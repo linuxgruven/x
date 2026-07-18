@@ -206,27 +206,46 @@ AgentExecute.execute=function(Obj, command, options=null)
       for factor in risk.factors;print yellow("  * "+factor);end for
     end if
     if globals.G_agent.config.promptOnCritical and risk.level=="critical" then
-      print white("Proceed with this operation?")
-      choices=[green("Yes, continue"),red("No, cancel")]
-      choiceIdx=Gui.choiceHybrid(choices,{},1,false,true)
-      if choiceIdx==1 then return {"error":"Operation cancelled by user"}
+      skipCrit=globals.G_agentContext and hasIndex(globals.G_agentContext,"skipCriticalPrompt") and globals.G_agentContext.skipCriticalPrompt
+      if skipCrit then
+        globals.G_agentContext.skipCriticalPrompt=false
+      else
+        globals.G_agent.startDialog("confirmYesNo","Proceed with this "+risk.level+"-risk operation?",["yes","no"],{
+          "resumeCommand":command,
+          "originalCommand":command,
+          "suggested":"no"
+        })
+        return {"success":true,"awaitDialog":true,"message":"Awaiting confirmation - reply with ai yes or ai no"}
+      end if
     end if
   end if
   //Create execution plan
   plan=globals.G_agent._createPlan(Obj,parsed,headlessMode)
   if hasIndex(plan,"error") then return {"error":plan.error}
+  //Hash required but missing - ask via typed dialog
+  if hasIndex(plan,"needsHash") and plan.needsHash then
+    resumeCmd="decipher"
+    if hasIndex(plan,"hashResumeCommand") and plan.hashResumeCommand then resumeCmd=plan.hashResumeCommand
+    globals.G_agent.startDialog("needHash","Enter hash to decipher (32 hex chars):",[],{
+      "resumeCommand":resumeCmd,
+      "originalCommand":command
+    })
+    return {"success":true,"awaitDialog":true,"message":"Awaiting hash - reply with ai <hash>"}
+  end if
   //Check if plan requires user prompt
   if hasIndex(plan,"needsPrompt") and plan.needsPrompt then
-    print white(plan.promptMessage)
-    choices=[green("Choose an action:")]
-    _len=len(plan.options);i=0;while i<_len;push(choices,yellow(plan.options[i]));i+=1;end while
-    push(choices,iyellow("Cancel"))
-    choiceIdx=Gui.choiceHybrid(choices,{},len(choices)-1,false,true)
-    if choiceIdx==len(choices)-1 then return {"error":"Cancelled"}
-    selectedAction=plan.options[choiceIdx-1]
-    //Recreate command with selected action
-    newCommand=selectedAction+" "+parsed.target
-    return globals.G_agent.execute(Obj,newCommand,options)
+    opts=plan.options
+    if not opts then opts=[]
+    msg="Choose an action"
+    if hasIndex(plan,"promptMessage") and plan.promptMessage then msg=plan.promptMessage
+    tgt=null
+    if hasIndex(parsed,"target") then tgt=parsed.target
+    globals.G_agent.startDialog("planPrompt",msg,opts,{
+      "target":tgt,
+      "originalCommand":command,
+      "suggested":null
+    })
+    return {"success":true,"awaitDialog":true,"message":"Awaiting action choice - reply with ai <option>"}
   end if
   if outLvl>=2 or globals.G_agent.config.dryRun then
     print yellow("[VERBOSE] Agent: Plan created with "+str(len(plan.steps))+" steps:")

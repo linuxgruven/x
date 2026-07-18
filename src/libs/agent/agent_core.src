@@ -358,8 +358,12 @@ AgentCore.startDialog=function(kind,question,options,context=null)
         print white("  "+str(i+1)+". "+options[i])
         i+=1
       end while
-    else
+    else if kind=="needHash" then
+      print white("Reply with: ai [32-char hex hash]   (or ai cancel)")
+    else if kind=="needTarget" then
       print white("Reply with: ai [ip]   (or ai cancel)")
+    else
+      print white("Reply with: ai [answer]   (or ai cancel)")
     end if
   end if
   return true
@@ -387,6 +391,26 @@ AgentCore.isDialogReply=function(reply)
     if foundIps and len(foundIps)>0 then return true
     if indexOf(text,".")!=null and indexOf(text," ")==null then return true
   end if
+  //needHash: accept a 32-char hex hash
+  if ds.kind=="needHash" then
+    h=lower(text)
+    if len(h)==32 then
+      ok=true
+      i=0;while i<32
+        c=h[i]
+        if not ((c>="0" and c<="9") or (c>="a" and c<="f")) then
+          ok=false
+          break
+        end if
+        i+=1
+      end while
+      if ok then return true
+    end if
+  end if
+  //confirmYesNo: yes/no aliases
+  if ds.kind=="confirmYesNo" then
+    if lowerText=="yes" or lowerText=="y" or lowerText=="no" or lowerText=="n" then return true
+  end if
   return false
 end function
 //Resolve a user reply against active dialogState.
@@ -405,7 +429,8 @@ AgentCore.resolveDialog=function(reply)
   if not options then options=[]
   choice=null
   //Accept suggestion shortcut when dialog stored one
-  if (lowerText=="yes" or lowerText=="ok" or lowerText=="sure" or lowerText=="suggested") and ds.context and hasIndex(ds.context,"suggested") and ds.context.suggested then choice=ds.context.suggested
+  //confirmYesNo: "yes"/"ok"/"sure" mean proceed, not "accept suggested" (suggested is often "no")
+  if ds.kind!="confirmYesNo" and (lowerText=="yes" or lowerText=="ok" or lowerText=="sure" or lowerText=="suggested") and ds.context and hasIndex(ds.context,"suggested") and ds.context.suggested then choice=ds.context.suggested
   //Numeric index (1-based)
   num=to_int(text)
   if typeof(num)=="number" and num>=1 and num<=len(options) then choice=options[num-1]
@@ -437,8 +462,31 @@ AgentCore.resolveDialog=function(reply)
       choice=text
     end if
   end if
+  //needHash: allow typing a 32-char hex hash
+  if not choice and ds.kind=="needHash" then
+    h=lower(text)
+    if len(h)==32 then
+      ok=true
+      hi=0;while hi<32
+        c=h[hi]
+        if not ((c>="0" and c<="9") or (c>="a" and c<="f")) then
+          ok=false
+          break
+        end if
+        hi+=1
+      end while
+      if ok then choice=h
+    end if
+  end if
+  //confirmYesNo: accept y/n / ok / sure shorthand
+  if not choice and ds.kind=="confirmYesNo" then
+    if lowerText=="y" or lowerText=="yes" or lowerText=="ok" or lowerText=="sure" then choice="yes"
+    if lowerText=="n" or lowerText=="no" then choice="no"
+  end if
   if not choice then
     if ds.kind=="needTarget" then return {"error":"Unrecognized target. Reply with an IP (or a listed option), or cancel"}
+    if ds.kind=="needHash" then return {"error":"Enter a 32-character hex hash (or cancel)"}
+    if ds.kind=="confirmYesNo" then return {"error":"Reply with yes or no (or cancel)"}
     return {"error":"Unrecognized reply. Use one of: "+join(options,", ")+" (or cancel)"}
   end if
   ctx=ds.context
@@ -453,6 +501,41 @@ AgentCore.resolveDialog=function(reply)
     if len(action)>0 then return {"command":trim(action+" "+choice)}
     return {"command":choice}
   end if
+  //Need hash: append hash to resume command
+  if kind=="needHash" then
+    hashVal=lower(choice)
+    resumeCmd="decipher"
+    if ctx and hasIndex(ctx,"resumeCommand") and ctx.resumeCommand then resumeCmd=ctx.resumeCommand
+    return {"command":trim(resumeCmd+" "+hashVal)}
+  end if
+  //Yes/no confirm: cancel on no; resume original command on yes
+  if kind=="confirmYesNo" then
+    isYes=lower(choice)=="yes" or lower(choice)=="y"
+    isNo=lower(choice)=="no" or lower(choice)=="n"
+    if not isYes and not isNo then
+      //Map from option labels
+      if indexOf(lower(choice),"yes")!=null then isYes=true
+      if indexOf(lower(choice),"no")!=null or indexOf(lower(choice),"cancel")!=null then isNo=true
+    end if
+    if isNo then return {"cancelled":true,"message":"Operation cancelled"}
+    if not isYes then return {"error":"Reply with yes or no (or cancel)"}
+    if not globals.G_agentContext then globals.G_agentContext={}
+    globals.G_agentContext.skipCriticalPrompt=true
+    resumeCmd=""
+    if ctx and hasIndex(ctx,"resumeCommand") and ctx.resumeCommand then resumeCmd=ctx.resumeCommand
+    if len(resumeCmd)==0 and len(original)>0 then resumeCmd=original
+    if len(resumeCmd)==0 then return {"cancelled":true,"message":"Nothing to resume"}
+    return {"command":resumeCmd}
+  end if
+  //Plan prompt: pick an action for a target
+  if kind=="planPrompt" then
+    target=""
+    if ctx and hasIndex(ctx,"target") then target=ctx.target
+    if len(target)>0 then return {"command":trim(choice+" "+target)}
+    return {"command":choice}
+  end if
+  //Show my IP: local/public -> "what is my <choice> ip"
+  if kind=="pickIpType" then return {"command":"what is my "+lower(choice)+" ip"}
   //Attack vector pick: stash selected vector, resume exploit command
   if kind=="pickVector" then
     selected=null
@@ -552,14 +635,14 @@ AgentCore.promptUser=function(question,context,allowRemember)
       print white("  "+context.details)
     end if
   end if
-  //Build choices
-  choices=["Yes, continue","No, cancel"]
+  //choiceHybrid treats index 0 as a non-selectable header
+  choices=[yellow("Confirm:"),"Yes, continue","No, cancel"]
   if allowRemember then
     push(choices,"Always (don't ask again)")
     push(choices,"Never (don't ask again)")
   end if
-  choice=Gui.choiceHybrid(choices,{},len(choices),false,true)
-  //Handle remember preferences
+  choice=Gui.choiceHybrid(choices,{},1,false,true)
+  //Handle remember preferences (1=Yes, 2=No, 3=Always, 4=Never)
   if allowRemember then
     if choice==3 then
       globals.G_agent.promptPreferences[questionHash]="always"

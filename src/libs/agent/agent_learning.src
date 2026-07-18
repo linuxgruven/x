@@ -391,11 +391,16 @@ AgentLearning.loadLearning=function
     globals.G_agent.userPreferences=data.userPreferences
     loadedCount+=1
   end if
-  //Restore templates
+  //Restore templates (skip degenerate exploit->exploit->exploit style signatures)
   if hasIndex(data,"templates") and typeof(data.templates)=="list" then
     if not hasIndex(globals.G_agent.sessionContext,"templates") then globals.G_agent.sessionContext.templates=[]
+    pruned=0
     for tmpl in data.templates
       if not tmpl or typeof(tmpl)!="map" then continue
+      if hasIndex(globals.G_agent,"_isDegenerateTemplate") and globals.G_agent._isDegenerateTemplate(tmpl) then
+        pruned+=1
+        continue
+      end if
       //Merge with existing or add new
       found=false
       _len=len(globals.G_agent.sessionContext.templates)
@@ -411,6 +416,7 @@ AgentLearning.loadLearning=function
       if not found then push(globals.G_agent.sessionContext.templates,tmpl)
       loadedCount+=1
     end for
+    if pruned>0 and debug then print green("[DEBUG] Learning: Pruned "+pruned+" degenerate templates on load")
   end if
   //Sync to sessionContext
   globals.G_agent.sessionContext.patternSuccess=globals.G_agent.patternScores

@@ -967,10 +967,12 @@ AgentHandlers._handleCheckPrivs=function(Obj,step,context)
 end function
 //Handler: Find escalation
 AgentHandlers._handleFindEscalation=function(Obj,step,context)
+  outLvl=globals.G_agent.config.outputLevel
   result={"success":false,"step":"findEscalation"}
-  //Find escalation path
-  result.success=true
-  result.methods=["kernelExploit","suidBinary","weakService"]
+  //Honest stub: no autonomous method discovery yet (use escalate / tryShellEX instead)
+  result.error="No escalation search implemented - try: ai escalate"
+  result.critical=false
+  if outLvl>=1 then print yellow("Agent: Escalation search not implemented - use 'ai escalate' or su/tryShellEX")
   return result
 end function
 //Handler: Direct command
@@ -995,14 +997,16 @@ AgentHandlers._handleDirectCommand=function(Obj,step,context)
       //Last argument is a flag with no value after it - might need a parameter
       //Check for hash-cracking commands that need a hash
       if (cmdName=="decipher" or cmdName=="hc" or cmdName=="hashcat") and (lastArg=="-d" or lastArg=="-h" or lastArg=="-c") then
-        //Prompt for hash
-        hashInput=user_input("Enter hash to crack: ")
-        if hashInput and len(hashInput)==32 then
-          cmdArgs.push(lower(hashInput))
-        else
-          result.error="Invalid or no hash provided"
-          return result
-        end if
+        //Ask via typed dialog instead of blocking user_input
+        resumeCmd=cmdName+" "+join(cmdArgs," ")
+        globals.G_agent.startDialog("needHash","Enter hash to crack (32 hex chars):",[],{
+          "resumeCommand":resumeCmd,
+          "originalCommand":step.command
+        })
+        result.success=true
+        result.awaitDialog=true
+        result.message="Awaiting hash"
+        return result
       end if
     end if
   end if

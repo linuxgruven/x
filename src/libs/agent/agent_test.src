@@ -138,6 +138,15 @@ AgentTest._handleTest=function(Obj,step,context)
     if hasIndex(globals.G_agent.patternScores,"scan") then _assert("scan success=5",globals.G_agent.patternScores["scan"].success==5)
     _assert("templates restored",len(globals.G_agent.sessionContext.templates)>=1)
     if len(globals.G_agent.sessionContext.templates)>=1 then _assert("template sig intact",globals.G_agent.sessionContext.templates[0].signature=="scan->exploit->crack")
+    //Degenerate templates are pruned on load
+    globals.G_agent.sessionContext.templates=[{"signature":"exploit->exploit->exploit","successCount":9,"lastUsed":0,"steps":["exploit a","exploit b","exploit c"]},{"signature":"scan->exploit->crack","successCount":2,"lastUsed":0,"steps":["scan","exploit","crack"]}]
+    globals.G_agent.saveLearning
+    globals.G_agent.sessionContext.templates=[]
+    globals.G_agent.loadLearning
+    hasDeg=false
+    for t in globals.G_agent.sessionContext.templates;if t.signature=="exploit->exploit->exploit" then hasDeg=true;end for
+    _assert("load prunes degenerate",hasDeg==false)
+    _assert("load keeps good template",len(globals.G_agent.sessionContext.templates)>=1)
     //Cleanup
     tf=File(comp,testFile)
     if tf then delete(tf)
@@ -525,6 +534,39 @@ AgentTest._handleTest=function(Obj,step,context)
     _assert("exploit pick stashed",globals.G_agentContext.selectedAttackExploit!=null and globals.G_agentContext.selectedAttackExploit.type=="shell")
     globals.G_agentContext.selectedAttackExploit=null
     globals.G_agentContext.selectedAttackVector=null
+    globals.G_agent.clearDialog
+    //confirmYesNo: yes resumes; no cancels; "yes" must not accept suggested="no"
+    globals.G_agent.startDialog("confirmYesNo","Proceed?",["yes","no"],{
+      "resumeCommand":"rm -rf /tmp/x",
+      "originalCommand":"rm -rf /tmp/x",
+      "suggested":"no"
+    })
+    r=globals.G_agent.resolveDialog("yes")
+    _assert("confirm yes->resume",hasIndex(r,"command") and r.command=="rm -rf /tmp/x")
+    _assert("confirm yes sets skip",globals.G_agentContext and hasIndex(globals.G_agentContext,"skipCriticalPrompt") and globals.G_agentContext.skipCriticalPrompt==true)
+    globals.G_agentContext.skipCriticalPrompt=false
+    globals.G_agent.startDialog("confirmYesNo","Proceed?",["yes","no"],{"resumeCommand":"rm -rf /tmp/x","suggested":"no"})
+    r=globals.G_agent.resolveDialog("no")
+    _assert("confirm no->cancel",hasIndex(r,"cancelled") and r.cancelled==true)
+    //needHash: 32-hex appends to resume command
+    globals.G_agent.clearDialog
+    globals.G_agent.startDialog("needHash","Enter hash:",[],{"resumeCommand":"decipher -d","originalCommand":"decipher -d"})
+    r=globals.G_agent.resolveDialog("aabbccddeeff00112233445566778899")
+    _assert("hash->decipher cmd",hasIndex(r,"command") and r.command=="decipher -d aabbccddeeff00112233445566778899")
+    globals.G_agent.startDialog("needHash","Enter hash:",[],{"resumeCommand":"decipher"})
+    r=globals.G_agent.resolveDialog("not-a-hash")
+    _assert("bad hash errors",hasIndex(r,"error"))
+    _assert("bad hash keeps dialog",globals.G_agent.dialogState.active==true)
+    globals.G_agent.clearDialog
+    //planPrompt: choice + target
+    globals.G_agent.startDialog("planPrompt","Choose action:",["scan","exploit","crack"],{"target":"10.0.0.1","originalCommand":"do something"})
+    r=globals.G_agent.resolveDialog("exploit")
+    _assert("planPrompt->exploit ip",hasIndex(r,"command") and r.command=="exploit 10.0.0.1")
+    //pickIpType: local/public -> what is my <type> ip
+    globals.G_agent.clearDialog
+    globals.G_agent.startDialog("pickIpType","Which IP?",["local","public"],{"suggested":"local"})
+    r=globals.G_agent.resolveDialog("public")
+    _assert("pickIpType->public",hasIndex(r,"command") and r.command=="what is my public ip")
     globals.G_agent.clearDialog
     globals.G_agent.config.promptOnAmbiguous=savedPrompt
   end if

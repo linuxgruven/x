@@ -1174,20 +1174,33 @@ ai go to lib              # Changes directory on 192.168.1.3
 
 ### Dialog State
 
-Used for typed multi-turn clarification when intent is ambiguous (`promptOnAmbiguous`):
+Typed multi-turn prompts (reply with `ai <answer>` or `ai cancel`). No blocking GUI menus for these flows.
 
-1. Agent prints options and sets `dialogState.active`
-2. Reply with `ai <option>` (name or `1`…`N`) or `ai cancel`
-3. Agent prepends the choice to the original phrase and continues
+1. Agent prints the question / options and sets `dialogState.active`
+2. Reply with `ai <option>` (name, number, or free-form where allowed) or `ai cancel`
+3. Agent resolves the reply into a resume command and continues
+
+**Kinds:**
+
+| Kind | When | Reply |
+|------|------|-------|
+| `ambiguousAction` / `synonymTie` | Unclear intent (`promptOnAmbiguous`) | option name or `1`…`N` |
+| `needTarget` | Action needs an IP (`exploit that`) | listed option or an IP |
+| `pickVector` | Multiple attack vectors | label / number |
+| `pickExploit` | Multiple exploits in a vector | `auto`, label, or number |
+| `confirmYesNo` | Critical-risk confirm (`promptOnCritical`) | `yes` / `no` |
+| `needHash` | Decipher/crack missing a hash | 32-char hex hash |
+| `planPrompt` | Plan asks which action to take | option name or number |
+| `pickIpType` | Show my IP without local/public | `local` / `public` |
 
 **State Structure:**
 ```javascript
 {
   "active": false,
-  "kind": null,       // e.g. "ambiguousAction"
+  "kind": null,       // see kinds table above
   "question": null,
-  "options": null,    // list of allowed replies
-  "context": null     // e.g. {mode:"prependAction", originalCommand:"…"}
+  "options": null,    // list of allowed replies (empty for needHash)
+  "context": null     // resumeCommand, vectors, suggested, etc.
 }
 ```
 

@@ -1283,15 +1283,14 @@ AgentHandlers._handleShowMyIp=function(Obj,step,context)
     end if
   end if
   if choiceIdx==0 then
-    choices=[green("Which IP address do you want?")]
-    push(choices,yellow("Local IP"))
-    push(choices,yellow("Public IP"))
-    push(choices,iyellow("Cancel"))
-    choiceIdx=Gui.choiceHybrid(choices,{},len(choices)-1,false,true)
-    if choiceIdx==len(choices)-1 then
-      result.error="Cancelled by user"
-      return result
-    end if
+    globals.G_agent.startDialog("pickIpType","Which IP address do you want?",["local","public"],{
+      "originalCommand":"show my ip",
+      "suggested":"local"
+    })
+    result.success=true
+    result.awaitDialog=true
+    result.message="Awaiting IP type - reply with ai local or ai public"
+    return result
   end if
   //Get the appropriate IP
   if choiceIdx==1 then

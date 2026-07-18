@@ -121,8 +121,8 @@ end function
 AgentPlanning._promptUser=function(question,defaultYes=true)
   outLvl=globals.G_agent.config.outputLevel
   if outLvl==0 then return defaultYes
-  if typeof(Gui)!="map" or not hasIndex(Gui,"yesno") then return defaultYes
-  response=Gui.yesno(question)
+  if typeof(Gui)!="map" or not hasIndex(Gui,"yesNo") then return defaultYes
+  response=Gui.yesNo(question,defaultYes)
   if response==null then return defaultYes
   return response
 end function
@@ -132,12 +132,12 @@ AgentPlanning._askUser=function(question, options=null)
   if outLvl==0 then return null
   if typeof(Gui)!="map" or not hasIndex(Gui,"input") then return null
   if options then
-    //Multiple choice
-    if hasIndex(Gui,"choiceAnykey") then
-      choices=[]
+    //Multiple choice (index 0 is a non-selectable header)
+    if hasIndex(Gui,"choiceHybrid") then
+      choices=[yellow(question)]
       for opt in options;push(choices,opt);end for
-      result=Gui.choiceHybrid(choices,{},0,false,true)
-      if result>=0 and result<len(options) then return options[result]
+      result=Gui.choiceHybrid(choices,{},1,false,true)
+      if result>=1 and result<=len(options) then return options[result-1]
       return null
     end if
   end if
@@ -1138,14 +1138,10 @@ AgentPlanning._buildDecipherPlan=function(Obj,parsed,plan)
   else if hasIndex(parsed,"args") and len(parsed.args)>0 then
     step.target=parsed.args[0]
   else
-    //Prompt for hash
-    hashInput=user_input("Enter hash to decipher: ")
-    if hashInput and len(hashInput)==32 then
-      step.target=lower(hashInput)
-    else
-      push(plan.steps,{"type":"error","description":"Invalid or no hash provided"})
-      return plan
-    end if
+    //Ask via typed dialog on execute (avoids blocking user_input mid-plan)
+    plan.needsHash=true
+    plan.hashResumeCommand="decipher"
+    return plan
   end if
   push(plan.steps,step)
   return plan

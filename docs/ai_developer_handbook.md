@@ -1480,9 +1480,9 @@ When the parser is uncertain about the user's intent, it now **asks** instead of
 
 **Two clarification triggers:**
 
-1. **Synonym tie-breaking:** When `_expandWithSynonyms` finds multiple synonym groups scoring equally, it presents a `Gui.choiceHybrid` menu letting the user pick the intended action.
+1. **Synonym tie-breaking:** When `_expandWithSynonyms` finds multiple synonym groups scoring equally, it starts a typed `synonymTie` dialog (`ai crack` / `ai exploit` / `ai 2`).
 
-2. **Fallback action prompt:** When the parser can't detect any action at all (would fall through to `directCommand`), it offers common actions: scan, exploit, crack, fetch, show, find, cancel.
+2. **Fallback action prompt:** When the parser can't detect any action at all (would fall through to `directCommand`), it offers common actions via `ambiguousAction`: scan, exploit, crack, fetch, show, find (or `ai cancel`).
 
 **Example:**
 ```
@@ -1490,11 +1490,11 @@ When the parser is uncertain about the user's intent, it now **asks** instead of
 Agent: Multiple interpretations found. Did you mean:
   1. crack
   2. exploit
-> [user selects "exploit"]
+> ai exploit
 Agent: Planning exploit...
 ```
 
-Both triggers require `promptOnAmbiguous` to be enabled (always true for interactive use, disabled in headless/test mode).
+Both triggers require `promptOnAmbiguous` to be enabled (always true for interactive use, disabled in headless/test mode). Related dialog kinds (`needTarget`, `pickVector`, `pickExploit`, `confirmYesNo`, `needHash`, `planPrompt`) use the same `startDialog` / `resolveDialog` path in `agent_core.src`.
 
 ### 6. Enhanced Conditional Logic
 
@@ -2319,10 +2319,10 @@ end function
 **Improvement:** Speech recognition
 **Status:** Not feasible (game limitation)
 
-#### 13. Multi-Turn Conversations
-**Current:** Ambiguous-action clarification uses `dialogState` (typed `ai <option>` follow-up)  
-**Improvement:** Broader multi-turn context beyond clarification  
-**Status:** Partial — `startDialog` / `resolveDialog` wired for `ambiguousAction`
+#### ~~13. Multi-Turn Conversations~~ ✅ IMPLEMENTED
+**Implemented as:** `dialogState` via `startDialog` / `resolveDialog` / `isDialogReply` in `agent_core.src`  
+**Kinds:** `ambiguousAction`, `synonymTie`, `needTarget`, `pickVector`, `pickExploit`, `confirmYesNo`, `needHash`, `planPrompt`, `pickIpType`  
+**Details:** Typed `ai <reply>` follow-ups (no GUI menus). Critical confirm, hash input, and plan prompts use the same path.
 
 #### ~~14. Proactive Suggestions~~ ✅ IMPLEMENTED
 **Implemented as:** `_generateSuggestions()` in `agent_learning.src`  
