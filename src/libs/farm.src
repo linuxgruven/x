@@ -176,7 +176,7 @@ Farm.proxy=function
 		end function
     //Extract /etc/passwd from various object types
 		getPasswd=function(ex,e)
-      //File object: navigate to /etc/passwd
+      //File object: parent/get_folders only (no File(computer,path) - overflow grants a random folder)
 			if e=="file" then
 				ex=FileHelper.toRootEx(ex)
 				if ex==null then return 1
@@ -272,31 +272,26 @@ Farm.proxy=function
     end if
     //Kill watcher app when done
 	end function
-  //Interactive menu for proxy mode
-	CH=[green("What would you like to do?")]
-	push(CH,yellow("Just save password file"))
-	push(CH,yellow("Just create a proxy chain using Map.conf"))
-	push(CH,yellow("Just add to the r00t password cache"))
-	push(CH,iyellow("All the above"))
-	UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true)
-  //Set flags based on selection
-	if UCH==1 then
-    //Password file only
-		self.get.p=1
-	else if UCH==2 then
-    //Map.conf only
-		self.get.m=1
-	else if UCH==3 then
-    //Root cache only
-		self.get.r=1
-	else if UCH==4 then
-    //All three options
-		self.get.p=1
-		self.get.m=1
-		self.get.r=1
-	end if
-  //Start watcher app if needed
-  //Time the operation
+  //CLI flags may already set p/m/r; otherwise interactive menu
+  if not self.get.p and not self.get.m and not self.get.r then
+    CH=[green("What would you like to do?")]
+    push(CH,yellow("Just save password file"))
+    push(CH,yellow("Just create a proxy chain using Map.conf"))
+    push(CH,yellow("Just add to the r00t password cache"))
+    push(CH,iyellow("All the above"))
+    UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true)
+    if UCH==1 then
+      self.get.p=1
+    else if UCH==2 then
+      self.get.m=1
+    else if UCH==3 then
+      self.get.r=1
+    else if UCH==4 then
+      self.get.p=1
+      self.get.m=1
+      self.get.r=1
+    end if
+  end if
   st=time
   Utility.pressQ
 	init
@@ -360,22 +355,19 @@ end function
 //Returns: 1 on success
 Farm.getFile=function(ex)
   e=typeof(ex)
-  //File object: navigate to /home/*/Config/
+  //File object: parent/get_folders only (overflow grants a random folder, not a computer handle)
 	if e=="file" then
 		ex=FileHelper.toRootEx(ex)
 		if ex==null then return 1
 		for d in get_folders(ex)
 			if name(d)!="home" then continue
 			for h in get_folders(d)
-        //Skip guest user
 				if name(h)=="guest" then continue
 				for c in get_folders(h)
 					if name(c)!="Config" then continue
 					for f in get_files(c)
-            //Match target filename
 						if name(f)!=self.get.file then continue
 						if not has_permission(f,"r") then return
-            //Process with decipher or dictionary
 						if self.get.useDec then self.decipher(f) else self.dictionary(f)
 						self.get.count=self.get.count+1
 					end for
@@ -387,9 +379,7 @@ Farm.getFile=function(ex)
 		x=get_folders(self.file(ex,"/home"))
 		if not x then return
 		for u in x
-      //Skip guest user
 			if name(u)=="guest" then continue
-      //Access /home/user/Config/file
 			f=self.file(ex,"/home/"+name(u)+"/Config/"+self.get.file)
 			if not f then continue
 			if has_permission(f,"r") then
@@ -403,9 +393,7 @@ Farm.getFile=function(ex)
 		x=get_folders(self.file(hc,"/home"))
 		if not x then return
 		for u in x
-      //Skip guest user
 			if name(u)=="guest" then continue
-      //Access /home/user/Config/file
 			f=self.file(hc,"/home/"+name(u)+"/Config/"+self.get.file)
 			if not f then continue
 			if has_permission(f,"r") then

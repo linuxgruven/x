@@ -50,24 +50,44 @@ Io.getTime=function
   //Return formatted time
   return(h+":"+m+":"+s)
 end function
+//_walkFilePath - Navigate absolute path from a root file object (O(depth))
+//Args: root (file at /), p (absolute path string)
+//Returns: file object or null
+Io._walkFilePath=function(root,p)
+  if not root then return null
+  if p=="/" then return root
+  parts=split(p,"/")
+  cur=root
+  for part in parts
+    if not part or part=="" then continue
+    nxt=null
+    for d in get_folders(cur);if name(d)==part then;nxt=d;break;end if;end for
+    if nxt==null then
+      for f in get_files(cur);if name(f)==part then return f;end for
+      return null
+    end if
+    cur=nxt
+  end for
+  return cur
+end function
 //getFileObj - Get file object from path
 //Args: Obj (object with type/computer/root), p (path string)
 //Returns: file object or Error
 Io.getFileObj=function(Obj,p)
 	//Handle computer or shell objects
 	if Obj.type=="computer" or indexOf(Obj.type,"shell")!=null then
-    //Get file directly from computer
     f=File(Obj.computer,p)
-    //Return file or error
     if f then return f else return Error.set("","",true)
   end if
 	//Handle file objects
 	if Obj.type=="file" then
-		//Return root if path is /
 		if p=="/" then return Obj.root
-    //Search all files in root
+    //Absolute path: segment walk first, getAll on miss (symlinks / odd paths)
+    if p and len(p)>0 and p[0]=="/" then
+      f=Io._walkFilePath(Obj.root,p)
+      if f then return f
+    end if
     for f in Io.getAll(Obj.root);if path(f)==p or name(f)==p then return f;end for
-    //File not found
     return Error.set("","",true)
 	end if
 end function
@@ -75,15 +95,17 @@ end function
 //Args: ex (shell/computer/file object), p (path string)
 //Returns: file object or Error
 Io.getFileObjEx=function(ex,p)
-	//Get object type
 	obj=typeof(ex)
-  //Handle computer objects
   if obj=="computer" then return File(ex,p)
-  //Handle shell objects
   if indexOf(obj,"shell")!=null then return File(host_computer(ex),p)
-	//Handle file objects - search all files from root
-	for f in Io.getAll(FileHelper.toRootEx(ex));if path(f)==p or name(f)==p then return f;end for
-  //File not found
+	//File objects: absolute path walk first, getAll on miss
+  root=FileHelper.toRootEx(ex)
+  if p=="/" then return root
+  if p and len(p)>0 and p[0]=="/" then
+    f=Io._walkFilePath(root,p)
+    if f then return f
+  end if
+	for f in Io.getAll(root);if path(f)==p or name(f)==p then return f;end for
   return Error.set("","",true)
 end function
 //getFile - Search multiple locations for file

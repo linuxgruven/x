@@ -358,76 +358,66 @@ Attack.recon=function(rt,ex,argv)
   end function
   getFileEmail=function(z)
     e=FileHelper.toRootEx(z.object)
+    home=null
     for d in get_folders(e)
-      if name(d)!="home" then continue
-      for h in get_folders(d)
-        if not get_folders(d)>1 then continue
-        if name(h)=="guest" then continue
-        if not hasIndex(U,name(h)) then U[name(h)]={
-          "type":z.type,
-          "ip":z.ip
-        }
-        if not hasIndex(E,name(h)) then E[name(h)]={"type":z.type,"ip":z.ip}
-        if hasIndex(E[name(h)],"email") then continue
-        for c in get_folders(h)
-          if name(c)!="Config" then continue
-          for f in get_files(c)
-            if name(f)!="Mail.txt" then continue
-            if not has_permission(f,"r") then
-              E[name(h)]+={
-                "email":"Permission Denied"
-              }
-              E[name(h)]+={
-                "emailPass":"Permission Denied"
-              }
-              continue
-            end if
-            content=get_content(f)
-            if not content then content=""
-            s=split(content,":")
-            if not len(s)==2 then
-              if name(f)=="Mail.txt" then
-                E[name(h)]+={
-                  "email":"Bad MD5"
-                }
-                E[name(h)]+={
-                  "emailPass":"Bad MD5"
-                }
-              else if name(f)=="Bank.txt" then
-                E[name(h)]+={
-                  "bank":"Bad MD5"
-                }
-                E[name(h)]+={
-                  "bankPass":"Bad MD5"
-                }
-              end if
-              continue
-            end if
-            t=Crack.hash(s[1])
-            if name(f)=="Mail.txt" then
-              E[name(h)]+={
-                "email":s[0]
-              }
-              t=Crack.hash(s[1])
-              if t then E[name(h)]+={
-                "emailPass":t
-              } else E[name(h)]+={
-                "emailPass":"Bad MD5"
-              }
-            else if name(f)=="Bank.txt" then
-              E[name(h)]+={
-                "bank":s[0]
-              }
-              t=Crack.hash(s[1])
-              if t then E[name(h)]+={
-                "bankPass":t
-              } else E[name(h)]+={
-                "bankPass":"Bad MD5"
-              }
-            end if
-          end for
+      if name(d)=="home" then
+        home=d
+        break
+      end if
+    end for
+    if not home then return
+    for h in get_folders(home)
+      uname=name(h)
+      if uname=="guest" then continue
+      if not hasIndex(U,uname) then U[uname]={
+        "type":z.type,
+        "ip":z.ip
+      }
+      if not hasIndex(E,uname) then E[uname]={"type":z.type,"ip":z.ip}
+      if hasIndex(E[uname],"email") then continue
+      //One Config listing for Mail.txt
+      mailF=null
+      for c in get_folders(h)
+        if name(c)!="Config" then continue
+        for f in get_files(c)
+          if name(f)=="Mail.txt" then
+            mailF=f
+            break
+          end if
         end for
+        break
       end for
+      if not mailF then continue
+      if not has_permission(mailF,"r") then
+        E[uname]+={
+          "email":"Permission Denied"
+        }
+        E[uname]+={
+          "emailPass":"Permission Denied"
+        }
+        continue
+      end if
+      content=get_content(mailF)
+      if not content then content=""
+      s=split(content,":")
+      if not len(s)==2 then
+        E[uname]+={
+          "email":"Bad MD5"
+        }
+        E[uname]+={
+          "emailPass":"Bad MD5"
+        }
+        continue
+      end if
+      t=Crack.hash(s[1])
+      E[uname]+={
+        "email":s[0]
+      }
+      if t then E[uname]+={
+        "emailPass":t
+      } else E[uname]+={
+        "emailPass":"Bad MD5"
+      }
     end for
   end function
   getFileSearch=function(z)
@@ -1500,64 +1490,81 @@ Attack.map=function(j,r,argv)
   if argv isa Error then return
   if not argv.extreme then argv.extreme=50 else argv.extreme=255
   if not argv.rest then argv.rest=Net.getRouters(r)
-	l=[]
+  l=[]
   y=["#### Public IP : "+j[0].public_ip]
-	h=false
-	for m in j
-		if h then break
-		q=null
-		c=0
-		z=0
-		if not hasIndex(globals.G_exploitCache,lib_name(m.metaLib)+"_"+version(m.metaLib)) then
-			Info.warning("Database is out of date, updateing database...")
-			Exploit.headless(m.metaLib)
-		end if
+  h=false
+  mapped={}
+  c=0
+  z=0
+  for m in j
+    if h then break
+    q=null
+    if not hasIndex(globals.G_exploitCache,lib_name(m.metaLib)+"_"+version(m.metaLib)) then
+      Info.warning("Database is out of date, updateing database...")
+      Exploit.headless(m.metaLib)
+    end if
     q=Exploit._ex(Exploit.getCacheKey(m.metaLib))
-		if not q isa list then continue
-		for e in q
-			if h then break
-			if e.e!="l" then continue
-			for i in argv.rest
-				if indexOf(l,i)!=null then continue
-				push(l,yellow("Lan Map for the following subnet [ "+green(i)+" ]"))
+    if not q isa list then continue
+    for e in q
+      if h then break
+      if e.e!="l" then continue
+      for i in argv.rest
+        if hasIndex(mapped,i) then continue
+        mapped[i]=1
+        push(l,yellow("Lan Map for the following subnet [ "+green(i)+" ]"))
         push(y,"Lan Map for the following subnet [ "+i+" ]")
-				z+=1
-				v=split(i,"\.")
-				x=join(v[:-1],".")+"."
-				b=0
-				a=0;while a<=argv.extreme
-					if not argv.extreme then
+        z+=1
+        v=split(i,"\.")
+        x=join(v[:-1],".")+"."
+        b=0
+        a=0
+        while a<=argv.extreme
+          if not argv.extreme then
             if b>20 then break
           end if
           t=x+a
-					if t==i then
-						a+=1
-						continue
-					end if
-					ex=Exploit.overflow(m.metaLib,e.m,e.s,t,"attack_recon")
+          if t==i then
+            a+=1
+            continue
+          end if
+          ex=Exploit.overflow(m.metaLib,e.m,e.s,t,"attack_recon")
           if ex==null or ex isa number or ex isa string then
-						b+=1
-						a+=1;continue
-					end if
-					if typeof(ex)=="computer" then
-						push(l,green("[------> ")+blue("Device at ")+" "+yellow(t))
-            push(y,"[------> Device at "+(t))
-						c+=1
-					end if
-				a+=1;end while
-			end for
-			h=true
-		end for
-	end for
-	if len(l)==1 then return Warning.set("No devices found on this network, Possible Cause: No Lan Bounce from the router")
-	print join(l,char(10))
-	print yellow("There are "+white(str(c))+" device(s) and "+white(str(z))+" router(s) on this network")
-	if Gui.yesNoNon("Save this data for future use?",false) then
-		f=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/map.txt")
-		if not f then f=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/map.txt"])
-		if f isa Error then return
-		_ct=get_content(f);if not _ct then set_content(f,join(y,char(10))) else set_content(f,_ct+char(10)+join(y,char(10)))
-	end if
+            b+=1
+            a+=1
+            continue
+          end if
+          //Computer exploits on non-routers ignore the LAN IP and always return
+          //the same machine - only count when the obtained host is actually t
+          if typeof(ex)=="computer" then
+            gotIp=ex.local_ip
+            if gotIp!=t then
+              b+=1
+              a+=1
+              continue
+            end if
+            push(l,green("[------> ")+blue("Device at ")+" "+yellow(gotIp))
+            push(y,"[------> Device at "+gotIp)
+            c+=1
+          end if
+          a+=1
+        end while
+      end for
+      h=true
+    end for
+  end for
+  if c==0 then return Warning.set("No devices found on this network, Possible Cause: No Lan Bounce from the router")
+  print join(l,char(10))
+  print yellow("There are "+white(str(c))+" device(s) and "+white(str(z))+" router(s) on this network")
+  if Gui.yesNoNon("Save this data for future use?",false) then
+    saveName="map.txt"
+    if j[0] and hasIndex(j[0],"public_ip") and j[0].public_ip then saveName=j[0].public_ip+"_map.txt"
+    savePath=path(globals.G_main.dir.current)+"/"+saveName
+    f=File(globals.G_main.computer,savePath)
+    if not f then f=Command.touch(globals.G_main,[savePath])
+    if f isa Error then return
+    _ct=get_content(f)
+    if not _ct then set_content(f,join(y,char(10))) else set_content(f,_ct+char(10)+join(y,char(10)))
+  end if
 end function
 // Extract system logs from remote target
 // Args: Obj (context), argv (IP and options: -p port, -w watch)

@@ -2040,10 +2040,11 @@ Net.lan=function(Obj,metaxploit,targetIp=null)
   portMap={}      // ip -> ports map
   ipList=[]       // ordered ip list for menu
   menuEntries=[]  // rendered entries for menu
-  // Recursively map devices, ports, and roles
-  deep=function(ip,seen)
+  // Recursively map devices, ports, and roles (seen = map for O(1) membership)
+  deep=function(ip,seen,rootIp=null)
     deviceEntries=[]
-    if indexOf(seen,ip)!=null then return deviceEntries
+    if rootIp==null then rootIp=ip
+    if hasIndex(seen,ip) then return deviceEntries
     node={
       "ip":ip,
       "ports":[],
@@ -2057,7 +2058,7 @@ Net.lan=function(Obj,metaxploit,targetIp=null)
       push(deviceEntries,node)
       return deviceEntries
     end if
-    push(seen,ip)
+    seen[ip]=1
     routerObj=get_router(ip)
     // Router/switch classification and firewall flagging
     if routerObj!=null then
@@ -2089,11 +2090,11 @@ Net.lan=function(Obj,metaxploit,targetIp=null)
         push(node["ports"],portEntry)
       end for
       for lanDevice in devices_lan_ip(routerObj)
-        if indexOf(seen,lanDevice)!=null or lanDevice==ip then continue
-        for child in deep(lanDevice,seen);push(node["devices"],child);end for
+        if hasIndex(seen,lanDevice) or lanDevice==ip then continue
+        for child in deep(lanDevice,seen,rootIp);push(node["devices"],child);end for
       end for
     else
-      parentRouter=get_router(seen[0])
+      parentRouter=get_router(rootIp)
       if parentRouter!=null then
         for devicePort in device_ports(parentRouter,ip)
           portEntry={}
@@ -2143,7 +2144,7 @@ Net.lan=function(Obj,metaxploit,targetIp=null)
     return menuEntries
   end function
   Info.info("Building network map cache...")
-  menuEntries=genLan(deep(local_ip(get_router),[]))
+  menuEntries=genLan(deep(local_ip(get_router),{}))
   if targetIp then
     if not hasIndex(portMap,targetIp) then return Info.error("No ports found for "+targetIp)
     if not portMap[targetIp] then return Info.error("No ports found for "+targetIp)
@@ -2221,7 +2222,7 @@ Net.lan=function(Obj,metaxploit,targetIp=null)
       portMap={}
       ipList=[]
       menuEntries=[]
-      menuEntries=genLan(deep(local_ip(get_router),[]))
+      menuEntries=genLan(deep(local_ip(get_router),{}))
       continue
     end if
     if userChoice==len(choiceList)-2 then
@@ -2229,7 +2230,7 @@ Net.lan=function(Obj,metaxploit,targetIp=null)
       portMap={}
       ipList=[]
       menuEntries=[]
-      menuEntries=genLan(deep(local_ip(get_router),[]))
+      menuEntries=genLan(deep(local_ip(get_router),{}))
       continue
     end if
 		if userChoice==len(choiceList)-1 then break

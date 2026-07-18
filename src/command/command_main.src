@@ -685,9 +685,25 @@ Command.mainCallbacks=function(Obj)
       _p.addArgument("s",false,"flag")  // Use shells to spawn workers
       _p.addArgument("d",false,"flag")  // Use decimal mode (skip rainbow tables)
       _p.addArgument("n",false,"store")  // Output save filename
+      _p.addArgument("password",false,"flag")  // Save password file (skip Gui menu)
+      _p.addArgument("map",false,"flag")  // Write Map.conf (skip Gui menu)
+      _p.addArgument("cache",false,"flag")  // Add to root password cache
+      _p.addArgument("all",false,"flag")  // password + map + cache
       arg=_p.parseArgs("get",arg)
       if arg isa Error then return
       if not arg.n then arg.n="crackedPasswords.dat"
+      pFlag=0
+      mFlag=0
+      rFlag=0
+      if arg.all then
+        pFlag=1
+        mFlag=1
+        rFlag=1
+      else
+        if arg.password then pFlag=1
+        if arg.map then mFlag=1
+        if arg.cache then rFlag=1
+      end if
 			Farm.get={
         "countTo":arg.c,
         "count":0,
@@ -695,9 +711,9 @@ Command.mainCallbacks=function(Obj)
         "ip":"",
         "useShells":arg.s,
         "saveAs":arg.n,
-        "p":0,
-        "m":0,
-        "r":0,
+        "p":pFlag,
+        "m":mFlag,
+        "r":rFlag,
         "passwordResults":[],
         "mapResults":[]
       }

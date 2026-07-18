@@ -66,21 +66,17 @@ Heist.getObject=function(i,p)
   if not is_valid_ip(i) then return Error.set("Invalid bank ip|domain provided")
   //Get router for target IP
   r=get_router(i)
-  //Initialize local IP variable
+  //One extract pass for port match + exploit attempts
+  extracts=Exploit.extract(r,i)
   a=null
-  //Find local IP for specified port
-  for m in Exploit.extract(r,i)
-    //Check if port matches target
+  for m in extracts
     if m.port_number==p then
-      //Store local IP
       a=m.local_ip
       break
     end if
   end for
-  //Check if exploit was found for port
   if not a then return Error.set("No exploit found for bank ip "+i+" with port "+p)
-  //Iterate through all exploits for target IP
-  for m in Exploit.extract(r,i)
+  for m in extracts
     if m.local_ip==a then
 			//Check if exploit library already cached
 			if Exploit.haveAlready(m.metaLib) then
@@ -173,14 +169,30 @@ Heist.getObject=function(i,p)
     end if
   end for
 end function
-//init - Interactive heist loop: your bank once, then targets until ! cancel
-//Args: Obj (unused), argv (unused; bare heist starts the loop)
-//Returns: nothing
+//init - Heist loop. Args: heist [yourHost yourPort [targetHost targetPort]]
+//Missing args fall back to Gui prompts. Bare heist stays interactive.
 Heist.init=function(Obj,argv)
+  _p=ArgumentParser.init
+  argv=_p.parseArgs("heist",argv)
+  if argv isa Error then return
+  rest=[]
+  if hasIndex(argv,"rest") and argv.rest then rest=argv.rest
+  yourBank=null
+  targetBank=null
+  if len(rest)>=2 then
+    yp=to_int(rest[1])
+    if typeof(yp)=="number" and yp>=1 then yourBank={"host":rest[0],"port":yp}
+  end if
+  if len(rest)>=4 then
+    tp=to_int(rest[3])
+    if typeof(tp)=="number" and tp>=1 then targetBank={"host":rest[2],"port":tp}
+  end if
   Info.info("Heist loop — enter ! to cancel")
-  //Acquire root on your bank (re-prompt until success or quit)
+  //Acquire root on your bank
   while true
-    bank=self.promptBank("Your bank")
+    bank=yourBank
+    yourBank=null
+    if not bank then bank=self.promptBank("Your bank")
     if bank isa Error then continue
     if not bank then
       Info.info("Heist cancelled")
@@ -192,9 +204,11 @@ Heist.init=function(Obj,argv)
     Info.info("Your bank ready (root)")
     break
   end while
-  //Repeatedly heist targets until quit
+  //One-shot target from argv, then loop; or interactive targets until quit
   while true
-    bank=self.promptBank("Target bank")
+    bank=targetBank
+    targetBank=null
+    if not bank then bank=self.promptBank("Target bank")
     if bank isa Error then continue
     if not bank then
       Info.info("Heist loop ended")

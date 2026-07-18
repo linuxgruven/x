@@ -1532,28 +1532,19 @@ end function
 Crack.hash=function(h,a=true)
   // Validate hash format (32 hex chars)
   if not h.matches("^[a-f0-9]{32}$") then return h
-	// Check if rainbow table files exist
+	// No rainbow tables: auto-decipher when allowed (no Gui in combat paths)
 	s=System.getSystem
 	if not s or not s.dir.rainbow then
-    if Gui.yesNo("Rainbow tables not found...use decipher?") then
-      addToRainbow=Gui.yesNo("Add this password to the rainbow tables?")
-      return self._tryDecipher(h,addToRainbow)
-    end if
+    if a then return self._tryDecipher(h)
+    return h
   end if
 	// findPassword checks G_rainbow first, then index/disk; always memos hits
 	if not globals.G_rainbow then globals.G_rainbow={}
 	if hasIndex(globals.G_rainbow,h) then return globals.G_rainbow[h]
 	password=self.findPassword(h)
 	if password then return password
-	// Not found - offer decipher option
-	if a then
-		return self._tryDecipher(h)
-	else
-		if Gui.yesNo("Password not found in the rainbow tables...use decipher?") then
-			addToRainbow=Gui.yesNo("Add this password to the rainbow tables?")
-			return self._tryDecipher(h,addToRainbow)
-		end if
-	end if
+	// Not found - decipher when allowed; otherwise return hash (no Gui)
+	if a then return self._tryDecipher(h)
 	return h
 end function
 Crack.edit=function(Obj)
