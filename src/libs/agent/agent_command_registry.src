@@ -44,14 +44,14 @@ AgentCommandRegistry.matchQuery=function(queryWords)
     score=0
     //Command name in query = strong signal
     if meaningfulWords.indexOf(cmdName)!=null then score=score+10
-    //Check purpose
+    //Check purpose (cached lower)
     if hasIndex(knowledge,"purpose") then
-      purposeLower=lower(knowledge.purpose)
+      if hasIndex(knowledge,"purposeLower") then purposeLower=knowledge.purposeLower else purposeLower=lower(knowledge.purpose);knowledge.purposeLower=purposeLower
       for word in meaningfulWords;if indexOf(purposeLower,word)!=null then score=score+2;end for
     end if
-    //Check raw description
+    //Check raw description (cached lower)
     if hasIndex(knowledge,"raw") then
-      rawLower=lower(knowledge.raw)
+      if hasIndex(knowledge,"rawLower") then rawLower=knowledge.rawLower else rawLower=lower(knowledge.raw);knowledge.rawLower=rawLower
       for word in meaningfulWords;if indexOf(rawLower,word)!=null then score+=1;end for
     end if
     if score>bestScore then

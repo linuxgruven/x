@@ -215,24 +215,18 @@ AgentParser._matchActionPhase=function(cmd,parsed,actionFound,debug)
         end if
       end for
       matchCount=0
+      cmdWords=split(cmd," ")
+      blackMap={}
+      for blacklisted in escalationBlacklist;blackMap[blacklisted]=1;end for
       for cmdName in globals.G_agent.commandKnowledgeCache.indexes
         knowledge=globals.G_agent.commandKnowledgeCache[cmdName]
         //Only use 'raw' field (full description from man pages)
         //Old knowledge files with only 'purpose' field are not supported
         if not hasIndex(knowledge,"raw") or not knowledge.raw then continue
         //Skip blacklisted commands for escalation intents
-        if isEscalationIntent then
-          isBlacklisted=false
-          for blacklisted in escalationBlacklist
-            if cmdName==blacklisted then
-              isBlacklisted=true
-              break
-            end if
-          end for
-          if isBlacklisted then continue
-        end if
+        if isEscalationIntent and hasIndex(blackMap,cmdName) then continue
         matchCount+=1
-        descLower=lower(knowledge.raw)
+        if hasIndex(knowledge,"rawLower") then descLower=knowledge.rawLower else descLower=lower(knowledge.raw);knowledge.rawLower=descLower
         //Debug first few commands
         if debug and matchCount<=3 then print green("[DEBUG] Agent: Checking '"+cmdName+"' desc='"+descLower[:50]+"...'")
         //Exact command name match - highest priority
@@ -255,7 +249,6 @@ AgentParser._matchActionPhase=function(cmd,parsed,actionFound,debug)
           end for
         end if
         //Bonus if command name appears as whole word in query (not substring)
-        cmdWords=split(cmd," ")
         for cmdWord in cmdWords
           if cmdWord==cmdName then
             score=score+20

@@ -148,29 +148,46 @@ AgentParser._synonymContext={
   "root":["shell","access","privilege","escalate","become","sudo"],
   "target":["ip","address","remote","connect","reach"]
 }
+//Build synonym -> [baseWord,...] reverse map once
+AgentParser._ensureSynonymRev=function
+  if hasIndex(self,"_synonymRev") and self._synonymRev!=null then return
+  rev={}
+  for baseWord in indexes(self._synonyms)
+    for synonym in self._synonyms[baseWord]
+      if not hasIndex(rev,synonym) then rev[synonym]=[]
+      if rev[synonym].indexOf(baseWord)==null then push(rev[synonym],baseWord)
+    end for
+  end for
+  self._synonymRev=rev
+end function
 //Expand command with context-weighted synonyms for better matching
 AgentParser._expandWithSynonyms=function(text)
   textLower=lower(text)
   words=split(textLower," ")
-  //Score each possible base word match
+  //Word set for O(1) membership
+  wordSet={}
+  for w in words;if len(w)>0 then wordSet[w]=1;end for
+  self._ensureSynonymRev
+  rev=self._synonymRev
+  //Score each possible base word match via reverse map
   bestWord=null
   bestScore=0
   tiedWords=[]
-  for baseWord in indexes(globals.G_agent._synonyms)
-    for synonym in globals.G_agent._synonyms[baseWord]
-      if indexOf(textLower,synonym)!=null then
-        //Found a synonym match - score it by context
-        score=1
-        if hasIndex(globals.G_agent._synonymContext,baseWord) then
-          for ctxWord in globals.G_agent._synonymContext[baseWord];if indexOf(textLower,ctxWord)!=null then score+=1;end for
-        end if
-        if score>bestScore then
-          bestScore=score
-          bestWord=baseWord
-          tiedWords=[baseWord]
-        else if score==bestScore and score>0 then
-          if indexOf(tiedWords,baseWord)==null then push(tiedWords,baseWord)
-        end if
+  for synonym in indexes(rev)
+    if not hasIndex(wordSet,synonym) then continue
+    for baseWord in rev[synonym]
+      score=1
+      if hasIndex(self._synonymContext,baseWord) then
+        for ctxWord in self._synonymContext[baseWord]
+          if hasIndex(wordSet,ctxWord) then score+=1
+        end for
+      end if
+      if score>bestScore then
+        bestScore=score
+        bestWord=baseWord
+        tiedWords=[baseWord]
+      else if score==bestScore and score>0 then
+        if tiedWords.indexOf(baseWord)==null then push(tiedWords,baseWord)
       end if
     end for
   end for
@@ -192,18 +209,21 @@ AgentParser._parseCommand=function(Obj,command,headlessMode=false)
   debug=globals.G_agent.config.debug
   //Validate input
   if not command or typeof(command)!="string" then return {"error":"Invalid command input"}
-  //Normalize soft fillers: "grab me a random router" -> "grab a random router"
+  //Normalize soft fillers: "grab me a router" -> "grab router"
   if hasIndex(globals.G_agent,"_stripSoftFillers") then command=globals.G_agent._stripSoftFillers(command)
   cmd=lower(trim(command))
   if cmd=="" then return {"error":"Empty command"}
+  //Extract IPs once for all parse phases
+  ips=globals.G_agent._extractIps(cmd)
+  if not ips then ips=[]
   parsed={}
   parsed.raw=command
   //Phase 1: early returns (compound / config / shorthand / ...)
-  early=self._parseEarlyCommand(Obj,command,cmd,debug)
+  early=self._parseEarlyCommand(Obj,command,cmd,debug,ips)
   if early then return early
   //Phase 2: autonomous / conditional / object-request flow
   actionFound=false
-  flowResult=self._parseFlowPhase(Obj,command,cmd,parsed,actionFound,headlessMode,debug)
+  flowResult=self._parseFlowPhase(Obj,command,cmd,parsed,actionFound,headlessMode,debug,ips)
   actionFound=flowResult.actionFound
   if flowResult.done then return parsed
   //Phase 3: phrase + man-page + synonym action match
@@ -211,5 +231,5 @@ AgentParser._parseCommand=function(Obj,command,headlessMode=false)
   //Synonym tie (or other phase-3 dialog) - wait for typed follow-up
   if hasIndex(globals.G_agent,"dialogState") and globals.G_agent.dialogState and globals.G_agent.dialogState.active then return {"awaitDialog":true,"summary":"Awaiting clarification - reply with ai [option]"}
   //Phase 4: field extraction / special cases
-  return self._extractFieldsPhase(Obj,command,cmd,parsed,actionFound,headlessMode,debug)
+  return self._extractFieldsPhase(Obj,command,cmd,parsed,actionFound,headlessMode,debug,ips)
 end function

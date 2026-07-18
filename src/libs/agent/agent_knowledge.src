@@ -96,7 +96,8 @@ AgentCore.getCommandInfo=function(commandName)
     //Parse structured information from the description and full help
     //Use normalized command name from help object for consistency
     normalizedName=help.command
-    knowledge={"command":normalizedName,"raw":globals.G_agent._stripColorTags(help.description)}
+    rawText=globals.G_agent._stripColorTags(help.description)
+    knowledge={"command":normalizedName,"raw":rawText,"rawLower":lower(rawText)}
     fullText=lower(help.fullHelp)
     desc=lower(help.description)
     //Universal extraction - parse any man page intelligently
@@ -186,6 +187,7 @@ AgentCore.getCommandInfo=function(commandName)
       //Fallback
       if not hasIndex(knowledge,"purpose") or knowledge.purpose=="" then knowledge.purpose="command utility"
     end if
+    if hasIndex(knowledge,"purpose") then knowledge.purposeLower=lower(knowledge.purpose)
     if debug then
       print green("[DEBUG] Agent: Learning about '"+normalizedName+"' command")
       print green("[DEBUG]   Purpose: "+knowledge.purpose)

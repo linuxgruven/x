@@ -309,6 +309,7 @@ Farm.decipher=function(f)
   //Crypto library required
   if not Library.haveCrypto then return
   if globals.G_crypto then D=globals.G_crypto else D=Library.crypto
+  outLines=[]
 	for l in split(get_content(f),char(10))
 		l=split(trim(l),":")
 		if not l then continue
@@ -319,18 +320,21 @@ Farm.decipher=function(f)
     //Decipher hash
 		p=Crack.doDecipher(D,b)
 		if not p or p isa Error then continue
-    //Write entry immediately
-    z=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/"+self.get.saveAs)
-    if not z then z=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/"+self.get.saveAs])
-    if z isa Error then continue
-    content=get_content(z)
-    if content then set_content(z,content+char(10)+a+":"+p) else set_content(z,a+":"+p)
+    push(outLines,a+":"+p)
 	end for
+  if len(outLines)==0 then return
+  z=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/"+self.get.saveAs)
+  if not z then z=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/"+self.get.saveAs])
+  if z isa Error then return
+  content=get_content(z)
+  batch=join(outLines,char(10))
+  if content then set_content(z,content+char(10)+batch) else set_content(z,batch)
 end function
 //dictionary - Crack password hashes using rainbow table
 //Args: f (file object containing user:hash lines)
 //Returns: null (writes to output file)
 Farm.dictionary=function(f)
+  outLines=[]
 	for l in split(get_content(f),char(10))
 		l=split(trim(l),":")
 		if not l then continue
@@ -341,13 +345,15 @@ Farm.dictionary=function(f)
     //Look up hash in rainbow table
 		p=Crack.hash(b)
 		if not p then continue
-    //Write entry immediately
-    z=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/"+self.get.saveAs)
-    if not z then z=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/"+self.get.saveAs])
-    if z isa Error then continue
-    content=get_content(z)
-    if content then set_content(z,content+char(10)+a+":"+p) else set_content(z,a+":"+p)
+    push(outLines,a+":"+p)
 	end for
+  if len(outLines)==0 then return
+  z=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/"+self.get.saveAs)
+  if not z then z=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/"+self.get.saveAs])
+  if z isa Error then return
+  content=get_content(z)
+  batch=join(outLines,char(10))
+  if content then set_content(z,content+char(10)+batch) else set_content(z,batch)
 end function
 //getFile - Extract target file from /home/*/Config/ directory
 //Args: ex (shell/computer/file object)

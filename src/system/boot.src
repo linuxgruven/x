@@ -63,10 +63,13 @@ Boot.pivotCOLoad=function
   co.exploitBtree=globals.G_exploitBtree
   co.digCache=globals.G_digCache
   co.rtree=globals.G_rtree
+  co.rtreeRev=globals.G_rtreeRev
   co.frtree=globals.G_frtree
   co.stree=globals.G_stree
+  co.streeRev=globals.G_streeRev
   co.fstree=globals.G_fstree
   co.mtree=globals.G_mtree
+  co.mtreeRev=globals.G_mtreeRev
   co.fmtree=globals.G_fmtree
   co.libraryCache=globals.G_libraryCache
   co.metaxploit=globals.G_metaxploit
@@ -135,6 +138,10 @@ Boot.pivotCOUnload=function
   globals.G_fstree=co.fstree
   globals.G_mtree=co.mtree
   globals.G_fmtree=co.fmtree
+  //Reverse maps: restore if present, else rebuild from forward trees
+  if hasIndex(co,"rtreeRev") and co.rtreeRev then globals.G_rtreeRev=co.rtreeRev else globals.G_rtreeRev=Exploit._rebuildTreeRev(globals.G_rtree)
+  if hasIndex(co,"streeRev") and co.streeRev then globals.G_streeRev=co.streeRev else globals.G_streeRev=Exploit._rebuildTreeRev(globals.G_stree)
+  if hasIndex(co,"mtreeRev") and co.mtreeRev then globals.G_mtreeRev=co.mtreeRev else globals.G_mtreeRev=Exploit._rebuildTreeRev(globals.G_mtree)
   globals.G_libraryCache=co.libraryCache
   globals.G_metaxploit=co.metaxploit
   globals.G_initMetaxploit=co.initMetaxploit

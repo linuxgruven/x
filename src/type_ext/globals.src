@@ -155,16 +155,22 @@ G_digCache={}
 G_auto_yes=false
 //Binary tree for exploit lookup
 G_exploitBtree={}
-//Router tree for network mapping
+//Router tree for network mapping (string -> index)
 G_rtree={}
+//Reverse rtree (index -> string) for O(1) lookup
+G_rtreeRev={}
 //File router tree reference
 G_frtree=null
-//Server tree for service tracking
+//Server tree for service tracking (string -> index)
 G_stree={}
+//Reverse stree (index -> string) for O(1) lookup
+G_streeRev={}
 //File server tree reference
 G_fstree=null
-//Machine tree for host mapping
+//Machine tree for host mapping (string -> index)
 G_mtree={}
+//Reverse mtree (index -> string) for O(1) lookup
+G_mtreeRev={}
 //File machine tree reference
 G_fmtree=null
 //Cached library objects {name: lib}

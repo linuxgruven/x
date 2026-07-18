@@ -3,7 +3,7 @@
 // Early-return parses (compound/config/shorthand) and autonomous/conditional flow.
 // =============================================================================
 //Early returns: compound, multi-target, config, whois, shorthand. Null if not handled.
-AgentParser._parseEarlyCommand=function(Obj,command,cmd,debug)
+AgentParser._parseEarlyCommand=function(Obj,command,cmd,debug,ips=null)
   parsed={}
   parsed.raw=command
   //Check for compound commands: "scan X and then exploit Y", "first scan then crack"
@@ -28,7 +28,7 @@ AgentParser._parseEarlyCommand=function(Obj,command,cmd,debug)
   end for
   //Check for multi-target commands: "scan 1.2.3.4 and 5.6.7.8 and 9.10.11.12"
   //Detect 3+ IPs with no compound delimiter -> multi-target mode
-  allIps=globals.G_agent._extractIps(cmd)
+  if ips==null then allIps=globals.G_agent._extractIps(cmd) else allIps=ips
   if allIps and len(allIps)>=3 then
     //3+ IPs likely means multi-target (not router+target pair)
     //Extract the action word (first word before any IP)
@@ -238,7 +238,9 @@ AgentParser._parseEarlyCommand=function(Obj,command,cmd,debug)
 end function
 //Autonomous / conditional / fetch-or-object flow. Mutates parsed.
 //Returns {"done":bool,"actionFound":bool}
-AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headlessMode,debug)
+AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headlessMode,debug,ips=null)
+  if ips==null then ips=globals.G_agent._extractIps(cmd)
+  if not ips then ips=[]
   //Check for autonomous decision-making requests
   autonomousPatterns=self._AUTONOMOUS_PATTERNS
   for pattern in autonomousPatterns
@@ -270,9 +272,11 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
       parsed.hasConditional=true
     end if
   end if
-      parsed.originalInput=cmd  // Store original command for knowledge recording
+  parsed.originalInput=cmd  // Store original command for knowledge recording
+  //Heavy IP/requirement setup only for autonomous / conditional (not every parse)
+  if (hasIndex(parsed,"autonomousRequest") and parsed.autonomousRequest) or hasConditional then
       //Extract target - look for IP addresses
-      extractedIps=globals.G_agent._extractIps(cmd)
+      extractedIps=ips
       if extractedIps and len(extractedIps)>0 then
         //Check if we have multiple IPs - determine which are LAN targets vs public routers
         if len(extractedIps)>=2 then
@@ -445,7 +449,8 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
       //Parse continuation commands for autonomous actions
       //First check if user explicitly requests object access
       continuationParts=[]
-      cmdLower=lower(cmd)
+      //cmd is already lowercased; alias for continuation parsers below
+      cmdLower=cmd
       skipAllCommands=false
       //Check for object request patterns with flexible matching (allow words between "need" and "computer")
       hasObjectRequest=false
@@ -481,10 +486,6 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
         end if
       end if
       if not skipAllCommands then
-        //First check hardcoded patterns (more specific)
-        cmdParts=split(cmd," ")
-        for part in cmdParts;partLower=lower(part);end for
-        //Check whole command for continuation patterns
       //Check for corrupted system - don't attempt any operations
       if hasIndex(Obj,"machineType") and lower(Obj.machineType)=="corrupted" then
         parsed.action="error"
@@ -671,6 +672,7 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
         if debug then print green("[DEBUG] Autonomous - built "+len(continuationParts)+" continuation commands")
       end if
     end if
+  end if
   //Check for knowledge query patterns
   if not actionFound then
     knowledgePatterns=self._KNOWLEDGE_PATTERNS
@@ -943,7 +945,7 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
       end if
     end for
   end if
-  ips=globals.G_agent._extractIps(cmd)
+  //Reuse shared ips from _parseCommand (already extracted)
   if len(ips)>0 then
     //If there's a LAN IP, it's always the target (endpoint)
     //If there's only a public IP, that's the target
@@ -1043,8 +1045,7 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
         parsed.autonomousRequest=true
         parsed.originalInput=cmd  //Store original command for autonomous processing
         //Extract target IPs
-        extractedIps=globals.G_agent._extractIps(cmd)
-        if extractedIps and len(extractedIps)>0 then parsed.target=extractedIps[0]
+        if len(ips)>0 then parsed.target=ips[0]
         //Extract requirements (same logic as autonomous patterns section)
         requirements={}
         //Extract privilege requirement

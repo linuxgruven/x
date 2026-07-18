@@ -104,9 +104,10 @@ AgentParser._extractNoActionPhase=function(Obj,command,cmd,parsed,headlessMode,d
   end if
   return parsed
 end function
-AgentParser._extractFieldsPhase=function(Obj,command,cmd,parsed,actionFound,headlessMode,debug)
-  //Must extract here: formerly shared locals from monolithic _parseCommand
-  ips=globals.G_agent._extractIps(cmd)
+AgentParser._extractFieldsPhase=function(Obj,command,cmd,parsed,actionFound,headlessMode,debug,ips=null)
+  //Reuse shared ips from _parseCommand when provided
+  if ips==null then ips=globals.G_agent._extractIps(cmd)
+  if not ips then ips=[]
   if hasIndex(parsed,"action") then
     parsed=self._extractActionPhase(Obj,command,cmd,parsed,headlessMode,debug,ips)
   end if

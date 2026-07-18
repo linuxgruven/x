@@ -1349,7 +1349,10 @@ Crack.findPassword=function(hash)
         lineStart=pos-1
         while lineStart>0 and content[lineStart]!=char(10);lineStart-=1;end while
         if content[lineStart]==char(10) then lineStart+=1
-        return content[lineStart:pos]
+        pwd=content[lineStart:pos]
+        if not globals.G_rainbow then globals.G_rainbow={}
+        globals.G_rainbow[hash]=pwd
+        return pwd
       end for
     end if
   end if
@@ -1358,7 +1361,15 @@ Crack.findPassword=function(hash)
     if name(file)=="index" then continue
     content=get_content(file)
     if not content then continue
-    for line in split(content,char(10));if not line then continue;parts=split(line,":");if len(parts)==2 and parts[1]==hash then return parts[0];end for
+    for line in split(content,char(10))
+      if not line then continue
+      parts=split(line,":")
+      if len(parts)==2 and parts[1]==hash then
+        if not globals.G_rainbow then globals.G_rainbow={}
+        globals.G_rainbow[hash]=parts[0]
+        return parts[0]
+      end if
+    end for
   end for
   return null
 end function
@@ -1518,22 +1529,11 @@ Crack.hash=function(h,a=true)
       return self._tryDecipher(h,addToRainbow)
     end if
   end if
-	// Use fast index-based lookup if available
-	if globals.G_rainbowIndex then
-		password=self.findPassword(h)
-		if password then return password
-	else
-		// Fall back to in-memory cache (old method)
-		if not globals.G_rainbow then globals.G_rainbow={}
-		if hasIndex(globals.G_rainbow,h) then return globals.G_rainbow[h]
-		// Try stream-based lookup and build index if possible
-		password=self.findPassword(h)
-		if password then
-			// Cache it for next time
-			globals.G_rainbow[h]=password
-			return password
-		end if
-	end if
+	// findPassword checks G_rainbow first, then index/disk; always memos hits
+	if not globals.G_rainbow then globals.G_rainbow={}
+	if hasIndex(globals.G_rainbow,h) then return globals.G_rainbow[h]
+	password=self.findPassword(h)
+	if password then return password
 	// Not found - offer decipher option
 	if a then
 		return self._tryDecipher(h)
