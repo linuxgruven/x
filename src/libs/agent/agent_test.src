@@ -471,9 +471,12 @@ AgentTest._handleTest=function(Obj,step,context)
     //Choosing exploit with no lastTarget should ask for a target (not hard-error)
     r=globals.G_agent.resolveDialog("exploit")
     _assert("break->exploit that",hasIndex(r,"command") and r.command=="exploit that")
+    //Clear session lastTarget so "that" stays unresolved (prior ai runs pollute this)
+    if globals.G_agent.sessionContext then globals.G_agent.sessionContext.lastTarget=null
+    if globals.G_agentContext then globals.G_agentContext.lastTarget=null
     p=globals.G_agent._parseCommand(Obj,r.command)
     _assert("exploit that->needTarget",hasIndex(p,"awaitDialog") and p.awaitDialog==true)
-    _assert("needTarget kind",globals.G_agent.dialogState.kind=="needTarget")
+    _assert("needTarget kind",globals.G_agent.dialogState!=null and globals.G_agent.dialogState.kind=="needTarget")
     r=globals.G_agent.resolveDialog("192.168.1.2")
     _assert("target->exploit ip",hasIndex(r,"command") and r.command=="exploit 192.168.1.2")
     //pickVector dialog stores selectedAttackVector and resumes exploit
