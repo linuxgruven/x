@@ -17,7 +17,7 @@ Gzip.gzip=function(Obj,argv)
   if argv.f then F=Io._getFile(Obj,argv.f)
   if F isa Error then return
 	z="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-  // Base64-like: 3-char chunks → 8-bit binary → 6-bit groups → charSet; pads to groups of 4
+  // Base64-like: 3-char chunks -> 8-bit binary -> 6-bit groups -> charSet; pads to groups of 4
   doCompress=function(s)
     if not s then return
     l=len(z)-1
@@ -77,7 +77,7 @@ Gzip.gzip=function(Obj,argv)
       print white(doCompress(join(arg.rest," ")))
     end if
 	end function
-  // Base64-like decode: 4-char chunks → 6-bit binary → 8-bit groups → char
+  // Base64-like decode: 4-char chunks -> 6-bit binary -> 8-bit groups -> char
   doUncompress=function(s)
     if not s then return
     l=len(z)-1

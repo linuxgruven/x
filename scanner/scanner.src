@@ -2275,7 +2275,7 @@ _pObjectMenu=function(_poShell=null)
           continue
         end if
         mr=mResults[mi-1]
-        if mr.type==_sh or mr.type==_cm or mr.type=="file" then _exM(mr.ex,mr.type) else _pw(mr.addr+" → "+mr.type+" ("+_s(mr.ex)+")")
+        if mr.type==_sh or mr.type==_cm or mr.type=="file" then _exM(mr.ex,mr.type) else _pw(mr.addr+" -> "+mr.type+" ("+_s(mr.ex)+")")
       end while
     end function
     pm.methods=function
@@ -3605,10 +3605,10 @@ downloadFile=function(ex,rpath=null,rShell=null)
   saveTo=lHome+"/Downloads/"
   if rpath and rpath.len then
     p=rpath.trim
-    _p GY("  Download from remote → save to ")+YL(saveTo)
+    _p GY("  Download from remote -> save to ")+YL(saveTo)
   else
     _p ""
-    _p GY("  Download from remote host → your machine")
+    _p GY("  Download from remote host -> your machine")
     _p GY("  Saves to ")+YL(saveTo)
     p=_ask("Remote file path ('b' cancel)")
     if not p or _tl(p)=="b" then return
@@ -3966,7 +3966,7 @@ uploadFile=function(ex,lpath=null,dest=null)
     lp=lpath.trim
   else
     _p ""
-    _p GY("  Upload from your machine → remote host")
+    _p GY("  Upload from your machine -> remote host")
     _p GY("  Remote: ")+WH(u)+GY("@")+YL(comp.public_ip)+GY("  default dir ")+YL(rHome+"/")
     _p GY("  Local home: ")+YL(lHome+"/")
     lp=_ask("Local file path ('b' cancel)")
@@ -3980,7 +3980,7 @@ uploadFile=function(ex,lpath=null,dest=null)
   if dest and dest.len then
     dest=_resolveRemotePath(ex,dest.trim)
   else
-    _p GY("  Uploading ")+WH(src.name)+GY(" → ")+YL(u+"@"+comp.public_ip)
+    _p GY("  Uploading ")+WH(src.name)+GY(" -> ")+YL(u+"@"+comp.public_ip)
     _p GY("  Remote directory (enter = ")+YL(rHome)+GY(")")
     dest=_ask("Remote dir")
     if not dest or not dest.trim.len then dest=rHome else dest=_resolveRemotePath(ex,dest.trim)
@@ -6488,7 +6488,7 @@ _showHelp=function(topic)
     _sub("WiFi (wf)")
     _p GY("  Needs active WiFi on current shell host (wlan0)")
     _p GY("  a = crack all networks   # = crack one by list number")
-    _p GY("  Flow: airmon start → aireplay → aircrack → connect")
+    _p GY("  Flow: airmon start -> aireplay -> aircrack -> connect")
     _p ""
   end if
   // XFIX1.0: REMOVE neuro help block with _neuroScan

@@ -129,7 +129,7 @@ Bash._lex=function(input)
       idEnd=pos+1
       while idEnd<inputLen;ic=input[idEnd];if (ic>="a" and ic<="z") or (ic>="A" and ic<="Z") or (ic>="0" and ic<="9") or ic=="_" then idEnd+=1 else break;end while
       word=input[pos:idEnd]
-      //_getvar(name) → single GV token with name extracted
+      //_getvar(name) -> single GV token with name extracted
       if word=="_getvar" and idEnd<inputLen and input[idEnd]=="(" then
         depth=1
         closeIdx=idEnd+1
@@ -140,7 +140,7 @@ Bash._lex=function(input)
           continue
         end if
       end if
-      //_setvar → SV token
+      //_setvar -> SV token
       if word=="_setvar" then
         push(tokens,self._tok("SV",word,pos))
         pos=idEnd
@@ -286,19 +286,19 @@ end function
 // Replaces _evalArithmetic, _evalStringConcat, and parts of _getVal
 //
 // Grammar:
-//   expr       → comparison
-//   comparison → addition (("==" | "!=" | "<" | ">" | "<=" | ">=") addition)*
-//   addition   → multiply (("+" | "-") multiply)*
-//   multiply   → power (("*" | "/" | "%") power)*
-//   power      → unary ("**" unary)*
-//   unary      → ("-" | "!") unary | call
-//   call       → primary ( "(" arglist ")" | "." IDENT )*
-//   primary    → NUMBER | STRING | GETVAR | IDENT | "(" expr ")" | "[" listlit "]"
+//   expr       -> comparison
+//   comparison -> addition (("==" | "!=" | "<" | ">" | "<=" | ">=") addition)*
+//   addition   -> multiply (("+" | "-") multiply)*
+//   multiply   -> power (("*" | "/" | "%") power)*
+//   power      -> unary ("**" unary)*
+//   unary      -> ("-" | "!") unary | call
+//   call       -> primary ( "(" arglist ")" | "." IDENT )*
+//   primary    -> NUMBER | STRING | GETVAR | IDENT | "(" expr ")" | "[" listlit "]"
 // =============================================================================
 
 //Evaluate a string expression and return typed result
-//getVar: function(name) → value from gb.VARS
-//callFunc: function(name, args) → dispatch to builtin or user function
+//getVar: function(name) -> value from gb.VARS
+//callFunc: function(name, args) -> dispatch to builtin or user function
 Bash._lexEval=function(input,getVar,callFunc)
 tokens=self._lex(input);s=self._lexStream(tokens);return self._lexExpr(s,getVar,callFunc)
 end function

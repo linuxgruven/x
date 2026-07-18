@@ -39,10 +39,10 @@ manAwk="AWK(1)                           X Shell Manual                         
       Print expressions. Comma-separated items joined by OFS.
       Concatenate with no comma for no separator.
       Inline string literals adjacent to field refs are concatenated:
-        $1"".""$2"".0.0/16""  →  value-of-$1 . value-of-$2 . .0.0/16
+        $1"".""$2"".0.0/16""  ->  value-of-$1 . value-of-$2 . .0.0/16
 
     <b>printf ""fmt"", arg, ...</b>
-      Formatted output. Supports %s, %d, %f. Use \\n for newline.
+      Formatted output. Supports %s, %d, %f. Use \"+char(8203)+"n for newline.
 
     <b>length(str)</b>
       Return length of string or field.
@@ -94,10 +94,10 @@ manAwk="AWK(1)                           X Shell Manual                         
     Reformat colon-delimited fields with custom separator
 
     <color=#e4ff34># printf</color>
-    awk '{printf ""[%d] %s\n"", NR, $0}' data.txt
+    awk '{printf ""[%d] %s\"+char(8203)+"n"", NR, $0}' data.txt
     Print formatted numbered lines
 
-    cat file.txt | awk '{printf ""%-20s %s\n"", $1, $2}'
+    cat file.txt | awk '{printf ""%-20s %s\"+char(8203)+"n"", $1, $2}'
     Left-aligned columns
 
     <color=#e4ff34># String Concatenation in print</color>

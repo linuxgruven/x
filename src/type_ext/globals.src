@@ -142,7 +142,7 @@ G_pipe={
   "stdout":[],
   // Flag indicating if currently in pipe mode
   "PIPE_MODE":false,
-  // Flag indicating if currently called from xargs (suppresses stdin→argv injection)
+  // Flag indicating if currently called from xargs (suppresses stdin->argv injection)
   "XARGS_MODE":false,
   // User-defined variable storage for command substitution (e.g., $(command))
   "VARS":{}

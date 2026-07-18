@@ -1475,7 +1475,7 @@ Bash._exec=function(Obj,c,skipProcess=false)
   end if
   //Dispatch to handler — O(1) map lookup, built locally on first call then cached in gb.
   //IMPORTANT: map must be constructed inside this function (not at module level).
-  //GreyScript invokes @refs in module-level maps at init time (no args → crash).
+  //GreyScript invokes @refs in module-level maps at init time (no args -> crash).
   //Local construction stores references correctly; same pattern as _builtinMap in bash_builtins.src.
   if not hasIndex(gb,"_dc") then
     gb._dc={
@@ -2572,7 +2572,7 @@ _ef_local=function(cmd,Obj)
   else if _code=="p" or _code=="w" then
     print green("_local: "+typeName+" changed to "+newPass+" on "+Obj.computer.public_ip)
   else
-    print green("_local: "+typeName+" → "+obj.user.name+" ["+obj.user.raw+"] on "+Obj.computer.public_ip)
+    print green("_local: "+typeName+" -> "+obj.user.name+" ["+obj.user.raw+"] on "+Obj.computer.public_ip)
   end if
   return false
 end function

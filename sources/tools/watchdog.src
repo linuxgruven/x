@@ -391,7 +391,7 @@ monitor_files_and_system=function(comp,config)
       print(""<color=#FF00AAff>""+msg+""</color>"")
       log_message(comp,msg)
     else if stored[p]!=cur[p] then
-      msg=""[!] FILE CHANGED: ""+p+"" (Size: ""+stored[p]+"" → ""+cur[p]+"")""
+      msg=""[!] FILE CHANGED: ""+p+"" (Size: ""+stored[p]+"" -> ""+cur[p]+"")""
       print(""<color=orange>""+msg+""</color>"")
       log_message(comp,msg)
     end if

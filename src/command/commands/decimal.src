@@ -1,8 +1,8 @@
 // =============================================================================
 // DECIMAL
 // Convert decimal numbers to binary or hex.
-// Direct:  decimal -b 255       → 11111111
-//          decimal -h 255       → ff
+// Direct:  decimal -b 255       -> 11111111
+//          decimal -h 255       -> ff
 // Pipe:    seq 1 10 | decimal -b
 //          seq 1 255 | decimal -h
 // =============================================================================

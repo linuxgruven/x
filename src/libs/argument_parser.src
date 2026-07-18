@@ -347,7 +347,7 @@ ArgumentParser.parse=function(commandName,argv,Obj=null,opts={})
 	// Validate input - ensure argv is a list
 	if argv==null then return Error.set("No arguments provided")
 	if not(argv isa list) then argv=[argv]
-	// Step 1: Expand combined short flags (-abc → -a -b -c)
+	// Step 1: Expand combined short flags (-abc -> -a -b -c)
 	argv=self.check(argv)
 	// Step 2: Parse flags into structured map
 	argv=self.parseArgs(commandName,argv)

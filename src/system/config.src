@@ -31,7 +31,7 @@ Config._getDefaults=function
   for setting in self._settingsRegistry;defaults[setting.key]=setting.default;end for
   return defaults
 end function
-//Lazily build and cache a map of key→setting for O(1) lookups in _validateSetting
+//Lazily build and cache a map of key->setting for O(1) lookups in _validateSetting
 Config._registryMap=null
 Config._getRegistryMap=function
   if self._registryMap then return self._registryMap

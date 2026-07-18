@@ -393,7 +393,7 @@ Command.open=function(Obj,argv)
     launch(targetObj.shell,path(exeFile))
     System.tryWait(2)
   end function
-  // Application launcher dispatch map (flag/name → function reference)
+  // Application launcher dispatch map (flag/name -> function reference)
   launchers={
     "-a":@admin,
     "admin":@admin,

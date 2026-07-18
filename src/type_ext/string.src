@@ -101,7 +101,7 @@ string.reverse=function
 	while v;push(s,pop(v));end while
 	return join(s,"")
 end function
-// Colon-separated hex character codes e.g. "AB" → "41:42"
+// Colon-separated hex character codes e.g. "AB" -> "41:42"
 string.toHex=function
 	h=""
 	for i in self;h+=code(self[__i_idx]).toHex;if i<len(self)-1 then h+=":";end for

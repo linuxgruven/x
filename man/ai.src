@@ -360,14 +360,14 @@ manAi="AI(1)                            X Shell Manual                          
 
     <color=#e4ff34># Multi-Target Batch</color>
     <b>ai scan 1.1.1.1 2.2.2.2 3.3.3.3</b>
-    3+ IPs → batched headless fan-out (continue-on-fail)
+    3+ IPs -> batched headless fan-out (continue-on-fail)
     Prints per-target OK/FAIL summary
 
     <color=#e4ff34># Typed Dialogs (reply with next ai command)</color>
-    <b>ai break that</b>  →  pick intent, then target / vector / exploit
-    <b>ai yes</b> / <b>ai no</b>  →  confirm critical ops or multi-step plans
-    <b>ai cancel</b>  →  abort active dialog
-    <b>ai auto</b>  →  when picking exploits, try in priority order
+    <b>ai break that</b>  ->  pick intent, then target / vector / exploit
+    <b>ai yes</b> / <b>ai no</b>  ->  confirm critical ops or multi-step plans
+    <b>ai cancel</b>  ->  abort active dialog
+    <b>ai auto</b>  ->  when picking exploits, try in priority order
 
     <color=#e4ff34># Reconnaissance</color>
     <b>ai recon 8.8.8.8</b>
@@ -447,9 +447,9 @@ manAi="AI(1)                            X Shell Manual                          
     Uses: hunt file -n config.txt
 
     Hunt flags supported:
-    version → -v, count → -c, save → -s,
-    download → -d, kill → -k, port → -p,
-    name → -n, bssid → -b, essid → -e
+    version -> -v, count -> -c, save -> -s,
+    download -> -d, kill -> -k, port -> -p,
+    name -> -n, bssid -> -b, essid -> -e
 
     <color=#e4ff34># With Options</color>
     <b>ai scan 10.0.0.1 -v</b>

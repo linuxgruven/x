@@ -113,9 +113,9 @@ Command.jq=function(Obj,argv)
     return result.map
   end function
   // Parse expression into descriptor
-  // .              → {type:"all"}
-  // .a.b.c         → {type:"single", path:["a","b","c"]}
-  // [.a,.b.c]      → {type:"multi",  paths:[["a"],["b","c"]]}
+  // .              -> {type:"all"}
+  // .a.b.c         -> {type:"single", path:["a","b","c"]}
+  // [.a,.b.c]      -> {type:"multi",  paths:[["a"],["b","c"]]}
   parseExpr=function(e)
     e=trim(e)
     if e=="." then return {"type":"all"}

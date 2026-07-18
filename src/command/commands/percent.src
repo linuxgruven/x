@@ -1,8 +1,8 @@
 // =============================================================================
 // PERCENT
 // Calculate what percentage x is of y.
-// Direct:  percent 50 200      → 25%
-// Pipe:    seq 1 10 | percent 100  → each line as % of 100
+// Direct:  percent 50 200      -> 25%
+// Pipe:    seq 1 10 | percent 100  -> each line as % of 100
 // =============================================================================
 Command.percent=function(Obj,argv)
   hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null

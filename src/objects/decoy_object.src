@@ -36,7 +36,7 @@ DecoyObject.run=function(this,ex,goto)
     //Do NOT clear CO here — proxy_object.init clears it when the proxy boots.
     //Clearing CO here would wipe the stash saved by proxy -q (Boot.pivotCOLoad),
     //causing the proxy X process to read an empty CO, skip continueBash, and race
-    //to user_input before the main loop → terminal ends in [MAIN] instead of [PROXY].
+    //to user_input before the main loop -> terminal ends in [MAIN] instead of [PROXY].
 	end function
   //Restore existing decoy session from ex object
   if typeof(ex)!="shell" then
