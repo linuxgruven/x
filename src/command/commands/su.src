@@ -1,0 +1,232 @@
+// =============================================================================
+// SU
+// Switch user or manage privileged accounts; root login support.
+// =============================================================================
+Command.su=function(Obj,argv)
+  if not argv then return Man.help(["su"])
+  command=lower(pull(argv))
+  _p=ArgumentParser.init
+  _p.addArgument("u",false,"store")  // Username to switch to
+  _p.addArgument("start",true,"flag")  // Long flag: --start (start su session)
+  argv=_p.parseArgs("su",argv)
+  if argv isa Error then return
+  // If stdin is piped in, use it as the password
+  stdinPass=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin then
+    stdinPass=trim(globals.G_pipe.stdin)
+    if stdinPass then
+      if not argv.rest then argv.rest=[stdinPass] else if not len(argv.rest) then push(argv.rest,stdinPass)
+    end if
+  end if
+  // When a password was piped in for plain `su`/`root`, use it instead of exploit-only path
+  if stdinPass and (command=="su" or command=="root") then command="-r"
+  rootShell=function(arg)
+    if Obj.rootShell then return Exploit.getShell(Obj.rootShell)
+    // Try password sources in order: user-provided, Shadow cache, direct passwd, silent passwd
+    password=null
+    if arg and arg.rest then password=arg.rest[0]
+    if not password then password=Shadow.returnPassword(Obj.meta.public_ip)
+    if not password then password=Crack.getPasswd(Obj.shell)
+    if not password then password=Crack.passwdReturnSilent(Obj)
+    if password then
+      if not globals.G_hasPivoted then shell=get_shell("root",password) else shell=Builder.getShell(Obj,"root",password)
+      if shell then
+        Shadow.addByObject(Obj,password)
+        Obj.rootShell=shell
+        return Exploit.getShell(shell)
+      end if
+    end if
+    // Try exploitation method before aggressive fallback
+    shell=Exploit.tryShell(Obj,true)
+    if shell and typeof(shell)=="shell" then
+      Obj.rootShell=shell
+      return Exploit.getShell(shell)
+    end if
+    // Fallback to aggressive Crack.returnRootShell method
+    shell=Crack.returnRootShell(Obj.shell)
+    if shell and typeof(shell)=="shell" then
+      Obj.rootShell=shell
+      return Exploit.getShell(shell)
+    end if
+    Info.error("Unable to get root shell")
+  end function
+  getCred=function(arg)
+    credentials={"name":"root","pass":"","argv":[]}
+    if arg.u then credentials.name=arg.u else credentials.name="root"
+    pipePass=null
+    if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin then pipePass=trim(globals.G_pipe.stdin)
+    if credentials.name=="root" then
+      // Check if password is being piped in or passed as argument
+      if arg.rest and len(arg.rest)>0 then
+        password=arg.rest[0]
+        credentials.pass=password
+      else if pipePass then
+        credentials.pass=pipePass
+      else
+        password=Shadow.returnPassword(Obj.meta.public_ip)
+        if password then
+          if not Gui.yesNo("Use shadow password for this network?") then password=Gui.inputPassNS("Enter Root Password: ")
+        else
+          password=Gui.inputPassNS("Enter Root Password: ")
+        end if
+        credentials.pass=password
+      end if
+    else
+      // Check if password is being piped in for non-root user
+      if arg.rest and len(arg.rest)>0 then
+        credentials.pass=arg.rest[0]
+      else if pipePass then
+        credentials.pass=pipePass
+      else
+        credentials.pass=Gui.inputPassNS("Enter "+credentials.name+" Password: ")
+      end if
+    end if
+    return credentials
+  end function
+  wipe=function(arg)
+    shell=null
+    // Use cached root shell or get credentials
+    if Obj.rootShell then
+      shell=Obj.rootShell
+    else
+      cred=getCred(arg)
+      if not globals.G_hasPivoted then shell=get_shell(cred.name,cred.pass) else shell=Builder.getShell(Obj,cred.name,cred.pass)
+    end if
+    if not shell then return warnA
+    logFile=Io.getFileObjEx(shell,"/var/system.log")
+    Info.info("Clearing log file...")
+    if Log.shellLog(shell) then Info.info("Wiped system.log")
+  end function
+  passwd=function(arg)
+    passwdFile=Io.getFileObj(Obj,"/etc/passwd")
+    if passwdFile isa Error then return Info.warning("File not found: /etc/passwd")
+    if not has_permission(passwdFile,"r") then
+      if Obj.rootShell then
+        passwdFile=File(host_computer(Obj.rootShell),"/etc/passwd")
+      else
+        cred=getCred(arg)
+        shell=get_shell(cred.name,cred.pass)
+        if shell then passwdFile=File(host_computer(shell),"/etc/passwd")
+      end if
+      if not passwdFile then return Warning.set("Passwd file is missing")
+      if not has_permission(passwdFile,"r") then return Error.set(Info.message.NOR)
+    end if
+    content=get_content(passwdFile)
+    for line in content.split(char(10));if len(line) then print white(line);end for
+  end function
+  execute=function(arg)
+    shell=null
+    binaryPath=null
+    if arg.rest then binaryPath=arg.rest[0]
+    if not binaryPath then return warnB
+    if Obj.rootShell then
+      shell=Obj.rootShell
+    else
+      cred=getCred({"u":arg.u,"rest":null})
+      if not globals.G_hasPivoted then shell=get_shell(cred.name,cred.pass) else shell=Builder.getShell(Obj,cred.name,cred.pass)
+      if not shell then return warnA
+    end if
+    binary=File(Obj.computer,"/bin/"+binaryPath)
+    if not binary then
+      if indexOf(binaryPath,"/")!=null then binary=File(Obj.computer,binaryPath) else binary=File(Obj.computer,Obj.dir.current+"/"+binaryPath)
+    end if
+    if not binary then return Error.set("File not found: "+binaryPath)
+    if not is_binary(binary) then return Info.error("Not a binary file: "+path(binary))
+    binaryArgs=null
+    if len(arg.rest)>1 then binaryArgs=arg.rest[1:].join(" ")
+    gco=get_custom_object
+    saved={}
+    keys=[]
+    for k in gco;keys.push(k.key);end for
+    for k in keys;saved[k]=gco[k];remove(gco,k);end for
+    if binaryArgs then result=launch(shell,path(binary),binaryArgs) else result=launch(shell,path(binary))
+    gco=get_custom_object
+    for k in saved;gco[k.key]=k.value;end for
+    return result
+  end function
+  shell=function(arg)
+    if Obj.rootShell then return Exploit.getShell(Obj.rootShell)
+    cred=getCred(arg)
+    if not globals.G_hasPivoted then shell=get_shell(cred.name,cred.pass) else shell=Builder.getShell(Obj,cred.name,cred.pass)
+    if not shell then return warnA
+    Exploit.getShell(shell)
+  end function
+  relaunch=function(arg)
+    if globals.G_hasPivoted then return Error.set("Cannot relaunch while you have|had active sessions")
+    if Obj.rootShell then return launch(Obj.rootShell,program_path)
+    cred=getCred(arg)
+    if not globals.G_hasPivoted then shell=get_shell(cred.name,cred.pass) else shell=Builder.getShell(Obj,cred.name,cred.pass)
+    if not shell then return warnA
+    launch(shell,program_path)
+  end function
+  terminal=function(arg)
+    shell=null
+    if Obj.rootShell then
+      shell=Obj.rootShell
+    else
+      cred=getCred({"u":arg.u,"rest":null})
+      if not globals.G_hasPivoted then shell=get_shell(cred.name,cred.pass) else shell=Builder.getShell(Obj,cred.name,cred.pass)
+      if not shell then return warnA
+    end if
+    if arg.start then start_terminal(shell)
+    terminalFile=File(Obj.computer,"/usr/bin/Terminal.exe")
+    if terminalFile then
+      launch(shell,path(terminalFile),arg.rest.join(" "))
+      return System.tryWait(2)
+    end if
+    terminalFile=Io.getExe(Obj.root,"Terminal.exe")
+    if terminalFile isa Error then
+      Builder.launchAppEx(shell,"Terminal.exe",arg.rest)
+    else
+      launch(shell,path(terminalFile),arg.rest.join(" "))
+      System.tryWait(2)
+    end if
+  end function
+  brute=function(arg);Crack.attack(Obj,arg);end function
+  dictionary=function(arg)
+    if arg isa map then
+      arg.s=true
+    else if arg then
+      arg=["-s"]+arg
+    else
+      arg=["-s"]
+    end if
+    Crack.dictAttack(Obj,arg)
+  end function
+  root=function(arg)
+    if Net.hasInternet(Obj) isa Warning then return
+    shell=Exploit.tryShellEX(Obj.shell,true)
+    if shell and (not shell isa Error) then Exploit.getShell(shell)
+  end function
+  user=function(arg)
+    if not arg.rest then return warnB
+    username=arg.rest[0]
+    password=null
+    if len(arg.rest)>1 then
+      password=arg.rest[1]
+    else
+      password=Gui.inputPassNS("Enter "+username+" Password: ")
+      if not password then return Info.warning("No password entered")
+    end if
+    if not globals.G_hasPivoted then shell=get_shell(username,password) else shell=Builder.getShell(Obj,username,password)
+    if not shell then return warnA
+    Exploit.getShell(shell)
+  end function
+  warnA=function;Info.warning("Incorrect username or password");end function
+  warnB=function;Info.warning("Invalid arguments 'see man su'");end function
+  commands={
+    "su":@root,
+    "root":@root,
+    "-l":@relaunch,
+    "-d":@dictionary,
+    "-b":@brute,
+    "-w":@wipe,
+    "-p":@passwd,
+    "-e":@execute,
+    "-t":@terminal,
+    "-s":@shell,
+    "-r":@rootShell,
+    "-u":@user
+  }
+  if hasIndex(commands,command) then commands[command](argv) else Info.error("Invalid flag: "+command+" (see 'man su')")
+end function

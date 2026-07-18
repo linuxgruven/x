@@ -1,0 +1,47 @@
+// Man page for l33t
+manL33t="L33T(1)                          X Shell Manual                          L33T(1)
+
+<b>NAME</b>
+    <b>l33t</b> - convert text to and from l33t speak
+
+<b>SYNOPSIS</b>
+    <b>l33t</b> -t|-f [-o file] TEXT
+    <b>l33t</b> -t|-f [-i file] [-o file]
+
+<b>DESCRIPTION</b>
+    Converts text between normal text and l33t speak. L33t speak
+    replaces certain letters with numbers and symbols:
+    a -> 4,  e -> 3,  i -> 1,  l -> |,  o -> 0
+    s -> 5,  t -> 7,  g -> 9,  b -> 8
+    Can read from file or arguments, and output to file or console.
+    <b>Note:</b> When passing text as arguments, flags must come BEFORE the text.
+
+<b>OPTIONS</b>
+    -t    Convert TO l33t speak
+
+    -f    Convert FROM l33t speak back to normal text
+
+    -i    Input file path to read from
+
+    -o    Output file path to write results to
+
+<b>EXAMPLE:</b>
+    <b>l33t -t Hello World</b>
+    Convert 'Hello World' to l33t: 'H3||0 W0r|d'
+
+    <b>l33t -f H3||0 W0r|d</b>
+    Convert back from l33t: 'Hello World'
+
+    <b>l33t -t -i message.txt -o l33t.txt</b>
+    Convert file contents to l33t speak
+
+    <b>l33t -f -i l33t.txt</b>
+    Convert l33t speak file back to normal text
+
+    <b>l33t -t -o output.txt Hello World</b>
+    Convert text and save to file
+
+    <b>cat secret.txt | l33t -t</b>
+    Convert piped input to l33t speak
+<b>SEE ALSO</b>
+    <b>cat</b>, <b>grep</b>, <b>sed</b>, <b>tr</b>"

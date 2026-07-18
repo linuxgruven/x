@@ -1,0 +1,212 @@
+webIsp="<!doctype html>
+<style>
+  html {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: linear-gradient(180deg, #111f52 0%, #1c3a78 55%, #2b5d95 100%);
+  }
+  body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: #d5e4f2;
+    font: 14px ""Trebuchet MS"", ""Segoe UI"", Arial, sans-serif;
+  }
+  .scroll-root {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    padding: 20px 0;
+  }
+  .page {
+    width: 860px;
+    max-width: 95%;
+    margin: 0 auto 18px auto;
+    border: 1px solid #3d5f93;
+    background: #0d1c31;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
+  }
+  .shell {
+    margin: 10px;
+    border: 1px solid #4f73a8;
+    background: #132742;
+  }
+  .top {
+    padding: 9px 12px;
+    border-bottom: 1px solid #4f73a8;
+    background: linear-gradient(90deg, #1c3f7f 0%, #2560a6 58%, #2e8dae 100%);
+    color: #e8f3ff;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+  }
+  .btn-group {
+    margin: 12px;
+    text-align: center;
+  }
+  .btn {
+    background-color: #1b3660;
+    border: 1px solid #6d90c3;
+    color: #d8e9ff;
+    padding: 5px 6px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 11px;
+    width: 108px;
+    margin: 3px;
+  }
+  .btn-sel {
+    background-color: #26518a;
+    border-color: #86b0df;
+  }
+  .btn-group button:hover {
+    background-color: #26518a;
+  }
+  .hero {
+    margin: 0 12px 12px 12px;
+    padding: 14px;
+    border: 1px solid #4f73a8;
+    background: linear-gradient(180deg, #18335a 0%, #152c4e 68%, #1a3f61 100%);
+    text-align: center;
+  }
+  .kicker {
+    margin: 0 0 6px 0;
+    color: #f2bf74;
+    font-size: 14px;
+    letter-spacing: 1px;
+    font-weight: bold;
+  }
+  .hero-copy {
+    margin: 0;
+    color: #d7ebff;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .sub {
+    margin: 7px 0 10px 0;
+    color: #b5ccea;
+    font-size: 13px;
+  }
+  .image-wrap {
+    width: 460px;
+    max-width: 95%;
+    margin: 0 auto;
+    border: 1px solid #5e80b1;
+    background: #102842;
+    padding: 6px;
+  }
+  img {
+    display: block;
+    margin: 0 auto;
+  }
+  .section-title {
+    margin: 0 12px 8px 12px;
+    color: #f2bf74;
+    font-size: 12px;
+    letter-spacing: 0.7px;
+  }
+  .plans {
+    margin: 0 12px 12px 12px;
+    text-align: center;
+  }
+  .plan {
+    display: inline-block;
+    vertical-align: top;
+    width: 31%;
+    min-width: 180px;
+    margin: 0 4px 8px 4px;
+    border: 1px solid #4f73a8;
+    border-top-width: 3px;
+    background: #10263f;
+    padding: 10px 8px;
+    box-sizing: border-box;
+  }
+  .plan-1 {
+    border-top-color: #4ba5d5;
+  }
+  .plan-2 {
+    border-top-color: #f2bf74;
+  }
+  .plan-3 {
+    border-top-color: #8ec882;
+  }
+  .plan-name {
+    margin: 0;
+    color: #d8ecff;
+    font-size: 14px;
+  }
+  .plan-info {
+    margin: 6px 0 0 0;
+    color: #b2cae9;
+    font-size: 12px;
+  }
+  .plan-price {
+    margin: 7px 0 0 0;
+    color: #8ec3ff;
+    font-size: 12px;
+    font-weight: bold;
+  }
+  .footer {
+    margin: 0 12px 12px 12px;
+    border-top: 1px solid #4f73a8;
+    padding-top: 8px;
+    color: #8eaccd;
+    font-size: 11px;
+    text-align: center;
+  }
+  @media (max-width: 640px) {
+    .btn {
+      width: 94%;
+      max-width: 260px;
+    }
+    .plan {
+      display: block;
+      width: auto;
+      margin: 0 0 8px 0;
+    }
+  }
+</style>
+<div class=""scroll-root"">
+  <div class=""page"">
+    <div class=""shell"">
+      <div class=""top"">NET SERVICES HUB ISP CONTROL NODE</div>
+      <div class=""btn-group"">
+        <button type=""button"" class=""btn btn-primary btn-sel"" id=""Main"">Main</button>
+        <button type=""button"" class=""btn btn-primary"" id=""ISPConfig"">Services</button>
+      </div>
+      <div class=""hero"">
+        <p class=""kicker"">NETWORK ACCESS PROVIDER</p>
+        <p class=""hero-copy"">Requtiluy. Secure and fast Internet Provider Service.<b><font size=13>
+<br>* Rental servers available<br>* Cancel your subscription at any time<br>* Subscription is paused when you don't use it</font></b></p>
+        <div class=""image-wrap"">
+          <img src=""isp.jpg"" width=""440"" height=""180"" align=""center"">
+        </div>
+      </div>
+      <p class=""section-title"">AVAILABLE PLANS</p>
+      <div class=""plans"">
+        <div class=""plan plan-1"">
+          <p class=""plan-name"">Home Link</p>
+          <p class=""plan-info"">Stable broadband for daily use</p>
+          <p class=""plan-price"">From $60 / month</p>
+        </div>
+        <div class=""plan plan-2"">
+          <p class=""plan-name"">Pro Stream</p>
+          <p class=""plan-info"">High-throughput connection</p>
+          <p class=""plan-price"">From $90 / month</p>
+        </div>
+        <div class=""plan plan-3"">
+          <p class=""plan-name"">Server Lease</p>
+          <p class=""plan-info"">External machine with uptime billing</p>
+          <p class=""plan-price"">From ¢295 / month</p>
+        </div>
+      </div>
+      <div class=""footer"">Service quality monitored daily Support line always available</div>
+    </div>
+  </div>
+</div>"

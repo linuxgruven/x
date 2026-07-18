@@ -1,0 +1,22 @@
+// Man page for median
+manMedian="MEDIAN(1)                        X Shell Manual                        MEDIAN(1)
+
+<b>NAME</b>
+    median - Find median value in list
+<b>SYNOPSIS</b>
+    <b>median NUMBER</b> [NUMBER...]
+<b>DESCRIPTION</b>
+    Calculate the median (middle value) of a list of numbers.
+    For odd-length lists, returns the middle number. For even-length
+    lists, typically returns the average of the two middle numbers.
+<b>EXAMPLE:</b>
+    <b>median 1 2 3 4 5</b>
+    Find median of 5 numbers (result: 3)
+
+    <b>median 10 20 30</b>
+    Find median of 3 numbers (result: 20)
+
+    <b>median 5 15 25 35</b>
+    Find median of 4 numbers
+<b>SEE ALSO</b>
+    <b>average</b>, <b>percent</b>"

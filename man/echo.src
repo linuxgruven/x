@@ -1,0 +1,66 @@
+// Man page for echo
+manEcho="ECHO(1)                          X Shell Manual                          ECHO(1)
+
+<b>NAME</b>
+    echo - Output text to screen or file
+<b>SYNOPSIS</b>
+    <b>echo</b> [-e] TEXT
+    <b>echo</b> TEXT > (NAME)
+    <b>echo</b> TEXT >> FILE
+<b>DESCRIPTION</b>
+    Output strings to terminal or redirect to files. Supports creating
+    new files or appending to existing files using redirection operators.
+    When the -e flag is used, escape sequences are interpreted.
+<b>OPTIONS</b>
+    -e    Enable interpretation of escape sequences:
+            \"+char(8203)+"n  newline
+            \t  tab
+            \r  carriage return
+            \\  literal backslash
+
+    <b>TEXT</b> - Print
+      Print text to terminal.
+
+    <b>TEXT > NAME</b> - Create File
+      Write text to new file (optional name).
+
+    <b>TEXT >> FILE</b> - Append
+      Append text to existing file.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man echo</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>echo</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Print to Screen</color>
+    <b>echo Hello World</b>
+    Display text on terminal
+
+    <color=#e4ff34># Create File</color>
+    <b>echo Configuration settings > config.txt</b>
+    Create new file with content
+
+    <b>echo Line 1 ></b>
+    Create echo.txt with content
+
+    <color=#e4ff34># Append to File</color>
+    <b>echo New line >> logfile.txt</b>
+    Add line to existing file
+
+    <b>echo Error occurred >> system.log</b>
+    Append to log file
+
+    <color=#e4ff34># Escape Sequences</color>
+    <b>echo -e Line 1\"+char(8203)+"nLine 2\"+char(8203)+"nLine 3</b>
+    Print multiple lines with newlines
+
+    <b>echo -e Name:\"+char(8203)+"tJohn\"+char(8203)+"nAge:\"+char(8203)+"t25</b>
+    Print formatted text with tabs
+
+    <b>echo -e 3\"+char(8203)+"n1\"+char(8203)+"n2 | sort</b>
+    Create separate lines for sorting
+<b>SEE ALSO</b>
+    <b>cat</b>, <b>write</b>, <b>print</b>, <b>tr</b>"

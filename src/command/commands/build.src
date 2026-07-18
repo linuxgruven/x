@@ -1,0 +1,52 @@
+// =============================================================================
+// BUILD
+// Compile a GreyScript source file into a binary executable.
+// =============================================================================
+Command.build=function(Obj,argv)
+	_p=ArgumentParser.init
+	_p.addArgument("a",false,"flag")  // Allow imports
+	_p.addArgument("r",false,"flag")  // Run after build
+	argv=_p.parse("build",argv,Obj)
+	if argv isa Error then return
+	hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+	if not argv.rest and not hasPipeInput then
+		sourceFile=Io.file(Obj,Obj.dir.current,"Select the source file to build:")
+		if sourceFile isa Warning then return sourceFile
+		push(argv,path(sourceFile))
+		outputDir=Io.folder(Obj,Obj.dir.current,"Select the build output directory:")
+		if outputDir isa Warning then return outputDir
+		push(argv.rest,path(outputDir))
+		argv.a=Gui.yesNo("Allow import?",false)
+	end if
+	if hasPipeInput and argv.rest and len(argv.rest)==1 then
+		outputDir=Io._getFile(Obj,argv.rest[0],true)
+		if outputDir isa Error then return outputDir
+		for _line in globals.G_pipe.stdin.split(char(10))
+			_line=trim(_line)
+			if _line=="" then continue
+			sourceFile=Io._getFile(Obj,_line,true)
+			if sourceFile isa Error then Info.error("Source not found: "+_line);continue
+			result=build(Obj.shell,path(sourceFile),path(outputDir),argv.a)
+			if result=="" then Info.info("Built: "+name(sourceFile)) else Info.error(result)
+		end for
+		return
+	end if
+	if not len(argv.rest)==2 then return Man.help(["build"])
+	sourcePath=argv.rest[0]
+	targetPath=argv.rest[1]
+	if not targetPath then targetPath=""
+	sourceFile=Io._getFile(Obj,sourcePath,true)
+	if sourceFile isa Error then return sourceFile
+	outputDir=Io._getFile(Obj,targetPath,true)
+	if outputDir isa Error then return outputDir
+	// build(shell, source_path, output_path, allow_imports) returns empty string on success
+	result=build(Obj.shell,path(sourceFile),path(outputDir),argv.a)
+	if result=="" then Info.info("build successful") else return Info.error(result) // Compilation failed - display error message
+	if argv.r then
+		// Remove .src extension to get binary name
+		binaryName=name(sourceFile).replace(".src","")
+		Info.info("Running "+binaryName+"...")
+		binaryPath=path(Io._getFile(Obj,targetPath+"/"+binaryName))
+		launch(Obj.shell,binaryPath)
+	end if
+end function

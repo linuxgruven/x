@@ -1,0 +1,136 @@
+// =============================================================================
+// TREE
+// Display directory tree in Linux tree style using | and -- connectors.
+// =============================================================================
+Command.tree=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("d",false,"flag")  // Short flag: -d directories only (no files)
+  _p.addArgument("w",false,"flag")  // Short flag: -w wide columnar mode
+  _p.addArgument("p",false,"flag")  // Short flag: -p show permissions
+  _p.addArgument("u",false,"flag")  // Short flag: -u show owner
+  _p.addArgument("g",false,"flag")  // Short flag: -g show group
+  _p.addArgument("s",false,"flag")  // Short flag: -s show size
+  _p.addArgument("L",false,"storeNumber")  // Short flag: -L <depth> max display depth
+  _p.addArgument("post",true,"flag")  // Long flag: --post (redirect output)
+  argv=_p.parse("tree",argv,Obj)
+  if argv isa Error then return
+  argv=_p.parsePath(Obj,argv)
+  if argv isa Error then return
+  // Determine target directory (default to current directory)
+  if argv.rest and len(argv.rest)>0 then targetDir=Io._getFile(Obj,argv.rest[0]) else targetDir=Io._getFile(Obj,path(Obj.dir.current))
+  if targetDir isa Error then return Error.set("Invalid path")
+  if not is_folder(targetDir) then return Error.set("Path is not a directory")
+  if argv.w then return self.treeWide(Obj,targetDir,_p,argv)
+  if argv.d then return self.treeDirectory(Obj,targetDir,_p,argv)
+  if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then _p.write=true
+  // Output buffer and counters
+  output=[]
+  counts={"dirs":0,"files":0}
+  // Print root directory name
+  rootName=path(targetDir)
+  push(output,rootName)
+  if not _p.write then print blue(rootName)
+  // Max depth from -L flag (0 = unlimited)
+  maxDepth=0
+  if argv.L and argv.L>0 then maxDepth=argv.L
+  // Recursive walker: builds Linux-style tree with | and -- connectors
+  walkDir=function(dir,prefix,depth)
+    items=get_folders(dir)+get_files(dir)
+    // Filter out null entries
+    clean=[]
+    for it in items;if it then push(clean,it);end for
+    total=len(clean)
+    if total==0 then return
+    i=0
+    while i<total
+      item=clean[i]
+      isLast=(i==total-1)
+      // Last item uses +--- with blank continuation; others use |--- with | continuation
+      if isLast then
+        connector="+<cspace=-0.3em>---</cspace> "
+        plainConnector="+--- "
+        childPrefix=prefix+"     "
+      else
+        connector="|<cspace=-0.3em>---</cspace> "
+        plainConnector="|--- "
+        childPrefix=prefix+"|    "
+      end if
+      itemName=name(item)
+      // Build [metadata] prefix if -p/-u/-g flags are set
+      metaParts=[]
+      colorMetaParts=[]
+      if argv.p then
+        push(metaParts,permissions(item))
+        push(colorMetaParts,green(permissions(item)))
+      end if
+      if argv.u then
+        push(metaParts,ljust(owner(item),8))
+        push(colorMetaParts,ljust(blue(owner(item)),8))
+      end if
+      if argv.g then
+        push(metaParts,ljust(group(item),8))
+        push(colorMetaParts,ljust(blue(group(item)),8))
+      end if
+      if argv.s then
+        _sz=str(Io.size(val(size(item))))
+        push(metaParts,rjust(_sz,8))
+        push(colorMetaParts,rjust(yellow(_sz),8))
+      end if
+      if len(metaParts)>0 then
+        meta="["+join(metaParts," ")+"]  "
+        colorMeta="["+join(colorMetaParts," ")+"]  "
+      else
+        meta=""
+        colorMeta=""
+      end if
+      if is_folder(item) then
+        counts.dirs=counts.dirs+1
+        push(output,prefix+plainConnector+meta+itemName)
+        if not _p.write then print prefix+connector+colorMeta+blue(itemName)
+        if maxDepth==0 or depth<maxDepth then walkDir(item,childPrefix,depth+1)
+      else
+        counts.files=counts.files+1
+        isLink=is_symlink(item)
+        isBinary=is_binary(item) or is_binary(item)==null
+        line=prefix+plainConnector+meta+itemName
+        if isLink then line=line+" -> "+path(item,true)
+        push(output,line)
+        if not _p.write then
+          if isBinary and isLink then
+            print prefix+connector+colorMeta+orange("*")+green(itemName)+" -> "+yellow(path(item,true))
+          else if isBinary then
+            print prefix+connector+colorMeta+orange("*")+green(itemName)
+          else if isLink then
+            print prefix+connector+colorMeta+yellow(itemName)+" -> "+yellow(path(item,true))
+          else
+            print prefix+connector+colorMeta+white(itemName)
+          end if
+        end if
+      end if
+    i+=1
+    end while
+  end function
+  walkDir(targetDir,"",1)
+  // Summary line matching Linux tree format
+  dc=counts.dirs
+  fc=counts.files
+  if dc==1 then ds="directory" else ds="directories"
+  if fc==1 then fs="file" else fs="files"
+  summary=str(dc)+" "+ds+", "+str(fc)+" "+fs
+  push(output,"")
+  push(output,summary)
+  if not _p.write then
+    print ""
+    print summary
+  end if
+  // Pipe mode: push plain output lines to stdout
+  if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+    for line in output;push(globals.G_pipe.stdout,line);end for
+    return
+  end if
+  // Handle output redirection to file
+  if _p.write then
+    argv["data"]=output
+    _p.out(Obj,argv)
+  end if
+end function

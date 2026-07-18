@@ -1,0 +1,32 @@
+// =============================================================================
+// NUMBER
+// Formatting, conversion, and math utilities for the number type.
+// =============================================================================
+number.toHex=function(p=0)
+  h=[]
+  n=self
+  while n!=0;t=n%16;if t<10 then push(h,char(t+48)) else push(h,char(t+55));n=floor(n/16);end while
+  if p>0 then
+    j=p-len(h)
+    if j>0 then h+=["0"*j]
+  end if
+  h.reverse
+  return "0x"+join(h,"")
+end function
+// Returns "True"/"False" — only 1 is considered true
+bool=function(self);if self==1 then return "True" else return "False";end function
+number.bool=@bool
+// Returns colored "True"/"False" — standard truthiness (0=false)
+cbool=function(self);if self then return green("True") else return red("False");end function
+number.cbool=@cbool
+// Return smaller of self and v
+min=function(v);if v<self then return v;return self;end function
+number.min=@min
+// Return larger of self and v
+max=function(v);if v>self then return v;return self;end function
+number.max=@max
+to_str=function(self);return ""+self;end function
+number.to_str=@to_str
+// Wrap in bold tags
+_bold=function(self);return "<b>"+self+"</b>";end function
+number._bold=@_bold

@@ -1,0 +1,18 @@
+// Man page for home
+manHome="HOME(1)                          X Shell Manual                          HOME(1)
+
+<b>NAME</b>
+    home - return to the top-level object
+<b>SYNOPSIS</b>
+    <b>home</b>
+<b>DESCRIPTION</b>
+    Closes all nested objects (shell|computer|file) and returns
+    to the top-level running object. If you are on a pivot or
+    proxy, you will be returned to that pivot or proxy — not
+    necessarily your main machine. Only returns to main if you
+    have no active pivots or proxies.
+<b>EXAMPLE:</b>
+    <b>home</b>
+    Return to top-level object
+<b>SEE ALSO</b>
+    <b>close</b>"

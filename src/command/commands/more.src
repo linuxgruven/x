@@ -1,0 +1,82 @@
+// =============================================================================
+// MORE
+// Paginated file viewer; pauses every N lines (default 25).
+// =============================================================================
+Command.more=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  if not argv and not hasPipeInput then return Man.help(["more"])
+  _p=ArgumentParser.init
+  _p.addArgument("c",false,"storeNumber")  // Lines per page
+  _p.addArgument("post",true,"flag")       // Post-processing mode
+  argv=_p.parse("more",argv,Obj)
+  if argv isa Error then return
+  fileTargets=[]
+  if hasPipeInput then
+    stdinText=globals.G_pipe.stdin
+    if typeof(stdinText)=="list" then stdinText=join(stdinText,char(10))
+    lines=stdinText.split(char(10))
+    totalLines=len(lines)
+    linesRemaining=totalLines
+    if argv and argv.c then linesPerPage=argv.c else linesPerPage=25
+    totalStr=white(str(totalLines))
+    pageStr=white(str(linesPerPage))
+    for line in lines
+      print white(line)
+      if not (__line_idx+1)%linesPerPage then
+        linesRemaining-=linesPerPage
+        if linesRemaining<0 then linesRemaining*=-1
+        user_input(yellow("Press Enter when ready (T:"+totalStr+" LR:"+white(str(linesRemaining))+" V:"+pageStr+")"))
+      end if
+    end for
+    return
+  end if
+  if argv.hasIndex("files") and argv.files and len(argv.files)>0 then
+    fileTargets=argv.files
+  else if argv.rest and len(argv.rest)>0 then
+    fileObj=Io._getFile(Obj,argv.rest[0])
+    if fileObj isa Error then return fileObj
+    fileTargets=[fileObj]
+  else
+    return Man.help(["more"])
+  end if
+  allContent=[]
+  for fileObj in fileTargets
+    if not fileObj or fileObj isa Error then continue
+    // Validate read permission on file
+    if not has_permission(fileObj,"r") then
+      Error.set(Info.message.NOR)
+      continue
+    end if
+    // Reject binary files and folders
+    if Io.isBinFolder(fileObj) then
+      Error.set("Invalid file type")
+      continue
+    end if
+    // Add file separator if multiple files
+    if len(fileTargets)>1 then allContent.push(char(10)+"===[ "+name(fileObj)+" ]==="+char(10))
+    // Retrieve and store file content
+    content=get_content(fileObj)
+    if content then allContent.push(content)
+  end for
+  content=allContent.join("")
+  if _p.write then argv["data"]=content
+  lines=split(content,char(10))
+  totalLines=len(lines)
+  linesRemaining=totalLines
+  if argv.c then linesPerPage=argv.c else linesPerPage=25
+  totalStr=white(str(totalLines))
+  pageStr=white(str(linesPerPage))
+  for line in lines
+    print white(line)
+    // Check if we've reached end of current page (page break)
+    if not (__line_idx+1)%linesPerPage then
+      linesRemaining-=linesPerPage
+      // Prevent negative display (shouldn't happen but safeguard)
+      if linesRemaining<0 then linesRemaining*=-1
+      // Pause for user input with progress indicator
+      prompt="Press Enter when ready (T:"+totalStr+" LR:"+white(str(linesRemaining))+" V:"+pageStr+")"
+      user_input(yellow(prompt))
+    end if
+  end for
+  if _p.write then return _p.out(Obj,argv)
+end function

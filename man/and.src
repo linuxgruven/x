@@ -1,0 +1,42 @@
+// Man page for and
+manAnd="AND(1)                           X Shell Manual                           AND(1)
+
+<b>NAME</b>
+    command ; command - Execute multiple commands unconditionally
+    command && command - Execute commands conditionally
+
+<b>DESCRIPTION</b>
+    Two ways to chain commands together:
+
+    <b>Semicolon (;)</b>
+    Execute commands sequentially, one after another, regardless of
+    success or failure. All commands run in order.
+
+    <b>Logical AND (&&)</b>
+    Execute commands conditionally. The second command only runs if
+    the first command succeeds (returns non-error result).
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Unconditional Chaining</color>
+    <b>ls ; pwd ; whoami</b>
+    Run three commands in sequence
+
+    <b>cd /home/tux ; touch file.txt ; ls</b>
+    Change directory, create file, list contents
+
+    <color=#e4ff34># Conditional Chaining</color>
+    <b>cd /etc && ls</b>
+    Only list contents if cd succeeds
+
+    <b>gzip -c -f secret.txt && rm secret.txt</b>
+    Only delete original if compression succeeds
+
+    <b>nmap -l && show</b>
+    Only show results if scan succeeds
+
+    <b>scan -l -p 22 && libssh</b>
+    Only run libssh if port 22 is open
+
+    <color=#e4ff34># Mixed Chaining</color>
+    <b>cd /etc && cat passwd ; echo done</b>
+    cd and cat are conditional, echo runs regardless"

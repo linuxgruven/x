@@ -1,0 +1,80 @@
+// Man page for pivot
+manPivot="PIVOT(1)                         X Shell Manual                         PIVOT(1)
+
+<b>NAME</b>
+    pivot - Copy and launch x framework on target systems
+<b>SYNOPSIS</b>
+    <b>pivot</b> [-y] [--full]
+<b>DESCRIPTION</b>
+    Pivoting is an integral part of x framework arsenal. Copy x to
+    compromised systems and launch for continued operations. If x already
+    exists on target, pivot launches existing copy instead of uploading.
+
+    Two pivot types available:
+      <b>Minimal</b> [default] - Copies x binary and empty payload structure
+      <b>Full</b> (--full flag) - Copies x binary and entire local payload directory
+        (man pages, password lists, rainbow tables, saved libs, exploits, etc.)
+
+    Maximum pivots (self launches): 17
+<b>OPTIONS</b>
+    <b>pivot</b>
+      Copy x to target. Prompts for install location.
+
+    <b>-y</b>
+      Auto-yes. Skip directory prompt, use home directory.
+
+    <b>--full</b>
+      Full pivot. Upload x binary and entire local payload directory
+      to the target. Implies auto-yes.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Pivoting</color>
+    <b>scan -p 192.168.1.50 22</b>
+    Exploit SSH service
+
+    <b>pivot</b>
+    Minimal pivot (prompted for location)
+
+    <b>pivot -y</b>
+    Minimal pivot (auto-yes, home directory)
+
+    <b>pivot --full</b>
+    Full pivot with all payload data
+
+    <color=#e4ff34># Multi-hop Pivoting</color>
+    <b>scan 192.168.1.100</b>
+    Compromise first target
+
+    <b>pivot --full</b>
+    Full pivot to first system
+
+    <b>scan -n</b>
+    Scan local network from pivot
+
+    <b>scan -p 192.168.2.50 22</b>
+    Exploit second target
+
+    <b>pivot</b>
+    Minimal pivot (nested pivot)
+
+    <color=#e4ff34># Strategic Operations</color>
+    <b>pivot --full</b>
+    Full pivot for extended operations
+
+    <b>scan -l</b>
+    Scan local libraries after pivot
+
+    <b>scan -n</b>
+    Scan network from pivoted position
+
+    <color=#e4ff34># Pivot Chain Example</color>
+    <b>hunt ssh -c 1</b>
+    Find SSH target
+
+    <b>scan -p TARGET 22</b>
+    Exploit found target
+
+    <b>pivot -y</b>
+    Quick minimal pivot
+<b>SEE ALSO</b>
+    <b>pull</b>"

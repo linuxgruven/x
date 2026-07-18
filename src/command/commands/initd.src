@@ -1,0 +1,42 @@
+// =============================================================================
+// INITD
+// Manage /etc/init.d startup compiled scripts: list, add, and remove entries.
+// Compiled scripts in /etc/init.d are executed automatically on boot.
+// =============================================================================
+Command.initd=function(Obj,argv)
+	if not argv then return Man.help(["initd"])
+	_p=ArgumentParser.init
+	_p.addArgument("a",false,"store")  // Add: path to compiled script to register
+	_p.addArgument("r",false,"store")  // Remove: name of entry to remove
+	_p.addArgument("l",false,"flag")   // List all init.d entries
+	argv=_p.parse("initd",argv,Obj)
+	if argv isa Error then return
+	initDir=File(Obj.computer,"/etc/init.d")
+	if not initDir then return Error.set("/etc/init.d does not exist")
+	// List
+	if argv.l or (not argv.a and not argv.r) then
+		entries=get_files(initDir)+get_folders(initDir)
+		if not entries or len(entries)==0 then return Info.info("No startup entries in /etc/init.d")
+		Info.info("Startup entries in /etc/init.d:")
+		for entry in entries;print purple("["+yellow("-")+"]")+"   "+white(name(entry));end for
+		return
+	end if
+	// Add
+	if argv.a then
+		srcFile=Io._getFile(Obj,argv.a,true)
+		if srcFile isa Error then return srcFile
+		entryName=name(srcFile)
+		if File(Obj.computer,"/etc/init.d/"+entryName) then return Error.set("'"+entryName+"' is already in init.d")
+		r=copy(srcFile,"/etc/init.d",entryName)
+		if r!=1 then return Error.set("Failed to add '"+entryName+"': "+r)
+    return Info.info("Added '"+entryName+"' to /etc/init.d")
+	end if
+	// Remove
+	if argv.r then
+		target=File(Obj.computer,"/etc/init.d/"+argv.r)
+		if not target then return Error.set("'"+argv.r+"' not found in init.d")
+		r=delete(target)
+		if r then return Error.set("Failed to remove '"+argv.r+"': "+r)
+		return Info.info("Removed '"+argv.r+"' from /etc/init.d")
+	end if
+end function

@@ -1,0 +1,25 @@
+binRshellInterface="metaxploit=include_lib(""/lib/metaxploit.so"")
+if not metaxploit then metaxploit=include_lib(current_path+""/metaxploit.so"")
+if not metaxploit then exit(""Error: Can't find metaxploit library in the /lib path or the current folder"")
+print(""Listening for upcoming connections..."")
+shells=[]
+while len(shells)==0
+	shells=rshell_server(metaxploit)
+	if typeof(shells)==""string"" then exit(shells)
+	if len(shells)==0 then wait(2)
+end while
+option=0
+while typeof(option)!=""number"" or (option<1 or option>len(shells))
+	print(len(shells)+"" shell(s) connected!""+char(10)+""<b>Select a shell to start a terminal:</b>"")
+	i=0
+	_len=len(shells)
+	while i<_len
+		comp=host_computer(shells[i])
+		print(char(10)+""<b>Shell (""+(i+1)+"")</b>""+char(10)+""Public IP: ""+public_ip(comp)+char(10)+""Local IP: ""+local_ip(comp))
+		i=i+1
+	end while
+	print(""-----------"")
+	option=to_int(user_input(""Select shell>""))
+end while
+print(""Starting shell #""+option)
+start_terminal(shells[option-1])"

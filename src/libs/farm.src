@@ -1,0 +1,451 @@
+// =============================================================================
+// FARM
+// Network farming library; automated credential harvesting and exploitation of network services.
+// =============================================================================
+Farm={
+  "get":{}
+}
+//file - Get File object from shell/computer/file with path resolution
+//Args: ex (shell/computer/file object), z (path string)
+//Returns: File object or null
+Farm.file=function(ex,z)
+  //Get object type
+	obj=typeof(ex)
+  //Computer object: direct File access
+	if obj=="computer" then return File(ex,z)
+  //Shell object: get computer then File
+	if indexOf(obj,"shell")!=null then return File(host_computer(ex),z)
+  //File object: navigate from root
+	if obj=="file" then
+    //Convert to root file access
+		ex=FileHelper.toRootEx(ex)
+    //Return root if requested
+		if z=="/" then return ex
+    //Navigate path segments directly (O(depth) not O(total files))
+    parts=split(z,"/")
+    cur=ex
+    for p in parts
+      if not p or p=="" then continue
+      nxt=null
+      for d in get_folders(cur);if name(d)==p then nxt=d; break;end for
+      if nxt==null then
+        for f in get_files(cur);if name(f)==p then return f;end for
+        return null
+      end if
+      cur=nxt
+    end for
+    return cur
+	end if
+end function
+//harvest - Shared exploit loop used by getMailBank and names
+//Args: handler (function(ex) - called with obtained access object, returns true on success)
+//Returns: null (harvests until Farm.get.count reaches Farm.get.countTo)
+Farm.harvest=function(handler)
+  //Metaxploit required
+	if not Library.haveMetaxploit then return
+  //Exploit cache required
+	if not Exploit.have then return
+  Utility.pressQ
+  //Loop until harvest target reached
+  seen={}
+	while self.get.count<self.get.countTo
+    //Check watcher app status
+    if poll_input=="q" then return
+    //Get random IP
+		i=Net.rip
+    //Skip already-seen IPs
+    if hasIndex(seen,i) then continue
+    seen[i]=1
+    //Get router at IP
+		r=get_router(i)
+		if not r then continue
+    //Check for open ports
+		z=used_ports(r)
+		if not z then continue
+		if Net.isPortsClose(z) then continue
+    //Extract library information
+		y=Exploit.extract(r,i)
+		if not y or y isa Error then continue
+    //Monitor IP if setting enabled
+		if globals.G_settings.monitorDirtyips then Dirty.add(i)
+		b=false
+    //Try exploits for each library
+		for m in y
+			if poll_input=="q" then return
+			if b then break
+      //Skip router exploits
+			if m.port_number==0 then continue
+      //Get cached exploits for library
+      E=lib_name(m.metaLib)+"_"+version(m.metaLib)
+      if not hasIndex(globals.G_exploitCache,E) then continue
+      q=Exploit._ex(E)
+			if not len(q) then continue
+			for e in q
+				if poll_input=="q" then return
+        //Try shell/computer/file exploits
+				if e.e=="s" or e.e=="c" or e.e=="f" then
+          //Skip shells if disabled
+					if e.e=="s" and not self.get.useShells then continue
+          //Execute exploit
+					ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"farm")
+          //Skip failed exploits
+          if ex==null or ex isa number or ex isa string then continue
+					obj=typeof(ex)
+          //Call the provided handler with the obtained access
+					if obj=="computer" or indexOf(obj,"shell")!=null or obj=="file" then
+						Farm.get.ex=ex
+						if handler then
+							b=true
+							break
+						end if
+					end if
+				end if
+			end for
+		end for
+	end while
+  //Kill watcher app when done
+end function
+//getMailBank - Farm mail/bank files from vulnerable systems
+//Returns: null (harvests until count reached)
+Farm.getMailBank=function
+  _handler=function;return Farm.getFile(Farm.get.ex);end function
+  Farm.harvest(@_handler)
+end function
+//proxy - Extract root passwords and build proxy chains
+//Returns: null (interactive mode with menu)
+Farm.proxy=function
+  //Metaxploit required
+	if not Library.haveMetaxploit then return
+  //Exploit cache required
+	if not Exploit.have then return
+  //Main farming logic
+	init=function
+		getData=function(f)
+      //Crypto library required for deciphering
+      if not Library.haveCrypto then return
+      if globals.G_crypto then D=globals.G_crypto else D=Library.crypto
+      //Save to Map.conf for proxy chain
+			save=function(i,p)
+        //Batch entry instead of read+write on every password
+        if not hasIndex(Farm.get,"mapResults") then Farm.get.mapResults=[]
+        push(Farm.get.mapResults,{"user":"root","ip":i,"password":p})
+			end function
+			for l in split(get_content(f),char(10))
+				p=null
+				l=split(trim(l),":")
+				if len(l)==2 and len(l[1])==32 then
+					if l[0]=="root" then
+						if Farm.get.useDec then p=Crack.doDecipher(D,l[1]) else p=Crack.hash(l[1])
+						if not p or p isa Error then continue
+						i=Farm.get.ip
+						if Farm.get.p then
+              //Batch result instead of immediate write
+              if not hasIndex(Farm.get,"passwordResults") then Farm.get.passwordResults=[]
+              push(Farm.get.passwordResults,p+"::"+i+"::"+i)
+						end if
+						if Farm.get.r then
+							m={
+                "public_ip":i,
+                "local_ip":i
+              }
+							if not Cache.get(m) then
+								o={
+                  "meta":{
+                    "public_ip":m.public_ip,
+                    "local_ip":m.local_ip
+                  }
+                }
+								Cache.add(o,p)
+							end if
+						end if
+						if Farm.get.m then save(i,p)
+						Farm.get.count+=1
+						return
+					end if
+				end if
+			end for
+		end function
+    //Check if SSH port (22) is open
+		checkPort=function(z)
+			for p in z
+				if port_number(p)==22 then
+          //Return 1 if open, null if closed
+					if not is_closed(p) then return 1 else return
+				end if
+			end for
+		end function
+    //Extract /etc/passwd from various object types
+		getPasswd=function(ex,e)
+      //File object: navigate to /etc/passwd
+			if e=="file" then
+				ex=FileHelper.toRootEx(ex)
+				if ex==null then return 1
+				for d in get_folders(ex)
+					if name(d)!="etc" then continue
+					for f in get_files(d);if name(f)!="passwd" then continue;if has_permission(f,"r") then getData(f) else return;end for
+				end for
+      //Computer object: direct file access
+			else if e=="computer" then
+				f=Farm.file(ex,"/etc/passwd")
+				if not f then return
+				if has_permission(f,"r") then getData(f) else return
+      //Shell object: get computer then file
+      else if indexOf(e,"shell")!=null then
+        f=File(host_computer(ex),"/etc/passwd")
+        if not f then return
+        if has_permission(f,"r") then getData(f) else return
+      end if
+      return true
+		end function
+    //Main farming loop
+    seen={}
+    while Farm.get.count<Farm.get.countTo
+      //Check watcher app status
+      if poll_input=="q" then return
+      //Get random IP
+			i=Net.rip
+      //Skip already-seen IPs
+      if hasIndex(seen,i) then continue
+      seen[i]=1
+			r=get_router(i)
+			if not r then continue
+      //Check for open ports
+			z=used_ports(r)
+			if not z isa list then continue
+      //Must have SSH port open
+			if not checkPort(z) then continue
+      //Monitor IP if setting enabled
+			if globals.G_settings.monitorDirtyips then Dirty.add(i)
+			b=null
+      //Try exploits for each library
+			for m in Exploit.extract(r,i)
+        if m isa Error then break
+				if poll_input=="q" then return
+				if b then break
+        //Skip router exploits
+				if m.port_number==0 then continue
+        //Get cached exploits for library
+        E=lib_name(m.metaLib)+"_"+version(m.metaLib)
+        if hasIndex(globals.G_exploitCache,E) then q=Exploit._ex(E) else continue
+				if not len(q) then continue
+				for e in q
+				if poll_input=="q" then return
+					if not len(e) then continue
+          //Try shell/computer/file exploits
+					if e.e=="s" or e.e=="c" or e.e=="f" then
+            //Skip shells if disabled
+						if e.e=="s" and not Farm.get.useShells then continue
+            //Execute exploit
+						ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"farm")
+            //Skip failed exploits
+            if ex==null or ex isa number or ex isa string then continue
+            //Store current IP
+						Farm.get.ip=i
+						obj=typeof(ex)
+            //Try to extract passwd from obtained access
+						if obj=="computer" or indexOf(obj,"shell")!=null or obj=="file" then
+							if getPasswd(ex,obj) then
+								b=1
+								break
+							end if
+						end if
+					end if
+				end for
+			end for
+		end while
+    //Write batched Map.conf entries (single read+write instead of one per password)
+    if Farm.get.m and hasIndex(Farm.get,"mapResults") and Farm.get.mapResults then
+      mc=Proxy.getMapConf(globals.G_main)
+      for entry in Farm.get.mapResults;push(mc.accounts,entry);end for
+      Proxy.saveMapConf(globals.G_main,mc)
+      Farm.get.mapResults=[]
+    end if
+    //Write batched password results
+    if Farm.get.p and hasIndex(Farm.get,"passwordResults") and Farm.get.passwordResults then
+      f=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/"+Farm.get.saveAs)
+      if not f then f=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/"+Farm.get.saveAs])
+      if not f isa Error then
+        content=get_content(f)
+        if content then set_content(f,content+char(10)+join(Farm.get.passwordResults,char(10))) else set_content(f,join(Farm.get.passwordResults,char(10)))
+      end if
+      Farm.get.passwordResults=[]
+    end if
+    //Kill watcher app when done
+	end function
+  //Interactive menu for proxy mode
+	CH=[green("What would you like to do?")]
+	push(CH,yellow("Just save password file"))
+	push(CH,yellow("Just create a proxy chain using Map.conf"))
+	push(CH,yellow("Just add to the r00t password cache"))
+	push(CH,iyellow("All the above"))
+	UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true)
+  //Set flags based on selection
+	if UCH==1 then
+    //Password file only
+		self.get.p=1
+	else if UCH==2 then
+    //Map.conf only
+		self.get.m=1
+	else if UCH==3 then
+    //Root cache only
+		self.get.r=1
+	else if UCH==4 then
+    //All three options
+		self.get.p=1
+		self.get.m=1
+		self.get.r=1
+	end if
+  //Start watcher app if needed
+  //Time the operation
+  st=time
+  Utility.pressQ
+	init
+  print yellow("Proccess took: "+round(time-st,2)+" seconds")
+end function
+//decipher - Decrypt password hashes using crypto library
+//Args: f (file object containing user:hash lines)
+//Returns: null (writes to output file)
+Farm.decipher=function(f)
+  //Crypto library required
+  if not Library.haveCrypto then return
+  if globals.G_crypto then D=globals.G_crypto else D=Library.crypto
+	for l in split(get_content(f),char(10))
+		l=split(trim(l),":")
+		if not l then continue
+    //Validate format: user:32charhash
+		if not len(l)==2 or not len(l[1])==32 then continue
+    a=l[0]
+    b=l[1]
+    //Decipher hash
+		p=Crack.doDecipher(D,b)
+		if not p or p isa Error then continue
+    //Write entry immediately
+    z=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/"+self.get.saveAs)
+    if not z then z=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/"+self.get.saveAs])
+    if z isa Error then continue
+    content=get_content(z)
+    if content then set_content(z,content+char(10)+a+":"+p) else set_content(z,a+":"+p)
+	end for
+end function
+//dictionary - Crack password hashes using rainbow table
+//Args: f (file object containing user:hash lines)
+//Returns: null (writes to output file)
+Farm.dictionary=function(f)
+	for l in split(get_content(f),char(10))
+		l=split(trim(l),":")
+		if not l then continue
+    //Validate format: name:32charhash
+		if not len(l)==2 or not len(l[1])==32 then continue
+    a=l[0]
+		b=l[1]
+    //Look up hash in rainbow table
+		p=Crack.hash(b)
+		if not p then continue
+    //Write entry immediately
+    z=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/"+self.get.saveAs)
+    if not z then z=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/"+self.get.saveAs])
+    if z isa Error then continue
+    content=get_content(z)
+    if content then set_content(z,content+char(10)+a+":"+p) else set_content(z,a+":"+p)
+	end for
+end function
+//getFile - Extract target file from /home/*/Config/ directory
+//Args: ex (shell/computer/file object)
+//Returns: 1 on success
+Farm.getFile=function(ex)
+  e=typeof(ex)
+  //File object: navigate to /home/*/Config/
+	if e=="file" then
+		ex=FileHelper.toRootEx(ex)
+		if ex==null then return 1
+		for d in get_folders(ex)
+			if name(d)!="home" then continue
+			for h in get_folders(d)
+        //Skip guest user
+				if name(h)=="guest" then continue
+				for c in get_folders(h)
+					if name(c)!="Config" then continue
+					for f in get_files(c)
+            //Match target filename
+						if name(f)!=self.get.file then continue
+						if not has_permission(f,"r") then return
+            //Process with decipher or dictionary
+						if self.get.useDec then self.decipher(f) else self.dictionary(f)
+						self.get.count=self.get.count+1
+					end for
+				end for
+			end for
+		end for
+  //Computer object: direct file access
+	else if e=="computer" then
+		x=get_folders(self.file(ex,"/home"))
+		if not x then return
+		for u in x
+      //Skip guest user
+			if name(u)=="guest" then continue
+      //Access /home/user/Config/file
+			f=self.file(ex,"/home/"+name(u)+"/Config/"+self.get.file)
+			if not f then continue
+			if has_permission(f,"r") then
+				if self.get.useDec then self.decipher(f) else self.dictionary(f)
+				self.get.count=self.get.count+1
+			end if
+		end for
+  //Shell object: get computer then file
+  else if indexOf(e,"shell")!=null then
+    hc=host_computer(ex)
+		x=get_folders(self.file(hc,"/home"))
+		if not x then return
+		for u in x
+      //Skip guest user
+			if name(u)=="guest" then continue
+      //Access /home/user/Config/file
+			f=self.file(hc,"/home/"+name(u)+"/Config/"+self.get.file)
+			if not f then continue
+			if has_permission(f,"r") then
+				if self.get.useDec then self.decipher(f) else self.dictionary(f)
+				self.get.count=self.get.count+1
+			end if
+		end for
+	end if
+  return 1
+end function
+//names - Enumerate user accounts from /home directories
+//Returns: null (harvests until count reached)
+Farm.names=function
+	getNames=function
+    ex=Farm.get.ex
+    e=typeof(ex)
+    //Resolve computer reference based on object type
+    if e=="file" then
+      ex=FileHelper.toRootEx(ex)
+      if ex==null then return
+      folders=get_folders(ex)
+      home=null
+      for d in folders;if name(d)=="home" then home=d; break;end for
+      if not home then return
+      x=get_folders(home)
+    else if e=="computer" then
+      x=get_folders(Farm.file(ex,"/home"))
+    else if indexOf(e,"shell")!=null then
+      x=get_folders(Farm.file(host_computer(ex),"/home"))
+    else
+      return
+    end if
+    if not x then return
+    z=[]
+    //Collect all non-guest usernames
+    for u in x;if name(u)=="guest" then continue;push(z,name(u));end for
+    if not z then return
+    //Write names immediately
+    f=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/"+Farm.get.saveAs)
+    if not f then f=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/"+Farm.get.saveAs])
+    if not f isa Error then
+      content=get_content(f)
+      if content then set_content(f,content+char(10)+join(z,char(10))) else set_content(f,join(z,char(10)))
+    end if
+    Farm.get.count+=len(z)
+    return true
+	end function
+  Farm.harvest(@getNames)
+end function

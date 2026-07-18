@@ -1,0 +1,69 @@
+// Man page for start
+manStart="START(8)                         X Shell Manual                         START(8)
+
+<b>NAME</b>
+    start - Launch x instances or terminal sessions
+<b>SYNOPSIS</b>
+    <b>start x</b> [PATH]
+    <b>start -t</b>
+    <b>start -s</b>
+    <b>start --terminal</b>
+<b>DESCRIPTION</b>
+    Launch new x framework instances or establish terminal connections.
+    Supports launching nested x instances (up to 17 pivots), starting
+    terminal-like interfaces, or establishing remote shell connections.
+
+    Maximum pivots: 17
+<b>OPTIONS</b>
+    <b>x [PATH]</b> - Launch New X Instance
+      Launch a new x framework instance at optional PATH.
+
+    <b>-t</b> - Terminal Interface
+      Start terminal-like interface (disabled during active pivot).
+
+    <b>-s</b> - Remote Shell
+      Start remote SSH or FTP shell connection.
+
+    <b>--terminal</b> - Full Terminal Session
+      Launch actual terminal session (closes current x session).
+      Requires confirmation.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Launch X Instances</color>
+    <b>start x</b>
+    Launch new x instance in current directory
+
+    <b>start x /root</b>
+    Launch x in specific directory
+
+    <b>start x /home/tux/projects</b>
+    Launch x in temp directory
+
+    <color=#e4ff34># Remote Shells</color>
+    <b>start -s 98.110.69.115 22 root password ssh</b>
+    Connect via SSH to remote system
+
+    <b>start -s 192.168.1.50 21 admin pass123 ftp</b>
+    Connect via FTP to local system
+
+    <b>start -s 10.0.0.5 22 user secret ssh</b>
+    Connect to internal network via SSH
+
+    <color=#e4ff34># Terminal Interfaces</color>
+    <b>start -t</b>
+    Start terminal-like interface
+
+    <b>start --terminal</b>
+    Launch full terminal (exits x session)
+
+    <color=#e4ff34># Multi-hop Pivoting</color>
+    <b>scan -p 192.168.1.100 22</b>
+    Exploit remote SSH
+
+    <b>pivot</b>
+    Copy x to exploited system
+
+    <b>start x</b>
+    Launch x on remote system
+<b>SEE ALSO</b>
+    <b>pivot</b>, <b>pull</b>"

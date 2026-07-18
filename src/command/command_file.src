@@ -1,0 +1,1456 @@
+// =============================================================================
+// COMMAND_FILE
+// File session callbacks: file ops, text processing, crypto, remote access.
+// =============================================================================
+//FileSessionCallbacks
+Command.fileCallbacks=function(Obj)
+	Command=@self
+  __alias=function(argv)
+    if not argv then return Man.help(["alias"])
+    Arg1=lower(argv[0])
+    setAlias=function(arg)
+      if globals.G_pipe.stdin then
+        _stdinLines=globals.G_pipe.stdin.split(char(10))
+        globals.G_pipe.stdin=null
+        for _line in _stdinLines
+          _line=trim(_line)
+          if not _line then continue
+          _toks=_line.split(" ")
+          if len(_toks)<2 then continue
+          setAlias(_toks)
+        end for
+        return
+      end if
+      if len(arg)<2 then return Error.set("Alias and command expected")
+      if hasIndex(globals.G_main.commands,arg[0]) or hasIndex(globals.G_settings.alias,arg[0]) then return Error.set("'"+arg[0]+"' is a built-in command and cannot be used as an alias")
+      _aliasVal=arg[1:]
+      if len(_aliasVal)==1 and indexOf(_aliasVal[0]," ")!=null then _aliasVal=_aliasVal[0].split(" ")
+      globals.G_settings.alias[arg[0]]=_aliasVal
+      if Config.save then Info.info("Alias '"+arg[0]+"' set to '"+join(arg[1:]," ")+"'")
+    end function
+    removeAlias=function(arg)
+      if not globals.G_settings.alias then return Info.info("No aliases available to remove")
+      if not arg then return Error.set("Alias expected")
+      a=arg[0]
+      if not hasIndex(globals.G_settings.alias,a) then return Error.set("Alias '"+a+"' not found")
+      remove(globals.G_settings.alias,a)
+      if Config.save then Info.info("Alias '"+a+"' removed")
+    end function
+    listAliases=function(arg)
+      if not globals.G_settings.alias then return Info.info("No aliases set")
+      if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+        for a in globals.G_settings.alias;push(globals.G_pipe.stdout,a.key+" => "+join(a.value," "));end for
+        return
+      end if
+      for a in globals.G_settings.alias;print white(a.key)+yellow(" => ")+green(join(a.value," "));end for
+    end function
+    clearAll=function(arg)
+      if not globals.G_settings.alias or len(globals.G_settings.alias)==0 then return Info.info("No aliases to clear")
+      count=len(globals.G_settings.alias)
+      globals.G_settings.alias={}
+      if Config.save then Info.info("Cleared "+count+" alias(s)")
+    end function
+    cmds={
+      "-s":@setAlias,
+      "-r":@removeAlias,
+      "-l":@listAliases,
+      "--clear":@clearAll
+    }
+    if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+    cmds[Arg1](argv[1:])
+  end function
+	__aes128=function(argv);Crack.AES128(argv);end function
+	__rainbow=function(argv);Crack.rainbow(argv);end function
+	__ls=function(argv);Command.ls(Obj,argv);end function
+	__edit=function(argv);Utility.editor(Obj,argv);end function
+	__kiddy=function(argv);Attack.script(Obj,argv);end function
+	__time=function(argv);Command.time(argv);end function
+	__post=function(argv);if Net.hasInternet(Obj) isa Warning then return;Command.post(argv);end function
+	__server=function(argv)
+		if Net.hasInternet(Obj) isa Warning then return
+		if System.checkDB isa Error then return
+		Server.task(argv)
+	end function
+	__bc=function(argv);Command.bc(Obj,argv);end function
+	__whoami=function(argv);print yellow(Obj.user.name);end function
+	__file=function(argv);Command.file(Obj,argv);end function
+	__more=function(argv);Command.more(Obj,argv);end function
+	__find=function(argv);Command.find(Obj,argv);end function
+	__zap=function(argv);Command.zap(Obj,argv);end function
+	__echo=function(argv);Command.echo(Obj,argv);end function
+	__write=function(argv);Command.write(Obj,argv);end function
+	__cd=function(argv);Command.cd(Obj,argv);end function
+	__cat=function(argv);Command.cat(Obj,argv);end function
+	__chgrp=function(argv);Command.chgrp(Obj,argv);end function
+	__chmod=function(argv);Command.chmod(Obj,argv);end function
+	__chown=function(argv);Command.chown(Obj,argv);end function
+	__chog=function(argv);Command.chog(Obj,argv);end function
+	__cp=function(argv);Command.cp(Obj,argv);end function
+	__mv=function(argv);Command.mv(Obj,argv);end function
+	__rm=function(argv);Command.rm(Obj,argv);end function
+	__aircrack=function(argv);Command.aircrack(Obj,argv);end function
+	__nmap=function(argv);if Net.hasInternet(Obj) isa Warning then return;Command.nmap(Obj,argv);end function
+	__decipher=function(argv);Command.decipher(Obj,argv);end function
+	__scanlib=function(argv);Command.scanlib(Obj,argv);end function
+	__scanaddress=function(argv);Command.scanaddress(Obj,argv);end function
+	__vi=function(argv);Command.vi(Obj,argv);end function
+	__mc=function(argv);Io.browse(Obj,argv);end function
+	__hashcat=function(argv);Command.hashcat(Obj,argv);end function
+	__hashfile=function(argv);Command.hashfile(Obj,argv);end function
+	__cache=function(argv)
+		if Net.hasInternet(Obj) isa Warning then return
+    if not argv then return Man.help(["cache"])
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		view=function(arg);Cache.view;end function
+		use=function(arg)
+			if not arg then return Man.help(["cache"])
+			if Obj.type=="computer" or Obj.type=="file" then
+        // CONTEXT ROUTING: If G_proxy exists, use proxy session for SSH connections
+        // This routes cache operations through the proxy chain instead of direct
+        if globals.G_proxy then o=globals.G_proxy else o=globals.G_main
+        Cache.use(o,to_int(arg[0]))
+      else
+        // CONTEXT ROUTING: Use proxy session if available for correct routing
+        if globals.G_proxy then o=globals.G_proxy else o=Obj
+        Cache.use(o,to_int(arg[0]))
+      end if
+		end function
+		edit=function(arg);if not arg then return Man.help(["cache"]);Cache.edit(to_int(arg[0]));end function
+		doLoad=function(arg);Cache.load(1);end function
+		custom=function(arg);Cache.custom;end function
+		loadFile=function(arg);Cache.loadFile;end function
+		dump=function(arg);Cache.dump(Obj);end function
+		removeBy=function(arg);if not arg then return Man.help(["cache"]);Cache.remove(to_int(arg[0]));end function
+		purge=function(arg);Cache.purge;end function
+		useCustom=function(arg)
+			if Obj.type=="computer" or Obj.type=="file" then
+        //if there is a proxy shell then use it
+        if globals.G_proxy then o=globals.G_proxy else o=globals.G_main
+        Cache.useCustom(o,arg)
+      else
+        //if there is a proxy shell then use it
+        if globals.G_proxy then o=globals.G_proxy else o=Obj
+        Cache.useCustom(o,arg)
+      end if
+		end function
+		cmds={
+      "-v":@loadFile,
+      "-u":@use,
+      "-e":@edit,
+      "-y":@doLoad,
+      "-n":@custom,
+      "-l":@view,
+      "-d":@dump,
+      "-r":@removeBy,
+      "-x":@purge,
+      "--u":@useCustom
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__hide=function(argv);Attack.hide(Obj,argv);end function
+	__encrypt=function(argv);Encryption.encrFile(Obj,argv);end function
+	__decrypt=function(argv);Encryption.decrFile(Obj,argv);end function
+	__pwd=function(argv);Command.pwd(Obj);end function
+	__jack=function(argv);if Net.hasInternet(Obj) isa Warning then return;if argv then Crack.dictInsert(Obj,[argv[0]]) else Crack.dictInsert(Obj,[]);end function
+	__info=function(argv);p=Shadow.returnPassword(Obj.meta.public_ip);if p then print yellow("Root password is [ "+green(p)+" ]") else print red("Root password not cached");end function
+	__sha256=function(argv);Crack.SHA256(argv);end function
+	__stat=function(argv);Command.stat(Obj,argv);end function
+	__notes=function(argv);Utility.notes;end function
+	__index=function(argv);Man.help(["index"]);end function
+	__share=function(argv)
+    //if Net.hasInternet(Obj) isa Warning then return
+    if not argv then Arg1="-l" else Arg1=lower(argv[0])
+		Obj=outer.Obj
+		fileView=function(arg);Share.fileView;end function
+		putFile=function(arg);if not arg then return Man.help(["share"]);Share.putFile(Obj,arg);end function
+		putLog=function(arg);Share.putFile(Obj,[File(Obj.computer,"/var/system.log")]);end function
+		putPasswd=function(arg);Share.putFile(Obj,["/etc/passwd"]);end function
+		filePeek=function(arg);if not arg then return Man.help(["share"]);Share.filePeek(to_int(arg[0]));end function
+		getFile=function(arg);if not arg then return Man.help(["share"]);Share.getFile(Obj,arg);end function
+		fileDel=function(arg);if not arg then return Man.help(["share"]);Share.fileDel(arg);end function
+		clear=function(arg);Share.clear;end function
+		manage=function(arg);Share.manage(Obj);end function
+		fileDelRange=function(arg);Share.fileDelRange;end function
+		cmds={
+			"-l":@fileView,
+			"-a":@putFile,
+			"-ap":@putPasswd,
+			"-g":@getFile,
+			"-r":@fileDel,
+			"-x":@clear,
+			"-v":@filePeek,
+			"-m":@manage,
+			"-z":@fileDelRange
+		}
+		if hasIndex(Obj,"shell") then cmds["-al"]=@putLog
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__touch=function(argv);Command.touch(Obj,argv);end function
+	__mkdir=function(argv);Command.mkdir(Obj,argv);end function
+	__whatami=function(argv);print yellow("You are a "+green(Obj.type)+" object");end function
+	__tree=function(argv);Command.tree(Obj,argv);end function
+	__ddos=function(argv);Command.ddos(Obj,argv);end function
+	__pingport=function(argv);if Net.hasInternet(Obj) isa Warning then return;Net.pingPort(Obj,argv);end function
+	__sessions=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+    if not argv then Arg1="-l" else Arg1=lower(argv[0])
+		Obj=outer.Obj
+		check=function(arg)
+      //if Utility.checkValid(Obj) then return Warning.set("Unable to add a session for PROXY|PIVOT|MAIN")
+			if Session.check(Obj,arg) then Info.info("Current session added") else Info.warning("Current session already in sessions")
+		end function
+		view=function(arg);Session.view(Obj);end function
+		use=function(arg);if not arg then return Man.help(["sess"]);Session.use(Obj,to_int(arg[0]));end function
+		doRemove=function(arg)
+			if not arg then return Man.help(["sess"])
+      n=to_int(pull(arg))
+      if not n isa number then return Error.set("Session id expected")
+      _p=ArgumentParser.init
+      _p.addArgument("y",false,"flag")  // Confirm session removal (yes)
+      _p.addArgument("n",false,"flag")  // Cancel session removal (no)
+      arg=_p.parseArgs("session",arg)
+      if arg isa Error then return
+      y=true
+      if arg.n then y=false
+			Session.remove(Obj,n,y)
+		end function
+		removeByNick=function(arg)
+			if not arg then return Man.help(["sess"])
+      n=pull(arg)
+      _p=ArgumentParser.init
+      _p.addArgument("y",false,"flag")  // Confirm session removal (yes)
+      _p.addArgument("n",false,"flag")  // Cancel session removal (no)
+      arg=_p.parseArgs("session",arg)
+      if arg isa Error then return
+      y=true
+      if arg.n then y=false
+			Session.removeByNick(Obj,n,y)
+		end function
+		nick=function(arg);if not arg or not len(arg)>=2 then return Man.help(["sess"]);Session.nick(arg);end function
+		clear=function(arg);Session.clear(Obj);end function
+		manage=function(arg);Session.manage(Obj);end function
+    pass=function(arg);Session.pass(Obj,arg);end function
+    exec=function(arg);Session.exec(arg);end function
+    goto=function(arg);Session.goto(Obj,arg);end function
+    back=function(arg);Session.back(Obj);end function
+		cmds={
+      "-a":@check,
+      "-l":@view,
+      "-u":@use,
+      "-r":@doRemove,
+      "-x":@clear,
+      "-m":@manage,
+      "-n":@nick,
+      "-p":@pass,
+      "-e":@exec,
+      "-g":@goto,
+      "back":@back,
+      "-rn":@removeByNick
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__xclip=function(argv);Command.xclip(Obj,argv);end function
+	__show=function(argv)
+		p=Shadow.returnPassword(Obj.meta.public_ip)
+		if p then print (yellow("Root password: ")+green(p)) else print red("Root password is not cached :(")
+		print yellow("Public IP:     ")+green(Obj.meta.public_ip)
+	end function
+	__wait=function(argv);Command.wait(argv);end function
+	__aireplay=function(argv);Command.aireplay(argv,Obj.net.wlan);end function
+	__nslookup=function(argv);if Net.hasInternet(Obj) isa Warning then return;Command.nslookup(argv);end function
+	__clear=function(argv);clear_screen;end function
+	__smpt=function(argv);if Net.hasInternet(Obj) isa Warning then return;Command.smtp_user_list(argv);end function
+	__whois=function(argv);if Net.hasInternet(Obj) isa Warning then return;Command.whois(argv);end function
+	__scanrouter=function(argv);if Net.hasInternet(Obj) isa Warning then return;Command.scanrouter(argv);end function
+	__gzip=function(argv);Gzip.gzip(Obj,argv);end function
+	__scrub=function(argv);Command.scrub(Obj);end function
+	__uniq=function(argv);Command.uniq(Obj,argv);end function
+	__sort=function(argv);Command.sort(Obj,argv);end function
+	__tee=function(argv);Command.tee(Obj,argv);end function
+	__inject=function(argv);Command.inject(Obj,argv);end function
+	__rev=function(argv);Command.rev(Obj,argv);end function
+	__tar=function(argv);Tar.run(Obj,argv);end function
+	__mkcd=function(argv);Command.mkcd(Obj,argv);end function
+	__locate=function(argv);Command.locate(Obj,argv);end function
+	__pwgen=function(argv);Crypt.pwgen(argv);end function
+	__split=function(argv);Command.split(Obj,argv);end function
+  __tail=function(argv);Command.tail(Obj,argv);end function
+  __head=function(argv);Command.head(Obj,argv);end function
+  __grep=function(argv);Command.grep(Obj,argv);end function
+  __sed=function(argv);Command.sed(Obj,argv);end function
+  __diff=function(argv);Command.diff(Obj,argv);end function
+  __rmdir=function(argv);Command.rmdir(Obj,argv);end function
+  __rn=function(argv);Command.rn(Obj,argv);end function
+  __join=function(argv);Command.join(Obj,argv);end function
+  __print=function(argv);Command.print(argv);end function
+  __mark=function(argv);Utility.mark;end function
+  __uptime=function(argv);Command.uptime;end function
+  __cal=function(argv);Command.cal(Obj,argv);end function
+  __probe=function(argv);System.probe(Obj);end function
+  __addpass=function(argv);if not argv then return Man.help(["addpass"]);Crack.addPassword(argv[0],1);end function
+  __qrm=function(argv);Command.qrm(Obj,argv);end function
+  __swap=function(argv);Command.swap(Obj,argv);end function
+  __logWatcher=function(argv);Command.logWatcher(Obj);end function
+  __iploop=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+    Net.ipLoop(argv)
+  end function
+  __cdl=function(argv);Command.cd(Obj,argv);Command.ls(Obj,[]);end function
+  __main=function(argv)
+    //if Net.hasInternet(Obj) isa Warning then return
+    if not argv then return Man.help(["main"])
+    Arg1=argv[0]
+    if (Arg1=="-u" or Arg1=="-d") and hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+      _stdin=trim(str(globals.G_pipe.stdin))
+      if _stdin!="" then
+        for _line in split(_stdin,char(10))
+          for _item in split(trim(_line)," ")
+            _item=trim(_item)
+            if _item!="" then push(argv,_item)
+          end for
+        end for
+      end if
+    end if
+    if Arg1=="-u" then return Io.upload(Obj,argv[1:])
+    if Arg1=="-d" then return Io.download(Obj,argv[1:])
+    if hasIndex(globals.G_main.commands,Arg1) then globals.G_main.commands[Arg1](argv[1:]) else return Error.set("check your syntax...there is no main command [ "+Arg1+" ]")
+  end function
+  __rat=function(argv);if Net.hasInternet(Obj) isa Warning then return;Utility.rat(argv);end function
+	__ssh=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+    if not argv then return Man.help(["ssh"])
+    _p=ArgumentParser.init
+    _p.addArgument("P",false,"store")  // Password for SSH connection
+    _p.addArgument("p",false,"storeNumber")  // Port number (default: 22)
+    _p.addArgument("t",false,"flag")  // Use tunneled connection
+    _p.addArgument("l",false,"flag")  // Use proxy shell (force through proxy)
+    _p.addArgument("d",false,"flag")  // Dictionary attack mode
+    _p.addArgument("start",true,"storeNumber")  // Long flag: --start (start index in wordlist)
+    _p.addArgument("stop",true,"storeNumber")  // Long flag: --stop (end index in wordlist)
+    argv=_p.parseArgs("ssh",argv)
+    if argv isa Error then return
+    if hasIndex(argv,"useAI") then
+      argv.rest=[]
+      i=Gui.input({"text":"Enter user ip"})
+      if i!=null then push(argv,i) else return Error.set("Invalid ip: "+i)
+      u=Gui.input({"text":"Enter user name"})
+      if u==null then return Error.set("User name is required")
+      push(argv.rest,u+"@"+i)
+      p=Gui.inputPass("Enter user password")
+      if not p then return Error.set("User password is required")
+      argv.P=p
+      argv.p=Gui.inputInt({"text":"Enter port number","default":22})
+      if G_proxy then
+        if Gui.yesNo("Use proxy shell?") then argv.l=true else argv.l=null
+      end if
+      if Gui.yesNo("Use tunneled connection?") then argv.t=true else argv.t=null
+    end if
+    //if argv.P and len(argv.rest)==1 then push(argv.rest,argv.P)
+    if not argv.p then argv.p=22
+    _targetIp=split(argv.rest[0],"@");_targetIp=_targetIp[len(_targetIp)-1]
+    if is_lan_ip(_targetIp) and Obj.type!="computer" and Obj.type!="file" then
+      S=Obj
+    else if argv.l then
+      S=globals.G_main
+    else
+      if G_proxy then S=G_proxy else S=globals.G_main
+    end if
+    if argv.d then
+      _c=split(argv.rest[0],"@")
+      _dIp=_c[len(_c)-1];_dUser=_c[0]
+      if is_lan_ip(_dIp) and Obj.type!="computer" and Obj.type!="file" then return Crack.dictNetworkLan(_dIp,argv.p,_dUser,"ssh",S.shell)
+      _dArg={"rest":[_dIp,""+argv.p],"u":_dUser,"start":0,"stop":null}
+      if argv.start then _dArg.start=argv.start
+      if argv.stop then _dArg.stop=argv.stop
+      return Crack.dictNetwork(_dArg,"ssh")
+    end if
+    if Obj.type=="computer" or Obj.type=="file" then argv.t=null
+    if argv.t then s=Builder.buildConnection(S,argv,"ssh") else s=Net.makeConnection(S,argv,"ssh")
+    if s isa Error then return
+    launch(s,"/usr/bin/Terminal.exe")
+	end function
+  __sssh=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+    if not argv then return Man.help(["sssh"])
+    _p=ArgumentParser.init
+    _p.addArgument("P",false,"store")  // Password for SSH connection
+    _p.addArgument("p",false,"storeNumber")  // Port number (default: 22)
+    _p.addArgument("t",false,"flag")  // Use tunneled connection
+    _p.addArgument("l",false,"flag")  // Use proxy shell (force through proxy)
+    _p.addArgument("d",false,"flag")  // Dictionary attack mode
+    _p.addArgument("start",true,"storeNumber")  // Long flag: --start (start index in wordlist)
+    _p.addArgument("stop",true,"storeNumber")  // Long flag: --stop (end index in wordlist)
+    argv=_p.parseArgs("sssh",argv)
+    if argv isa Error then return
+    if hasIndex(argv,"useAI") then
+      argv.rest=[]
+      i=Gui.input({"text":"Enter user ip"})
+      if i!=null then push(argv,i) else return Error.set("Invalid ip: "+i)
+      u=Gui.input({"text":"Enter user name"})
+      if u==null then return Error.set("User name is required")
+      push(argv.rest,u+"@"+i)
+      p=Gui.inputPass("Enter user password")
+      if not p then return Error.set("User password is required")
+      argv.P=p
+      argv.p=Gui.inputInt({"text":"Enter port number","default":22})
+      if G_proxy then
+        if Gui.yesNo("Use proxy shell?") then argv.l=true else argv.l=null
+      end if
+      if Gui.yesNo("Use tunneled connection?") then argv.t=true else argv.t=null
+    end if
+    //if argv.P and len(argv.rest)==1 then push(argv.rest,argv.P)
+    if not argv.p then argv.p=22
+    _targetIp=split(argv.rest[0],"@");_targetIp=_targetIp[len(_targetIp)-1]
+    if is_lan_ip(_targetIp) and Obj.type!="computer" and Obj.type!="file" then
+      S=Obj
+    else if argv.l then
+      S=globals.G_main
+    else
+      if G_proxy then S=G_proxy else S=globals.G_main
+    end if
+    if argv.d then
+      _c=split(argv.rest[0],"@")
+      _dIp=_c[len(_c)-1];_dUser=_c[0]
+      if is_lan_ip(_dIp) and Obj.type!="computer" and Obj.type!="file" then return Crack.dictNetworkLan(_dIp,argv.p,_dUser,"sssh",S.shell)
+      _dArg={"rest":[_dIp,""+argv.p],"u":_dUser,"start":0,"stop":null}
+      if argv.start then _dArg.start=argv.start
+      if argv.stop then _dArg.stop=argv.stop
+      return Crack.dictNetwork(_dArg,"ssh")
+    end if
+    if Obj.type=="computer" or Obj.type=="file" then argv.t=null
+    if argv.t then s=Builder.buildConnection(S,argv,"ssh") else s=Net.makeConnection(S,argv,"ssh")
+    if s isa Error then return
+    Exploit.getShell(s)
+  end function
+	__ftp=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+    if not argv then return Man.help(["ftp"])
+    _p=ArgumentParser.init
+    _p.addArgument("P",false,"store")  // Password for FTP connection
+    _p.addArgument("p",false,"storeNumber")  // Port number (default: 21)
+    _p.addArgument("t",false,"flag")  // Use tunneled connection
+    _p.addArgument("l",false,"flag")  // Use proxy shell (force through proxy)
+    _p.addArgument("d",false,"flag")  // Dictionary attack mode
+    _p.addArgument("start",true,"storeNumber")  // Long flag: --start (start index in wordlist)
+    _p.addArgument("stop",true,"storeNumber")  // Long flag: --stop (end index in wordlist)
+    argv=_p.parseArgs("ftp",argv)
+    if argv isa Error then return
+    if hasIndex(argv,"useAI") then
+      argv.rest=[]
+      i=Gui.input({"text":"Enter user ip"})
+      if i!=null then push(argv.rest,i) else return Error.set("Invalid ip: "+i)
+      u=Gui.input({"text":"Enter user name"})
+      if u==null then return Error.set("User name is required")
+      push(argv.rest,u+"@"+i)
+      p=Gui.inputPass("Enter user password")
+      if not p then return Error.set("User password is required")
+      argv.P=p
+      t=Gui.inputInt({"text":"Enter port number","default":21})
+      if t isa number then argv.p=t else return Error.set("Invalid port: "+t)
+      if G_proxy then
+        if Gui.yesNo("Use proxy shell?") then argv.l=true else argv.l=null
+      end if
+      if Gui.yesNo("Use tunneled connection?") then argv.t=true else argv.t=null
+    end if
+    //if argv.P and len(argv.rest)==1 then push(argv.rest,argv.P)
+    if not argv.p then argv.p=21
+    _targetIp=split(argv.rest[0],"@");_targetIp=_targetIp[len(_targetIp)-1]
+    if is_lan_ip(_targetIp) and Obj.type!="computer" and Obj.type!="file" then
+      S=Obj
+    else if argv.l then
+      S=globals.G_main
+    else
+      if G_proxy then S=G_proxy else S=globals.G_main
+    end if
+    if argv.d then
+      _c=split(argv.rest[0],"@")
+      _dIp=_c[len(_c)-1];_dUser=_c[0]
+      if is_lan_ip(_dIp) and Obj.type!="computer" and Obj.type!="file" then return Crack.dictNetworkLan(_dIp,argv.p,_dUser,"ftp",S.shell)
+      _dArg={"rest":[_dIp,""+argv.p],"u":_dUser,"start":0,"stop":null}
+      if argv.start then _dArg.start=argv.start
+      if argv.stop then _dArg.stop=argv.stop
+      return Crack.dictNetwork(_dArg,"ftp")
+    end if
+    if Obj.type=="computer" or Obj.type=="file" then argv.t=null
+    if argv.t then s=Builder.buildConnection(S,argv,"ftp") else s=Net.makeConnection(S,argv,"ftp")
+    if s isa Error then return
+    _=new FTPShellObject
+    return _.run(_,s.shell,s["public_ip"],s["port"])
+	end function
+	__favs=function(argv);System.favs(argv);end function
+  __fw=function(argv);Command.folderWatcher(Obj,argv);end function
+	__email=function(argv)
+    if not argv then return Man.help(["email"])
+    // Inject piped credentials (email pass) into argv for -c and -l
+    if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+      _parts=split(trim(str(globals.G_pipe.stdin))," ")
+      if len(_parts)>=2 then
+        _len=len(argv)
+        i=0
+        while i<_len
+          if argv[i]=="-c" or argv[i]=="-l" then
+            argv=argv[:i+1]+_parts+argv[i+1:]
+            break
+          end if
+          i=i+1
+        end while
+      end if
+    end if
+		Arg1=lower(argv[0])
+      client=function(arg)
+        if arg and len(arg)>=2 then
+          // XFIX1.0: mm=mail_login(arg[0],arg[1])  // no pack needed
+          mm=Builder.packMailLogin(globals.G_main,arg[0],arg[1])
+          if mm isa Error or not mm then return Info.error("Login failed")
+          Email.mail=mm
+          Email.account.user=arg[0]
+          Email.account.pass=arg[1]
+          Email.client(true)
+        else
+          Email.client
+        end if
+      end function
+		view=function(arg);Email.view;end function
+		open=function(arg);Email.open(to_int(arg[0]));end function
+		login=function(arg);Email.login(arg);end function
+		setup=function(arg);Email.setup;end function
+		newEmail=function(arg);Email.newEmail;end function
+		bomb=function(arg);Email.bomb(arg);end function
+		doRemove=function(arg);Email.remove(to_int(arg[0]));end function
+		clear=function(arg);Email.clear;end function
+		monitor=function(arg);Email.monitor(arg);end function
+		clearCreds=function(arg);Email.clearCreds(arg);end function
+		cmds={
+			"-c":@client,
+			"-v":@view,
+			"-o":@open,
+			"-l":@login,
+			"-s":@setup,
+			"-n":@newEmail,
+			"-b":@bomb,
+			"-r":@doRemove,
+			"-x":@clear,
+			"-cc":@clearCreds
+		}
+		if Utility.checkValid(Obj) then cmds["-m"]=@monitor
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__libs=function(argv)
+    //if Net.hasInternet(Obj) isa Warning then return
+    if not argv then Arg1="-l" else Arg1=lower(argv[0])
+		Obj=outer.Obj
+		fileView=function(arg);SavedLibs.fileView;end function
+		putFile=function(arg);if not arg then return Man.help(["libs"]);SavedLibs.putFile(Obj,arg);end function
+		doInstall=function(arg);if not Utility.checkValid(Obj,true) then return Warning.set("Only available for PROXY|PIVOT|MAIN objects");SavedLibs.install(Obj,arg);end function
+		getFile=function(arg);if not arg then return Man.help(["libs"]);SavedLibs.getFile(Obj,arg);end function
+		fileDel=function(arg);if not arg then return Man.help(["libs"]);SavedLibs.fileDel(arg);end function
+		clear=function(arg);SavedLibs.clear;end function
+		cmds={
+			"-l":@fileView,
+			"-r":@fileDel,
+			"-x":@clear
+		}
+		if hasIndex(Obj,"shell") then
+			cmds["-a"]=@putFile
+			cmds["-g"]=@getFile
+			cmds["-i"]=@doInstall
+		end if
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__list=function(argv)
+		if not argv then return Man.help(["list"])
+    argv=ArgumentParser.check(argv)
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		Command=outer.Command
+		passwd=function(arg);Command.postPW(Obj);end function
+		vulnerableFiles=function(arg)
+			Obj=outer.Obj
+			Command=outer.Command
+			run=function(Obj,f)
+				Command=outer.Command
+				X=true
+				man=function(ar);Man.help(ar);end function
+				vfile=function(ar);Session.putFile(Obj,[f]);outer.X=false;end function
+				share=function(ar);Share.putFile(Obj,[f]);outer.X=false;end function
+				libs=function(ar);SavedLibs.putFile(Obj,[f]);outer.X=false;end function
+				edit=function(ar);Io._edit(Obj,f);outer.X=false;end function
+				dec=function(ar);Io._dec(Obj,f);outer.X=false;end function
+				enc=function(ar);Io._enc(Obj,f);outer.X=false;end function
+				post=function(ar);Io._post(f);outer.X=false;end function
+				zip=function(ar);Io._zip(Obj,f);outer.X=false;end function
+				lock=function(ar);Io._lock(Obj,f);outer.X=false;end function
+				doScan=function(ar);Io._scan(Obj,f);outer.X=false;end function
+				echo=function(ar);r=Io._echo(f,ar);if r isa string then return Error.set(r) else outer.X=false;end function
+				rm=function(ar)
+					if not has_permission(f,"w") then return Error.set(Info.message.NOW)
+					Gui.delPrompt(f)
+					outer.X=false
+				end function
+				set=function(ar);r=Io._set(f,ar);if r isa string then return Error.set(r) else outer.X=false;end function
+				rn=function(ar);r=Io._rn(f,ar);if r then return Error.set(r) else outer.X=false;end function
+				cp=function(ar);r=Io._cp(Obj,f);if r isa string then return Error.set(r) else outer.X=false;end function
+				mv=function(ar);r=Io._mv(Obj,f);if r isa string then return Error.set(r) else outer.X=false;end function
+				get=function(ar);r=Io._get(Obj,f,ar);if r isa string then return Error.set(r) else outer.X=false;end function
+				info=function(ar);Command.file(Obj,[f]);end function
+				view=function(ar);Io._view(f);end function
+				help=function(ar);Man.commands(["browsefiles"]);end function
+				chog=function(ar);r=Io._chog(f,ar);if r then return Error.set(r) else outer.X=false;end function
+				doChown=function(ar);r=Io._chown(f,ar);if r then return Error.set(r) else outer.X=false;end function
+				doChmod=function(ar);r=Io._chmod(f,ar);if r then return Error.set(r) else outer.X=false;end function
+				doChgrp=function(ar);r=Io._chgrp(f,ar);if r then return Error.set(r) else outer.X=false;end function
+				qrm=function(ar);Command.qrm(Obj,[f]);outer.X=false;end function
+				cmds={
+          "qrm":@qrm,
+          "man":@man,
+          "libs":@libs,
+          "vfile":@vfile,
+          "share":@share,
+          "edit":@edit,
+          "dec":@dec,
+          "enc":@enc,
+          "post":@post,
+          "info":@info,
+          "zip":@zip,
+          "lock":@lock,
+          "?":@help,
+          "help":@help,
+          "cmds":@help,
+          "view":@view,
+          "peek":@view,
+          "get":@get,
+          "mv":@mv,
+          "cp":@cp,
+          "rn":@rn,
+          "set":@set,
+          "rm":@rm,
+          "echo":@echo,
+          "scan":@doScan,
+          "chog":@chog,
+          "chown":@doChown,
+          "chmod":@doChmod,
+          "chgrp":@doChgrp
+				}
+				while X
+					Info.info("What would you like to do with the file: "+name(f)+" ?")
+					c=split(trim(user_input(Gui.closeNR))," ")
+          if not c then continue
+					Arg1=lower(c[0])
+					if Arg1=="x" then return
+					if hasIndex(cmds,Arg1) then cmds[Arg1](c[1:]) else Error.set(Text.msg.command+Arg1+" ]")
+				end while
+			end function
+			while true
+				CH=[white("Browse files:")]
+				k=[]
+				for f in Io.getAll(Obj.root)
+					canRead=has_permission(f,"r")
+					canWrite=has_permission(f,"w")
+					push(k,f)
+					p=permissions(f)
+					if canRead and canWrite then
+						c=@green
+					else if canRead or canWrite then
+						c=@yellow
+					else
+						c=@red
+					end if
+					if is_folder(f) then
+						push(CH,c(path(f)+" ["+p+"] (dir)"))
+					else if is_binary(f) then
+						push(CH,c(path(f)+" ["+p+"] (bin)"))
+					else
+						push(CH,c(path(f)+" ["+p+"]"))
+					end if
+				end for
+				push(CH,iyellow("--- Stop browsing files"))
+				UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+				if UCH==len(CH)-1 then break
+				run(Obj,k[UCH-1])
+			end while
+		end function
+		vulnerableDirectorys=function(arg)
+			Info.info("Found the following folders:")
+			for f in Io.getAll(Obj.root)
+				if not is_folder(f) then continue
+				canRead=has_permission(f,"r")
+				canWrite=has_permission(f,"w")
+				p=permissions(f)
+				if canRead and canWrite then
+					print green(path(f)+" ["+p+"]")
+				else if canRead or canWrite then
+					print yellow(path(f)+" ["+p+"]")
+				else
+					print red(path(f)+" ["+p+"]")
+				end if
+			end for
+		end function
+		allFiles=function(arg)
+			z=0
+			d=0
+			s="   "
+			Info.info("Found the following folders/files:")
+      for f in Io.getAll(Obj.root)
+				if is_folder(f) then
+					d+=1
+					print green("Directory at ")+orange(path(f))
+					print yellow("Permissions:")+white("----")+blue(permissions(f))
+					print yellow("Owner:")+white("----------")+blue(owner(f))
+					print yellow("Group:")+white("----------")+blue(group(f))
+					c=len(get_files(f))
+					if not c then c=0
+					print yellow("File Count:")+white("-----")+blue(str(c))
+					print yellow("Directory Count:")+blue(str(len(get_folders(f))))
+					print yellow("Size:")+white("-----------")+blue(str(Io.size(val(size(f)))))
+				else
+					z+=1
+					if is_binary(f) then
+						print blue("]"+yellow("*")+"[")+orange(name(f))
+						print yellow(s+"Full path:")+white("------")+blue(path(f))
+						print yellow(s+"Permissions:")+white("----")+blue(permissions(f))
+						print yellow(s+"Owner:")+white("----------")+blue(owner(f))
+						print yellow(s+"Group:")+white("----------")+blue(group(f))
+						print yellow(s+"File type:")+white("------")+blue("binary")
+					else
+						print blue("]-[")+orange(name(f))
+						print yellow(s+"Full path:")+white("------")+blue(path(f))
+						print yellow(s+"Permissions:")+white("----")+blue(permissions(f))
+						print yellow(s+"Owner:")+white("----------")+blue(owner(f))
+						print yellow(s+"Group:")+white("----------")+blue(group(f))
+						print yellow(s+"File type:")+white("------")+blue("text file")
+						if has_permission(f,"r") then
+							print yellow(s+"Line Count:")+white("-----")+blue(str(len(split(get_content(f),char(10)))))
+							print yellow(s+"Char Count:")+white("-----")+blue(str(len(get_content(f))))
+						else
+							print yellow(s+"Line Count:")+white("-----")+red("Don't have read permissions for "+name(f))
+							print yellow(s+"Char Count:")+white("-----")+red("Don't have read permissions for "+name(f))
+						end if
+					end if
+					print yellow(s+"Size:")+white("-----------")+blue(str(Io.size(val(size(f)))))
+				end if
+			end for
+			print white("Total directory count: "+d)
+			print white("Total file count     : "+z)
+		end function
+		localNetworks=function(arg)
+      if Net.hasInternet(Obj) isa Warning then return
+			if not Obj.net.lan then return Info.info("No local ip's to show")
+			if Utility.checkValid(Obj) then
+				for d in Obj.net.lan
+					j=get_router(d)
+					if not j then j=get_router
+					c=Utility.machine(d,j)
+					if Obj.type=="file" then
+						print green("[---] ")+c+" "+yellow(d)
+					else
+						if d==Obj.computer.local_ip then print green("[---] ")+c+" "+green(d) else print green("[---] ")+c+" "+yellow(d)
+					end if
+					f=firewall_rules(j)
+					if len(f) then
+						print green("[---] ")+white("Firewall Rules for:"+d)
+						Net.firewallRules(f)
+					end if
+					for o in devices_lan_ip(j)
+						z=Utility.machine(o,j)
+						if indexOf(Obj.net.lan,o)==null then
+							u=device_ports(j,o)
+							if u and len(u)>0 then
+								if Obj.type=="file" then
+									print orange("[------> ")+z+" "+yellow(o)
+								else
+									if o==Obj.computer.local_ip then print orange("[------> ")+z+" "+yellow(o) else print orange("[------> ")+z+" "+yellow(o)
+								end if
+								for p in u
+									if port_info(j,p)!=null then i=split(port_info(j,p)," ")[0] else i=null
+									if i!=null then
+										if is_closed(p) then a=red("-X->") else a=green("--->")
+										w=split(port_info(j,p)," ")
+										print orange("[-----")+blue("•")+a+orange(" :")+green(ljust(str(port_number(p)),5)+ljust(" "+w[0],14))+" "+blue(ljust(str(w[1]),8))
+									end if
+								end for
+							else
+								print orange("[------> ")+z+" "+yellow(o)
+								print orange("[-----")+blue("•")+red("x-x> No ports detected")
+							end if
+						end if
+					end for
+				end for
+			else
+				Info.info("Showing basic information for local ip's")
+				for d in Obj.net.lan;print green("[---] ")+Utility.machine(d,Obj.net.router)+" "+yellow(d);end for
+			end if
+		end function
+		accounts=function(arg);Net.snoop(Obj,arg);end function
+		allConfigContents=function(arg)
+			for a in get_folders(Obj.root)
+				if name(a)=="root" then
+					for b in get_folders(a)
+						if name(b)!="Config" then continue
+						if len(get_files(b))==0 then continue
+						print yellow("Contents of /"+name(a)+"/Config:")
+						for c in get_files(b)
+							if is_binary(c) then continue
+							if name(c)=="Theme.conf" then continue
+							if not has_permission(c,"r") then continue
+							print green(name(c)+":")
+							for e in split(get_content(c),char(10));print white(e);end for
+						end for
+					end for
+					continue
+				end if
+				if name(a)=="home" then
+					homeFolders=get_folders(a)
+					for b in homeFolders
+						userFolders=get_folders(b)
+						for c in userFolders
+							if name(c)!="Config" then continue
+							configFiles=get_files(c)
+							if len(configFiles)==0 then continue
+							print yellow("Contents of /home/"+name(b)+"/Config:")
+							for d in configFiles
+								if name(d)=="Theme.conf" then continue
+								if is_binary(d) then continue
+								if not has_permission(d,"r") then continue
+								print green(name(d)+":")
+								for e in split(get_content(d),char(10));print white(e);end for
+							end for
+						end for
+					end for
+				end if
+			end for
+		end function
+		libraryVersions=function(arg)
+			if arg then Arg1=arg[0] else Arg1=null
+			if not Library.haveMetaxploit then return
+			if not Exploit.have then return
+			d=null
+			if Arg1 then d=Io.getFileObj(Obj,Arg1) else d=Io.getFileObj(Obj,"/lib")
+			if d isa Error then return
+			for f in get_files(d);lib=load(Library.metaxploit,path(f));if typeof(lib)=="MetaLib" then print blue(ljust(name(f),18))+green(" : ")+yellow(lib.version) else continue;end for
+		end function
+		mapConf=function(arg)
+			m=null
+			if indexOf(Obj.type,"shell")!=null or Obj.type=="computer" then m=File(Obj.computer,path(Obj.user.home)+"/Config/Map.conf")
+			if Obj.type=="file" then m=Io.getFileObj(Obj,path(Obj.user.home)+"/Config/Map.conf")
+			if m isa Error then return Info.warning("Map.conf file not found")
+			if not has_permission(m,"r") then return Error.set("Don't have read permision for Map.conf")
+			m=get_content(m)[14:-27].replace(char(34),"")
+			i=0;while i<=len(m);m=m.remove("user:").remove("ip:").remove("password:");i+=1;end while
+			for i in split(m,"\},\{");print purple("["+white(str(__i_idx+1))+"] "+green(ljust(split(i,",")[1],45))+" "+yellow(split(i,",")[0])+" "+password(split(i,",")[2]));end for
+		end function
+		hiddenFiles=function(arg)
+			s="   "
+			Info.info("Found the following hidden folders/files:")
+			for f in Io.getAll(Obj.root)
+				if name(f)[0]=="." then
+					if is_folder(f) then
+						print green("Directory at ")+orange(path(f))
+						print yellow("Permissions:")+white("----")+blue(permissions(f))
+						print yellow("Owner:")+white("----------")+blue(owner(f))
+						print yellow("Group:")+white("----------")+blue(group(f))
+						c=len(get_files(f))
+						if not c then c=0
+						print yellow("File Count:")+white("-----")+blue(str(c))
+						print yellow("Directory Count:")+blue(str(len(get_folders(f))))
+						print yellow("Size:")+white("-----------")+blue(str(Io.size(val(size(f)))))
+					else if is_binary(f) then
+						print blue("]"+yellow("*")+"[")+orange(name(f))
+						print yellow(s+"Full path:")+white("------")+blue(path(f))
+						print yellow(s+"Permissions:")+white("----")+blue(permissions(f))
+						print yellow(s+"Owner:")+white("----------")+blue(owner(f))
+						print yellow(s+"Group:")+white("----------")+blue(group(f))
+						print yellow(s+"File type:")+white("------")+blue("binary")
+					else
+						print blue("]-[")+orange(name(f))
+						print yellow(s+"Full path:")+white("------")+blue(path(f))
+						print yellow(s+"Permissions:")+white("----")+blue(permissions(f))
+						print yellow(s+"Owner:")+white("----------")+blue(owner(f))
+						print yellow(s+"Group:")+white("----------")+blue(group(f))
+						print yellow(s+"File type:")+white("------")+blue("text file")
+						if has_permission(f,"r") then
+							print yellow(s+"Line Count:")+white("-----")+blue(str(len(split(get_content(f),char(10)))))
+							print yellow(s+"Char Count:")+white("-----")+blue(str(len(get_content(f))))
+						else
+							print yellow(s+"Line Count:")+white("-----")+red("Don't have read permissions for "+name(f))
+							print yellow(s+"Char Count:")+white("-----")+red("Don't have read permissions for "+name(f))
+						end if
+					end if
+				end if
+			end for
+		end function
+		detailed=function(arg)
+			D=null
+			B=null
+			for _da in arg
+				if _da=="--detail" then D=1
+				if _da=="--bin" then B=1
+			end for
+			e=["pdf","txt","jpg","log","exe","bin"]
+			Info.info("Found the following special files:")
+			for f in Io.getAll(Obj.root)
+				if is_folder(f) then continue
+				if not B and split(path(f),"\/")[1]=="bin" then continue
+				_n=name(f)
+				_isBinNoExt=is_binary(f) and indexOf(_n,".")==null
+				if indexOf(e,split(_n,"\.")[-1])!=null or _isBinNoExt then
+					if D then
+						print orange(name(f))
+						print yellow("Full path:")+white("------")+blue(path(f))
+						print yellow("Permissions:")+white("----")+blue(permissions(f))
+						print yellow("Owner:")+white("----------")+blue(owner(f))
+						print yellow("Group:")+white("----------")+blue(group(f))
+						if is_binary(f) then
+							print yellow("File type:")+white("------")+blue("binary")
+						else
+							print yellow("File type:")+white("------")+blue("text file")
+							if has_permission(f,"r") then
+								print yellow("Line Count:")+white("-----")+blue(str(len(split(get_content(f),char(10)))))
+								print yellow("Char Count:")+white("-----")+blue(str(len(get_content(f))))
+							else
+								print yellow("Line Count:")+white("-----")+red("Don't have read permissions for "+name(f))
+								print yellow("Char Count:")+white("-----")+red("Don't have read permissions for "+name(f))
+							end if
+						end if
+						print yellow("Size:")+white("-----------")+blue(str(Io.size(val(size(f)))))
+					else
+						t=split(name(f),"\.")[-1]
+						if hasIndex({"pdf":0,"jpg":0,"log":0,"bin":0},t) then print green("+")+white(permissions(f))+" "+yellow(path(f)) else print green("+")+white(permissions(f))+" "+blue(path(f))
+					end if
+				end if
+			end for
+		end function
+		textFiles=function(arg)
+			z=0
+			s="   "
+			Info.info("Found the following text files:")
+      for f in Io.getAll(Obj.root)
+				if Io.isBinFolder(f) then continue
+				z+=1
+				print blue("]-[")+orange(name(f))
+				print yellow(s+"Full path:")+white("------")+blue(path(f))
+				print yellow(s+"Permissions:")+white("----")+blue(permissions(f))
+				print yellow(s+"Owner:")+white("----------")+blue(owner(f))
+				print yellow(s+"Group:")+white("----------")+blue(group(f))
+				print yellow(s+"File type:")+white("------")+blue("text file")
+				if has_permission(f,"r") then
+					print (s+"Line Count:")+white("-----")+blue(str(len(split(get_content(f),char(10)))))
+					print (s+"Char Count:")+white("-----")+blue(str(len(get_content(f))))
+				else
+					print yellow(s+"Line Count:")+white("-----")+red("Don't have read permissions for "+name(f))
+					print yellow(s+"Char Count:")+white("-----")+red("Don't have read permissions for "+name(f))
+				end if
+				print yellow(s+"Size:")+white("-----------")+blue(str(Io.size(val(size(f)))))
+			end for
+			print white("Total file count : "+z)
+		end function
+		allFileContents=function(arg)
+			a=Io.getAll(Obj.root)
+			if a isa Error then return
+			_pat=""
+			if arg and len(arg)>0 then _pat=arg[0]
+			s="   "
+			Info.info("Found the following text files:")
+			for f in a
+				if is_binary(f) then continue
+				if is_folder(f) then continue
+				if _pat and not Io.matchName(name(f),_pat) then continue
+				print blue("]-[")+orange(name(f))
+				print yellow(s+"Full path:")+white("------")+blue(path(f))
+				print yellow(s+"Permissions:")+white("----")+blue(permissions(f))
+				print yellow(s+"Owner:")+white("----------")+blue(owner(f))
+				print yellow(s+"Group:")+white("----------")+blue(group(f))
+				print yellow(s+"Size:")+white("-----------")+blue(str(Io.size(val(size(f)))))
+				if has_permission(f,"r") then
+					_c=get_content(f)
+					if _c then
+						print cyan(s+"+-- contents --+")
+						for _ln in split(_c,char(10));print white(s+"| ")+_ln;end for
+						print cyan(s+"+----------------+")
+					end if
+				end if
+			end for
+		end function
+		getSpecial=function(arg)
+			a=Io.getAll(Obj.root)
+			if a isa Error then return
+			for f in a
+				if name(f)=="system.log" then continue
+				if is_folder(f) then continue
+				if hasIndex(Text.specialFiles,split(name(f),"\.")[-1])!=null then
+					print green(name(f)+":")
+					print "  "+white(path(f))
+				end if
+			end for
+		end function
+		cmds={
+			"-x":@getSpecial,
+			"-t":@textFiles,
+			"-m":@mapConf,
+			"--password":@passwd,
+			"-f":@vulnerableFiles,
+			"-d":@vulnerableDirectorys,
+			"-a":@allFiles,
+			"-n":@localNetworks,
+			"-s":@accounts,
+			"-c":@allConfigContents,
+			"-z":@hiddenFiles,
+			"-h":@detailed,
+			"-i":@allFileContents
+		}
+		if Utility.checkValid(Obj) then cmds["-l"]=@libraryVersions
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		_li=0;_llen=len(argv)
+		while _li<_llen
+			_lf=argv[_li]
+			if hasIndex(cmds,_lf) then
+				_largs=[]
+				_lj=_li+1
+				while _lj<_llen
+					if hasIndex(cmds,argv[_lj]) then break
+					push(_largs,argv[_lj])
+					_lj+=1
+				end while
+				cmds[_lf](_largs)
+				_li=_lj
+			else
+				_li+=1
+			end if
+		end while
+	end function
+	__wipe=function(argv)
+		if not argv then return Man.help(["wipe"])
+    Arg1=lower(argv[0])
+		Obj=outer.Obj
+		doLog=function(arg);Log.log(Obj);end function
+    transLog=function(arg);Log.transLog(Obj);end function
+		logx=function(arg);Log.logX(Obj);end function
+		logc=function(arg);Log.logC(Obj);end function
+		boot=function(arg);if not arg then return Attack.boot(Obj);if arg[0]=="-y" then Attack.boot(Obj,true) else Attack.boot(Obj);end function
+		system=function(arg);if not arg then return Attack.system(Obj);if arg[0]=="-y" then Attack.system(Obj,true) else Attack.system(Obj);end function
+		proxyLogs=function(arg)
+			m=Proxy.getMapConf(Obj).accounts.values
+			if not m then return Info.info("No systems in Map.conf. Run [ get -m (count) ] to add systems to Map.conf")
+			for i in m
+				if not len(i)==3 then continue
+				s=connect_service(Obj.shell,i.ip,22,i.user,i.password)
+				if not s then
+					Error.set("Could not connect to "+i.ip)
+					continue
+				end if
+				Info.info("Cleaning "+i.ip+" system.log")
+				Log.shellLog(s)
+			end for
+			Info.info("Cleaning complete :-)")
+		end function
+		xConfig=function(arg)
+			if not Gui.yesNo("This will remove all x's config files. Continue?",false) then return
+			c=File(Obj.computer,path(Obj.dir.data)+"/.xrc")
+			if c then delete(c)
+			c=File(Obj.computer,path(Obj.dir.data)+"/.erc")
+			if c then delete(c)
+			c=File(Obj.computer,path(Obj.dir.data)+"/.hrc")
+			if c then delete(c)
+			Info.info("X's config files removed")
+			Info.info("X is now restarting...")
+			launch(get_shell,program_path)
+		end function
+		trash=function(arg);Attack.trash(Obj);end function
+		xTraces=function(arg)
+      if not hasIndex(Obj,"computer") then return Error.set("This command is only for shell/computer objects")
+      if not hasIndex(Obj.dir,"payload") then return Error.set("No payload directory found for this object")
+			if not File(Obj.computer,path(Obj.dir.payload)) then return
+			x=File(Obj.computer,program_path)
+			if x then move(x,path(Obj.dir.data),"x")
+			move(Obj.dir.payload,path(Obj.dir.data),"bye")
+			Log.log(Obj,null)
+		end function
+		logMessage=function(arg);Log.logT(Obj);end function
+    deploy=function(arg)
+      _p=ArgumentParser.init
+      arg=_p.parseArgs("wipe",arg)
+      if arg isa Error then return
+      Log.deploy(Obj,arg)
+    end function
+		cmds={
+			"-t":@trash,
+			"-l":@doLog,
+			"-b":@boot,
+			"-s":@system,
+			"-lx":@logx,
+			"-lc":@logc,
+			"-lt":@logMessage,
+			"-a":@transLog
+		}
+		if Utility.checkValid(Obj,true) then
+			cmds["-x"]=@xTraces
+			cmds["-m"]=@proxyLogs
+			cmds["-c"]=@xConfig
+			cmds["--deploy"]=@deploy
+		end if
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__shadow=function(argv)
+    if not argv then Arg1="-l" else Arg1=lower(argv[0])
+		Obj=outer.Obj
+		view=function(arg);Shadow.view;end function
+		add=function(arg)
+			if not arg then return Error.set("Invalid params")
+			if not is_valid_ip(arg[0]) then return Error.set(arg[0]+" is not a valid ip")
+			Shadow.add(arg)
+		end function
+		clear=function(arg);Shadow.clear(arg);end function
+		readFile=function(arg);Shadow.readFile(Obj,arg);end function
+		writeFile=function(arg);Shadow.writeFile(Obj,arg);end function
+		cmds={
+			"-l":@view,
+			"-a":@add,
+			"-x":@clear
+		}
+		if Utility.checkValid(Obj) then
+			cmds["-r"]=@readFile
+			cmds["-w"]=@writeFile
+		end if
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__bit=function(argv);Command.bit(Obj,argv);end function
+	__radix=function(argv);Command.radix(Obj,argv);end function
+	__hex=function(argv);Command.hex(Obj,argv);end function
+	__compare=function(argv);if len(argv)!=2 then return Man.help(["compare"]);print yellow(argv[0])+green(str(Math.compare(val(argv[0]),val(argv[1]))))+yellow(argv[1]);end function
+	__decimal=function(argv);Command.decimal(Obj,argv);end function
+	__binary=function(argv);Command.binary(Obj,argv);end function
+	__percent=function(argv);Command.percent(Obj,argv);end function
+	__median=function(argv);Command.median(Obj,argv);end function
+	__average=function(argv);Command.average(Obj,argv);end function
+	__vfile=function(argv)
+    //if Net.hasInternet(Obj) isa Warning then return
+    if not argv then Arg1="-l" else Arg1=lower(argv[0])
+		Obj=outer.Obj
+		fileView=function(arg);Session.fileView;end function
+		putFile=function(arg);if not arg then return Man.help(["vfile"]);Session.putFile(Obj,arg);end function
+		putLog=function(arg);Session.putFile(Obj,[File(Obj.computer,"/var/system.log")]);end function
+		putPasswd=function(arg);Session.putFile(Obj,[File(Obj.computer,"/etc/passwd")]);end function
+		filePeek=function(arg);if not arg then return Man.help(["vfile"]);Session.filePeek(to_int(arg[0]));end function
+		getFile=function(arg);if not arg then return Man.help(["vfile"]);Session.getFile(Obj,arg);end function
+		fileDel=function(arg);if not arg then return Man.help(["vfile"]);Session.fileDel(arg);end function
+		fileClear=function(arg);Session.fileClear;end function
+		toShare=function(arg);Session.toShare(Obj);end function
+		cmds={
+			"-l":@fileView,
+			"-a":@putFile,
+			"-ap":@putPasswd,
+			"-g":@getFile,
+			"-r":@fileDel,
+			"-x":@fileClear,
+			"-v":@filePeek
+		}
+		if hasIndex(Obj.type,"shell") then
+			cmds["-al"]=@putLog
+			cmds["-ts"]=@toShare
+		end if
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__rshell=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+    if not Library.haveMetaxploit then return
+    if not argv then Arg1="-l" else Arg1=lower(argv[0])
+		Obj=outer.Obj
+		view=function(arg);if globals.G_settings.rshell then Rshell.view else RshellLite.view;end function
+		start=function(arg)
+			if globals.G_settings.rshell then
+				if Utility.checkValid(Obj) then Rshell.start(arg) else Rshell.start(arg,Obj)
+			else
+				if Utility.checkValid(Obj) then RshellLite.start(arg) else RshellLite.start(arg,Obj)
+			end if
+		end function
+		doBuild=function(arg);Rshell.build(Obj);end function
+		doInstall=function(arg);Rshell.install(Obj);end function
+		doBoth=function(arg);if Rshell.build(Obj) then Rshell.install(Obj);end function
+		killSingle=function(arg)
+			if not arg then return Man.help(["rshell"])
+      if globals.G_settings.rshell then
+        if len(arg)==1 then Rshell.killSingle(to_int(arg[0])) else Rshell.killSingle(to_int(arg[0]),arg[1])
+      else
+        if len(arg)==1 then RshellLite.killSingle(to_int(arg[0])) else RshellLite.killSingle(to_int(arg[0]),arg[1])
+      end if
+		end function
+		getShell=function(arg);if not arg then return Man.help(["rshell"]);if globals.G_settings.rshell then Rshell.shell(to_int(arg[0])) else RshellLite.shell(to_int(arg[0]));end function
+		killall=function(arg);if globals.G_settings.rshell then Rshell.killall(arg) else RshellLite.killall(arg);end function
+		getLogs=function(arg);if globals.G_settings.rshell then Rshell.getLogs(Obj) else RshellLite.getLogs(Obj);end function
+		doImport=function(arg)
+			rs=Rshell
+			if not globals.G_settings.rshell then rs=RshellLite
+			rs.import(Obj.meta.public_ip,Obj)
+		end function
+		refresh=function(arg);if globals.G_settings.rshell then Rshell.refresh else RshellLite.refresh;end function
+		showList=function(arg);if globals.G_settings.rshell then Rshell.list else RshellLite.list;end function
+		history=function(arg);if globals.G_settings.rshell then Rshell.history(Obj,arg) else RshellLite.history(Obj,arg);end function
+		clear=function(arg);Rshell.clear(arg);end function
+		exec=function(arg);if not globals.G_settings.rshell then return Error.set("Not available in rshell lite");Rshell.exec(arg);end function
+		execAll=function(arg);if not globals.G_settings.rshell then return Error.set("Not available in rshell lite");Rshell.execAll(arg);end function
+		download=function(arg);if globals.G_settings.rshell then Rshell.download(arg) else RshellLite.download(arg);end function
+		downloadAll=function(arg);if globals.G_settings.rshell then Rshell.downloadAll(arg) else RshellLite.downloadAll(arg);end function
+		downloadCurrent=function(arg);if globals.G_settings.rshell then Rshell.downloadCurrent(Obj,arg) else RshellLite.downloadCurrent(Obj,arg);end function
+		downloadCurrentAll=function(arg);if globals.G_settings.rshell then Rshell.downloadCurrentAll(Obj,arg) else RshellLite.downloadCurrentAll(Obj,arg);end function
+		upload=function(arg);if globals.G_settings.rshell then Rshell.upload(arg) else RshellLite.upload(arg);end function
+		uploadAll=function(arg);if globals.G_settings.rshell then Rshell.uploadAll(arg) else RshellLite.uploadAll(arg);end function
+		uploadCurrent=function(arg);if globals.G_settings.rshell then Rshell.uploadCurrent(Obj,arg) else RshellLite.uploadCurrent(Obj,arg);end function
+		uploadCurrentAll=function(arg);if globals.G_settings.rshell then Rshell.uploadAllCurrent(Obj,arg) else RshellLite.uploadAllCurrent(Obj,arg);end function
+    dump=function(arg);Rshell.dump(arg);end function
+    select=function(arg)
+      if not globals.G_settings.rshell then return Error.set("Not available in rshell lite")
+      _p=ArgumentParser.init
+      _p.addArgument("e",false,"flag")  // Execute command in selected shells
+      _p.addArgument("k",false,"flag")  // Kill/close selected shells
+      _p.addArgument("u",false,"flag")  // Upload file to selected shells
+      _p.addArgument("d",false,"flag")  // Download file from selected shells
+      arg=_p.parseArgs("rshell",arg)
+      if arg isa Error then return
+      if not arg.rest then return Error.set("You need to specify a shell id(s) and a command to execute")
+      i=split(arg.rest[0],",")
+      if arg.e then
+        c=arg.rest[1]
+        if len(arg.rest)>=2 then p=arg.rest[1:] else p=[]
+        for s in i;exec([s]+p);end for
+      else if arg.k then
+        for s in i;killSingle([s]+arg.rest);end for
+      else if arg.u then
+        if not Obj.type=="shell" then return Error.set("You can only use -u with a shell object")
+        for s in i;upload([s]+arg.rest);end for
+      else if arg.d then
+        if not Obj.type=="shell" then return Error.set("You can only use -d with a shell object")
+        for s in i;download([s]+arg.rest);end for
+      else
+        return Error.set("Invalid parameters. Use -e, -k, -u or -d")
+      end if
+    end function
+		cmds={
+			"-z":@select,
+			"dump":@dump,
+			"-ea":@execAll,
+			"-e":@exec,
+			"-c":@clear,
+			"-x":@killall,
+			"-u":@getShell,
+			"--use":@getShell,
+			"-l":@view,
+			"-k":@killSingle,
+			"logs":@getLogs,
+			"import":@doImport,
+			"refresh":@refresh,
+			"list":@showList,
+			"-h":@history
+		}
+		if hasIndex(Obj,"shell") then
+			cmds["-pca"]=@uploadCurrentAll
+			cmds["-pc"]=@uploadCurrent
+			cmds["-pa"]=@uploadAll
+			cmds["-p"]=@upload
+			cmds["-dca"]=@downloadCurrentAll
+			cmds["-dc"]=@downloadCurrent
+			cmds["-da"]=@downloadAll
+			cmds["-d"]=@download
+			cmds["-s"]=@start
+			cmds["-b"]=@doBuild
+			cmds["-i"]=@doInstall
+			cmds["-bi"]=@doBoth
+		end if
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+  __clean=function(argv);Command.clean(Obj,argv);end function
+  __wc=function(argv);Command.wc(Obj,argv);end function
+  __yes=function(argv);Command.yes(Obj,argv);end function
+  __ln=function(argv);Command.ln(Obj,argv);end function
+	__home=function(argv)
+    // Already at main — nowhere to go
+    if Obj.id==0 then return Info.info("I'll file this under 'user error'")
+    // If on a proxy or pivot, it becomes "home"
+    if globals.G_hasPivoted then
+      // Already on the proxy/pivot — we are home
+      if Obj.layer=="proxy" or Obj.layer=="pivot" then return Info.info("Achievement unlocked: going nowhere")
+      // Child session under proxy/pivot — set back+home to unwind menus
+      globals.G_attributes.back=true
+      globals.G_attributes.home=true
+      Obj.running=false
+      return
+    end if
+    // No proxy/pivot — kill IPC and return to main
+    if globals.G_IPC then Ipc.killAll
+	end function
+	__zip=function(argv);Zip.zip(Obj,argv);end function
+	__do=function(argv);Bash.do(Obj,argv);end function
+  __open=function(argv);Command.open(Obj,argv);end function
+  __reset=function(argv);Boot.resetCOPacked;end function
+  __disk=function(argv);Disk.list(Obj,argv);end function
+  __cut=function(argv);Command.cut(Obj,argv);end function
+  __awk=function(argv);Command.awk(Obj,argv);end function
+  __neofetch=function(argv);Command.neofetch(Obj,argv);end function
+  __l33t=function(argv);Command.l33t(Obj,argv);end function
+  __ai=function(argv);Command.ai(Obj,argv);end function
+	__manual=function(argv);Man.help(argv);end function
+  __trim=function(argv);Command["trim"](Obj,argv);end function
+  __tr=function(argv);Command.tr(Obj,argv);end function
+  __column=function(argv);Command.column(Obj,argv);end function
+  __jq=function(argv);Command.jq(Obj,argv);end function
+  __repl=function(argv);Command.repl(Obj,argv);end function
+  __initd=function(argv);Command.initd(Obj,argv);end function
+  __seq=function(argv);Command.seq(Obj,argv);end function
+  __paste=function(argv);Command.paste(Obj,argv);end function
+  __printf=function(argv);Command.printf(Obj,argv);end function
+  return {
+    "ai":@__ai,
+    "l33t":@__l33t,
+    "awk":@__awk,
+    "cut":@__cut,
+    "disk":@__disk,
+    "alias":@__alias,
+    "reset":@__reset,
+    "open":@__open,
+    "do":@__do,
+    "zip":@__zip,
+    "home":@__home,
+    "ln":@__ln,
+    "wc":@__wc,
+    "yes":@__yes,
+    "sort":@__sort,
+    "tee":@__tee,
+    "clean":@__clean,
+    "rshell":@__rshell,
+    "vfile":@__vfile,
+    "average":@__average,
+    "median":@__median,
+    "neofetch":@__neofetch,
+    "percent":@__percent,
+    "binary":@__binary,
+    "decimal":@__decimal,
+    "compare":@__compare,
+    "radix":@__radix,
+    "hex":@__hex,
+    "bit":@__bit,
+    "shadow":@__shadow,
+    "wipe":@__wipe,
+    "list":@__list,
+    "libs":@__libs,
+    "email":@__email,
+    "fw":@__fw,
+    "favs":@__favs,
+    "ftp":@__ftp,
+    "sssh":@__sssh,
+    "ssh":@__ssh,
+    "rat":@__rat,
+    "main":@__main,
+    "cdl":@__cdl,
+    "addpass":@__addpass,
+    "iploop":@__iploop,
+    "lw":@__logWatcher,
+    "swap":@__swap,
+    "qrm":@__qrm,
+    "probe":@__probe,
+    "cal":@__cal,
+    "uptime":@__uptime,
+    "mark":@__mark,
+    "print":@__print,
+    "join":@__join,
+    "rn":@__rn,
+    "rmdir":@__rmdir,
+    "diff":@__diff,
+    "sed":@__sed,
+    "grep":@__grep,
+    "head":@__head,
+    "tail":@__tail,
+    "split":@__split,
+    "pwgen":@__pwgen,
+    "locate":@__locate,
+    "mkcd":@__mkcd,
+    "tar":@__tar,
+    "rev":@__rev,
+    "inject":@__inject,
+    "uniq":@__uniq,
+    "scrub":@__scrub,
+    "gzip":@__gzip,
+    "scanrouter":@__scanrouter,
+    "whois":@__whois,
+    "smtp":@__smpt,
+    "clear":@__clear,
+    "clr":@__clear,
+    "cls":@__clear,
+    "nslookup":@__nslookup,
+    "aireplay":@__aireplay,
+    "wait":@__wait,
+    "show":@__show,
+    "xc":@__xclip,
+    "sess":@__sessions,
+    "pp":@__pingport,
+    "ddos":@__ddos,
+    "tree":@__tree,
+    "whatami":@__whatami,
+    "mkdir":@__mkdir,
+    "touch":@__touch,
+    "share":@__share,
+    "index":@__index,
+    "stat":@__stat,
+    "notes":@__notes,
+    "sha256":@__sha256,
+    "info":@__info,
+    "jack":@__jack,
+    "pwd":@__pwd,
+    "dec":@__decrypt,
+    "enc":@__encrypt,
+    "hide":@__hide,
+    "cache":@__cache,
+    "hf":@__hashfile,
+    "hc":@__hashcat,
+    "mc":@__mc,
+    "vi":@__vi,
+    "scanlib":@__scanlib,
+    "scanaddress":@__scanaddress,
+    "decipher":@__decipher,
+    "nmap":@__nmap,
+    "aircrack":@__aircrack,
+    "rm":@__rm,
+    "mv":@__mv,
+    "cp":@__cp,
+    "chog":@__chog,
+    "chown":@__chown,
+    "chmod":@__chmod,
+    "chgrp":@__chgrp,
+    "cat":@__cat,
+    "cd":@__cd,
+    "write":@__write,
+    "echo":@__echo,
+    "zap":@__zap,
+    "find":@__find,
+    "more":@__more,
+    "file":@__file,
+    "whoami":@__whoami,
+    "bc":@__bc,
+    "aes128":@__aes128,
+    "rainbow":@__rainbow,
+    "ls":@__ls,
+    "edit":@__edit,
+    "sk":@__kiddy,
+    "date":@__time,
+    "time":@__time,
+    "post":@__post,
+    "server":@__server,
+    "man":@__manual,
+    "trim":@__trim,
+    "tr":@__tr,
+    "column":@__column,
+    "jq":@__jq,
+    "repl":@__repl,
+    "initd":@__initd,
+    "seq":@__seq,
+    "paste":@__paste,
+    "printf":@__printf
+  }
+end function

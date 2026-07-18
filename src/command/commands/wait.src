@@ -1,0 +1,5 @@
+// =============================================================================
+// WAIT
+// Pause execution for specified seconds or 1 second if no argument is provided.
+// =============================================================================
+Command.wait=function(argv);if argv then wait(val(argv[0])) else wait;end function

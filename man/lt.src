@@ -1,0 +1,78 @@
+// Man page for lt
+manLt="LT(1)                            X Shell Manual                            LT(1)
+
+<b>NAME</b>
+    lt - Log route tracking and visualization
+<b>SYNOPSIS</b>
+    <b>lt</b> <b>-a</b> FROM_IP TO_IP
+    <b>lt</b> <b>-r</b> INDEX
+    <b>lt</b> <b>-l</b>
+    <b>lt</b> <b>-x</b>
+    <b>lt</b> <b>-m</b>
+    <b>lt</b> <b>-w</b>
+<b>DESCRIPTION</b>
+    Visual log route tracker for following multi-hop attack paths and router
+    bounces. Color-coded display shows LAN versus public IP addresses. Essential
+    for tracing connections through multiple routers back to origin system.
+
+    <b>Color Coding:</b>
+      <color=#e4ff34>Yellow</color> = LAN IP address
+      <color=#20ff98>Green</color> = Public IP address
+
+    <b>Tracing Strategy:</b>
+    When both IPs are green, attack the router and examine logs. Search for
+    LAN IP in logs, then track that system. Final entry should show two
+    green IPs when you reach the origin system.
+<b>OPTIONS</b>
+    <b>-a FROM_IP TO_IP</b>
+    Add IP pair to tracker
+    Record connection route
+
+    <b>-r INDEX</b>
+    Remove entry by index
+    Delete tracked route
+
+    <b>-l</b>
+    List all tracked routes
+    Display connection chains
+
+    <b>-x</b>
+    Clear all entries
+    Reset tracker
+
+    <b>-m</b>
+    Enter management mode
+    Interactive tracking
+
+    <b>-w</b>
+    Write to ip_tracker.lst
+    Save current directory
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Building Route Chain</color>
+    <b>lt -a 177.61.158.111 192.168.0.2</b>
+    Add first hop
+
+    <b>lt -a 177.61.158.111 101.35.57.9</b>
+    Add second hop
+
+    <b>lt -a 101.35.57.9 26.87.87.62</b>
+    Continue tracking
+
+    <color=#e4ff34># Managing Tracker</color>
+    <b>lt -l</b>
+    View all routes
+
+    <b>lt -r 2</b>
+    Remove entry 2
+
+    <b>lt -m</b>
+    Interactive mode
+
+    <color=#e4ff34># Export and Reset</color>
+    <b>lt -w</b>
+    Save to file
+
+    <b>lt -x</b>
+    Clear all tracking
+<b>SEE ALSO</b>
+    <b>whois</b>, <b>nslookup</b>, <b>router</b>"

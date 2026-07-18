@@ -1,0 +1,240 @@
+// =============================================================================
+// TAIL
+// Display last N lines; -f follows changes, -s monitors system.log.
+// =============================================================================
+Command.tail=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("n",false,"store")          // Line count (can be +NUM)
+  _p.addArgument("c",false,"store")          // Byte count (can be +NUM)
+  _p.addArgument("s",false,"flag")           // System log mode
+  _p.addArgument("f",false,"flag")           // Follow mode
+  _p.addArgument("q",false,"flag")           // Quiet mode (no headers)
+  _p.addArgument("v",false,"flag")           // Verbose mode (always show headers)
+  argv=_p.parse("tail",argv,Obj)
+  if argv isa Error then return
+  if argv.n and argv.c then return Error.set("Cannot use -n and -c together")
+  if argv.q and argv.v then return Error.set("Cannot use -q and -v together")
+  if argv.s and argv.f then return Error.set("Cannot use -s and -f together: -s already follows system.log")
+  if argv.s then
+    logFile=Io.getFileObj(Obj,"/var/system.log")
+    isError=(logFile isa Error)
+    if isError then return Info.errorr("File not found: /var/system.log")
+    Info.info("Tailing system.log")
+    lastSize=size(logFile)
+    Utility.pressQ
+    while poll_input!="q"
+      fileExists=(logFile!=null)
+      if not fileExists then return Error.set("File not found: /var/system.log")
+      currentSize=size(logFile)
+      hasSizeChanged=(lastSize!=currentSize)
+      if hasSizeChanged then
+        Info.warning("Size has changed from "+str(lastSize)+" to "+str(currentSize))
+        lastSize=currentSize
+      end if
+    end while
+    return
+  end if
+  if argv.f then
+    if not argv.rest or len(argv.rest)==0 then return Error.set("No file specified")
+    fileArg=argv.rest[0]
+    filePath=fileArg
+    if fileArg.indexOf("*")!=null then
+      expanded=Glob.expand(Obj,fileArg)
+      if expanded and len(expanded)>0 and not(len(expanded)==1 and expanded[0]==fileArg) then filePath=expanded[0]
+    end if
+    fileObj=Io._getFile(Obj,filePath)
+    isError=(fileObj isa Error)
+    if isError then return
+    isBinOrFolder=Io.isBinFolder(fileObj)
+    if isBinOrFolder then return Error.set("Invalid file type")
+    currentLines=split(get_content(fileObj),char(10))
+    // Show initial N lines before entering follow mode
+    initialN=10
+    if argv.n then
+      temp=to_int(argv.n)
+      if temp isa number and temp>0 then initialN=temp
+    end if
+    initialTotal=len(currentLines)
+    startIdx=0
+    if initialTotal>initialN then startIdx=initialTotal-initialN
+    for line in currentLines[startIdx:];if line!=null then print white(line);end for
+    Info.info("Tailing "+name(fileObj))
+    lastSize=size(fileObj)
+    while poll_input!="q"
+      fileExists=(fileObj!=null)
+      if not fileExists then return Error.set("File not found: "+filePath)
+      // Get updated file content
+      newLines=split(get_content(fileObj),char(10))
+      comparison=currentLines.compare(newLines)
+      // Skip iteration if no changes detected
+      hasNoChange=(comparison.r=="=")
+      if hasNoChange then continue
+      // Handle line modifications
+      isModified=(comparison.r=="#")
+      if isModified then
+        Info.info("A line change has been made:")
+        currentLines=newLines
+        for line in comparison.l;hasContent=(line!=null);if not hasContent then continue;print white(line);end for
+      end if
+      // Handle lines added
+      isAddition=(comparison.r=="+")
+      if isAddition then
+        lineCountDiff=len(newLines)-len(currentLines)
+        Info.info(name(fileObj)+" has grown by "+str(lineCountDiff)+" line(s)","+")
+        currentLines=newLines
+        for line in comparison.l;hasContent=(line!=null);if not hasContent then continue;print white(line);end for
+      end if
+      // Handle lines removed
+      isDeletion=(comparison.r=="-")
+      if isDeletion then
+        lineCountDiff=len(currentLines)-len(newLines)
+        Info.warning(name(fileObj)+" has shrunk by "+str(lineCountDiff)+" line(s)","-")
+        currentLines=newLines
+        for line in comparison.l;hasContent=(line!=null);if not hasContent then continue;print white(line);end for
+      end if
+    end while
+    return
+  end if
+  usePipedInput=false
+  stdinContent=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinContent=globals.G_pipe.stdin
+    usePipedInput=true
+  end if
+  if not argv.rest or len(argv.rest)==0 then
+    if not usePipedInput then return Error.set("No file specified")
+  end if
+  fileObj=null
+  content=null
+  if usePipedInput then
+    content=stdinContent
+    if typeof(content)!="string" then content=str(content)
+  else
+    fileArg=argv.rest[0]
+    filePath=fileArg
+    if fileArg.indexOf("*")!=null then
+      expanded=Glob.expand(Obj,fileArg)
+      if expanded and len(expanded)>0 and not(len(expanded)==1 and expanded[0]==fileArg) then filePath=expanded[0]
+    end if
+    fileObj=Io._getFile(Obj,filePath)
+    isError=(fileObj isa Error)
+    if isError then return
+    isBinOrFolder=Io.isBinFolder(fileObj)
+    if isBinOrFolder then return Error.set("Invalid file type")
+    content=get_content(fileObj)
+  end if
+  lineCount=10
+  byteCount=100
+  byteMode=false
+  fromLine=0  // For +NUM syntax (0 means normal tail behavior)
+  refreshInterval=null
+  if argv.c then
+    byteMode=true
+    temp=argv.c
+    // Check for +NUM syntax
+    if len(temp)>0 and temp[0]=="+" then
+      fromLine=to_int(temp[1:])
+      if not fromLine isa number then fromLine=1
+      byteCount=0
+    else
+      byteCount=to_int(temp)
+      if not byteCount isa number then byteCount=100
+    end if
+  else if argv.n then
+    temp=argv.n
+    // Check for +NUM syntax
+    if len(temp)>0 and temp[0]=="+" then
+      fromLine=to_int(temp[1:])
+      if not fromLine isa number then fromLine=1
+      lineCount=0
+    else
+      lineCount=to_int(temp)
+      if not lineCount isa number then lineCount=10
+    end if
+  end if
+  if len(argv.rest)>1 then
+    temp=to_int(argv.rest[1])
+    if temp isa number then refreshInterval=temp
+  end if
+  showHeader=true
+  if argv.q then showHeader=false
+  if argv.v then showHeader=true
+  inPipeMode=globals.G_pipe.PIPE_MODE
+  if byteMode then
+    contentLen=len(content)
+    outputContent=null
+    if fromLine>0 then
+      // +NUM syntax: show from byte NUM to end
+      if fromLine<=contentLen then
+        if showHeader and not inPipeMode and fileObj then Info.info("Showing from byte "+str(fromLine)+" to end of "+name(fileObj))
+        outputContent=content[fromLine-1:]
+      else
+        if showHeader and not inPipeMode then Info.info("Byte offset beyond file size")
+        outputContent=""
+      end if
+    else
+      // Normal tail: last N bytes
+      if contentLen>byteCount then
+        if showHeader and not inPipeMode and fileObj then Info.info("Showing the last "+str(byteCount)+" bytes of "+name(fileObj))
+        outputContent=content[contentLen-byteCount:]
+      else
+        if showHeader and not inPipeMode and fileObj then Info.info("Showing all "+name(fileObj))
+        outputContent=content
+      end if
+    end if
+    if inPipeMode then push(globals.G_pipe.stdout,outputContent) else print white(outputContent)
+    return
+  end if
+  lines=split(content,char(10))
+  lineTotal=len(lines)
+  outputLines=[]
+  if fromLine>0 then
+    // +NUM syntax: show from line NUM to end
+    if fromLine<=lineTotal then
+      if showHeader and not inPipeMode and fileObj then Info.info("Showing from line "+str(fromLine)+" to end of "+name(fileObj))
+      i=fromLine-1;while i<lineTotal;outputLines.push(lines[i]);i+=1;end while
+    else
+      if showHeader and not inPipeMode then Info.info("Line offset beyond file size")
+    end if
+    if inPipeMode then
+      for line in outputLines;push(globals.G_pipe.stdout,line);end for
+    else
+      for line in outputLines;print white(line);end for
+    end if
+    return
+  end if
+  hasMoreLinesThanCount=(lineTotal>lineCount)
+  hasRefresh=(refreshInterval!=null)
+  if hasRefresh then
+    if hasMoreLinesThanCount then
+      while poll_input!="q"
+        clear_screen
+        if showHeader then Info.info("Showing the last "+str(lineCount)+" lines of "+name(fileObj))
+        startIdx=lineTotal-lineCount
+        for line in lines[startIdx:];print white(line);end for
+        wait refreshInterval
+      end while
+    else
+      while poll_input!="q"
+        clear_screen
+        if showHeader then Info.info("Showing all "+name(fileObj))
+        for line in lines;print white(line);end for
+        wait refreshInterval
+      end while
+    end if
+  else
+    if hasMoreLinesThanCount then
+      if showHeader and not inPipeMode and fileObj then Info.info("Showing the last "+str(lineCount)+" lines of "+name(fileObj))
+      startIdx=lineTotal-lineCount
+      outputLines=lines[startIdx:]
+    else
+      if showHeader and not inPipeMode and fileObj then Info.info("Showing all "+name(fileObj))
+      outputLines=lines
+    end if
+    if inPipeMode then
+      for line in outputLines;push(globals.G_pipe.stdout,line);end for
+    else
+      for line in outputLines;print white(line);end for
+    end if
+  end if
+end function

@@ -1,0 +1,56 @@
+// =============================================================================
+// UNIQ
+// Remove duplicate lines from a file in-place; -s to also sort.
+// =============================================================================
+Command.uniq=function(Obj,argv)
+  usePipedInput=false
+  stdinContent=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinContent=globals.G_pipe.stdin
+    usePipedInput=true
+  end if
+  if not argv and not usePipedInput then return Man.help(["uniq"])
+  argv=ArgumentParser.check(argv)
+  _p=ArgumentParser.init
+  _p.addArgument("s",false,"flag")  // Sort lines after deduplication
+  argv=_p.parseArgs("uniq",argv)
+  if argv isa Error then return
+  lines=null
+  fileObj=null
+  if usePipedInput then
+    // Process stdin content
+    content=stdinContent
+    if typeof(content)!="string" then content=str(content)
+    lines=split(content,char(10))
+  else
+    // Parse and validate file path argument (only if not using stdin)
+    argv=_p.parsePath(Obj,argv)
+    if argv isa Error then return
+    // Require file argument if not using piped input
+    if not argv.rest or len(argv.rest)==0 then return Man.help(["uniq"])
+    // Retrieve file object from parsed path
+    filePath=argv.rest[0]
+    fileObj=Io._getFile(Obj,filePath)
+    if fileObj isa Error then return fileObj
+    // Validate file has content before processing
+    if not get_content(fileObj) then return Warning.set("File is empty: "+filePath)
+    // Split file content into individual lines
+    lines=split(get_content(fileObj),char(10))
+  end if
+  // Remove duplicate lines by using map keys (which are always unique)
+  uniqueMap={}
+  for line in lines;uniqueMap[line]=1;end for
+  uniqueLines=uniqueMap.indexes
+  if argv.s then uniqueLines=sort(uniqueLines)
+  if usePipedInput then
+    if globals.G_pipe.PIPE_MODE then
+      for line in uniqueLines;push(globals.G_pipe.stdout,line);end for
+    else
+      for line in uniqueLines;print white(line);end for
+    end if
+  else
+    // Write back to file
+    set_content(fileObj,join(uniqueLines,char(10)))
+    Info.info("Complete")
+  end if
+end function

@@ -1,0 +1,34 @@
+// =============================================================================
+// IPC
+// Inter-process communication; manages registration, signaling, and data exchange between processes.
+// =============================================================================
+Ipc={}
+//addObject - Register process object in IPC registry
+//Args: Obj (object with .id and .commands)
+//Returns: nothing
+Ipc.addObject=function(Obj)
+	//Skip processes in safe list
+	if hasIndex(globals.G_IPCSafe,Obj.id) then return
+	//Store command handlers in global registry
+	globals.G_IPC[Obj.id]=Obj.commands
+end function
+//removeObj - Remove process object from IPC registry
+//Args: id (process identifier string)
+//Returns: nothing
+Ipc.removeObj=function(id)
+	//Remove from registry if exists
+	if hasIndex(globals.G_IPC,id) then remove(globals.G_IPC,id)
+end function
+//killAll - Terminate all non-safe processes
+//Args: none
+//Returns: nothing
+Ipc.killAll=function
+	//Set background mode flag
+	globals.G_attributes.back=true
+  //Track processes to remove
+  i=[]
+	//Iterate through copy of IPC registry
+	for obj in clone(globals.G_IPC);if hasIndex(globals.G_IPCSafe,obj.key) then continue;obj.value["x"];push(i,obj.key);end for
+  //Remove all marked processes
+  for o in i;remove(globals.G_IPC,o);end for
+end function

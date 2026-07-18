@@ -1,0 +1,22 @@
+// =============================================================================
+// MEDIAN
+// Calculate the median (middle value) of a list of numbers.
+// Pipe: seq 1 100 | median
+// =============================================================================
+Command.median=function(Obj,argv)
+  hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  isPipeOut=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  nums=[]
+  if hasPipeIn then
+    stdinData=globals.G_pipe.stdin
+    if stdinData isa list then lines=stdinData else lines=split(trim(str(stdinData)),char(10))
+    for line in lines;line=trim(line);if line then push(nums,val(line));end for
+  else
+    if not argv then return Man.help(["median"])
+    nums=argv.toNumber
+  end if
+  if not len(nums) then return Man.help(["median"])
+  result=Math.median(nums)
+  if result isa Error then return result
+  if isPipeOut then push(globals.G_pipe.stdout,str(result)) else print yellow("The median is: ")+green(str(result))
+end function

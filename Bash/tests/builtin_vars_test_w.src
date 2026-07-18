@@ -1,0 +1,112 @@
+testBuiltinVars="// Stress test for COMPUTER, SHELL, and ROOT built-in variables
+
+_print bold(=== COMPUTER TESTS ===)
+_setvar(lan, COMPUTER.local_ip)
+_setvar(pub, COMPUTER.public_ip)
+_setvar(host, COMPUTER.get_name)
+_setvar(gw, COMPUTER.network_gateway)
+_setvar(card, COMPUTER.active_net_card)
+_setvar(netup, COMPUTER.is_network_active)
+_print cyan(LAN IP:) _getvar(lan)
+_print cyan(Public IP:) _getvar(pub)
+_print cyan(Hostname:) _getvar(host)
+_print cyan(Gateway:) _getvar(gw)
+_print cyan(Net Card:) _getvar(card)
+_print cyan(Network Active:) _getvar(netup)
+
+_print
+_print bold(--- Ports ---)
+_setvar(ports, COMPUTER.get_ports)
+_setvar(pcount, len(_getvar(ports)))
+_print yellow(Port count:) _getvar(pcount)
+
+_print
+_print bold(--- Processes ---)
+_setvar(procs, COMPUTER.show_procs)
+_print _getvar(procs)
+
+_print
+_print bold(=== SHELL TESTS ===)
+_setvar(comp, SHELL.host_computer)
+_setvar(comptype, typeof_val(_getvar(comp)))
+_print green(host_computer type:) _getvar(comptype)
+_setvar(ship, _getvar(comp).public_ip)
+_print green(Shell host IP:) _getvar(ship)
+
+_print
+_print bold(=== ROOT TESTS ===)
+_setvar(rpath, ROOT.path)
+_setvar(rname, ROOT.name)
+_setvar(rown, ROOT.owner)
+_setvar(rgrp, ROOT.group)
+_setvar(rprm, ROOT.permissions)
+_setvar(rsiz, ROOT.size)
+_setvar(rfld, ROOT.is_folder)
+_setvar(rbin, ROOT.is_binary)
+_setvar(rsym, ROOT.is_symlink)
+_print magenta(Path:) _getvar(rpath)
+_print magenta(Name:) _getvar(rname)
+_print magenta(Owner:) _getvar(rown)
+_print magenta(Group:) _getvar(rgrp)
+_print magenta(Perms:) _getvar(rprm)
+_print magenta(Size:) _getvar(rsiz)
+_print magenta(Is folder:) _getvar(rfld)
+_print magenta(Is binary:) _getvar(rbin)
+_print magenta(Is symlink:) _getvar(rsym)
+
+_print
+_print bold(--- Root Folders ---)
+_setvar(folders, ROOT.get_folders)
+_setvar(fcount, len(_getvar(folders)))
+_print yellow(Folder count:) _getvar(fcount)
+for d in folders
+  _setvar(dn, _getvar(d).name)
+  _setvar(dp, _getvar(d).permissions)
+  _setvar(do, _getvar(d).owner)
+  _print liteblue(_getvar(dp)) green(_getvar(do)) _getvar(dn)
+endfor
+
+_print
+_print bold(--- Root Files ---)
+_setvar(files, ROOT.get_files)
+_setvar(fcnt, len(_getvar(files)))
+_print yellow(File count:) _getvar(fcnt)
+for f in files
+  _setvar(fn, _getvar(f).name)
+  _setvar(fp, _getvar(f).permissions)
+  _setvar(fo, _getvar(f).owner)
+  _setvar(fs, _getvar(f).size)
+  _print liteblue(_getvar(fp)) green(_getvar(fo)) yellow(_getvar(fs)) _getvar(fn)
+endfor
+
+_print
+_print bold(--- Parent Test ---)
+_setvar(parent, ROOT.parent)
+_setvar(ptype, typeof_val(_getvar(parent)))
+_print cyan(Parent type:) _getvar(ptype)
+
+_print
+_print bold(=== CHAINING TEST ===)
+_setvar(chain1, SHELL.host_computer.local_ip)
+_setvar(chain2, SHELL.host_computer.public_ip)
+_setvar(chain3, SHELL.host_computer.get_name)
+_print lime(Chain LAN:) _getvar(chain1)
+_print lime(Chain Public:) _getvar(chain2)
+_print lime(Chain Hostname:) _getvar(chain3)
+
+_print
+_print bold(=== DEEP CHAIN: list root subdirs ---)
+_setvar(rootdirs, ROOT.get_folders)
+for sd in rootdirs
+  _setvar(sdn, _getvar(sd).name)
+  _setvar(sdp, _getvar(sd).path)
+  _setvar(sdf, _getvar(sd).get_files)
+  _setvar(sdd, _getvar(sd).get_folders)
+  _setvar(sfcount, len(_getvar(sdf)))
+  _setvar(sdcount, len(_getvar(sdd)))
+  _print orange(_getvar(sdp)) cyan(_getvar(sdcount) dirs) purple(_getvar(sfcount) files)
+endfor
+
+_print
+_print bold(=== DONE ===)
+"

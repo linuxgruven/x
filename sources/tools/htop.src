@@ -1,0 +1,49 @@
+toolHtop="string.red=function;return ""<color=#ff4b4b>""+self+""</color>"";end function
+string.liteGrey=function;return ""<color=#fbfbfb>""+self+""</color>"";end function
+string.lime=function;return ""<color=#baff50>""+self+""</color>"";end function
+string.grey=function;return ""<color=#9d9d9d>""+self+""</color>"";end function
+string.black=function;return ""<color=#032e41>""+self+""</color>"";end function
+string.blue=function;return ""<color=#36abe8>""+self+""</color>"";end function
+string.green=function;return ""<color=#20ff98>""+self+""</color>"";end function
+lastOutput=""""
+computer=host_computer(get_shell)
+while 1
+	makeBar=function(percent,barLen=29)
+		filled=ceil(percent/barLen*10)
+		empty=barLen-filled
+		filledStr=""#""*filled
+		emptyStr=""-""*empty
+		return (filledStr.blue+emptyStr.black)
+	end function
+	procMap={}
+	totalCpu=0.0
+	totalMem=0.0
+	idx=0
+	for procLine in split(show_procs(computer),char(10))[1:]
+		fields=split(procLine,"" "")
+		user=fields[0]
+		if user==""root"" then user=user.red else user=user.liteGrey
+		proc={""user"":user,""pid"":str(fields[1]).green,""cpu"":str(fields[2]).blue,""mem"":str(fields[3]).blue,""command"":fields[4].lime}
+		totalCpu=totalCpu+val(fields[2][:-1])
+		totalMem=totalMem+val(fields[3][:-1])
+		procMap[idx]=proc
+		idx=idx+1
+	end for
+	headerLines=[]
+	push(headerLines,(""    tasks: ""+len(procMap)).liteGrey)
+	push(headerLines,(""cpu_usage: [""+makeBar(totalCpu)+""]==[""+(totalCpu+""%"").blue+""]"").liteGrey)
+	if totalMem>100 then push(headerLines,(""mem_usage: [""+(""#""*29).blue+""]==[""+(""100%"").blue+""]"").liteGrey) else push(headerLines,(""mem_usage: [""+makeBar(totalMem)+""]==[""+(totalMem+""%"").blue+""]"").liteGrey)
+	procLines=[]
+	push(procLines,join([""USER"".grey,""PID"".grey,""CPU"".grey,""MEM"".grey,""COMMAND"".grey],""  ""))
+	for proc in procMap
+		val_entry=proc.value
+		push(procLines,join([val_entry.user,val_entry.pid,val_entry.cpu,val_entry.mem,val_entry.command],""  ""))
+	end for
+	headerStr=join(headerLines,char(10))
+	procStr=join(procLines,char(10))
+	if lastOutput!=headerStr+procStr then
+		print(headerStr,1)
+		print(format_columns(procStr),1)
+		lastOutput=headerStr+procStr
+	end if
+end while"

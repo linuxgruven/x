@@ -1,0 +1,51 @@
+// Man page for yes
+manYes="YES(1)                            X Shell Manual                            YES(1)
+
+<b>NAME</b>
+    yes - enable or disable automatic yes to all prompts
+<b>SYNOPSIS</b>
+    <b>yes</b>
+    <b>yes --off</b>
+    <b>yes -c</b>
+<b>DESCRIPTION</b>
+    Sets a session-wide flag that automatically confirms all yes/no prompts
+    without user input. Useful when running commands with <b>-i</b> (interactive)
+    that would otherwise prompt before each operation.
+
+    The flag is automatically cleared at the end of any pipeline, so
+    <b>yes | cmd -i ...</b> works for pipeline-scoped auto-confirmation.
+
+    Use <b>yes --off</b> to manually disable the flag outside of a pipeline.
+<b>OPTIONS</b>
+    <b>yes</b>
+    Enable auto-yes. All Gui prompts will return true automatically.
+
+    <b>yes --off</b>
+    Disable auto-yes and restore normal prompt behaviour.
+
+    <b>yes -c</b>
+    Check the current state of auto-yes (ON or OFF).
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Session-scoped</color>
+    <b>yes</b>
+    Enable auto-yes for all subsequent prompts
+
+    <b>cp -i *.txt /backup</b>
+    All overwrite prompts auto-confirmed
+
+    <b>yes --off</b>
+    Re-enable normal prompting
+
+    <color=#e4ff34># Pipeline-scoped (auto-cleared after pipe)</color>
+    <b>yes | cp -i file.txt /etc</b>
+    Auto-confirm overwrite for this command only
+
+    <color=#e4ff34># Check status</color>
+    <b>yes -c</b>
+    Print whether auto-yes is currently ON or OFF
+
+    <color=#e4ff34># Cheeky reset</color>
+    <b>yes | echo</b>
+    Pipe clears the flag automatically
+<b>SEE ALSO</b>
+    <b>cp</b>, <b>mv</b>, <b>rm</b>"

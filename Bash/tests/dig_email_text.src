@@ -1,0 +1,16 @@
+// dig_email_text.src
+// Tests --text mode: returns join(values(rawMap), char(10)) — a flat string
+// Usage: @dig_email_text
+
+_setvar(result, _dig -e --text --quiet)
+
+if _len(_getvar(result)) == 0
+  _print red(No data returned)
+  return
+endif
+
+_print green(=== dig --text output ===)
+_setvar(slen, _len result)
+_print cyan(String length: ) _getvar(slen)
+_print white(-----------------------------)
+_print _getvar(result)

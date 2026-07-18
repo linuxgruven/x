@@ -1,0 +1,34 @@
+// Man page for reset
+manReset="RESET(8)                         X Shell Manual                         RESET(8)
+
+<b>NAME</b>
+    reset - clear X internal cache and shell cache
+<b>SYNOPSIS</b>
+    <b>reset</b>
+<b>DESCRIPTION</b>
+    <b>reset</b> is used to reset X internal cache and shell cache. Use this
+    command when you have issues with dig or any other heavy shell command.
+    Sometimes the cache can get corrupted and needs to be reset. This will clear
+    all cached shell objects, network data, and internal state information.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Cache Reset</color>
+    <b>reset</b>
+    Clear all internal caches
+
+    <color=#e4ff34># Common Use Cases</color>
+    <b>reset</b>
+    Fix dig command showing stale data
+
+    <b>reset</b>
+    Clear corrupted shell cache
+
+    <b>reset</b>
+    Resolve network query issues
+
+    <b>reset</b>
+    Refresh cached shell objects after system changes
+
+    <b>reset</b>
+    Fix memory or performance issues
+<b>SEE ALSO</b>
+    <b>reboot</b>, <b>dig</b>"

@@ -1,0 +1,374 @@
+// =============================================================================
+// PARSER
+// JSON and string parser; serialization, deserialization, and structured data utilities.
+// =============================================================================
+Parser={
+  "hexDigitMap":{},
+  "escapeTo":["\\\\","\\""","\\b","\\t","\\n","\\f","\\r"],
+  "eol":char(13),
+  "escapeFrom":["\\","""",char(8),char(9),char(10),char(12),char(13)],
+  "escapeIndexes":0,
+  "whiteSpace":" "+char(9)+char(10)+char(13),
+  "source":"",
+  "sourceLen":0,
+  "p":0
+}
+//Pre-build hex digit map at module load time (avoids rebuilding on every unescape call)
+for __ph in [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+  if __ph<10 then
+    Parser.hexDigitMap[str(__ph)]=__ph
+  else
+    Parser.hexDigitMap[char(55+__ph)]=__ph
+    Parser.hexDigitMap[char(87+__ph)]=__ph
+  end if
+end for
+//hexToInt - Convert hexadecimal string to integer
+//Args: s (hex string, e.g., "1A3F")
+//Returns: decimal integer value
+Parser.hexToInt=function(s)
+	//Initialize result
+	r=0
+	//Process each hex digit
+	for c in s;r=r*16+Parser.hexDigitMap[c];end for
+	//Return converted integer
+	return r
+end function
+//escape - Escape special characters in string
+//Args: s (string to escape)
+//Returns: string with escape sequences (\n, \t, \b, etc.)
+Parser.escape=function(s)
+	//Get indexes of characters to escape
+	Parser.escapeIndexes=indexes(Parser.escapeFrom)
+	//Replace each character with escape sequence
+	for i in Parser.escapeIndexes;s=s.replace(Parser.escapeFrom[__i_idx],Parser.escapeTo[__i_idx]);end for
+	//Return escaped string
+	return s
+end function
+//unescape - Convert escape sequences to actual characters
+//Args: s (string with escape sequences)
+//Returns: string with unescaped characters
+Parser.unescape=function(s)
+	//Initialize result array
+	r=[]
+	//hexDigitMap is pre-built at module load time
+	//Initialize position
+	i=0
+	//Cache string length
+	m=len(s)
+	//Process each character
+	while i<m
+		//Default advance by 1
+		d=1
+		//Check for escape sequence
+		if s[i]=="\\" then
+			//Escape sequences are 2+ chars
+			d=2
+			//Get escape type
+			c=s[i+1]
+			//Handle \b (backspace)
+			if c=="b" then
+				push(r,char(8))
+				i+=d
+				continue
+			end if
+			//Handle \t (tab)
+			if c=="t" then
+				push(r,char(9))
+				i+=d
+				continue
+			end if
+			//Handle \n (newline)
+			if c=="n" then
+				push(r,char(10))
+				i+=d
+				continue
+			end if
+			//Handle \f (form feed)
+			if c=="f" then
+				push(r,char(12))
+				i+=d
+				continue
+			end if
+			//Handle \r (carriage return)
+			if c=="r" then
+				push(r,char(13))
+				i+=d
+				continue
+			end if
+			//Handle \uXXXX (Unicode)
+			if c=="u" then
+				//Extract 4-digit hex code
+				h=s[i+2:i+6]
+				//Convert to character
+				push(r,char(self.hexToInt(h)))
+				//Unicode escapes are 6 chars (\uXXXX)
+				d=6
+				i+=d
+				continue
+			end if
+			//Other escapes (\" or \\)
+			push(r,c)
+		else
+			//Regular character
+			push(r,s[i])
+		end if
+		//Advance position
+		i+=d
+	end while
+	//Join result array to string
+	return join(r,"")
+end function
+//init - Initialize parser with source string
+//Args: s (JSON string to parse)
+//Returns: nothing
+Parser.init=function(s)
+	//Store source string
+	self.source=s
+	//Cache length for performance
+	self.sourceLen=len(s)
+end function
+//parse - Parse JSON string to object
+//Args: s (JSON string, optional if already initialized)
+//Returns: parsed object (map, list, string, number, boolean, or null)
+Parser.parse=function(s=null)
+	//Initialize with new source if provided
+	if s!=null then self.init s
+	//Reset parse position
+	self.p=0
+	//Begin parsing
+	return self.parseElement
+end function
+//skipWhiteSpace - Advance past whitespace characters
+//Returns: nothing (modifies self.p)
+Parser.skipWhiteSpace=function
+	//Loop until non-whitespace or end
+	while self.p<self.sourceLen;c=self.source[self.p];if indexOf(self.whiteSpace,c)==null then break;self.p=self.p+1;end while
+end function
+//parseElement - Parse any JSON element
+//Returns: parsed value
+Parser.parseElement=function
+	//Delegate to parseValue
+	return self.parseValue
+end function
+//parseValue - Dispatch to appropriate parser based on first character
+//Returns: parsed value (string, number, list, map, boolean, or null)
+Parser.parseValue=function
+	//Skip leading whitespace
+	self.skipWhiteSpace
+	//Get first character
+	c=self.source[self.p]
+	//Parse string (starts with ")
+	if c=="""" then return self.parseString
+	//Parse number (starts with digit, -, or .)
+	if indexOf("0123456789-.",c)!=null then return self.parseNumber
+	//Parse list (starts with [)
+	if c=="[" then return self.parseList
+	//Parse map (starts with {)
+	if c=="{" then return self.parseMap
+	//Parse boolean true
+	if c=="t" and self.source[self.p:self.p+4]=="true" then
+		//Advance past "true"
+		self.p=self.p+4
+		return true
+	end if
+	//Parse boolean false
+	if c=="f" and self.source[self.p:self.p+5]=="false" then
+		//Advance past "false"
+		self.p=self.p+5
+		return false
+	end if
+	//Parse null
+	if c=="n" and self.source[self.p:self.p+4]=="null" then
+		//Advance past "null"
+		self.p=self.p+4
+		return
+	end if
+end function
+//parseList - Parse JSON array [...]
+//Returns: list of parsed elements
+Parser.parseList=function
+	//Skip opening [
+	self.p=self.p+1
+	//Skip whitespace after [
+	self.skipWhiteSpace
+	//Initialize result list
+	r=[]
+	//Parse elements until ]
+	while self.p<self.sourceLen
+		//Get current character
+		c=self.source[self.p]
+		//Break on closing ]
+		if c=="]" then break
+		//Parse and add element
+		push(r,self.parseElement)
+		//Skip whitespace after element
+		self.skipWhiteSpace
+		//Check for comma separator
+		c=self.source[self.p]
+		if c=="," then
+			//Skip comma
+			self.p=self.p+1
+			//Skip whitespace after comma
+			self.skipWhiteSpace
+		end if
+	end while
+	//Skip closing ]
+	self.p=self.p+1
+	//Return parsed list
+	return r
+end function
+//parseMap - Parse JSON object {...}
+//Returns: map of key-value pairs or Error
+Parser.parseMap=function
+	//Skip opening {
+	self.p=self.p+1
+	//Skip whitespace after {
+	self.skipWhiteSpace
+	//Initialize result map
+	r={}
+	//Parse key-value pairs until }
+	while self.p<self.sourceLen
+		//Get current character
+		c=self.source[self.p]
+		//Break on closing }
+		if c=="}" then break
+		//Validate key is string
+		if c!="""" then return Error.set("Object member key must be a string literal Error at position "+self.p+": "+self.source[self.p-60:self.p+60])
+		//Parse key string
+		k=self.parseString
+		//Skip whitespace after key
+		self.skipWhiteSpace
+		//Validate colon separator
+		if self.source[self.p]!=":" then return Error.set("Colon expected Error at position "+self.p+": "+self.source[self.p-60:self.p+60])
+		//Skip colon
+		self.p=self.p+1
+		//Skip whitespace after colon
+		self.skipWhiteSpace
+		//Parse value
+		v=self.parseElement
+		//Store key-value pair
+		r[k]=v
+		//Skip whitespace after value
+		self.skipWhiteSpace
+		//Check for comma separator
+		c=self.source[self.p]
+		if c=="," then
+			//Skip comma
+			self.p=self.p+1
+			//Skip whitespace after comma
+			self.skipWhiteSpace
+		end if
+	end while
+	//Skip closing }
+	self.p=self.p+1
+	//Return parsed map
+	return r
+end function
+//parseString - Parse quoted string
+//Returns: unescaped string
+Parser.parseString=function
+	//Skip opening quote
+	self.p=self.p+1
+	//Mark string start
+	s=self.p
+	//Track if escape sequences found
+	e=null
+	//Find closing quote
+	while self.p<self.sourceLen
+		//Get current character
+		c=self.source[self.p]
+		//Advance position
+		self.p=self.p+1
+		//Break on closing quote
+		if c=="""" then break
+		//Handle escape sequence
+		if c=="\\" then
+			//Mark that unescaping needed
+			e=1
+			//Skip escaped character
+			self.p=self.p+1
+		end if
+	end while
+	//Extract string content
+	r=self.source[s:self.p-1]
+	//Unescape if needed
+	if e then r=self.unescape(r)
+	//Return string
+	return r
+end function
+//parseNumber - Parse numeric value (integer, float, scientific)
+//Returns: number
+Parser.parseNumber=function
+	//Mark number start
+	s=self.p
+	//Find end of number
+	while self.p<self.sourceLen;c=self.source[self.p];if indexOf("0123456789+-.eE",c)==null then break;self.p=self.p+1;end while
+	//Extract and convert to number
+	r=val(self.source[s:self.p])
+	//Return number
+	return r
+end function
+//listToJSON - Convert list to JSON array string
+//Args: l (list), c (compact flag), d (depth for indentation)
+//Returns: JSON array string
+Parser.listToJSON=function(l,c,d)
+	//Calculate whitespace (empty if compact)
+	w=(self.eol+"  "*(d+1))*(not c)
+	//Start with opening bracket and whitespace
+	p=["[",w]
+	//Track first element
+	f=1
+	//Iterate through list
+	for i in l
+		//Add comma separator after first
+		if not f then
+			push(p,",")
+			push(p,w)
+		end if
+		//Convert element to JSON recursively
+		push(p,System.toJSON(i,c,d+1))
+		//Clear first flag
+		f=0
+	end for
+	//Add closing whitespace if not compact
+	if not c then push(p,self.eol+"  "*d)
+	//Add closing bracket
+	push(p,"]")
+	//Join and return
+	return join(p,"")
+end function
+//mapToJSON - Convert map to JSON object string
+//Args: l (map), c (compact flag), d (depth for indentation)
+//Returns: JSON object string
+Parser.mapToJSON=function(l,c,d)
+	//Calculate whitespace (empty if compact)
+	w=(self.eol+"  "*(d+1))*(not c)
+	//Start with opening brace and whitespace
+	p=["{",w]
+	//Track first pair
+	f=1
+	//Iterate through map
+	for k in l
+		//Add comma separator after first
+		if not f then
+			push(p,",")
+			push(p,w)
+		end if
+		//Add key as JSON string
+		push(p,System.toJSON(str(k.key)))
+		//Add colon separator
+		push(p,":")
+		//Add space after colon if not compact
+		if not c then push(p," ")
+		//Convert value to JSON recursively
+		push(p,System.toJSON(@k.value,c,d+1))
+		//Clear first flag
+		f=0
+	end for
+	//Add closing whitespace if not compact
+	if not c then push(p,self.eol+"  "*d)
+	//Add closing brace
+	push(p,"}")
+	//Join and return
+	return join(p,"")
+end function

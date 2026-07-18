@@ -1,0 +1,32 @@
+// Memory Test Script
+// Continuously adds to a variable and reports size
+print "Memory Test - Press Ctrl+C to stop"
+print "Testing variable growth and memory impact"
+print ""
+testData = {}
+counter = 0
+iteration = 0
+while true
+  iteration = iteration + 1
+  // Add data to map (simulating library cache growth)
+  for i in range(1, 100)
+    counter = counter + 1
+    key = "item_" + counter
+    testData[key] = {
+      "name": "test_library_" + counter,
+      "version": "1.0." + counter,
+      "data": "some_data_string_here_" + counter
+    }
+  end for
+  // Report stats every 100 items
+  if counter % 100 == 0 then
+    itemCount = len(testData)
+    // Estimate memory: ~200 bytes per item (key + value structure)
+    estimatedBytes = itemCount * 200
+    estimatedKB = floor(estimatedBytes / 1024)
+    estimatedMB = floor(estimatedBytes / (1024 * 1024) * 100) / 100
+    print "[" + iteration + "] Items: " + itemCount + " | Counter: " + counter + " | Est. Size: " + estimatedMB + " MB (" + estimatedKB + " KB)"
+  end if
+  // Optional: pause briefly (remove for max speed)
+  // wait(0.1)
+end while

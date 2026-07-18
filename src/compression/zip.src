@@ -1,0 +1,61 @@
+// =============================================================================
+// ZIP
+// LZW compress/decompress individual files; --force bypasses extension check.
+// =============================================================================
+Zip={}
+Zip.zip=function(Obj,argv)
+	if not argv then return Man.help(["zip"])
+	Arg1=lower(pull(argv))
+	_p=ArgumentParser.init
+	_p.addArgument("z",false,"flag")
+	_p.addArgument("u",false,"flag")
+	_p.addArgument("n",false,"store")
+	_p.addArgument("v",false,"flag")
+  _p.addArgument("force",true,"flag")
+	argv=_p.parseArgs("zip",argv)
+	if argv isa Error then return
+	argv=_p.parsePath(Obj,argv)
+	if argv isa Error then return
+	// LZW-compress file and rename with .zip extension
+	zip=function(arg)
+		if not arg.rest then return Error.set("No file specified!")
+		f=Io._getFile(Obj,arg.rest[0])
+		if f isa Error then return
+		r=set_content(f,Lzw.compress(get_content(f)))
+		if r isa string then return Error.set(r)
+		if arg.n then rename(f,arg.n+".zip") else rename(f,name(f)+".zip")
+	end function
+	// Check .zip extension; returns true if caller should abort
+	checkZip=function(f,force)
+		if endsWith(name(f),".zip") then return false
+		if force then return false
+		Error.set("File is not a zip file, use --force to force unzip")
+		return true
+	end function
+	// LZW-decompress .zip file; --force bypasses extension check
+	unzip=function(arg)
+		if not arg.rest then return Error.set("No zip file specified!")
+		f=Io._getFile(Obj,arg.rest[0])
+		if f isa Error then return
+		if checkZip(f,arg.force) then return
+		r=set_content(f,Lzw.decompress(get_content(f)))
+		if r isa string then return Error.set(r)
+		if arg.n then rename(f,arg.n) else rename(f,name(f).replace(".zip",""))
+	end function
+	// Decompress and print .zip contents; --force bypasses extension check
+	view=function(arg)
+		if not arg.rest then return Error.set("No zip file specified!")
+		f=Io._getFile(Obj,arg.rest[0])
+		if f isa Error then return
+		if checkZip(f,arg.force) then return
+		nl=char(10)
+		for i in split(Lzw.decompress(get_content(f)),nl);print cyan(i);end for
+	end function
+	cmds={
+    "-z":@zip,
+    "-u":@unzip,
+    "-v":@view
+	}
+	if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+	cmds[Arg1](argv)
+end function

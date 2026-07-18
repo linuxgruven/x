@@ -1,0 +1,51 @@
+// Man page for qrm
+manQrm="QRM(1)                           X Shell Manual                           QRM(1)
+
+<b>NAME</b>
+    qrm - Quiet file removal without log entries
+<b>SYNOPSIS</b>
+    <b>qrm</b> FILE [FILE2 ...]
+    <b>qrm</b> FILE [FILE2 FOLDER]
+    <b>find</b> PATTERN | <b>qrm</b>
+<b>DESCRIPTION</b>
+    Stealth file and folder deletion utility that bypasses system logging.
+    Removes files without creating delete entries in system logs, reducing
+    forensic footprint. Requires read and write permissions in current working
+    directory. Essential for covert operations and cleaning attack traces.
+
+    Multiple targets can be specified. Accepts filenames from stdin via pipe.
+<b>OPTIONS</b>
+    <b>FILE</b>
+    One or more target files or folders to remove silently.
+    No log entries created.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Stealth Deletion</color>
+    <b>qrm exploit.src</b>
+    Remove a single file without logging
+
+    <color=#e4ff34># Multiple Files</color>
+    <b>qrm x payload.src backdoor.bin</b>
+    Remove multiple files silently in one command
+
+    <b>qrm /root/attack_tools</b>
+    Remove entire folder quietly
+
+    <color=#e4ff34># Trace Removal</color>
+    <b>qrm payload.src /root/.attack_history</b>
+    Remove multiple traces at once
+
+    <color=#e4ff34># Compare with Standard rm</color>
+    <b>rm file.txt</b>
+    Creates log entry
+
+    <b>qrm file.txt</b>
+    No log entry created
+
+    <color=#e4ff34># Pipe Support</color>
+    <b>find *.src | qrm</b>
+    Silently remove all matched files
+
+    <b>find /root/attack_tools *.bin | qrm</b>
+    Wipe all binaries from a directory without a trace
+<b>SEE ALSO</b>
+    <b>rm</b>, <b>wipe</b>, <b>scrub</b>"

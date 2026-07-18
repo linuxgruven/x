@@ -1,0 +1,23 @@
+binNmap="if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""nmap_usage""))
+if not is_valid_ip(params[0]) then exit(""nmap: invalid ip address"")
+if not is_network_active(host_computer(get_shell)) then exit(""nmap: No internet access."")
+ipAddress=params[0]
+if ipAddress==""127.0.0.1"" then ipAddress=local_ip(host_computer(get_shell))
+isLanIp=is_lan_ip(ipAddress)
+if isLanIp then router=get_router else router=get_router(ipAddress)
+if not router then exit(""nmap: ip address not found"")
+if not isLanIp then ports=used_ports(router) else ports=device_ports(router,ipAddress)
+if not ports then exit(""nmap: ip address not found"")
+if typeof(ports)==""string"" then exit(ports)
+info=""PORT STATE SERVICE VERSION LAN""
+print(char(10)+""Starting nmap v1.1 at ""+current_date)
+print(""Interesting ports on ""+params[0]+char(10))
+if len(ports)==0 then exit(""Scan finished. No open ports."")
+for port in ports
+	service_info=port_info(router,port)
+	lan_ips=get_lan_ip(port)
+	port_status=""open""
+	if is_closed(port) and not isLanIp then port_status=""closed""
+	info=info+char(10)+port_number(port)+"" ""+port_status+"" ""+service_info+"" ""+lan_ips
+end for
+print(format_columns(info)+char(10))"

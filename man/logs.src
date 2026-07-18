@@ -1,0 +1,55 @@
+// Man page for logs
+manLogs="LOGS(1)                          X Shell Manual                          LOGS(1)
+
+<b>NAME</b>
+    logs - System log file management and transfer
+<b>SYNOPSIS</b>
+    <b>logs</b>
+    <b>logs -s</b>
+    <b>logs -r</b>
+    <b>logs -u</b>
+    <b>logs -d</b>
+<b>DESCRIPTION</b>
+    Manages system.log files by downloading them to your current directory,
+    allowing modifications, and re-uploading them to the target system.
+    Most operations require root privileges to successfully modify log files.
+    Server flags (-s, -r, -u, -d) enable log file transfers between target
+    and server storage when using an x database.
+
+    <color=#e4ff34>*** Can only be used with shell objects (main, shell and ftpshell) ***</color>
+    <color=#e4ff34>*** Server flags require that you are using an x database ***</color>
+<b>OPTIONS</b>
+    <b>logs</b> - Edit Target Log
+      Download system.log to current directory, wait for modifications,
+      then re-upload to target:/var/system.log
+
+    <b>-s</b> - Send to Server
+      Send target's log file to server:/temp folder.
+
+    <b>-r</b> - Retrieve from Server
+      Return target's log file from server:/temp to target:/var/system.log
+
+    <b>-u</b> - Upload to Server
+      Upload log from current directory to server:/temp directory.
+
+    <b>-d</b> - Download from Server
+      Download log from server:/temp to current directory.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Local Log Editing</color>
+    <b>logs</b>
+    Download, edit, and re-upload system.log
+
+    <color=#e4ff34># Server Operations</color>
+    <b>logs -s</b>
+    Send target log to server storage
+
+    <b>logs -r</b>
+    Retrieve target log from server
+
+    <b>logs -u</b>
+    Upload local log to server
+
+    <b>logs -d</b>
+    Download log from server to current directory
+<b>SEE ALSO</b>
+    <b>cat</b>, <b>vi</b>, <b>chmod</b>"

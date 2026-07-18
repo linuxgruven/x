@@ -1,0 +1,165 @@
+// DEBUG TEST 4: Chapters 8-14 (Practical Programs, Advanced)
+// Tests the later chapters that may have hidden issues.
+
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>  [PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>  [FAIL]</color> _getvar(label)
+  endif
+endfunc
+
+// -- CH8: Practical Programs --
+_print <color=#eb0cc6>=== CHAPTER 8 START ===</color>
+
+// Fibonacci
+func fib(n)
+  if _getvar(n) <= 0
+    _return 0
+  endif
+  if _getvar(n) == 1
+    _return 1
+  endif
+  _setvar(a, 0)
+  _setvar(b, 1)
+  for i in range(2, _getvar(n))
+    _setvar(temp, _getvar(b))
+    _setvar(b, _getvar(a) + _getvar(b))
+    _setvar(a, _getvar(temp))
+  endfor
+  _return _getvar(b)
+endfunc
+_setvar(r, fib(10))
+assert(fib 10 = 55, _getvar(r), 55)
+_print <color=#00ff00>  8.1 fibonacci OK</color>
+
+// isPrime
+func isPrime(n)
+  if _getvar(n) < 2
+    _return 0
+  endif
+  _setvar(i, 2)
+  while _getvar(i) * _getvar(i) <= _getvar(n)
+    if _getvar(n) % _getvar(i) == 0
+      _return 0
+    endif
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return 1
+endfunc
+_setvar(r, isPrime(17))
+assert(17 is prime, _getvar(r), 1)
+_setvar(r, isPrime(4))
+assert(4 is not prime, _getvar(r), 0)
+_print <color=#00ff00>  8.2 primes OK</color>
+
+// Bubble sort (manual variables - list index assignment not supported)
+_setvar(a, 5)
+_setvar(b, 3)
+_setvar(c, 8)
+_setvar(d, 1)
+_setvar(e, 4)
+// Pass 1
+if _getvar(a) > _getvar(b)
+  _setvar(t, _getvar(a))
+  _setvar(a, _getvar(b))
+  _setvar(b, _getvar(t))
+endif
+if _getvar(b) > _getvar(c)
+  _setvar(t, _getvar(b))
+  _setvar(b, _getvar(c))
+  _setvar(c, _getvar(t))
+endif
+if _getvar(c) > _getvar(d)
+  _setvar(t, _getvar(c))
+  _setvar(c, _getvar(d))
+  _setvar(d, _getvar(t))
+endif
+if _getvar(d) > _getvar(e)
+  _setvar(t, _getvar(d))
+  _setvar(d, _getvar(e))
+  _setvar(e, _getvar(t))
+endif
+// Pass 2
+if _getvar(a) > _getvar(b)
+  _setvar(t, _getvar(a))
+  _setvar(a, _getvar(b))
+  _setvar(b, _getvar(t))
+endif
+if _getvar(b) > _getvar(c)
+  _setvar(t, _getvar(b))
+  _setvar(b, _getvar(c))
+  _setvar(c, _getvar(t))
+endif
+if _getvar(c) > _getvar(d)
+  _setvar(t, _getvar(c))
+  _setvar(c, _getvar(d))
+  _setvar(d, _getvar(t))
+endif
+// Pass 3
+if _getvar(a) > _getvar(b)
+  _setvar(t, _getvar(a))
+  _setvar(a, _getvar(b))
+  _setvar(b, _getvar(t))
+endif
+if _getvar(b) > _getvar(c)
+  _setvar(t, _getvar(b))
+  _setvar(b, _getvar(c))
+  _setvar(c, _getvar(t))
+endif
+_print <color=#aaaaaa>  Sorted: _getvar(a), _getvar(b), _getvar(c), _getvar(d), _getvar(e)</color>
+assert(sort first is 1, _getvar(a), 1)
+_print <color=#00ff00>  8.3 sort OK</color>
+
+_print <color=#eb0cc6>=== CHAPTER 8 DONE ===</color>
+
+// -- CH9: Colors --
+_print <color=#eb0cc6>=== CHAPTER 9 START ===</color>
+_print <color=#ff0000>  Red text</color>
+_print <color=#00ff00>  Green text</color>
+_print <color=#0000ff>  Blue text</color>
+_print <color=#ffff00>  Yellow text</color>
+_print <color=#eb0cc6>=== CHAPTER 9 DONE ===</color>
+
+// -- CH10: Advanced Patterns --
+_print <color=#eb0cc6>=== CHAPTER 10 START ===</color>
+
+// Map-like structure using lists
+func makeCounter()
+  _setvar(count, 0)
+  _return _getvar(count)
+endfunc
+_setvar(c, makeCounter())
+assert(counter starts at 0, _getvar(c), 0)
+
+// Accumulator pattern
+func sumList(lst)
+  _setvar(total, 0)
+  for item in _getvar(lst)
+    _setvar(total, _getvar(total) + _getvar(item))
+  endfor
+  _return _getvar(total)
+endfunc
+_setvar(r, sumList([10, 20, 30]))
+assert(sum of 10+20+30 = 60, _getvar(r), 60)
+_print <color=#00ff00>  10.1 patterns OK</color>
+_print <color=#eb0cc6>=== CHAPTER 10 DONE ===</color>
+
+// -- CH11: Builtin Chaining --
+_print <color=#eb0cc6>=== CHAPTER 11 START ===</color>
+_setvar(r, upper(substr(hello, 0, 3)))
+assert(upper+substr = HEL, _getvar(r), HEL)
+_setvar(r, len(upper(hello)))
+assert(len of upper = 5, _getvar(r), 5)
+_setvar(r, floor(abs(-7) + ceil(2.1)))
+assert(floor+abs+ceil = 10, _getvar(r), 10)
+_print <color=#00ff00>  11 chaining OK</color>
+_print <color=#eb0cc6>=== CHAPTER 11 DONE ===</color>
+
+// -- CH13: Process Management --
+_print <color=#eb0cc6>=== CHAPTER 13 START ===</color>
+_setvar(t1, timestamp())
+_print <color=#aaaaaa>  Timestamp:</color> _getvar(t1)
+_print <color=#eb0cc6>=== CHAPTER 13 DONE ===</color>
+
+_print <color=#00ff00>=== DEBUG TEST 4 COMPLETE ===</color>

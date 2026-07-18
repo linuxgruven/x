@@ -1,0 +1,29 @@
+// Man page for nslookup
+manNslookup="NSLOOKUP(1)                      X Shell Manual                      NSLOOKUP(1)
+
+<b>NAME</b>
+    nslookup - used to obtain the ip address from a domain
+<b>SYNOPSIS</b>
+    <b>nslookup</b> DOMAIN
+<b>DESCRIPTION</b>
+    It is used to obtain the ip address from a given domain name.
+<b>OPTIONS</b>
+    <b>DOMAIN</b> - Lookup IP
+      Returns the ip of a web address.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man nslookup</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>nslookup</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Domain Lookup</color>
+    <b>nslookup www.website.com</b>
+    Get IP for domain
+
+    <b>nslookup example.org</b>
+    Lookup example site
+<b>SEE ALSO</b>
+    <b>whois</b>, <b>nmap</b>"

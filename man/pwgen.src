@@ -1,0 +1,12 @@
+// Man page for pwgen
+manPwgen="PWGEN(1)                         X Shell Manual                         PWGEN(1)
+
+<b>NAME</b>
+    pwgen - is used to generate passwords
+<b>SYNOPSIS</b>
+    <b>pwgen</b>
+    Generate a password (15 chars).
+    <b>pwgen </b><b>-s</b>
+    Generate a hard password (20 chars).
+    <b>pwgen </b><b>-l </b><b>NUMBER</b>
+    Generate a password with NUMBER chars."

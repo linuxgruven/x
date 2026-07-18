@@ -1,0 +1,12 @@
+// Man page for devices
+manDevices="DEVICES(1)                       X Shell Manual                       DEVICES(1)
+
+<b>NAME</b>
+    devices - used to see what devices are available to use
+<b>SYNOPSIS</b>
+    <b>devices</b>
+<b>DESCRIPTION</b>
+    Display available devices that can be used for operations.
+<b>EXAMPLE:</b>
+    <b>devices</b>
+    List all available devices"

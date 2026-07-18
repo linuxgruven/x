@@ -1,0 +1,183 @@
+// =============================================================================
+// JQ
+// Extract key-value fields from structured text or JSON-style input.
+// Reads from piped stdin or a file.
+// Expressions: .key  .key.subkey  [.k1,.k2]  .
+// =============================================================================
+Command.jq=function(Obj,argv)
+  if not argv or len(argv)==0 then return Man.help(["jq"])
+  _p=ArgumentParser.init
+  _p.addArgument("r",false,"flag")    // Raw output: value only
+  _p.addArgument("c",false,"flag")    // Compact output
+  argv=_p.parse("jq",argv,Obj)
+  if argv isa Error then return
+  if not argv.rest or len(argv.rest)==0 then return Man.help(["jq"])
+  expr=argv.rest[0]
+  // Check for piped stdin
+  usePipedInput=false
+  stdinContent=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinContent=globals.G_pipe.stdin
+    usePipedInput=true
+  end if
+  // Determine input source
+  rawText=null
+  if usePipedInput then
+    rawText=stdinContent
+    if typeof(rawText)=="list" then
+      rawText=join(rawText,char(10))
+    else if typeof(rawText)!="string" then
+      rawText=str(rawText)
+    end if
+  else if len(argv.rest)>=2 then
+    f=Io._getFile(Obj,argv.rest[1])
+    if f isa Error then return f
+    if not has_permission(f,"r") then return Error.set("Read permission denied")
+    rawText=get_content(f)
+  else
+    return Error.set("No input: pipe content or provide a file argument")
+  end if
+  if not rawText or len(rawText)==0 then return
+  // Strip surrounding quotes from a string token
+  stripQ=function(s)
+    s=trim(s)
+    if len(s)>=2 and s[0]=="""" and s[-1:]=="""" then return s[1:-1]
+    if len(s)>=2 and s[0]=="'" and s[-1:]=="'" then return s[1:-1]
+    return s
+  end function
+  // Parse lines[startIdx..] into a map, stopping at a closing brace
+  // Returns {map:{}, nextIdx:n}
+  parseBlock=function(lines,startIdx)
+    kv={}
+    _len=len(lines)
+    i=startIdx
+    while i<_len
+      line=trim(lines[i])
+      i+=1
+      if len(line)==0 then continue
+      // End of nested block
+      if line=="}" or line=="}," then break
+      // Bare opening brace (root object open line)
+      if line=="{" then continue
+      // Find first colon (key separator)
+      colonIdx=indexOf(line,":")
+      if colonIdx==null or colonIdx<=0 then continue
+      k=stripQ(line[:colonIdx])
+      if len(k)==0 then continue
+      v=trim(line[colonIdx+1:])
+      // Strip trailing comma
+      if len(v)>0 and v[-1:]=="," then v=trim(v[:-1])
+      if v=="{" then
+        // Nested block starts on following lines
+        result=parseBlock(lines,i)
+        kv[k]=result.map
+        i=result.nextIdx
+      else if len(v)>1 and v[0]=="{" and v[-1:]=="}" then
+        // Inline nested: "key": {"a":"b"}
+        inner=v[1:-1]
+        sub={}
+        parts=split(inner,",")
+        for sl in parts
+          sl=trim(sl)
+          ci=indexOf(sl,":")
+          if ci!=null and ci>0 then
+            sk=stripQ(sl[:ci])
+            sv=stripQ(sl[ci+1:])
+            if len(sk)>0 then sub[sk]=sv
+          end if
+        end for
+        kv[k]=sub
+      else
+        kv[k]=stripQ(v)
+      end if
+    end while
+    return {"map":kv,"nextIdx":i}
+  end function
+  parseKV=function(text)
+    lines=split(text,char(10))
+    result=parseBlock(lines,0)
+    // Fallback: try = separator for flat key=value files
+    if len(result.map)==0 then
+      kv={}
+      for line in lines
+        line=trim(line)
+        if len(line)==0 then continue
+        eqIdx=indexOf(line,"=")
+        if eqIdx==null or eqIdx<=0 then continue
+        k=stripQ(line[:eqIdx])
+        v=stripQ(line[eqIdx+1:])
+        if len(k)>0 then kv[k]=v
+      end for
+      return kv
+    end if
+    return result.map
+  end function
+  // Parse expression into descriptor
+  // .              → {type:"all"}
+  // .a.b.c         → {type:"single", path:["a","b","c"]}
+  // [.a,.b.c]      → {type:"multi",  paths:[["a"],["b","c"]]}
+  parseExpr=function(e)
+    e=trim(e)
+    if e=="." then return {"type":"all"}
+    if len(e)>=2 and e[0]=="[" and e[-1:]=="]" then
+      inner=e[1:-1]
+      parts=split(inner,",")
+      paths=[]
+      for part in parts
+        part=trim(part)
+        if len(part)>0 and part[0]=="." then part=part[1:]
+        if indexOf(part,".")!=null then push(paths,split(part,"\.")) else push(paths,[part])
+      end for
+      return {"type":"multi","paths":paths}
+    end if
+    if len(e)>0 and e[0]=="." then e=e[1:]
+    if indexOf(e,".")!=null then return {"type":"single","path":split(e,"\.")}
+    return {"type":"single","path":[e]}
+  end function
+  // Walk a map along path segments
+  resolvePath=function(kv,pathList)
+    cur=kv
+    for seg in pathList;if typeof(cur)!="map" then return null;if not hasIndex(cur,seg) then return null;cur=cur[seg];end for
+    return cur
+  end function
+  // Print a value — recurses into nested maps with indentation
+  printVal=function(label,val,depth)
+    pad=""
+    i=0
+    while i<depth;pad=pad+"  ";i+=1;end while
+    if typeof(val)=="map" then
+      if not argv.r then
+        if globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,pad+label+":") else print white(pad+label+":")
+      end if
+      for pair in val;printVal(pair.key,pair.value,depth+1);end for
+    else
+      vs=str(val)
+      if argv.r then
+        if globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,pad+vs) else print green(pad+vs)
+      else
+        if globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,pad+label+": "+vs) else print white(pad+label+": ")+green(vs)
+      end if
+    end if
+  end function
+  kv=parseKV(rawText)
+  if not kv or len(kv)==0 then return Error.set("No key-value pairs found in input")
+  parsed=parseExpr(expr)
+  if parsed.type=="all" then
+    for pair in kv;printVal(pair.key,pair.value,0);end for
+  else if parsed.type=="single" then
+    val=resolvePath(kv,parsed.path)
+    if val==null then return Error.set("Path '"+expr+"' not found")
+    label=parsed.path[len(parsed.path)-1]
+    printVal(label,val,0)
+  else if parsed.type=="multi" then
+    for pathList in parsed.paths
+      val=resolvePath(kv,pathList)
+      label=pathList[len(pathList)-1]
+      if val!=null then
+        printVal(label,val,0)
+      else
+        if not globals.G_pipe.PIPE_MODE then print red("[null] "+join(pathList,".")+" not found")
+      end if
+    end for
+  end if
+end function

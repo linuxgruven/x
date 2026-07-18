@@ -1,0 +1,558 @@
+// =============================================================================
+// BUILDER
+// Builder library; packages GreyScript code into custom objects for remote deployment.
+// =============================================================================
+Builder={}
+// Check write permissions for build directory
+// Falls back to home directory if current directory not writable
+// Returns: writable directory path or Error
+Builder.checkPerms=function(Obj)
+  C=Obj.dir.current
+  // Check if current directory is writable
+  if not has_permission(C,"w") then
+    H=Obj.user.home
+    // Can't fall back if already in home directory
+    if path(C)==path(H) then return Error.set("No write permission to : "+path(C))
+    // Check if home directory is writable
+    if not has_permission(H,"w") then return Error.set("No write permission to : "+path(C)+" or "+path(H)) else C=H // Fall back to home directory
+  end if
+  return C
+end function
+// Clean up temp build files and optionally an uploaded library from path(C)
+Builder._cleanup=function(Obj,C,m=null,n=".x_x")
+  f=File(Obj.computer,path(C)+"/"+n+".src")
+  if f then Crack.qrm(Obj.computer,path(C),f)
+  f=File(Obj.computer,path(C)+"/"+n)
+  if f then Crack.qrm(Obj.computer,path(C),f)
+  if m then Crack.qrm(Obj.computer,path(C),m)
+end function
+// Pack libtrafficnet.so into get_custom_object for network operations
+// Args: Obj (context)
+// Returns: packed library object or Error
+Builder.packTraffic=function(Obj)
+  co=get_custom_object
+  // Check write permissions
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  // Clear existing packed object
+  if hasIndex(co,"packTraffic") then co.packTraffic=null
+  F=true
+  // Look for library on target system
+  m=Io.findFile(Obj.root,"libtrafficnet.so")
+  if m isa Error then
+    // Library not found, upload from local system
+    m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/libtrafficnet.so")
+    if not m then return Error.set("","",true)
+    x=scp(globals.G_main.shell,path(m),path(C),Obj.shell)
+    if x isa string then return Error.set(x)
+    m=File(Obj.computer,path(C)+"/libtrafficnet.so")
+    if not m then return Error.set("Failed to upload libtrafficnet")
+  else
+    // Library already exists, don't delete it later
+    F=false
+  end if
+	// Create code to pack library into get_custom_object
+	c="get_custom_object[""packTraffic""]=include_lib("""+path(m)+""")"
+	// Create temporary source file
+	_n=Io.tmpName
+	f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+	if f isa Error then return Error.set("","",true)
+	set_content(f,c)
+	// Build and launch to execute packing code
+	if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+	// Clean up temporary files
+	_m=null
+	if F then _m=m
+	self._cleanup(Obj,C,_m,_n)
+  return co.packTraffic
+end function
+// Pack libsmartappliance.so into get_custom_object for smart appliance operations
+// Args: Obj (context)
+// Returns: packed library object or Error
+Builder.packAppliance=function(Obj)
+  co=get_custom_object
+  // Check write permissions
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  // Clear existing packed object
+  if hasIndex(co,"packAppliance") then co.packAppliance=null
+  F=true
+  // Look for library on target system
+  m=Io.findFile(Obj.root,"libsmartappliance.so")
+  if m isa Error then
+    // Library not found, upload from local system
+    m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/libsmartappliance.so")
+    if not m then return Error.set("","",true)
+    x=scp(globals.G_main.shell,path(m),path(C),Obj.shell)
+    if x isa string then return Error.set(x)
+    m=File(Obj.computer,path(C)+"/libsmartappliance.so")
+    if not m then return Error.set("Failed to upload libsmartappliance")
+  else
+    // Library already exists
+    F=false
+  end if
+	// Create packing code
+	c="get_custom_object[""packAppliance""]=include_lib("""+path(m)+""")"
+	// Create temporary source file
+	_n=Io.tmpName
+	f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+	if f isa Error then return Error.set("","",true)
+	set_content(f,c)
+	// Build and launch to execute packing
+	if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+	// Clean up temporary files
+	_m=null
+	if F then _m=m
+	self._cleanup(Obj,C,_m,_n)
+  return co.packAppliance
+end function
+// Pack crypto.so into get_custom_object for encryption operations
+// Args: Obj (context), L (leave flag - don't delete library if true)
+// Returns: packed library object or Error
+Builder.packCrypto=function(Obj,L=false)
+  co=get_custom_object
+  // Check write permissions
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  // Clear existing packed object
+  if hasIndex(co,"packCrypto") then co.packCrypto=null
+  F=true
+  // Look for library on target system
+  m=Io.findFile(Obj.root,"crypto.so")
+  if m isa Error then
+    // Upload library from local system
+    m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/crypto.so")
+    if not m then return Error.set("","",true)
+    x=scp(globals.G_main.shell,path(m),path(C),Obj.shell)
+    if x isa string then return Error.set(x)
+    m=File(Obj.computer,path(C)+"/crypto.so")
+    if not m then return Error.set("Failed to upload crypto")
+  else
+    // Library already exists
+    F=false
+  end if
+	// Create packing code
+	c="get_custom_object[""packCrypto""]=include_lib("""+path(m)+""")"
+	// Create and build temporary source file
+	_n=Io.tmpName
+	f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+	if f isa Error then return Error.set("","",true)
+	set_content(f,c)
+	if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+	// Clean up temporary files
+	_m=null
+	if not L and F then _m=m
+	self._cleanup(Obj,C,_m,_n)
+  return co.packCrypto
+end function
+// Pack metaxploit.so into get_custom_object for exploitation operations
+// Args: Obj (context), L (leave flag - don't delete library if true)
+// Returns: packed library object or Error
+Builder.packMetaxploit=function(Obj,L=false)
+  co=get_custom_object
+  // Check write permissions
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  // Clear existing packed object
+  if hasIndex(co,"packMetaxploit") then co.packMetaxploit=null
+  F=true
+  // Look for library on target system
+  m=Io.findFile(Obj.root,"metaxploit.so")
+  if m isa Error then
+    // Upload library from local system
+    m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/metaxploit.so")
+    if not m then return Error.set("","",true)
+    x=scp(globals.G_main.shell,path(m),path(C),Obj.shell)
+    if x isa string then return Error.set(x)
+    m=File(Obj.computer,path(C)+"/metaxploit.so")
+    if not m then return Error.set("Failed to upload metaxploit")
+  else
+    // Library already exists
+    F=false
+  end if
+	// Create packing code
+	c="get_custom_object[""packMetaxploit""]=include_lib("""+path(m)+""")"
+	// Create and build temporary source file
+	_n=Io.tmpName
+	f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+	if f isa Error then return Error.set("","",true)
+	set_content(f,c)
+	if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+	// Clean up temporary files
+	_m=null
+	if not L and F then _m=m
+	self._cleanup(Obj,C,_m,_n)
+  return co.packMetaxploit
+end function
+// Pack router object into get_custom_object
+// Args: Obj (context), i (optional IP address for specific router)
+// Returns: packed router object or Error
+Builder.packRouter=function(Obj,i=null)
+  co=get_custom_object
+  // Check write permissions
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  // Clear existing packed object
+  if hasIndex(co,"packRouter") then co.packRouter=null
+	// Create code for router packing (with or without IP)
+	if i then c="get_custom_object[""packRouter""]=get_router("""+i+""")" else c="get_custom_object[""packRouter""]=get_router"
+  // Create and build temporary source file
+  _n=Io.tmpName
+  f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+	if f isa Error then return Error.set("","",true)
+	set_content(f,c)
+	if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+	// Clean up temporary files
+	self._cleanup(Obj,C,null,_n)
+  return co.packRouter
+end function
+Builder.packNetwork=function(Obj)
+  co=get_custom_object
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  if hasIndex(co,"packNetwork") then co.packNetwork=null
+	c="deep=function(t,s);R=[];if indexOf(s,t)!=null then return R;D={""ip"":t,""ports"":[],""devices"":[],""type"":""<color=#36abe8>Workstation at --- </color>"",""typeIcon"":""<color=#36abe8>[-] </color>"",""firewall"":false,""firewall_rules"":null};if not ping(get_shell,t) then;R.push(D);return R;end if;push(s,t);r=get_router(t);if r!=null then;F=firewall_rules(r);if F isa list and F then;D[""typeIcon""]=""<color=#20ff98>[F] </color>"";D[""firewall""]=true;D[""firewall_rules""]=F;for z in F;if indexOf(z,""DENY"")!=null then D[""typeIcon""]=""<color=#ff4b4b>[F] </color>"";end for;end if;if local_ip(get_router(public_ip(r)))==D[""ip""] then;D[""type""]=""<color=#ffffff>Edge Router at</color><color=#36abe8> --- </color>"";if not D[""firewall""] then D[""typeIcon""]=""<color=#36abe8>[+] </color>"";else;if get_switch(D[""ip""]) then;D[""type""]=""<color=#e4ff34>Switch at</color><color=#36abe8> -------- </color>"";if not D[""firewall""] then D[""typeIcon""]=""<color=#e4ff34>[!] </color>"";else;D[""type""]=""<color=#ffffff>Router at</color><color=#36abe8> -------- </color>"";if not D[""firewall""] then D[""typeIcon""]=""<color=#20ff98>[+] </color>"";end if;end if;for p in device_ports(r,t);d={};if port_number(p)==8080 then push(D[""ports""],{""port_number"":0,""local_ip"":local_ip(r),""public_ip"":public_ip(r)});d[""port_number""]=port_number(p);d[""local_ip""]=get_lan_ip(p);d[""public_ip""]=public_ip(r);push(D[""ports""],d);end for;v=devices_lan_ip(r);for c in v;if indexOf(s,c)!=null or c==t then continue;u=deep(c,s);for l in u;push(D[""devices""],l);end for;end for;else;M=get_router(s[0]);if M!=null then;for p in device_ports(M,t);d={};d[""port_number""]=port_number(p);d[""local_ip""]=get_lan_ip(p);d[""public_ip""]=public_ip(M);if port_number(p)==1222 then;if not D[""type""]==""<color=#7e17e6>Player at</color><color=#36abe8> -------- </color>"" then D[""type""]=""<color=#7e17e6>Player at</color><color=#36abe8> -------- </color>"";else if port_number(p)==37777 then;if not D[""type""]==""<color=#7e17e6>Player at</color><color=#36abe8> -------- </color>"" then D[""type""]=""<color=#ffa500>Camera at</color><color=#36abe8> -------- </color>"";else if port_number(p)==1883 then;if not D[""type""]==""<color=#7e17e6>Player at</color><color=#36abe8> -------- </color>"" then D[""type""]=""<color=#ffa500>Appliance at</color><color=#36abe8> ----- </color>"";else if port_number(p)==5555 then;if not D[""type""]==""<color=#7e17e6>Player at</color><color=#36abe8> -------- </color>"" then D[""type""]=""<color=#ffa500>ADB|Phone at</color><color=#36abe8> ----- </color>"";else if port_number(p)==6667 then;if not D[""type""]==""<color=#7e17e6>Player at</color><color=#36abe8> -------- </color>"" then D[""type""]=""<color=#7e17e6>Player at</color><color=#36abe8> -------- </color>"";end if;push(D[""ports""],d);end for;end if;end if;push(R,D);return R;end function;get_custom_object[""packNetwork""]=deep(local_ip(get_router),[])"
+	_n=Io.tmpName
+	f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+	if f isa Error then return Error.set("","",true)
+	set_content(f,c)
+	if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+	self._cleanup(Obj,C,null,_n)
+  return co.packNetwork
+end function
+Builder.packNetworkInfo=function(Obj)
+  co=get_custom_object
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  if hasIndex(co,"packNetworkInfo") then co.packNetworkInfo=null
+	c="deep=function(t,s);R=[];if indexOf(s,t)!=null then return R;D={""ip"":t,""ports"":[],""devices"":[]};if not ping(get_shell,t) then;R.push(D);return R;end if;push(s,t);r=get_router(t);if r!=null then;for p in device_ports(r,t);d={};d[""port""]=p;push(D[""ports""],d);end for;v=devices_lan_ip(r);for c in v;if indexOf(s,c)!=null or c==t then continue;u=deep(c,s);for l in u;push(D[""devices""],l);end for;end for;else;M=get_router(s[0]);if M!=null then;for p in device_ports(M,t);d={};d[""port""]=p;push(D[""ports""],d);end for;end if;end if;push(R,D);return R;end function;get_custom_object[""packNetworkInfo""]=deep(local_ip(get_router),[])"
+	_n=Io.tmpName
+	f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+	if f isa Error then return Error.set("","",true)
+	set_content(f,c)
+	if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+	self._cleanup(Obj,C,null,_n)
+  return co.packNetworkInfo
+end function
+// Build and run a flat LAN scan on the target machine
+// Script runs ON Obj so get_router/devices_lan_ip execute in correct context
+// Returns: {ip:[{port,service,version},...], ...} or Error
+Builder.packLan=function(Obj)
+  co=get_custom_object
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  if hasIndex(co,"packLan") then co.packLan=null
+  c="result={};deep=function(t,s);if indexOf(s,t)!=null then return;push(s,t);r=get_router(t);if r!=null then;ports=[];for p in device_ports(r,t);pn=port_number(p);info=port_info(r,p);if info and pn>0 then push(ports,{""port"":pn,""service"":info});end for;result[t]=ports;v=devices_lan_ip(r);for c in v;if indexOf(s,c)!=null or c==t then continue;deep(c,s);end for;else;M=get_router(s[0]);if M!=null then;ports=[];for p in device_ports(M,t);pn=port_number(p);info=port_info(M,p);if info and pn>0 then push(ports,{""port"":pn,""service"":info});end for;result[t]=ports;end if;end if;end function;deep(local_ip(get_router),[]);get_custom_object[""packLan""]=result"
+  _n=Io.tmpName
+  f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+  if f isa Error then return Error.set("","",true)
+  set_content(f,c)
+  if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+  self._cleanup(Obj,C,null,_n)
+  if hasIndex(co,"packLan") and co.packLan!=null then return co.packLan
+  return []
+end function
+// Pack all essential libraries: router, metaxploit, and crypto
+// Args: Obj (context)
+// Returns: info messages about packing status
+Builder.packAll=function(Obj)
+  // Check write permissions
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  Info.info("Packing router, metaxploit and crypto")
+  // Pack router object
+  r=self.packRouter(Obj)
+  if r isa Error then Info.error("Failed to pack router") else Obj.packRouter=r
+  // Pack metaxploit library
+  m=self.packMetaxploit(Obj)
+  if m isa Error then Info.error("Failed to pack metaxploit") else Obj.packMetaxploit=m
+  // Pack crypto library
+  c=self.packCrypto(Obj)
+  if c isa Error then Info.error("Failed to pack crypto") else Obj.packCrypto=c
+  // Report results
+  if (not r isa Error) and (not m isa Error) and (not c isa Error) then return Info.info("All packed")
+  if not r isa Error then Info.info("Router packed")
+  if not m isa Error then Info.info("Metaxploit packed")
+  if not c isa Error then Info.info("Crypto packed")
+end function
+// Build root shell from exploit shell on remote system
+// Args: ex (exploit shell), i (IP address), p (optional root password)
+// Returns: root shell object or null
+Builder.packEXSu=function(ex,i,p=null)
+  co=get_custom_object
+  // Clear existing packed shell
+  if hasIndex(co,"packRootShell") then co.packRootShell=null
+  u=Utility.getUserEX(ex)
+  // Check write permission to home directory
+  if not has_permission(u.home,"w") then return
+  c=host_computer(ex)
+  // If already root, just return the shell
+  if u.user=="root" then
+    co.packRootShell=ex
+    return ex
+  end if
+	// Try multiple methods to get root password
+	if not p then p=Shadow.returnPassword(i)
+	if not p then p=Crack.passwdReturnSilentEX(ex)
+  if not p then p=Crack.returnRootPass(ex)
+  if not p then return
+	// Build code to get root shell
+	h=path(u.home)
+	s="get_custom_object[""packRootShell""]=get_shell(""root"","""+p+""")"
+	// Create temporary source file on remote system
+	_n=Io.tmpName
+	touch(c,h,_n+".src")
+	f=File(c,h+"/"+_n+".src")
+	if not f then return
+	set_content(f,s)
+	// Build and launch to execute
+	if build(ex,path(f),h)=="" then launch(ex,h+"/"+_n)
+	// Clean up temporary files
+	f=File(c,h+"/"+_n+".src")
+	if f then Crack.qrm(c,h,f)
+	f=File(c,h+"/"+_n)
+	if f then Crack.qrm(c,h,f)
+	// Return root shell if successful
+	if typeof(co.packRootShell)=="shell" then return co.packRootShell
+end function
+// Get shell for specific user on target system
+// Args: Obj (context), u (username), p (password)
+// Returns: shell object or Error
+Builder.getShell=function(Obj,u,p)
+  co=get_custom_object
+  // Check write permissions
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  // Clear existing packed shell
+  if hasIndex(co,"packRootShell") then co.packRootShell=null
+	// Create code to get shell
+	c="get_custom_object[""packRootShell""]=get_shell("""+u+""","""+p+""")"
+	// Create and build temporary source file
+	_n=Io.tmpName
+	f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+	if f isa Error then return Error.set("","",true)
+	set_content(f,c)
+	if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+	// Clean up temporary files
+	self._cleanup(Obj,C,null,_n)
+  return co.packRootShell
+end function
+Builder.packCO=function(Obj,i=null)
+  co=get_custom_object
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  if hasIndex(co,"packMetaxploit") then co.packMetaxploit=null
+  if hasIndex(co,"packRouter") then co.packRouter=null
+  F=true
+  m=Io.findFile(Obj.root,"metaxploit.so")
+  if m isa Error then
+    m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/metaxploit.so")
+    if not m then return Error.set("","",true)
+    x=scp(globals.G_main.shell,path(m),path(C),Obj.shell)
+    if x isa string then return Error.set(x)
+    m=File(Obj.computer,path(C)+"/metaxploit.so")
+    if not m then return Error.set("Failed to upload metaxploit")
+  else
+    F=false
+  end if
+	if i then c="get_custom_object[""packMetaxploit""]=include_lib("""+path(m)+""");get_custom_object[""packRouter""]=get_router("""+i+""")" else c="get_custom_object[""packMetaxploit""]=include_lib("""+path(m)+""");get_custom_object[""packRouter""]=get_router"
+	_n=Io.tmpName
+	f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+	if f isa Error then return Error.set("","",true)
+	set_content(f,c)
+	if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+	_m=null
+	if F then _m=m
+	self._cleanup(Obj,C,_m,_n)
+  return {"metaxploit":co.packMetaxploit,"router":co.packRouter}
+end function
+// packCOEX - Pack Custom Objects through EXploit shell
+// CRITICAL: This function solves Grey Hack's context switching problem
+// When operating from a proxy chain, we need to get router/metaxploit from
+// a DIFFERENT system than where our code is currently executing.
+//
+// Example: Home at 41.107.36.160, proxy chain ends at 169.27.175.176
+//   - Direct get_router("41.107.36.160") would fail (wrong context)
+//   - Must build+launch code on target to execute in its own context
+//   - Result stored in get_custom_object (only cross-context storage)
+//
+// Args: ex (shell to execute through), i (optional IP for get_router)
+// Returns: {metaxploit, router} packed through remote execution
+Builder.packCOEX=function(ex,i=null)
+  co=get_custom_object
+  // Clear stale results from previous pack operations
+  if hasIndex(co,"packMetaxploit") then co.packMetaxploit=null
+  if hasIndex(co,"packRouter") then co.packRouter=null
+  F=true
+  m=Io.findFile(File(host_computer(ex),"/"),"metaxploit.so")
+  h=Utility.getUserEX(ex).home
+  if not has_permission(h,"w") then return Error.set("","",true)
+  h=path(h)
+  if not m or m isa Error then
+    m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/metaxploit.so")
+    if not m then return Error.set("","",true)
+    x=scp(globals.G_main.shell,path(m),h,ex)
+    if x isa string then return Error.set(x)
+    m=File(host_computer(ex),h+"/metaxploit.so")
+    if not m then return Error.set("Failed to import metaxploit")
+  else
+    F=false
+  end if
+	if i then c="get_custom_object[""packMetaxploit""]=include_lib("""+path(m)+""");get_custom_object[""packRouter""]=get_router("""+i+""")" else c="get_custom_object[""packMetaxploit""]=include_lib("""+path(m)+""");get_custom_object[""packRouter""]=get_router"
+	_n=Io.tmpName
+	touch(host_computer(ex),h,_n+".src")
+	f=File(host_computer(ex),h+"/"+_n+".src")
+	if not f then return Error.set("Failed to create source file")
+	set_content(f,c)
+	if build(ex,path(f),h)=="" then launch(ex,h+"/"+_n)
+	f=File(host_computer(ex),h+"/"+_n+".src")
+	if f then Crack.qrm(host_computer(ex),h,f)
+	f=File(host_computer(ex),h+"/"+_n)
+	if f then Crack.qrm(host_computer(ex),h,f)
+	if F then Crack.qrm(host_computer(ex),h,m)
+  return {"metaxploit":co.packMetaxploit,"router":co.packRouter}
+end function
+// Launch application on target system, deploy if not found
+// Args: Obj (context), n (app name), argv (optional arguments)
+Builder.launchApp=function(Obj,n,argv=null)
+  // Check write permissions
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  // Find app on target system
+  b=Io.findFile(Obj.root,n)
+  if b isa Error then
+    // App not found, deploy from local /usr/bin
+    Info.info(n+" not found, deploying...")
+    scp(globals.G_main.shell,"/usr/bin/"+n,path(C),Obj.shell)
+    exePath=path(C)+"/"+n
+    if argv isa list and len(argv)>0 then launch(Obj.shell,exePath,join(argv," ")) else launch(Obj.shell,exePath)
+    System.tryWait(2)
+    // Clean up after launch
+    Command.qrm(Obj,[exePath])
+  else
+    // Launch existing app
+    if argv isa list and len(argv)>0 then launch(Obj.shell,path(b),join(argv," ")) else launch(Obj.shell,path(b))
+    System.tryWait(2)
+  end if
+end function
+// Deploy and launch tool on target system
+// Args: Obj (context), argv (arguments), n (tool name)
+// Returns: command execution result
+Builder.deploy=function(Obj,argv,n)
+  // Check write permissions
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  L=false
+  // Check if Terminal.exe needed and deploy if missing
+  if Io.findFile(File(Obj.computer,"/"),"Terminal.exe") isa Error then
+    //if Net.hasInternet(Obj) isa Warning then return
+    Info.info("Terminal.exe not found, deploying...")
+    scp(globals.G_main.shell,"/usr/bin/Terminal.exe",path(C),Obj.shell)
+    L=true
+  end if
+  // Check if tool already exists on target
+  b=Io.findFile(File(Obj.computer,"/"),n)
+  if not b isa Error then
+    if argv.rest then
+      if L then return Command.exec(Obj,[path(C)+"/Terminal.exe",path(b)+" "+join(argv.rest," ")]) else return Command.open(Obj,["-t",path(b)+" "+join(argv.rest," ")])
+    else
+      if L then return Command.exec(Obj,[path(C)+"/Terminal.exe",path(b)]) else return Command.open(Obj,["-t",path(b)])
+    end if
+  end if
+  f=File(Obj.computer,path(C)+"/"+n)
+  if f then return Command.open(Obj,["-t",path(f)])
+  s=Command.touch(Obj,[path(C)+"/"+n+".src"])
+  if s isa Error then return s
+  _sys=System.getSystem
+  _sf=File(_sys.computer,path(_sys.dir.srcTools)+"/"+n)
+  if not _sf then return Error.set("Missing "+n+" source")
+  set_content(s,get_content(_sf))
+  if build(Obj.shell,path(s),path(C))=="" then
+    Command.qrm(Obj,[path(s)])
+    if argv.rest then
+      if L then return Command.exec(Obj,[path(C)+"/Terminal.exe",path(C)+"/"+n+" "+join(argv.rest," ")]) else return Command.open(Obj,["-t",path(C)+"/"+n+" "+join(argv.rest," ")])
+    else
+      if L then return Command.exec(Obj,[path(C)+"/Terminal.exe",path(C)+"/"+n]) else return Command.open(Obj,["-t",path(C)+"/"+n])
+    end if
+  end if
+end function
+// Build SSH or FTP connection to remote service
+// Args: Obj (context), argv (user@ip and password, -p port), w (service type: "ssh" or "ftp")
+// Returns: shell object or {shell, public_ip} for FTP, or Error
+Builder.buildConnection=function(Obj,argv,w="ssh")
+  co=get_custom_object
+  // Check write permissions
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  // Parse user@ip format
+  c=split(argv.rest[0],"@")
+  u=c[0]
+  if not u then return Error.set("Missing user name")
+  // Resolve IP address
+  i=Net.lookup(c[1])
+  if not i then return Error.set("Invalid ip: "+c[1])
+  if not argv.P then p=Gui.inputPass("Enter user password") else p=argv.P
+  if not p then return Error.set("Missing user password")
+  if not argv.p then argv.p=22
+  Info.info("Connecting...")
+  // Clear existing connection
+  if hasIndex(co,"cshell") then co.cshell=null
+  // Build connection code
+  c="get_custom_object[""cshell""]=connect_service(get_shell,"""+i+""","+argv.p+","""+u+""","""+p+""","""+w+""")"
+  // Create and build temporary source file
+  _n=Io.tmpName
+  f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+	if f isa Error then return Error.set("","",true)
+	set_content(f,c)
+	if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+  // Clean up temporary files
+  self._cleanup(Obj,C,null,_n)
+  // Handle connection errors
+  if co.cshell isa string then return Error.set(co.cshell)
+  if not co.cshell then return Error.set("Failed to connect")
+  // Return shell or shell+IP for FTP
+  if w=="ftp" then return {"shell":co.cshell,"public_ip":i,"port":argv.p} else return co.cshell
+end function
+// Pack arbitrary library into get_custom_object
+// Args: Obj (context), p (library path)
+// Returns: packed library object or Error
+Builder.packLibrary=function(Obj,p)
+  co=get_custom_object
+  // Check write permissions
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  // Clear existing packed library
+  if hasIndex(co,"packLibrary") then co.packLibrary=null
+	// Create code to include library
+	c="get_custom_object[""packLibrary""]=include_lib("""+p+""")"
+	// Create and build temporary source file
+	_n=Io.tmpName
+	f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+	if f isa Error then return Error.set("","",true)
+	set_content(f,c)
+	if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+	// Clean up temporary files
+	self._cleanup(Obj,C,null,_n)
+  return co.packLibrary
+end function
+// Log into an email account on the current machine and return the MetaMail object
+// Args: Obj (context), email (email address), pass (plaintext password)
+// Returns: MetaMail object or Error
+// XFIX1.0: packing not needed — mail_login works on the local host. Prefer:
+// XFIX1.0:   return mail_login(email,pass)
+// XFIX1.0: Callers that hit fetch/read/send/delete* still need the 2s MetaMail cooldown.
+Builder.packMailLogin=function(Obj,email,pass)
+  // XFIX1.0: return mail_login(email,pass)
+  co=get_custom_object
+  C=self.checkPerms(Obj)
+  if C isa Error then return C
+  if hasIndex(co,"packMailLogin") then co.packMailLogin=null
+  c="get_custom_object[""packMailLogin""]=mail_login("""+email+""","""+pass+""")"
+  _n=Io.tmpName
+  f=Command.touch(Obj,["-x",path(C)+"/"+_n+".src"])
+  if f isa Error then return Error.set("","",true)
+  set_content(f,c)
+  if build(Obj.shell,path(f),path(C))=="" then launch(Obj.shell,path(C)+"/"+_n)
+  self._cleanup(Obj,C,null,_n)
+  return co.packMailLogin
+end function

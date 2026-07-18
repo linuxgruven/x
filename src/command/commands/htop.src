@@ -1,0 +1,67 @@
+// =============================================================================
+// HTOP
+// Real-time process monitor with CPU/memory bars; refreshes only on change.
+// =============================================================================
+Command.htop=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("deploy",true,"flag")  // Deployment flag
+  argv=_p.parse("htop",argv,Obj)
+  if argv isa Error then return
+  if argv.deploy then return Builder.deploy(Obj,argv,"htop")
+  if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+    for line in split(show_procs(Obj.computer),char(10))[1:];fields=split(line," ");push(globals.G_pipe.stdout,join([fields[0],fields[1],fields[2],fields[3],fields[4]]," "));end for
+    return
+  end if
+  lastOutput=""
+  Utility.pressQ
+  while poll_input!="q"
+    // Returns color-coded bar: blue <79%, yellow 79-99%, red 100%
+    bar=function(percent,length=33)
+      if percent>=100 then return(red("#"*33))
+      filled=ceil(percent/length*10)
+      empty=length-filled
+      filledBar="#"*filled
+      emptyBar="-"*empty
+      if percent>=79 then return (yellow(filledBar)+black(emptyBar))
+      return (blue(filledBar)+black(emptyBar))
+    end function
+    processData={}
+    totalCPU=0.0
+    totalMEM=0.0
+    index=0
+    for line in split(show_procs(Obj.computer),char(10))[1:]
+      fields=split(line," ")
+      username=fields[0]
+      // Highlight root user in red for security awareness
+      if username=="root" then username=red(username) else username=liteGrey(username)
+      entry={
+        "user":username,
+        "pid":green(str(fields[1])),
+        "cpu":blue(str(fields[2])),
+        "mem":blue(str(fields[3])),
+        "command":lime(fields[4])
+      }
+      // Accumulate total resource usage (strip % sign with [:-1])
+      totalCPU+=val(fields[2][:-1])
+      totalMEM+=val(fields[3][:-1])
+      processData[index]=entry
+      index+=1
+    end for
+    header=[]
+    push(header,liteGrey("    tasks: "+len(processData)))
+    if totalCPU>=100 then push(header,liteGrey("cpu_usage: ["+bar(totalCPU)+"]==["+blue("100%")+"]")) else push(header,liteGrey("cpu_usage: ["+bar(totalCPU)+"]==["+blue(totalCPU+"%")+"]"))
+    if totalMEM>100 then push(header,liteGrey("mem_usage: ["+bar(totalMEM)+"]==["+blue("100%")+"]")) else push(header,liteGrey("mem_usage: ["+bar(totalMEM)+"]==["+blue(totalMEM+"%")+"]"))
+    columns=[]
+    push(columns,join([grey("USER"),grey("PID"),grey("CPU"),grey("MEM"),grey("COMMAND")],"  "))
+    for entry in processData;data=entry.value;push(columns,join([data.user,data.pid,data.cpu,data.mem,data.command],"  "));end for
+    headerOutput=join(header,char(10))
+    tableOutput=join(columns,char(10))
+    // Only update display if data has changed (reduces flicker)
+    if lastOutput!=headerOutput+tableOutput then
+      print(headerOutput,1)
+      print(format_columns(tableOutput),1)
+      lastOutput=headerOutput+tableOutput
+    end if
+  end while
+  Info.info("htop shutting down...")
+end function

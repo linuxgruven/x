@@ -1,0 +1,145 @@
+// =============================================================================
+// HEX
+// Hex calculator: arithmetic and bitwise operations on hex/decimal values.
+// Accepts 0x-prefixed hex or plain decimal. Always outputs 0xRESULT (decimal N).
+// Usage: hex VALUE [OPERATOR VALUE2]
+//        command | hex [OPERATOR VALUE2]
+// Operators: + - * / -and -or -xor -ls -rs
+// =============================================================================
+Command.hex=function(Obj,argv)
+  if not argv then argv=[]
+  // Parse a value: accepts 0x prefix (hex) or plain decimal
+  parseVal=function(s)
+    s=lower(trim(s))
+    if s[:2]=="0x" then
+      hex=s[2:]
+      digits="0123456789abcdef"
+      dec=0
+      _len=len(hex);i=0
+      while i<_len
+        ch=hex[i]
+        d=indexOf(digits,ch)
+        if d==null then return Error.set("invalid hex digit '"+ch+"'")
+        dec=dec*16+d
+        i+=1
+      end while
+      return dec
+    end if
+    n=val(s)
+    if not n isa number then return Error.set("invalid value: "+s)
+    return n
+  end function
+  // Format result as 0xHEX (decimal N), handles negatives
+  fmtResult=function(n)
+    digits="0123456789abcdef"
+    neg=n<0
+    x=abs(n)
+    h=""
+    if x==0 then
+      h="0"
+    else
+      while x>0;h=digits[x%16]+h;x=floor(x/16);end while
+    end if
+    prefix=""
+    if neg then prefix="-"
+    return green(prefix+"0x"+upper(h))+" "+yellow("(decimal: "+str(n)+")")
+  end function
+  hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  isPipeOut=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  // Collect input lines
+  values=[]
+  if hasPipeIn then
+    stdinData=globals.G_pipe.stdin
+    if stdinData isa list then
+      for item in stdinData;line=trim(str(item));if line then push(values,line);end for
+    else
+      for line in split(trim(str(stdinData)),char(10));line=trim(line);if line then push(values,line);end for
+    end if
+  else
+    if not len(argv) then return Man.help(["hex"])
+    push(values,argv[0])
+  end if
+  // Determine operator and second operand from argv
+  // Pipe mode: argv = [OPERATOR, VALUE2]
+  // Direct mode: argv = [VALUE, OPERATOR, VALUE2] or [VALUE]
+  op=null
+  y=null
+  if hasPipeIn then
+    if len(argv)>=2 then
+      op=lower(trim(argv[0]))
+      _y=parseVal(argv[1])
+      if _y isa Error then return _y
+      y=_y
+    end if
+  else
+    if len(argv)>=3 then
+      op=lower(trim(argv[1]))
+      _y=parseVal(argv[2])
+      if _y isa Error then return _y
+      y=_y
+    end if
+  end if
+  doOp=function(x,result)
+    if isPipeOut then push(globals.G_pipe.stdout,"0x"+upper(result)) else print fmtResult(x)
+  end function
+  for v in values
+    x=parseVal(v)
+    if x isa Error then return x
+    if op==null then
+      // Display only
+      if isPipeOut then
+        digits2="0123456789abcdef"
+        h=""
+        n=x
+        if n==0 then
+          h="0"
+        else
+          while n>0;h=digits2[n%16]+h;n=floor(n/16);end while
+        end if
+        push(globals.G_pipe.stdout,"0x"+upper(h))
+      else
+        print fmtResult(x)
+      end if
+      continue
+    end if
+    result=null
+    if op=="+" then
+      result=x+y
+    else if op=="-" then
+      result=x-y
+    else if op=="*" then
+      result=x*y
+    else if op=="/" then
+      if y==0 then return Error.set("division by zero")
+      result=floor(x/y)
+    else if op=="-and" then
+      result=bitAnd(x,y)
+    else if op=="-or" then
+      result=bitOr(x,y)
+    else if op=="-xor" then
+      result=bitXor(x,y)
+    else if op=="-ls" then
+      result=bitwise("<<",x,y)
+    else if op=="-rs" then
+      result=bitwise(">>",x,y)
+    else
+      return Error.set("unknown operator '"+op+"' — use + - * / -and -or -xor -ls -rs")
+    end if
+    if isPipeOut then
+      digits2="0123456789abcdef"
+      neg2=result<0
+      n=abs(result)
+      h=""
+      if n==0 then
+        h="0"
+      else
+        while n>0;h=digits2[n%16]+h;n=floor(n/16);end while
+      end if
+      prefix2=""
+      if neg2 then prefix2="-"
+      push(globals.G_pipe.stdout,prefix2+"0x"+upper(h))
+    else
+      print fmtResult(result)
+    end if
+  end for
+end function

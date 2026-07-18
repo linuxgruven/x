@@ -1,0 +1,69 @@
+// Man page for temp
+manTemp="TEMP(1)                          X Shell Manual                          TEMP(1)
+
+<b>NAME</b>
+    temp - Temporary data store utility
+<b>SYNOPSIS</b>
+    <b>temp</b> <b>-a</b> STRING
+    <b>temp</b> <b>-l</b>
+    <b>temp</b> <b>-c</b>
+    <b>temp</b> <b>-r</b>
+    <b>temp</b> <b>-w</b>
+<b>DESCRIPTION</b>
+    Temporary storage utility that maintains unique entries only. Ideal for
+    collecting IP addresses, targets, and results during reconnaissance. Duplicate
+    entries are automatically rejected. Can read from files and export to disk.
+    All data stores in memory until written or cleared.
+<b>OPTIONS</b>
+    <b>-a STRING</b>
+    Add item to temporary store
+    Duplicates automatically rejected
+
+    <b>-l</b>
+    List all stored items
+    Display current entries
+
+    <b>-c</b>
+    Clear all items
+    Empty temporary store
+
+    <b>-r</b>
+    Read from file
+    Import list into store
+
+    <b>-w</b>
+    Write to temp.lst file
+    Export to current directory
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Storage</color>
+    <b>temp -a 10.0.0.5</b>
+    Store IP address
+
+    <b>temp -a 192.168.1.100</b>
+    Add another target
+
+    <color=#e4ff34># View and Clear</color>
+    <b>temp -l</b>
+    List all stored items
+
+    <b>temp -c</b>
+    Clear all entries
+
+    <color=#e4ff34># File Operations</color>
+    <b>temp -r targets.txt</b>
+    Read from file
+
+    <b>temp -w</b>
+    Write to temp.lst
+
+    <color=#e4ff34># Scanning Workflow</color>
+    <b>scan -l</b>
+    Scan local network
+
+    <b>temp -a 10.0.0.15</b>
+    Store interesting target
+
+    <b>temp -l</b>
+    Review collected targets
+<b>SEE ALSO</b>
+    <b>list</b>, <b>cache</b>, <b>scan</b>"

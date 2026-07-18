@@ -1,0 +1,7 @@
+binReboot="if len(params)>1 or (len(params)==1 and params[0]!=""-sm"") then exit(command_info(""reboot_usage""))
+safeMode=0
+if len(params)==1 and params[0]==""-sm"" then safeMode=1
+signal=reboot(host_computer(get_shell),safeMode)
+if signal==1 then exit(""Reboot signal emitted successfully."")
+if signal then exit(""reboot: ""+signal)
+print(""reboot: unknown error"")"

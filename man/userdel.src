@@ -1,0 +1,31 @@
+// Man page for userdel
+manUserdel="USERDEL(8)                       X Shell Manual                       USERDEL(8)
+
+<b>NAME</b>
+    userdel - remove a user from the system
+<b>SYNOPSIS</b>
+    <b>userdel</b> (<b>-r</b>) <b>USER</b>
+<b>DESCRIPTION</b>
+    Delete user accounts from the system. With -r flag, also removes user home directory
+    and all user files under /home/username. Without -r, only removes account.
+<b>OPTIONS</b>
+    <b>-r</b>
+    Remove home directory
+    Deletes /home/USER folder
+
+    <b>USER</b>
+    Username to delete
+    Must exist on system
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Delete Account Only</color>
+    <b>userdel guest</b>
+    Remove guest account
+
+    <color=#e4ff34># Delete Account and Files</color>
+    <b>userdel -r tux</b>
+    Remove tux and /home/tux
+
+    <b>userdel -r hacker</b>
+    Clean removal
+<b>SEE ALSO</b>
+    <b>useradd</b>, <b>passwd</b>, <b>groups</b>"

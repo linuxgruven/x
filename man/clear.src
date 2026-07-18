@@ -1,0 +1,7 @@
+// Man page for clear
+manClear="CLEAR(1)                         X Shell Manual                         CLEAR(1)
+
+<b>NAME</b>
+    clear - clears the screen of all characters
+<b>DESCRIPTION</b>
+    Alias used : clr and cls."

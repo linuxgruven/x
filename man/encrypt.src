@@ -1,0 +1,21 @@
+// Man page for encrypt
+manEncrypt="ENCRYPT(1)                       X Shell Manual                       ENCRYPT(1)
+
+<b>NAME</b>
+    enc - Encrypt file with X algorithm
+<b>SYNOPSIS</b>
+    <b>enc </b><b>FILE </b>(SEED|KEY)
+<b>DESCRIPTION</b>
+    Encrypt files using X encryption algorithm (not crypto). This
+    algorithm is immune to crypto library overflow vulnerabilities.
+<b>OPTIONS</b>
+    <b>FILE SEED</b> - Encrypt
+    Encrypt file with optional seed or key.
+<b>EXAMPLE:</b>
+    <b>enc secret.txt</b>
+    Encrypt file
+
+    <b>enc data.bin mykey123</b>
+    Encrypt with specific key
+<b>SEE ALSO</b>
+    <b>dec</b>, <b>pzip</b>"

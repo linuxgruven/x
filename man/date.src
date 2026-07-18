@@ -1,0 +1,12 @@
+// Man page for time
+manDate="TIME(7)                          X Shell Manual                          TIME(7)
+
+<b>NAME</b>
+    time - Display current time and date
+<b>SYNOPSIS</b>
+    <b>time</b>
+<b>DESCRIPTION</b>
+    Print the current system time and date.
+<b>EXAMPLE:</b>
+    <b>time</b>
+    Display current time and date"

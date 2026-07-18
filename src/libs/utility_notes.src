@@ -1,0 +1,105 @@
+// =============================================================================
+// UTILITY_NOTES
+// Interactive notes manager with persistent storage.
+// =============================================================================
+Utility.notes=function
+	b=[]
+  F=false
+	s=System.getSystem
+	c=s.computer
+	p=path(s.dir.data)+"/notes"
+	d=path(s.dir.data)
+	n=File(c,p)
+	while true
+		m={
+      "n":"New item...",
+      "a":"Append to line...",
+      "e":"Edit a line...",
+      "r":"Remove a line...",
+      "d":"Dump note data to :"+path(globals.G_main.dir.current),
+      "c":"Clear all",
+      "f":"Un|Format",
+      "x":"--- Done using notes ---"
+    }
+		if not n then
+      n=Command.touch(s.obj,[d+"/notes"])
+      if n isa Error then return
+		end if
+		b=split(get_content(n),char(10))
+		CH=[green("What would you like to do with the notes file?")]
+		if not get_content(n) then
+			print red("Add something...")
+		else
+      if not F then
+        r=uncolorString(get_content(n)).replace("\\n","\<b></b>n")
+        p=split(r,char(10))
+        _len=len(p);l=0;while l<_len;push(CH,green(p[l]));l+=1;end while
+      else
+        r=parseSyntax(uncolorString(get_content(n)),false).replace("\\n","\<b></b>n")
+        p=split(r,char(10))
+        _len=len(p);l=0;while l<_len;push(CH,p[l]);l+=1;end while
+      end if
+			print blue("Line Item Count:")+yellow(str(len(b)))
+		end if
+		UCH=lower(Gui.choiceAlpha(CH,m,"x"))
+		if UCH=="x" then break
+		if UCH=="n" then
+			a=Gui.input({"text":"Add What?"})
+			if a==null then continue
+			push(b,a)
+			set_content(n,trim(join(b,char(10))))
+		else if UCH=="a" then
+			if not len(b) then continue
+      if len(b)==1 and b[0]=="" then continue
+			w=Gui.inputInt({"text":"What line to append?"})-1
+      if not w isa number then continue
+			if w>=0 and w<len(b) then
+				t=b[w]
+				z=Gui.input({"text":"What would you like to append?"})
+        if z==null then continue
+				if z==t then continue
+				b[w]=b[w]+" "+trim(z)
+				set_content(n,trim(join(b,char(10))))
+			end if
+		else if UCH=="e" then
+			if not len(b) then continue
+      if len(b)==1 and b[0]=="" then continue
+			w=Gui.inputInt({"text":"What line to edit?"})-1
+      if not w isa number then continue
+			if w>=0 and w<len(b) then
+				t=b[w]
+				print orange(t)
+				g=Gui.input({"text":"What changes do you want to make?"})
+        if g==null then continue
+				if g==t then continue
+				b[w]=trim(g)
+				set_content(n,trim(join(b,char(10))))
+			end if
+		else if UCH=="r" then
+			if not len(b) then continue
+      if len(b)==1 and b[0]=="" then continue
+			w=Gui.inputInt({"text":"What line do you want to remove?"})-1
+      if not w isa number then continue
+			if w>=0 and w<len(b) then
+				remove(b,w)
+				set_content(n,trim(join(b,char(10))))
+			end if
+		else if UCH=="c" then
+			if not len(b) then continue
+      if len(b)==1 and b[0]=="" then continue
+			set_content(n,"")
+    else if UCH=="d" then
+      if not len(b) then continue
+      if len(b)==1 and b[0]=="" then continue
+      n=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/notes.txt")
+      if n then return set_content(n,get_content(n)+char(10)+join(b,char(10)))
+      n=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/notes.txt"])
+			if not n isa Error then
+				set_content(n,join(b,char(10)))
+				Info.info("Notes writen out to "+path(globals.G_main.dir.current)+"/notes.txt")
+			end if
+    else if UCH=="f" then
+      F=not F
+		end if
+	end while
+end function

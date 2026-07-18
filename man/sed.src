@@ -1,0 +1,30 @@
+// Man page for sed
+manSed="SED(1)                           X Shell Manual                           SED(1)
+
+<b>NAME</b>
+    sed - Search and replace in files
+<b>SYNOPSIS</b>
+    <b>sed</b> PATTERN REPLACE_WITH FILE
+    <b>sed</b> [-i] PATTERN REPLACE_WITH FILE
+    COMMAND <b>| sed</b> PATTERN REPLACE_WITH
+<b>DESCRIPTION</b>
+    Search a file or piped input for a specified pattern and replace all
+    occurrences with the replacement text. Use -i to modify the file in place.
+    Supports pipe input from other commands.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man sed</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>sed</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Replace Text</color>
+    sed oldtext newtext file.txt
+    Replace all occurrences of oldtext with newtext
+
+    <b>sed</b> oldip newip config.txt
+    Update IP address in configuration file
+<b>SEE ALSO</b>
+    <b>grep</b>, <b>vi</b>"

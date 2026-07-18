@@ -1,0 +1,69 @@
+// Man page for pingport
+manPingport="PINGPORT(1)                      X Shell Manual                      PINGPORT(1)
+
+<b>NAME</b>
+    pp - Ping network port repeatedly
+
+<b>SYNOPSIS</b>
+    <b>pp</b> [-w WAIT] [-c COUNT] IP PORT
+
+<b>DESCRIPTION</b>
+    Repeatedly ping a network port and launch attack when port becomes
+    available. Use -c flag to limit ping attempts. Default wait time
+    between pings is 1 second. Valid wait values: 0.01-300 seconds.
+
+<b>OPTIONS</b>
+    <b>-w WAIT</b> - Wait Time
+      Seconds to wait between pings (0.01-300).
+      Default: 1 second
+
+    <b>-c COUNT</b> - Ping Count
+      Number of times to ping port.
+      Will loop until port responds or count reached.
+
+    <b>IP</b> - Target IP Address
+      IP address to monitor.
+
+    <b>PORT</b> - Target Port
+      Port number to ping.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Port Pinging</color>
+    <b>pp 192.168.1.50 22</b>
+        Ping SSH port continuously
+
+    <b>pp 10.0.0.5 80</b>
+        Ping HTTP port
+
+    <b>pp 172.16.0.10 21</b>
+        Ping FTP port
+
+    <color=#e4ff34># Limited Pings</color>
+    <b>pp -c 10 192.168.1.50 22</b>
+        Ping SSH 10 times
+
+    <b>pp -c 5 10.0.0.5 3306</b>
+        Ping MySQL 5 times
+
+    <color=#e4ff34># Custom Wait Times</color>
+    <b>pp -w 0.5 192.168.1.50 22</b>
+        Ping every 0.5 seconds
+
+    <b>pp -w 5 -c 20 10.0.0.5 80</b>
+        Ping every 5 seconds, 20 times
+
+    <b>pp -w 0.01 192.168.1.100 22</b>
+        Rapid pinging (every 0.01 seconds)
+
+    <color=#e4ff34># Monitoring Scenarios</color>
+    <b>pp -c 100 -w 2 192.168.1.50 22</b>
+        Monitor SSH for 200 seconds
+
+    <b>pp -w 10 10.0.0.5 21</b>
+        Check FTP every 10 seconds
+
+    <b>pp -c 60 -w 60 192.168.1.1 80</b>
+        Monitor HTTP for 1 hour
+
+<b>SEE ALSO</b>
+    <b>scan</b>, <b>ports</b>, <b>nmap</b>"

@@ -1,0 +1,43 @@
+// Man page for rec
+manRec="REC(1)                           X Shell Manual                           REC(1)
+
+<b>NAME</b>
+    rec - System backup and recovery utility
+<b>SYNOPSIS</b>
+    <b>rec</b> <b>-b</b>
+    <b>rec</b> <b>-r</b>
+<b>DESCRIPTION</b>
+    Framework backup and restore system for disaster recovery. Creates snapshots
+    of essential files and configurations for later restoration. Useful for
+    maintaining persistence and recovering from system compromises.
+
+    <color=#e4ff34>*** Backup: Main and Shell objects only ***</color>
+    <color=#e4ff34>*** Restore: Main, Shell, and Computer objects ***</color>
+<b>OPTIONS</b>
+    <b>-b</b>
+    Backup essential files
+    Create recovery snapshot
+
+    <b>-r</b>
+    Restore from backup
+    Recover all backed up files
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Creating Backups</color>
+    <b>rec -b</b>
+    Backup current system state
+
+    <color=#e4ff34># Restoring System</color>
+    <b>rec -r</b>
+    Restore from backup
+
+    <color=#e4ff34># Disaster Recovery</color>
+    <b>rec -b</b>
+    Create pre-attack backup
+
+    <b>scan -l</b>
+    Perform operations
+
+    <b>rec -r</b>
+    Recover if needed
+<b>SEE ALSO</b>
+    <b>sys</b>"

@@ -1,0 +1,66 @@
+// Man page for hide
+manHide="HIDE(1)                          X Shell Manual                          HIDE(1)
+
+<b>NAME</b>
+    hide - Hide or modify root file system visibility
+<b>SYNOPSIS</b>
+    <b>hide -s</b> (-c [CHAR]) (-n [NUMBER])
+    <b>hide -f</b> FILE
+    <b>hide -t</b>
+<b>DESCRIPTION</b>
+    Manipulate the visibility of the root file system and individual files.
+    Hide or unhide system directories and files to obfuscate presence or
+    create visual confusion. Can modify directory display with custom
+    characters and patterns. Useful for concealing activity or creating
+    decoy file structures. Also manages .Trash folder visibility.
+<b>OPTIONS</b>
+    <b>-s</b> (-c [CHAR]) (-n [NUMBER]) - Hide Root System
+      Hide or unhide root file system directories.
+      Use -c to specify custom character display.
+      Use -n to specify number of character repetitions.
+
+    <b>-f FILE</b> - Hide File
+      Hide or unhide individual file.
+      Toggles file visibility state.
+
+    <b>-t</b> - Hide Trash
+      Hide or unhide the .Trash folder.
+      Toggles trash directory visibility.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Hide</color>
+    <b>hide -s</b>
+    Show: ./bin, ./boot, ./etc...
+
+    <color=#e4ff34># Custom Character Display</color>
+    <b>hide -s -n 10 -c _</b>
+    Show: __________/bin...
+
+    <b>hide -s -n 10 -c .-</b>
+    Show: .-.-.-.-.-.-.-.-.-.-/bin...
+
+    <color=#e4ff34># Hide Files</color>
+    <b>hide -f /root/exploit.src</b>
+    Hide exploit script
+
+    <b>hide -f /home/data.txt</b>
+    Toggle file visibility
+
+    <color=#e4ff34># Hide Trash</color>
+    <b>hide -t</b>
+    Toggle .Trash visibility
+
+    <color=#e4ff34># Obfuscation Patterns</color>
+    <b>hide -s -n 5 -c XX</b>
+    Create XXXXXXXXXX pattern
+
+    <b>hide -s -n 15 -c .</b>
+    Create dotted pattern
+
+    <color=#e4ff34># Security Usage</color>
+    <b>hide -f /root/passwords.txt</b>
+    Hide sensitive file
+
+    <b>hide -s -n 8 -c --</b>
+    Obfuscate directory listing
+<b>SEE ALSO</b>
+    <b>wipe</b>, <b>rm</b>, <b>ls</b>"

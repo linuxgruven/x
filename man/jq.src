@@ -1,0 +1,54 @@
+// Man page for jq
+manJq="JQ(1)                            X Shell Manual                            JQ(1)
+
+<b>NAME</b>
+    jq - Extract fields from structured key-value or JSON-style text
+<b>SYNOPSIS</b>
+    <b>jq</b> [<b>-r</b>] [<b>-c</b>] <i>expression</i> [<i>file</i>]
+    <i>command</i> | <b>jq</b> [<b>-r</b>] [<b>-c</b>] <i>expression</i>
+<b>DESCRIPTION</b>
+    Parse structured text (key: value, key=value, or JSON-style) and
+    extract one or more fields using a dot-notation expression.
+    Input is read from stdin (pipe) or from a file argument.
+
+    jq understands line-delimited key-value pairs in any of these
+    formats:
+        key: value
+        key:value
+        key=value
+        ""key"": ""value""    (JSON-style, quotes stripped)
+<b>OPTIONS</b>
+    <b>-r</b> - Raw output
+      Print only the value, without the ""key: value"" prefix.
+
+    <b>-c</b> - Compact output
+      Suppress blank lines between multi-field results.
+<b>EXPRESSIONS</b>
+    <b>.</b>
+      Print all key-value pairs from the input.
+
+    <b>.key</b>
+      Extract the single field named <i>key</i>.
+
+    <b>.key.subkey</b>
+      Extract a nested field. Works on JSON objects with nested blocks.
+
+    <b>[.k1,.k2,...]</b>
+      Extract multiple fields in the order listed. Dot-paths supported.
+<b>EXAMPLE:</b>
+    <b>cat /etc/apt/sources.txt | jq .official_server</b>
+    Extract the official_server field from the apt sources file
+
+    <b>cat /etc/apt/sources.txt | jq .sourceList</b>
+    Extract the nested sourceList object
+
+    <b>cat /etc/apt/sources.txt | jq -r .official_server</b>
+    Print just the value with no label
+
+    <b>cat /etc/apt/sources.txt | jq .</b>
+    Print all fields from the file
+
+    <b>jq .host /home/tux/config.txt</b>
+    Read from a file directly
+<b>SEE ALSO</b>
+    <b>cat</b>, <b>grep</b>, <b>awk</b>, <b>column</b>"

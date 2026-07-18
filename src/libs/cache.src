@@ -1,0 +1,614 @@
+// =============================================================================
+// CACHE
+// Cache library; persists rooted system credentials for rapid reconnection.
+// =============================================================================
+Cache={}
+// Index maps for O(1) lookups (lazy initialized)
+Cache._nicknameIndex=null
+Cache._ipIndex=null
+// Helper: Ensure cache is loaded
+Cache._ensureLoaded=function;if not globals.G_cachePasswords then self.load;if not globals.G_cachePasswords then globals.G_cachePasswords=[];end function
+// Helper: Rebuild lookup indexes after cache changes
+Cache._rebuildIndexes=function
+  self._nicknameIndex={}
+  self._ipIndex={}
+  if not globals.G_cachePasswords then return
+  for r in globals.G_cachePasswords;self._nicknameIndex[r.nick_name]=__r_idx;self._ipIndex[r.public_ip]=__r_idx;end for
+end function
+// Helper: Validate and convert index or nickname to valid index
+// Args: i (index number or nickname string)
+// Returns: validated index or Error
+Cache._validateIndex=function(i)
+  if not i isa number then
+    i=self.getid(i)
+    if not i isa number then return Error.set("Not a valid nickname: "+i)
+  else
+    if i<0 or i>=len(globals.G_cachePasswords) then return Error.set("Invalid cache index: "+i)
+    if not hasIndex(globals.G_cachePasswords,i) then return Error.set("Invalid cache index: "+i)
+  end if
+  return i
+end function
+// Helper: Format cache record for display
+// Args: r (cache record)
+// Returns: formatted string
+Cache._formatRecord=function(r)
+  servicesStr=""
+  if r.services and typeof(r.services)=="string" then servicesStr=r.services
+  return orange("Nick Name:")+password(r.nick_name)+ljust("",10-len(r.nick_name))+orange("r00t:")+System.anonPass(password(r.password))+ljust("",15-len(r.password),0,blue("-"))+blue("@")+yellow(r.public_ip)+servicesStr
+end function
+// Helper: Check if port is available for service
+// Args: ip (IP address), serviceType ("ssh" or "ftp"), port (port number)
+// Returns: true if available, null otherwise
+Cache._checkPort=function(ip,serviceType,port)
+  if not port then
+    if serviceType=="ssh" then port=22 else if serviceType=="ftp" then port=21
+  end if
+  r=get_router(ip)
+  if not r then return
+  z=used_ports(r)
+  if not len(z) then return
+  for p in z;if port_number(p)==port then return true;end for
+end function
+// Helper: Determine which shell to use for connections
+// Args: Obj (context object)
+// Returns: shell (priority: G_proxy.shell > Obj.shell > G_main.shell)
+Cache._getShell=function(Obj)
+  if globals.G_proxy then return globals.G_proxy.shell
+  if hasIndex(Obj,"shell") then return Obj.shell
+  return globals.G_main.shell
+end function
+// Helper: Parse service IP and port from services string
+// Args: servicesStr (formatted services string), serviceType ("ssh", "ftp", etc.)
+// Returns: [ip, port] or null
+Cache._parseServiceInfo=function(servicesStr,serviceType)
+  if not servicesStr then return null
+  serviceTag=upper(serviceType)
+  lines=split(servicesStr,char(10))
+  for line in lines
+    if indexOf(line,"[ "+serviceTag+" ]-")!=null then
+      parts=split(line,"-")
+      if len(parts)>=2 then
+        ipPort=parts[1]
+        ipPort=ipPort.replace(char(27)+"[0m","").trim
+        if indexOf(ipPort,":")!=null then
+          ipPortParts=split(ipPort,":")
+          return [ipPortParts[0],ipPortParts[1].val]
+        end if
+      end if
+    end if
+  end for
+  return null
+end function
+// Helper: Connect to service with error handling
+// Args: shell (shell to use), r (cache record), service, port
+// Returns: connection or Error
+Cache._connectService=function(shell,r,service,port)
+  defaultPort=22
+  if service=="ftp" then defaultPort=21
+  // Parse service info to get actual port from services string
+  serviceInfo=self._parseServiceInfo(r.services,service)
+  actualPort=port
+  if not actualPort then
+    if serviceInfo then actualPort=serviceInfo[1] else actualPort=defaultPort
+  end if
+  s=connect_service(shell,r.public_ip,actualPort,"root",r.password,service)
+  if not s then return Error.set(Text.badport)
+  if s isa string then return Error.set(s)
+  return s
+end function
+// Get count of cached systems
+// Returns: string count or "0"
+Cache.count=function
+  self._ensureLoaded
+  if not globals.G_cachePasswords then return "0"
+  return str(len(globals.G_cachePasswords))
+end function
+// Get cache index by nickname
+// Args: n (nickname string)
+// Returns: index number or null
+Cache.getid=function(n)
+	// Check if cache is loaded
+	if not globals.G_cachePasswords then return
+  // Use O(1) hash lookup via nickname index
+  if not self._nicknameIndex then self._rebuildIndexes
+  if hasIndex(self._nicknameIndex,n) then return self._nicknameIndex[n]
+end function
+// Display all cached systems with formatted output
+Cache.view=function
+	// Check if cache has entries
+	if not globals.G_cachePasswords then return Info.info("You have no cached systems")
+	v=[]
+	// Build formatted list of cached systems
+	for r in globals.G_cachePasswords;push(v,self._formatRecord(r));end for
+	Info.info("You have the following r00ted systems:")
+	listNHNC(v)
+end function
+// Interactive menu for cached system operations
+// Args: Obj (context), i (index or nickname)
+// Options: attack, terminal, shell, pivot, custom port, update services
+Cache.use=function(Obj,i)
+	// Check if cache has entries
+	if not globals.G_cachePasswords then return Info.info("You have no cached systems")
+	// Validate index
+	i=self._validateIndex(i)
+	if i isa Error then return i
+  p=null
+  r=globals.G_cachePasswords[i]
+  shell=self._getShell(Obj)
+	// Interactive menu loop
+	while true
+		// Cache service availability for this iteration
+		hasSSH=indexOf(r.services,"SSH")!=null
+		// Display current cached system info
+		print self._formatRecord(r)
+		print yellow("Will need to set the port if you want to connect to a")
+    print yellow("service that does not use a default port")
+    if p then Info.info("Custom port set to:"+str(p))
+    // Build menu options
+    CH=[green("What are we doing with this system?")]
+		push(CH,yellow("Attack (RSH)"))
+		push(CH,yellow("Open a terminal (SSH)"))
+    push(CH,yellow("Start a terminal (SSH)"))
+		push(CH,yellow("Start a shell"))
+    push(CH,yellow("Set custom port"))
+    push(CH,yellow("Default port numbers"))
+		push(CH,yellow("Pivot (SSH)"))
+    push(CH,yellow("Full Pivot (SSH)"))
+    push(CH,yellow("Update services"))
+		push(CH,iyellow("Forget it"))
+		// Get user choice
+		UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true)
+		if UCH==len(CH)-1 then break
+		// Option 1: Attack via RSH
+		if UCH==1 then Attack.scan(Obj,r.public_ip,1)
+		// Option 2: Open terminal via SSH
+		if UCH==2 then
+      if hasSSH then
+        // Verify SSH port is available
+        if not self._checkPort(r.public_ip,"ssh",p) then return Error.set(Text.badport)
+        // Connect with custom or default port
+        s=self._connectService(shell,r,"ssh",p)
+        if s isa Error then return s
+        // Open terminal in shell
+        if indexOf(typeof(s),"shell")!=null then Exploit.getShell(s,false,[],true).commands["open"](["-t"])
+      else
+        return Info.error("No ssh services available")
+      end if
+		// Option 3: Start terminal via SSH
+		else if UCH==3 then
+      if hasSSH then
+        // Verify SSH port is available
+        if not self._checkPort(r.public_ip,"ssh",p) then return Error.set(Text.badport)
+        // Connect with custom or default port
+        s=self._connectService(shell,r,"ssh",p)
+        if s isa Error then return s
+        // Launch Terminal.exe directly
+        if indexOf(typeof(s),"shell")!=null then launch(s,"/usr/bin/Terminal.exe")
+      else
+        return Info.error("No shell service available")
+      end if
+    // Option 4: Start shell (SSH or FTP)
+    else if UCH==4 then
+      hasFTP=indexOf(r.services,"FTP")!=null
+      if not hasSSH and not hasFTP then return Info.error("No shell services available")
+      useSSH=hasSSH
+      if hasSSH and hasFTP then useSSH=Gui.yesNo("Both SSH and FTP available, Use SSH?")
+      if useSSH then
+        if not self._checkPort(r.public_ip,"ssh",p) then return Error.set(Text.badport)
+        s=self._connectService(shell,r,"ssh",p)
+        if s isa Error then return s
+        if indexOf(typeof(s),"shell")!=null then return Exploit.getShell(s)
+      else
+        if not self._checkPort(r.public_ip,"ftp",p) then return Error.set(Text.badport)
+        s=self._connectService(shell,r,"ftp",p)
+        if s isa Error then return s
+        if indexOf(typeof(s),"shell")!=null then
+          _=new FTPShellObject
+          return _.run(_,s,r.public_ip,p)
+        end if
+      end if
+    else if UCH==5 then
+      p=Gui.inputInt({"text":"Enter Port Number","default":22})
+    else if UCH==6 then
+      print white("8080 :http - (Router)")
+      print white("22   :ssh")
+      print white("21   :ftp")
+      print white("80   :http")
+      print white("6667 :chat")
+      print white("1222 :rshell")
+      print white("1542 :repository")
+      print white("37777:cam")
+      print white("141  :bank_account - (SQL)")
+      print white("3306 :employees/students/criminals - (SQL)")
+      print white("3307 :employees/criminals - (SQL)")
+      print white("25   :smtp")
+		else if UCH==7 then
+      if hasSSH then
+        Info.info("Initializing pivot protocol...")
+        if not self._checkPort(r.public_ip,"ssh",p) then return Error.set(Text.badport)
+        s=self._connectService(shell,r,"ssh",p)
+        if s isa Error then return s
+        if indexOf(typeof(s),"shell")!=null then
+          c=host_computer(s)
+          u=Utility.getUserEX(s)
+          pth=path(u.home)
+          if File(c,pth+"/x") then
+            if Gui.yesNo("There is a copy of x already installed on this host, launch it?") then
+              Boot.pivotCOLoad
+              return launch(s,pth+"/x",Kernel.key+" pivot")
+            end if
+            Info.info("Removing a posable rogue copy of x...")
+            f=File(c,pth+"/x")
+            Command.qrm(Obj,[f])
+          end if
+          create_folder(c,pth,"payload")
+          create_folder(c,pth+"/payload","data")
+          x=scp(globals.G_main.shell,path(File(globals.G_main.computer,globals.G_attributes.program_path)),pth,s)
+          if x isa string then return Error.set(x)
+          Boot.pivotCOLoad
+          return launch(s,pth+"/x",Kernel.key+" pivot")
+        end if
+      else
+        return Info.error("No ssh services available")
+      end if
+    else if UCH==8 then
+      if hasSSH then
+        Info.info("Initializing full pivot protocol...")
+        if not self._checkPort(r.public_ip,"ssh",p) then return Error.set(Text.badport)
+        s=self._connectService(shell,r,"ssh",p)
+        if s isa Error then return s
+        if indexOf(typeof(s),"shell")!=null then return Attack.push(Obj,s)
+      else
+        return Info.error("No ssh services available")
+      end if
+    else if UCH==9 then
+      globals.G_cachePasswords[i].services=Net.getServices(r.public_ip)
+      self.save
+		end if
+	end while
+end function
+// Command-line interface for cached system operations
+// Args: Obj (context), argv [flag, index/nick, port, service]
+// Flags: -a (attack), -t (terminal), -s (shell), -u (pivot)
+Cache.useCustom=function(Obj,argv)
+  // Validate argument count
+  if not len(argv)>=2 then
+    globals.G_bash.SIGSTOP=true
+    return Man.help(["cache"])
+  end if
+  Arg1=argv[0]
+  Arg2=argv[1]
+	// Validate index (handles both numeric index and nickname)
+	if Arg2 isa string then
+    tempIdx=to_int(Arg2)
+    if tempIdx isa number then Arg2=tempIdx
+  end if
+	Arg2=self._validateIndex(Arg2)
+	if Arg2 isa Error then return Arg2
+  record=globals.G_cachePasswords[Arg2]
+  shell=self._getShell(Obj)
+  // Parse optional port and service arguments
+  if len(argv)>=3 then port=to_int(argv[2]) else port=null
+  if not port isa number then port=null
+  if len(argv)>=4 then service=argv[3] else service="ssh"
+  if not service then service="ssh"
+  // Helper: Connect and validate shell
+  connectShell=function
+    defaultPort=22
+    if service=="ftp" then defaultPort=21
+    actualPort=defaultPort
+    if port isa number then actualPort=port
+    conn=connect_service(shell,record.public_ip,actualPort,"root",record.password,service)
+    if not conn then return Error.set(Text.badport)
+    if conn isa string then return Error.set(conn)
+    return conn
+  end function
+  // Attack mode: scan and exploit target
+  attack=function(arg);Attack.scan(Obj,record.public_ip,1);end function
+  // Terminal mode: open terminal on target
+  getTerminal=function(arg)
+    conn=connectShell
+    if conn isa Error then return conn
+    if indexOf(typeof(conn),"shell")!=null then return start_terminal(conn)
+  end function
+  // Shell mode: get interactive shell
+  getShell=function(arg)
+    conn=connectShell
+    if conn isa Error then return conn
+    if indexOf(typeof(conn),"shell")!=null then return Exploit.getShell(conn)
+  end function
+  // Pivot: upload and launch X in pivot mode on target
+  simplePivot=function(arg)
+    conn=connectShell
+    if conn isa Error then return conn
+    if indexOf(typeof(conn),"shell")==null then return Error.set("Failed to get a shell")
+    c=host_computer(conn)
+    u=Utility.getUserEX(conn)
+    p=path(u.home)
+    if File(c,p+"/x") then
+      if Gui.yesNo("There is a copy of x already installed on this host, launch it?") then
+        Boot.pivotCOLoad
+        return launch(conn,p+"/x",Kernel.key+" pivot")
+      end if
+      Info.info("Removing a posable rogue copy of x...")
+      f=File(c,p+"/x")
+      Command.qrm(Obj,[f])
+    end if
+    create_folder(c,p,"payload")
+    create_folder(c,p+"/payload","data")
+    x=scp(globals.G_main.shell,path(File(globals.G_main.computer,globals.G_attributes.program_path)),p,conn)
+    if x isa string then return Error.set(x)
+    Boot.pivotCOLoad
+    return launch(conn,p+"/x",Kernel.key+" pivot")
+  end function
+  // Full pivot: deploy X shell and restart
+  pivot=function(arg)
+    conn=connectShell
+    if conn isa Error then return conn
+    if indexOf(typeof(conn),"shell")==null then return Error.set("Failed to get a shell")
+    return Attack.push(Obj,conn)
+  end function
+	// Command dispatcher
+	cmds={
+    "-a":@attack,
+    "-t":@getTerminal,
+    "-s":@getShell,
+    "-p":@simplePivot,
+    "-u":@pivot
+  }
+	if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+	cmds[Arg1](argv[1:])
+end function
+// Get cached record by index or nickname
+// Args: i (index or nickname)
+// Returns: cache record or null
+Cache.select=function(i)
+	//Ensure cache is loaded
+	self._ensureLoaded
+	// Validate and convert to index
+	i=self._validateIndex(i)
+	if i isa Error then return null
+	return globals.G_cachePasswords[i]
+end function
+// Import cache from formatted text file
+// Format: Nick Name::Password::Public IP::Local IP::Services
+Cache.loadFile=function
+	//Ensure cache is loaded before importing
+	self._ensureLoaded
+	// Display expected format
+	Info.info("Format for loading a custom file is:")
+  Info.info("Nick Name::Password::Public IP::Local IP::Services")
+	// Prompt for file selection
+	passFile=Io.file(globals.G_main,globals.G_main.user.home,"Select the password file:")
+	if passFile isa Warning then return passFile
+	for line in split(get_content(passFile),char(10))
+		if not len(line) then continue
+		line=split(trim(line),"::")
+    if len(line)!=5 then continue
+		// Extract fields
+		nickName=line[0]
+		password=line[1]
+		public=line[2]
+		// Skip if already cached
+		if self.have(public) then continue
+		local=line[3]
+		services=line[4]
+		// Add to cache
+		push(globals.G_cachePasswords,{
+      "nick_name":nickName,
+      "password":password,
+      "public_ip":public,
+      "local_ip":local,
+      "services":services
+    })
+	end for
+	// Save updated cache
+	self.save
+end function
+// Edit nickname and password for cached system
+// Args: i (index or nickname)
+Cache.edit=function(i)
+	// Check if cache has entries
+	if not globals.G_cachePasswords then return Info.info("You have no cached systems")
+	// Validate index
+	i=self._validateIndex(i)
+	if i isa Error then return i
+	// Display current entry
+	r=globals.G_cachePasswords[i]
+	print self._formatRecord(r)
+	// Prompt for new nickname
+	n=Gui.input({"text":"Enter a new Nick Name"})
+	if n!=null then globals.G_cachePasswords[i].nick_name=n
+	// Prompt for new password
+	p=Gui.input({"text":"Set a new password"})
+	if p!=null then globals.G_cachePasswords[i].password=p
+	// Rebuild indexes and save updated cache
+	self._rebuildIndexes
+	self.save
+  self.view
+end function
+// Remove system from cache
+// Args: i (index or nickname)
+Cache.remove=function(i)
+	// Check if cache has entries
+	if not globals.G_cachePasswords then return Info.info("You have no cached systems")
+	// Validate index
+	i=self._validateIndex(i)
+	if i isa Error then return i
+	// Remove from cache, rebuild indexes, and save
+	remove(globals.G_cachePasswords,i)
+	self._rebuildIndexes
+	self.save
+end function
+// Clear all cached systems and delete cache file
+Cache.purge=function
+	// Check if cache has entries
+	if not len(globals.G_cachePasswords) then return Info.info("No cached ip's found")
+	// Clear cache array and indexes
+	globals.G_cachePasswords=[]
+	self._nicknameIndex={}
+	self._ipIndex={}
+  s=System.getSystem
+	// Delete cache file
+	c=File(s.computer,path(s.dir.data)+"/cache.dat")
+	if c then delete(c)
+	Info.info("Cache cleared")
+end function
+// Check if IP is already cached
+// Args: i (IP address)
+// Returns: true if cached, null otherwise
+Cache.have=function(i)
+	// Use O(1) hash lookup via IP index
+	if not self._ipIndex then self._rebuildIndexes
+	return hasIndex(self._ipIndex,i)
+end function
+// Add system to cache from Obj context
+// Args: Obj (context), p (password), n (nickname)
+Cache.add=function(Obj,p,n="Not Set")
+	//Ensure cache is loaded before adding
+	self._ensureLoaded
+	i=Obj.meta.public_ip
+	// Check if already cached
+	if self.have(i) then return Info.info("You already have this ip cached")
+	// Add new cache entry with service detection
+	push(globals.G_cachePasswords,{
+    "password":p,
+    "public_ip":i,
+    "local_ip":Obj.meta.local_ip,
+    "services":Net.getServices(i),
+    "nick_name":n
+  })
+	// Rebuild indexes and save updated cache
+	self._rebuildIndexes
+	self.save
+  Info.info("System added to the cache file")
+end function
+// Add system to cache from exploit shell
+// Args: ex (exploit shell), p (password)
+Cache.addEx=function(ex,p)
+	//Ensure cache is loaded before adding
+	self._ensureLoaded
+	// Get public IP from exploit shell
+	i=public_ip_pc(host_computer(ex))
+	// Check if already cached
+	if self.have(i) then return
+	// Get local IP from exploit shell
+	lip=host_computer(ex).local_ip
+	// Add new cache entry with service detection
+	push(globals.G_cachePasswords,{
+    "password":p,
+    "public_ip":i,
+    "local_ip":lip,
+    "services":Net.getServices(i),
+    "nick_name":"Not Set"
+  })
+	// Rebuild indexes and save updated cache
+	self._rebuildIndexes
+	self.save
+end function
+// Load cache from encrypted file
+// Args: r (refresh flag, default=false)
+Cache.load=function(r=false)
+	//Initialize cache array if missing
+	if not globals.G_cachePasswords then globals.G_cachePasswords=[]
+	// Clear cache if refresh enabled
+	if r then globals.G_cachePasswords=[]
+	// Skip if cache already loaded
+	if len(globals.G_cachePasswords) then return
+  s=System.getSystem
+	// Read cache file
+	c=File(s.computer,path(s.dir.data)+"/cache.dat")
+	if not c then return
+	// Parse each encrypted line
+	for l in split(get_content(c),char(10));if not len(l) then continue;push(globals.G_cachePasswords,System.parse(Encryption.encrypt(l,Kernel.key,false)));end for
+	// Rebuild indexes for fast lookups
+	self._rebuildIndexes
+end function
+// Manual cache entry via GUI prompts
+Cache.custom=function
+	// Prompt for nickname
+	n=Gui.input({"text":"Enter a Nick Name"})
+	if n==null then n="Not Set"
+	// Prompt for root password
+	p=Gui.inputPass("Enter r00t password")
+  if not p then return
+	// Prompt for public IP
+	i=Gui.inputIP({"text":"Enter public ip"})
+	if i==null then return Error.set("Missing ip")
+	// Check if already cached
+	if self.have(i) then return Info.info(i+" is all ready in the cache list")
+	// Add new cache entry with service detection
+	push(globals.G_cachePasswords,{
+    "password":p,
+    "public_ip":i,
+    "local_ip":i,
+    "services":Net.getServices(i),
+    "nick_name":n
+  })
+	// Rebuild indexes and save updated cache
+	self._rebuildIndexes
+	self.save
+	Info.info("SUCCESS!!!")
+end function
+// Save cache to encrypted file
+// Args: i (info flag, default=false)
+Cache.save=function(i=false)
+  s=System.getSystem
+  // Get or create cache file
+  c=File(s.computer,path(s.dir.data)+"/cache.dat")
+  if not c then c=Command.touch(s.obj,[path(s.dir.data)+"/cache.dat"])
+	if c isa Error then return
+	// Build content string directly (avoid array allocation)
+	content=""
+	for x in globals.G_cachePasswords;if len(content) then content=content+char(10);content=content+Encryption.encrypt(System.toJSON(x),Kernel.key);end for
+	// Write all entries to file
+	r=set_content(c,content)
+	// Display result if info flag set
+	if i then
+		if r==1 then Info.info("Cache data successfully saved") else return Error.set(r)
+	end if
+	return r
+end function
+// Export readable cache dump to file
+// Args: Obj (context object)
+Cache.dump=function(Obj)
+	// Create or copy dump file
+	if Obj.type=="file" then
+		// Use existing file as template
+		f=FileHelper.useFile(Obj)
+		if f isa Error then return
+		copy(f,path(Obj.dir.current),"cache_dump.dat")
+		c=Io.getFileObj(Obj,path(Obj.dir.current)+"/cache_dump.dat")
+	else
+		// Create new dump file
+		c=Command.touch(Obj,[path(Obj.dir.current)+"/cache_dump.dat"])
+	end if
+	if c isa Error then return
+	// Build readable format
+	w=[]
+	for z in globals.G_cachePasswords
+		// Format each cache entry as human-readable
+		push(w,"Nick Name: "+z.nick_name)
+		push(w,"Password : "+z.password)
+		push(w,"Public IP: "+z.public_ip)
+		push(w,"Local IP : "+z.local_ip)
+		push(w,"Services : "+Net.getServicesRaw(z.public_ip))
+		// Add separator between entries
+		if (__z_idx+1)!=len(globals.G_cachePasswords) then push(w,"="*35)
+	end for
+	// Write dump file
+	r=set_content(c,join(w,char(10)))
+	if r==1 then Info.info("Cache data successfully dumped to "+path(c)) else Error.set(r)
+end function
+// Args: i (object with public_ip property)
+// Returns: password if found, null otherwise
+Cache.get=function(i)
+	// Check if cache has entries
+	if not len(globals.G_cachePasswords) then return
+	// Use O(1) hash lookup via IP index
+	if not self._ipIndex then self._rebuildIndexes
+	if not hasIndex(self._ipIndex,i.public_ip) then return
+	idx=self._ipIndex[i.public_ip]
+	if idx==null then return
+	return globals.G_cachePasswords[idx].password
+end function

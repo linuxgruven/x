@@ -1,0 +1,28 @@
+// Man page for ids
+manIds="IDS(8)                           X Shell Manual                           IDS(8)
+
+<b>NAME</b>
+    ids - is a intrusion detection system
+<b>SYNOPSIS</b>
+    <b>ids</b>
+<b>DESCRIPTION</b>
+    Intrusion Detection System monitoring tool. Watches processes, file system, and router
+    for changes. Real-time alerting for modifications and security events. Essential for defense.
+<b>OPTIONS</b>
+    <b>ids</b>
+    Start IDS monitoring
+    Watch all system activity
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Start Monitoring</color>
+    <b>ids</b>
+    Begin IDS watch
+
+    <color=#e4ff34># Background Mode</color>
+    <b>ids &</b>
+    Run in background
+
+    <color=#e4ff34># With Logging</color>
+    <b>ids > ids.log</b>
+    Log all alerts
+<b>SEE ALSO</b>
+    <b>ps</b>, <b>lsof</b>, <b>find</b>"

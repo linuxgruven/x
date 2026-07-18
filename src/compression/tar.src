@@ -1,0 +1,189 @@
+// =============================================================================
+// TAR
+// Archive files into LZW-compressed tarballs; supports memory-mode transfer.
+// =============================================================================
+Tar={
+  "string":"@#@#@#@#",
+  "spacer":":#:#:#:#"
+}
+// Collect all text files recursively into spacer-delimited string, then chunk at 160KB
+Tar.recurseFolder=function(f,r)
+  c=""
+  for f in Io.getAll(f);if Io.isBinFolder(f) then continue;s=get_content(f);c+=path(f)[r:]+self.string+s+self.spacer;end for
+  if not len(c) then return []
+  // Split into 160KB chunks if needed
+  a=[]
+  while len(c)>160000;k=split160k(c);push(a,k[0]);c=k[1];end while
+  push(a,c)
+  return a
+end function
+// Iterate spacer-delimited entries in data; calls cb(path, content) for each valid entry
+Tar.eachEntry=function(data,cb);for x in split(data,self.spacer);s=split(x,self.string);if len(s)==2 then cb(s[0],s[1]);end for;end function
+// Recreate file and directory structure during tar extract
+Tar.makeTarFile=function(Obj,p,c,t)
+  n=path(t)
+  if p[0]=="/" then p=p[1:]
+  x=split(p,"/")
+  x.reverse
+  x=x[1:]
+  if len(x)>1 then x.reverse
+  if len(x)>0 then
+    for i in x;create_folder(Obj.computer,n,i);n+="/"+i;end for
+  end if
+  f=Command.touch(Obj,[n+"/"+split(p,"/")[-1]])
+  if f isa Error then return
+  set_content(f,c)
+end function
+Tar.run=function(Obj,argv)
+  if not argv then return Man.help(["tar"])
+  Arg1=lower(pull(argv))
+  _p=ArgumentParser.init
+  _p.addArgument("n",false,"store")
+  _p.addArgument("r",false,"flag")
+  _p.addArgument("s",false,"store")
+  _p.addArgument("e",false,"store")
+  _p.addArgument("memory",true,"flag")
+  argv=_p.parseArgs("tar",argv)
+  if argv isa Error then return
+  // Create tar archive from directory; splits into numbered files if over 160KB
+  create=function(arg)
+    if not arg.rest then return Error.set("No target file specified!")
+    if Obj.type=="file" then return Error.set("Cannot create tar file with a file object!")
+    z=Io._getFile(Obj,arg.rest[0])
+    if z isa Error then return
+    if not is_folder(z) then return Error.set(z+": is not a folder!")
+    if not arg.n then arg.n=name(z)
+    if arg.s then p=arg.s else p=path(Obj.dir.current)
+    if path(z)=="/" then r=0 else r=len(path(z))
+    Info.info("Loading files for the tarball...")
+    t=Tar.recurseFolder(z,r)
+    Info.info("Building tarballs...")
+    if len(t)>1 then
+      c=1
+      for a in t
+        if not a then break
+        k=Command.touch(Obj,[p+"/"+arg.n+c+".tar"])
+        if k isa Error then return
+        set_content(k,Lzw.compress(join(a,"")))
+        c+=1
+      end for
+    else
+      k=Command.touch(Obj,[p+"/"+arg.n+".tar"])
+      if k isa Error then return
+      set_content(k,Lzw.compress(join(t,"")))
+    end if
+    if arg.r then delete(z)
+    Info.info("Complete")
+  end function
+  // Extract tar archive to directory
+  extract=function(arg)
+    Obj=outer.Obj
+    if Obj.type=="file" then return Error.set("Cannot extract a tarball with a file object!")
+    t=Io._getFile(Obj,arg.rest[0])
+    if t isa Error then return Error.set("No target file specified!")
+    if not arg.n then arg.n=name(t).replace(".tar","")
+    if arg.e then p=Command.mkdir(Obj,[arg.e+"/"+arg.n],true) else p=Command.mkdir(Obj,[arg.n],true)
+    if p isa Error then return Error.set("Failed to create target directory")
+    n=File(Obj.computer,p)
+    Info.info("Extracting files...")
+    _cb=function(h,c);Tar.makeTarFile(Obj,h,c,outer.n);end function
+    if is_folder(t) then
+      for x in get_files(t);if not endsWith(name(x),".tar") then continue;Tar.eachEntry(Lzw.decompress(get_content(x)),@_cb);end for
+      if arg.r then delete(t)
+      return Info.info("Complete")
+    end if
+    if not endsWith(name(t),".tar") then return Error.set("File is not a tar file")
+    Tar.eachEntry(Lzw.decompress(get_content(t)),@_cb)
+    if arg.r then delete(t)
+    Info.info("Complete")
+  end function
+  // Pack directory into globals.G_tar for inter-shell transfer
+  memory=function(arg)
+    if not arg.rest then return Error.set("No target file specified!")
+    f=Io._getFile(Obj,arg.rest[0])
+    if f isa Error then return
+    if not is_folder(f) then return Error.set(name(f)+": is not a folder!")
+    if path(f)=="/" then r=len("/home/") else r=len(path(f))
+    Info.info("Packing files into memory...")
+    t=Tar.recurseFolder(f,r)
+    Info.info("Building tarballs...")
+    if len(t)>1 then
+      for i in t;if not i then break;globals.G_tar+=join(i,"");end for
+    else
+      globals.G_tar+=join(t,"")
+    end if
+    if arg.r then delete(f)
+    Info.info("Complete")
+  end function
+  // Extract from globals.G_tar to directory
+  retrieve=function(arg)
+    Obj=outer.Obj
+    if Obj.type=="file" then return Error.set("Cannot create tar file with a file object!")
+    if not globals.G_tar then return Error.set("No tarball in memory!")
+    if not arg.n then arg.n="tarball"
+    if arg.e then t=Command.mkdir(Obj,[arg.e+"/"+arg.n],true) else t=Command.mkdir(Obj,[arg.n],true)
+    if t isa Error then return Error.set("Failed to create target directory")
+    Info.info("Extracting files from memory...")
+    n=File(Obj.computer,t)
+    _cb=function(p,c);Tar.makeTarFile(Obj,p,c,outer.n);end function
+    Tar.eachEntry(globals.G_tar,@_cb)
+    if arg.r then globals.G_tar=null
+    Info.info("Complete")
+  end function
+  // View tar archive contents without extracting
+  view=function(arg)
+    total=0
+    count=0
+    _printEntry=function(h,c)
+      total=outer.total
+      count=outer.count
+      bytes=len(c)
+      lines=len(split(c,char(10)))
+      total=total+bytes
+      count+=1
+      outer.total=total
+      outer.count=count
+      if bytes==0 then info=" (empty)" else info=" ("+bytes+" bytes, "+lines+" lines)"
+      print white(bold(h))+cyan(info)
+    end function
+    _printHeader=function(fname);print bold("Archive: ")+white(fname);print cyan("--------------------------------------------");end function
+    _printFooter=function
+      t=outer.total
+      c=outer.count
+      print cyan("--------------------------------------------")
+      print white(c+" file(s), "+t+" bytes total")
+    end function
+    if arg.memory then
+      if not globals.G_tar then return Error.set("No tarball in memory!")
+      _printHeader("[memory]")
+      Tar.eachEntry(globals.G_tar,@_printEntry)
+      _printFooter
+      return
+    end if
+    if not arg.rest then return Error.set("No tar file specified!")
+    f=Io._getFile(Obj,arg.rest[0])
+    if f isa Error then return
+    if is_folder(f) then
+      for x in get_files(f)
+        if not endsWith(name(x),".tar") then continue
+        _printHeader(name(x))
+        Tar.eachEntry(Lzw.decompress(get_content(x)),@_printEntry)
+        _printFooter
+      end for
+      return
+    end if
+    if not endsWith(name(f),".tar") then return Error.set("File is not a tar file")
+    _printHeader(name(f))
+    Tar.eachEntry(Lzw.decompress(get_content(f)),@_printEntry)
+    _printFooter
+  end function
+  cmds={
+    "-c":@create,
+    "-x":@extract,
+    "-m":@memory,
+    "-u":@retrieve,
+    "-v":@view
+  }
+  if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+  cmds[Arg1](argv)
+end function

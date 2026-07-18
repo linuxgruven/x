@@ -1,0 +1,67 @@
+// Man page for cd
+manCd="CD(1)                            X Shell Manual                            CD(1)
+
+<b>NAME</b>
+    cd - use to move to a new directory
+<b>SYNOPSIS</b>
+    <b>cd </b><b>PATH</b>
+    <b>cd </b><b>..</b>
+    <b>cd</b>
+    <b>cd </b><b>back</b>|<b>-</b>
+    <b>cd </b><b>dir*</b>
+<b>DESCRIPTION</b>
+    Change the current working directory. Navigate the filesystem using absolute or
+    relative paths. Supports parent directory navigation, home directory return, and
+    previous directory recall. Tilde (~) expands to home directory. Wildcard patterns
+    display matching directories in a menu. Using wildcards like D* in the home directory
+    will list Desktop, Downloads, and all other directories starting with D for selection.
+<b>OPTIONS</b>
+    <b>cd PATH</b>
+    Move to specified directory
+    Accepts absolute or relative paths
+
+    <b>cd ..</b>
+    Move up one directory level
+    Navigate to parent directory
+
+    <b>cd</b>
+    Return to your home directory
+    Quick return to user home
+
+    <b>cd back, cd -</b>
+    Return to previous directory
+    Go back to last location
+
+    <b>cd dir*</b>
+    List matching directories with wildcard
+    Display menu of matching directories to choose from
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Navigation</color>
+    <b>cd /home/tux</b>
+    Go to tux home directory
+
+    <b>cd Documents</b>
+    Enter Documents folder
+
+    <color=#e4ff34># Parent and Home</color>
+    <b>cd ..</b>
+    Move up one level
+
+    <b>cd</b>
+    Return to home directory
+
+    <color=#e4ff34># History Navigation</color>
+    <b>cd back</b>
+    Go to previous directory
+
+    <b>cd -</b>
+    Return to last location
+
+    <color=#e4ff34># Wildcard Selection</color>
+    <b>cd D*</b>
+    List dirs starting with D
+
+    <b>cd pro*</b>
+    List dirs starting with pro
+<b>SEE ALSO</b>
+    <b>ls</b>, <b>tree</b>"

@@ -1,0 +1,12 @@
+// =============================================================================
+// REBOOT
+// Reboot the target computer system.
+// =============================================================================
+Command.reboot=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("s",false,"flag")  // Silent reboot (no confirmation prompt)
+  argv=_p.parse("reboot",argv,Obj)
+  if argv isa Error then return
+  result=reboot(Obj.computer,argv.s)
+  if result isa string then return Error.set(result)
+end function

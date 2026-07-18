@@ -1,0 +1,167 @@
+shell=get_shell
+computer=host_computer(shell)
+u=active_user
+if u=="root" then home="/root" else home="/home/"+u
+watchPaths=["/home/guest"]
+if params then timeout=to_int(params[0]) else timeout=0
+if timeout==null or timeout<0 then timeout=0
+i=1
+while i<params.len;watchPaths.push(params[i]);i=i+1;end while
+GN="<color=#4bff4b>"
+RD="<color=#ff4b4b>"
+YL="<color=#ffff4b>"
+BL="<color=#4b8bff>"
+GY="<color=#aaaaaa>"
+EC="</color>"
+F={}
+F.New=function(a)
+  f=new self
+  f.name=a.name
+  f.path=a.path
+  f.size=a.size
+  f.owner=a.owner
+  f.group=a.group
+  f.permissions=a.permissions
+  f.isFolder=a.is_folder
+  f.isBinary=a.is_binary
+  f.content=null
+  if not a.is_folder and not a.is_binary and a.has_permission("r") then f.content=a.get_content
+  return f
+end function
+getFiles=function(folder)
+  result=[F.New(folder)]
+  for x in folder.get_files;result.push(F.New(x));end for
+  for x in folder.get_folders;result=result+getFiles(x);end for
+  return result
+end function
+getProcs=function(c)
+  lines=c.show_procs.split(char(10))
+  result=[]
+  i=1
+  while i<lines.len;t=lines[i].split(" ");if t.len>=5 then result.push({"user":t[0],"pid":t[1],"cmd":t[4]});i=i+1;end while
+  return result
+end function
+diffProcs=function(a,b)
+  newP=[]
+  gone=[]
+  for x in a
+    found=false
+    for y in b
+      if x.pid==y.pid and x.cmd==y.cmd then
+        found=true
+        break
+      end if
+    end for
+    if not found then newP.push(x)
+  end for
+  for x in b
+    found=false
+    for y in a
+      if x.pid==y.pid and x.cmd==y.cmd then
+        found=true
+        break
+      end if
+    end for
+    if not found then gone.push(x)
+  end for
+  return {"new":newP,"gone":gone}
+end function
+print GN+"[+] Monitor started (every "+timeout+"s)"+EC
+blPath=home+"/blacklist.txt"
+if not computer.File(blPath) then
+  computer.touch(home,"blacklist.txt")
+  print YL+"[~] Created "+blPath+" (add process names, one per line)"+EC
+end if
+qDir="/root/quarantine"
+if not computer.File(qDir) then
+  computer.create_folder("/root","quarantine")
+  print GN+"[+] Created "+qDir+EC
+end if
+print GY+"[i] Watching: "+watchPaths.join(", ")+EC
+print GY+"[i] Scanning filesystem..."+EC
+oldFiles=getFiles(computer.File("/"))
+oldProcs=getProcs(computer)
+print GN+"[+] Baseline: "+oldFiles.len+" files, "+oldProcs.len+" processes"+EC
+while true
+  if timeout>0 then wait timeout
+  newFiles=getFiles(computer.File("/"))
+  newProcs=getProcs(computer)
+  oldPaths={}
+  for x in oldFiles;oldPaths[x.path]=x;end for
+  newPaths={}
+  for x in newFiles;newPaths[x.path]=x;end for
+  for x in newFiles
+    if not oldPaths.hasIndex(x.path) then
+      if x.isFolder then
+        t=BL+"dir"
+      else if x.isBinary then
+        t=GN+"bin"
+      else
+        t=GY+"file"
+      end if
+      print GN+"+ "+t+" "+GY+x.path+EC
+      inWatch=false
+      for wp in watchPaths
+        if x.path.indexOf(wp)==0 then
+          inWatch=true
+          break
+        end if
+      end for
+      if inWatch then
+        rf=computer.File(x.path)
+        if rf then
+          rf.chmod("o-wrx",1)
+          rf.chmod("g-wrx",1)
+          rf.chmod("u-wrx",1)
+          rf.move(qDir,rf.name)
+          print RD+"  -> quarantined to "+qDir+"/"+x.name+EC
+        end if
+      end if
+    else
+      o=oldPaths[x.path]
+      changes=[]
+      if x.size!=o.size then changes.push("size:"+o.size+"->"+x.size)
+      if x.owner!=o.owner then changes.push("owner:"+o.owner+"->"+x.owner)
+      if x.group!=o.group then changes.push("group:"+o.group+"->"+x.group)
+      if x.permissions!=o.permissions then changes.push("perms:"+o.permissions+"->"+x.permissions)
+      if x.content!=null and o.content!=null and x.content!=o.content then changes.push("content")
+      if changes.len>0 then print YL+"? "+GY+x.path+" "+YL+changes.join(", ")+EC
+    end if
+  end for
+  for x in oldFiles
+    if not newPaths.hasIndex(x.path) then
+      if x.isFolder then
+        t=BL+"dir"
+      else if x.isBinary then
+        t=GN+"bin"
+      else
+        t=GY+"file"
+      end if
+      print RD+"x "+t+" "+GY+x.path+EC
+    end if
+  end for
+  pd=diffProcs(newProcs,oldProcs)
+  for x in pd["new"];print GN+"> "+GY+x.cmd+" "+BL+x.pid+" "+GY+"@"+x.user+EC;end for
+  for x in pd.gone;print RD+"- "+GY+x.cmd+" "+BL+x.pid+" "+GY+"@"+x.user+EC;end for
+  oldFiles=newFiles
+  oldProcs=newProcs
+  blacklist=[]
+  blFile=computer.File(blPath)
+  if blFile then
+    bl=blFile.get_content.split(char(10))
+    for b in bl;b=b.trim;if b and b[0]!="#" then blacklist.push(b);end for
+  end if
+  for p in newProcs
+    if p.user=="guest" then
+      close_program(computer,to_int(p.pid))
+      print RD+"[!] Killed guest process: "+p.cmd+" ("+p.pid+")"+EC
+      continue
+    end if
+    for bl in blacklist
+      if p.cmd.indexOf(bl)!=null then
+        close_program(computer,to_int(p.pid))
+        print RD+"[!] Killed blacklisted: "+p.cmd+" ("+p.pid+") @"+p.user+EC
+      end if
+    end for
+  end for
+end while

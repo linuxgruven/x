@@ -1,0 +1,28 @@
+// =============================================================================
+// PERCENT
+// Calculate what percentage x is of y.
+// Direct:  percent 50 200      → 25%
+// Pipe:    seq 1 10 | percent 100  → each line as % of 100
+// =============================================================================
+Command.percent=function(Obj,argv)
+  hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  isPipeOut=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  if hasPipeIn then
+    if not argv or len(argv)<1 then return Man.help(["percent"])
+    y=val(argv[0])
+    stdinData=globals.G_pipe.stdin
+    if stdinData isa list then lines=stdinData else lines=split(trim(str(stdinData)),char(10))
+    for line in lines
+      line=trim(line)
+      if not line then continue
+      result=Math.percent(val(line),y)
+      if result isa Error then return result
+      if isPipeOut then push(globals.G_pipe.stdout,str(result)) else Info.info(line+" is "+str(result)+"% of "+str(y),"=")
+    end for
+  else
+    if not argv or len(argv)!=2 then return Man.help(["percent"])
+    result=Math.percent(to_int(argv[0]),val(argv[1]))
+    if result isa Error then return result
+    Info.info("The percentage is: "+str(result)+"%","=")
+  end if
+end function

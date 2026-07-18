@@ -1,0 +1,413 @@
+// =============================================================================
+// AgentTest - AI Agent Test Suites
+// All test logic for `ai test` command lives here.
+// =============================================================================
+AgentTest={}
+AgentTest._handleTest=function(Obj,step,context)
+  result={"success":false,"step":"test"}
+  suite="all"
+  if hasIndex(step,"suite") then suite=step.suite
+  if suite=="list" then
+    print yellow("Available test suites:")
+    print "  all          - Run all test suites"
+    print "  synonyms     - Context-weighted synonym disambiguation"
+    print "  compound     - Compound command parsing"
+    print "  persistence  - Learning save/load to disk"
+    print "  template     - Template recall in planner"
+    print "  fuzzy        - Fuzzy template matching"
+    print "  conditional  - Conditional command parsing"
+    print "  multitarget  - Multi-target IP parsing"
+    print "  iputils      - IP extraction & private IP detection"
+    print "  risk         - Risk assessment & success prediction"
+    print "  learning     - Pattern reinforcement & preference tracking"
+    print "  signature    - Sequence signature generation"
+    result.success=true
+    result.message="Listed 11 test suites"
+    return result
+  end if
+  passed=0
+  failed=0
+  total=0
+  _assert=function(name,cond)
+    outer.total=outer.total+1
+    if cond then
+      outer.passed=outer.passed+1
+      print green("  PASS: "+name)
+    else
+      outer.failed=outer.failed+1
+      print red("  FAIL: "+name)
+    end if
+  end function
+  //TEST 1: Context-Weighted Synonyms
+  if suite=="all" or suite=="synonyms" then
+    print yellow("="*50)
+    print yellow("TEST: CONTEXT-WEIGHTED SYNONYMS")
+    print yellow("="*50)
+    r=globals.G_agent._expandWithSynonyms("break the password")
+    _assert("break+password->crack",r=="crack")
+    r=globals.G_agent._expandWithSynonyms("break into the system")
+    _assert("break+system->exploit",r=="exploit")
+    r=globals.G_agent._expandWithSynonyms("check the network ports")
+    _assert("check+network->scan",r=="scan")
+    r=globals.G_agent._expandWithSynonyms("get the file")
+    _assert("get+file->fetch",r=="fetch")
+    r=globals.G_agent._expandWithSynonyms("grab data from server")
+    _assert("grab+data->fetch",r=="fetch")
+    r=globals.G_agent._expandWithSynonyms("elevate privilege to root")
+    _assert("elevate+priv->escalate",r=="escalate")
+    r=globals.G_agent._expandWithSynonyms("wipe the logs")
+    _assert("wipe+logs->remove",r=="remove")
+    r=globals.G_agent._expandWithSynonyms("hello world")
+    _assert("no match->null",r==null)
+    r=globals.G_agent._expandWithSynonyms("probe that")
+    _assert("probe->scan",r=="scan")
+  end if
+  //TEST 2: Compound Command Parsing
+  if suite=="all" or suite=="compound" then
+    print yellow("="*50)
+    print yellow("TEST: COMPOUND COMMAND PARSING")
+    print yellow("="*50)
+    p=globals.G_agent._parseCommand(Obj,"scan 1.2.3.4 and then exploit 1.2.3.4")
+    _assert("and then->compound",hasIndex(p,"compound") and p.compound==true)
+    _assert("and then->action=compound",p.action=="compound")
+    _assert("and then->2 subs",hasIndex(p,"subCommands") and len(p.subCommands)==2)
+    if hasIndex(p,"subCommands") and len(p.subCommands)==2 then
+      _assert("sub1 has scan",indexOf(lower(p.subCommands[0]),"scan")!=null)
+      _assert("sub2 has exploit",indexOf(lower(p.subCommands[1]),"exploit")!=null)
+    end if
+    p=globals.G_agent._parseCommand(Obj,"first scan the target then crack passwords")
+    _assert("first+then->compound",hasIndex(p,"compound") and p.compound==true)
+    if hasIndex(p,"subCommands") and len(p.subCommands)==2 then _assert("first stripped",indexOf(lower(p.subCommands[0]),"first")==null)
+    p=globals.G_agent._parseCommand(Obj,"scan 1.2.3.4")
+    _assert("simple not compound",not (hasIndex(p,"compound") and p.compound==true))
+  end if
+  //TEST 3: Learning Persistence
+  if suite=="all" or suite=="persistence" then
+    print yellow("="*50)
+    print yellow("TEST: LEARNING PERSISTENCE")
+    print yellow("="*50)
+    //Save current state
+    savedPatterns=globals.G_agent.patternScores
+    savedPrefs=globals.G_agent.userPreferences
+    savedTemplates=null
+    if hasIndex(globals.G_agent.sessionContext,"templates") then savedTemplates=globals.G_agent.sessionContext.templates
+    comp=globals.G_main.computer
+    dataPath=path(globals.G_main.dir.data)
+    testFile=dataPath+"/agent_learning.json"
+    //Remove any existing test file first
+    oldF=File(comp,testFile)
+    if oldF then delete(oldF)
+    //Also remove old .dat file if it exists
+    oldDat=File(comp,dataPath+"/agent_learning.dat")
+    if oldDat then delete(oldDat)
+    //--- Sub-test A: saveLearning writes valid JSON ---
+    globals.G_agent.patternScores={}
+    globals.G_agent._reinforcePattern("scan 1.2.3.4",true,{})
+    globals.G_agent._reinforcePattern("exploit 1.2.3.4",true,{})
+    _assert("patterns seeded",len(indexes(globals.G_agent.patternScores))>0)
+    globals.G_agent.sessionContext.templates=[]
+    push(globals.G_agent.sessionContext.templates,{"signature":"scan->exploit->crack","successCount":3,"lastUsed":0,"steps":["scan 1.2.3.4","exploit ssh","crack root"]})
+    saveOk=globals.G_agent.saveLearning
+    _assert("saveLearning ok",saveOk==true)
+    sf=File(comp,testFile)
+    if sf then
+      sc=get_content(sf)
+      parsed=System.parse(sc)
+      hasP=parsed!=null and hasIndex(parsed,"patternScores")
+      hasT=parsed!=null and hasIndex(parsed,"templates")
+      _assert("save has patterns",hasP==true)
+      _assert("save has templates",hasT==true)
+      delete(sf)
+    else
+      _assert("save created file",false)
+    end if
+    //--- Sub-test B: loadLearning restores from saved file ---
+    //Seed and save known data
+    globals.G_agent.patternScores={"scan":{"success":5,"failure":1,"total":6},"exploit":{"success":3,"failure":0,"total":3}}
+    globals.G_agent.sessionContext.templates=[{"signature":"scan->exploit->crack","successCount":4,"lastUsed":0,"steps":["scan target","exploit ssh","crack root"]}]
+    globals.G_agent.saveLearning
+    //Clear memory
+    globals.G_agent.patternScores={}
+    globals.G_agent.sessionContext.templates=[]
+    _assert("memory cleared",len(indexes(globals.G_agent.patternScores))==0)
+    //Load from saved file
+    loadOk=globals.G_agent.loadLearning
+    _assert("loadLearning ok",loadOk==true)
+    _assert("patterns restored",len(indexes(globals.G_agent.patternScores))>0)
+    if hasIndex(globals.G_agent.patternScores,"scan") then _assert("scan success=5",globals.G_agent.patternScores["scan"].success==5)
+    _assert("templates restored",len(globals.G_agent.sessionContext.templates)>=1)
+    if len(globals.G_agent.sessionContext.templates)>=1 then _assert("template sig intact",globals.G_agent.sessionContext.templates[0].signature=="scan->exploit->crack")
+    //Cleanup
+    tf=File(comp,testFile)
+    if tf then delete(tf)
+    //Restore original state
+    globals.G_agent.patternScores=savedPatterns
+    globals.G_agent.userPreferences=savedPrefs
+    if savedTemplates!=null then globals.G_agent.sessionContext.templates=savedTemplates
+  end if
+  //TEST 4: Template Recall in Planner
+  if suite=="all" or suite=="template" then
+    print yellow("="*50)
+    print yellow("TEST: TEMPLATE RECALL IN PLANNER")
+    print yellow("="*50)
+    savedTemplates2=null
+    if hasIndex(globals.G_agent.sessionContext,"templates") then savedTemplates2=globals.G_agent.sessionContext.templates
+    globals.G_agent.sessionContext.templates=[]
+    push(globals.G_agent.sessionContext.templates,{"signature":"scan->exploit->crack","successCount":3,"lastUsed":0,"steps":["scan 1.2.3.4","exploit ssh","crack root"]})
+    tp=globals.G_agent._createPlan(Obj,{"action":"scan","target":"1.2.3.4","raw":"scan 1.2.3.4"})
+    _assert("plan uses template",hasIndex(tp,"fromTemplate") and tp.fromTemplate)
+    _assert("plan has 3 steps",len(tp.steps)==3)
+    //Low success template should be skipped
+    globals.G_agent.sessionContext.templates=[]
+    push(globals.G_agent.sessionContext.templates,{"signature":"scan->exploit","successCount":1,"lastUsed":0,"steps":["scan x","exploit x"]})
+    tp2=globals.G_agent._createPlan(Obj,{"action":"scan","target":"test","raw":"scan test"})
+    _assert("low-success skipped",not (hasIndex(tp2,"fromTemplate") and tp2.fromTemplate))
+    //Restore
+    if savedTemplates2!=null then globals.G_agent.sessionContext.templates=savedTemplates2
+  end if
+  //TEST 5: Fuzzy Template Matching
+  if suite=="all" or suite=="fuzzy" then
+    print yellow("="*50)
+    print yellow("TEST: FUZZY TEMPLATE MATCHING")
+    print yellow("="*50)
+    tmpl1={"signature":"scan->exploit->crack","successCount":3,"lastUsed":0,"steps":["scan x","exploit x","crack x"]}
+    //Exact match should score 1.0
+    s=globals.G_agent._scoreFuzzyTemplate("scan",tmpl1)
+    _assert("exact match=1.0",s==1.0)
+    s=globals.G_agent._scoreFuzzyTemplate("exploit",tmpl1)
+    _assert("exact exploit=1.0",s==1.0)
+    //Similar action should score ~0.8
+    s=globals.G_agent._scoreFuzzyTemplate("attack",tmpl1)
+    _assert("attack~exploit>=0.7",s>=0.7)
+    s=globals.G_agent._scoreFuzzyTemplate("hack",tmpl1)
+    _assert("hack~exploit>=0.7",s>=0.7)
+    s=globals.G_agent._scoreFuzzyTemplate("probe",tmpl1)
+    _assert("probe~scan>=0.7",s>=0.7)
+    //Unrelated action should score 0
+    s=globals.G_agent._scoreFuzzyTemplate("install",tmpl1)
+    _assert("install vs scan->exploit=0",s==0)
+    //Null/empty should score 0
+    s=globals.G_agent._scoreFuzzyTemplate(null,tmpl1)
+    _assert("null action=0",s==0)
+    s=globals.G_agent._scoreFuzzyTemplate("scan",{})
+    _assert("no signature=0",s==0)
+    //High success count bonus
+    tmpl2={"signature":"scan->exploit","successCount":10,"lastUsed":0,"steps":["scan x","exploit x"]}
+    s2=globals.G_agent._scoreFuzzyTemplate("hack",tmpl2)
+    tmpl3={"signature":"scan->exploit","successCount":2,"lastUsed":0,"steps":["scan x","exploit x"]}
+    s3=globals.G_agent._scoreFuzzyTemplate("hack",tmpl3)
+    _assert("high success bonus",s2>s3)
+    //Fuzzy match creates plan correctly
+    savedTemplates3=null
+    if hasIndex(globals.G_agent.sessionContext,"templates") then savedTemplates3=globals.G_agent.sessionContext.templates
+    globals.G_agent.sessionContext.templates=[]
+    push(globals.G_agent.sessionContext.templates,{"signature":"scan->exploit->crack","successCount":5,"lastUsed":0,"steps":["scan 1.2.3.4","exploit ssh","crack root"]})
+    tp=globals.G_agent._createPlan(Obj,{"action":"attack","target":"1.2.3.4","raw":"attack 1.2.3.4"})
+    _assert("fuzzy plan uses template",hasIndex(tp,"fromTemplate") and tp.fromTemplate)
+    if savedTemplates3!=null then globals.G_agent.sessionContext.templates=savedTemplates3
+  end if
+  //TEST 6: Conditional Parsing
+  if suite=="all" or suite=="conditional" then
+    print yellow("="*50)
+    print yellow("TEST: CONDITIONAL PARSING")
+    print yellow("="*50)
+    //Test "if X has/finds Y, then Z" pattern
+    r=globals.G_agent._parseConditionals("if scan has ssh, then exploit it")
+    _assert("has pattern detected",r!=null and hasIndex(r,"condition"))
+    if r and hasIndex(r,"condition") then
+      _assert("has condition content",indexOf(r.condition,"has")!=null)
+      _assert("has onCondition",hasIndex(r,"onCondition") and r.onCondition!=null)
+    end if
+    //Test "X, if it works Y" pattern
+    r=globals.G_agent._parseConditionals("scan 1.2.3.4, if it works exploit it")
+    _assert("if-it-works detected",r!=null and hasIndex(r,"condition"))
+    if r and hasIndex(r,"condition") then
+      _assert("success condition",r.condition=="success")
+      _assert("primary preserved",hasIndex(r,"primary") and indexOf(r.primary,"scan")!=null)
+    end if
+    //Test "X, on success Y"
+    r=globals.G_agent._parseConditionals("scan 1.2.3.4, on success exploit it")
+    _assert("on success detected",r!=null and hasIndex(r,"condition"))
+    if r and hasIndex(r,"condition") then _assert("on success->success",r.condition=="success")
+    //Test non-conditional returns null
+    r=globals.G_agent._parseConditionals("scan 1.2.3.4")
+    _assert("simple->null",r==null)
+  end if
+  //TEST 7: Multi-Target Parsing
+  if suite=="all" or suite=="multitarget" then
+    print yellow("="*50)
+    print yellow("TEST: MULTI-TARGET PARSING")
+    print yellow("="*50)
+    //3+ IPs should trigger multiTarget
+    p=globals.G_agent._parseCommand(Obj,"scan 1.2.3.4 5.6.7.8 9.10.11.12")
+    _assert("3 IPs->multiTarget",hasIndex(p,"multiTarget") and p.multiTarget==true)
+    _assert("action=multiTarget",p.action=="multiTarget")
+    _assert("3 targets",hasIndex(p,"targets") and len(p.targets)==3)
+    _assert("targetAction=scan",hasIndex(p,"targetAction") and p.targetAction=="scan")
+    //2 IPs should NOT trigger multiTarget
+    p=globals.G_agent._parseCommand(Obj,"scan 1.2.3.4 and then exploit 5.6.7.8")
+    _assert("2 IPs not multi",not (hasIndex(p,"multiTarget") and p.multiTarget==true))
+    //Multi-target plan should create steps per IP
+    savedTemplates4=null
+    if hasIndex(globals.G_agent.sessionContext,"templates") then savedTemplates4=globals.G_agent.sessionContext.templates
+    globals.G_agent.sessionContext.templates=[]
+    tp=globals.G_agent._createPlan(Obj,{"action":"multiTarget","multiTarget":true,"targets":["1.1.1.1","2.2.2.2","3.3.3.3"],"targetAction":"scan","raw":"scan 1.1.1.1 2.2.2.2 3.3.3.3"})
+    _assert("multi plan has 3 steps",len(tp.steps)==3)
+    if len(tp.steps)>=1 then
+      _assert("step type=multiTargetStep",tp.steps[0].type=="multiTargetStep")
+      _assert("step has target",hasIndex(tp.steps[0],"target"))
+    end if
+    if savedTemplates4!=null then globals.G_agent.sessionContext.templates=savedTemplates4
+  end if
+  //TEST 8: IP Extraction & Private IP Detection
+  if suite=="all" or suite=="iputils" then
+    print yellow("="*50)
+    print yellow("TEST: IP EXTRACTION & PRIVATE IP DETECTION")
+    print yellow("="*50)
+    //Basic IP extraction
+    ips=globals.G_agent._extractIps("scan 192.168.1.1")
+    _assert("single IP",len(ips)==1 and ips[0]=="192.168.1.1")
+    ips=globals.G_agent._extractIps("scan 10.0.0.1 and 10.0.0.2")
+    _assert("two IPs",len(ips)==2)
+    ips=globals.G_agent._extractIps("no ips here")
+    _assert("no IPs->empty",len(ips)==0)
+    //Trailing punctuation
+    ips=globals.G_agent._extractIps("target 1.2.3.4, then go")
+    _assert("strip comma",len(ips)==1 and ips[0]=="1.2.3.4")
+    //CIDR notation
+    ips=globals.G_agent._extractIps("scan 192.168.1.0/24")
+    _assert("CIDR detected",len(ips)>=1)
+    //Invalid octet
+    ips=globals.G_agent._extractIps("bad 999.999.999.999")
+    _assert("invalid octets rejected",len(ips)==0)
+    //Private IP detection
+    _assert("10.x is private",globals.G_agent._isPrivateIp("10.0.0.1")==true)
+    _assert("172.16.x is private",globals.G_agent._isPrivateIp("172.16.0.1")==true)
+    _assert("172.31.x is private",globals.G_agent._isPrivateIp("172.31.255.1")==true)
+    _assert("172.15.x is public",globals.G_agent._isPrivateIp("172.15.0.1")==false)
+    _assert("172.32.x is public",globals.G_agent._isPrivateIp("172.32.0.1")==false)
+    _assert("192.168.x is private",globals.G_agent._isPrivateIp("192.168.0.1")==true)
+    _assert("127.x is loopback",globals.G_agent._isPrivateIp("127.0.0.1")==true)
+    _assert("8.8.8.8 is public",globals.G_agent._isPrivateIp("8.8.8.8")==false)
+    _assert("null->false",globals.G_agent._isPrivateIp(null)==false)
+    _assert("empty->false",globals.G_agent._isPrivateIp("")==false)
+    _assert("not-ip->false",globals.G_agent._isPrivateIp("hello")==false)
+  end if
+  //TEST 9: Risk Assessment & Success Prediction
+  if suite=="all" or suite=="risk" then
+    print yellow("="*50)
+    print yellow("TEST: RISK ASSESSMENT & SUCCESS PREDICTION")
+    print yellow("="*50)
+    //Local ops should be low risk
+    r=globals.G_agent._assessRisk("navigation",{})
+    _assert("navigation=low",r.level=="low" and r.score==0)
+    r=globals.G_agent._assessRisk("fileOp",{})
+    _assert("fileOp=low",r.level=="low" and r.score==0)
+    //Dangerous ops should score high
+    r=globals.G_agent._assessRisk("wipe",{})
+    _assert("wipe>=50",r.score>=50)
+    _assert("wipe=critical",r.level=="critical")
+    r=globals.G_agent._assessRisk("ddos",{})
+    _assert("ddos>=50",r.score>=50)
+    //Public IP target adds risk
+    r=globals.G_agent._assessRisk("exploit",{"target":"8.8.8.8"})
+    publicScore=r.score
+    r2=globals.G_agent._assessRisk("exploit",{"target":"192.168.1.1"})
+    _assert("public IP>private IP",publicScore>r2.score)
+    //No fallback shell adds risk
+    r=globals.G_agent._assessRisk("exploit",{})
+    noShellScore=r.score
+    r2=globals.G_agent._assessRisk("exploit",{"shell":true})
+    _assert("no shell>with shell",noShellScore>r2.score)
+    //Success prediction capping
+    savedHistory=globals.G_agent.history
+    globals.G_agent.history=[]
+    p=globals.G_agent._predictSuccess("scan",{})
+    _assert("confidence>=0.1",p.confidence>=0.1)
+    _assert("confidence<=0.95",p.confidence<=0.95)
+    //Complex ops without scanData reduces confidence
+    p=globals.G_agent._predictSuccess("escalate",{})
+    pWithData=globals.G_agent._predictSuccess("escalate",{"scanData":true})
+    _assert("no scan data penalty",p.confidence<=pWithData.confidence)
+    globals.G_agent.history=savedHistory
+  end if
+  //TEST 10: Pattern Reinforcement & Preference Tracking
+  if suite=="all" or suite=="learning" then
+    print yellow("="*50)
+    print yellow("TEST: PATTERN REINFORCEMENT & PREFERENCE TRACKING")
+    print yellow("="*50)
+    //Save state
+    savedPatterns=globals.G_agent.patternScores
+    savedPrefs=globals.G_agent.userPreferences
+    globals.G_agent.patternScores={}
+    globals.G_agent.userPreferences={}
+    //Reinforce scan pattern
+    ok=globals.G_agent._reinforcePattern("scan 1.2.3.4",true,{})
+    _assert("reinforce scan ok",ok==true)
+    _assert("scan tracked",hasIndex(globals.G_agent.patternScores,"scan"))
+    _assert("scan success=1",globals.G_agent.patternScores["scan"].success==1)
+    //Reinforce failure
+    globals.G_agent._reinforcePattern("scan 5.6.7.8",false,{})
+    _assert("scan failure=1",globals.G_agent.patternScores["scan"].failure==1)
+    _assert("scan total=2",globals.G_agent.patternScores["scan"].total==2)
+    //Reinforce exploit via attack keyword
+    globals.G_agent._reinforcePattern("attack the server",true,{})
+    _assert("attack->exploit",hasIndex(globals.G_agent.patternScores,"exploit"))
+    //Null command rejected
+    ok=globals.G_agent._reinforcePattern(null,true,{})
+    _assert("null cmd->false",ok==false)
+    //Unrecognized command rejected
+    ok=globals.G_agent._reinforcePattern("hello world",true,{})
+    _assert("unknown cmd->false",ok==false)
+    //Track user preferences
+    globals.G_agent.userPreferences={}
+    ok=globals.G_agent._trackUserPreferences("scan -v -p 22",{})
+    _assert("track prefs ok",ok==true)
+    _assert("cmd counted",globals.G_agent.userPreferences.commands["scan"]==1)
+    _assert("flags tracked",hasIndex(globals.G_agent.userPreferences.flags,"scan"))
+    _assert("-v flag tracked",globals.G_agent.userPreferences.flags["scan"]["-v"]==1)
+    //Track same command again increments
+    globals.G_agent._trackUserPreferences("scan -v",{})
+    _assert("cmd count=2",globals.G_agent.userPreferences.commands["scan"]==2)
+    _assert("-v count=2",globals.G_agent.userPreferences.flags["scan"]["-v"]==2)
+    //Null rejected
+    ok=globals.G_agent._trackUserPreferences(null,{})
+    _assert("null prefs->false",ok==false)
+    //Restore
+    globals.G_agent.patternScores=savedPatterns
+    globals.G_agent.userPreferences=savedPrefs
+  end if
+  //TEST 11: Sequence Signature Generation
+  if suite=="all" or suite=="signature" then
+    print yellow("="*50)
+    print yellow("TEST: SEQUENCE SIGNATURE GENERATION")
+    print yellow("="*50)
+    sig=globals.G_agent._getSequenceSignature(["scan 1.2.3.4","exploit ssh","crack root"])
+    _assert("scan->exploit->crack",sig=="scan->exploit->crack")
+    sig=globals.G_agent._getSequenceSignature(["attack the server","grab credentials"])
+    _assert("attack->extract",sig=="exploit->extract")
+    sig=globals.G_agent._getSequenceSignature(["find open ports","hack the system","steal data"])
+    _assert("find->hack->steal",sig=="scan->exploit->extract")
+    sig=globals.G_agent._getSequenceSignature(["connect via ssh","escalate to root","install backdoor","clean logs"])
+    _assert("shell->escalate->backdoor->cleanup",sig=="shell->escalate->backdoor->cleanup")
+    //Unknown command
+    sig=globals.G_agent._getSequenceSignature(["do something weird"])
+    _assert("unknown->unknown",sig=="unknown")
+    //Empty sequence
+    sig=globals.G_agent._getSequenceSignature([])
+    _assert("empty->\",sig=="")
+  end if
+  //Summary
+  print ""
+  print yellow("="*50)
+  print yellow("TEST SUMMARY")
+  print yellow("="*50)
+  print "Total: "+total+"  Passed: "+green(passed)+"  Failed: "+red(failed)
+  if failed==0 then print green("ALL TESTS PASSED!") else print red(failed+" TESTS FAILED")
+  result.success=(failed==0)
+  result.passed=passed
+  result.failed=failed
+  result.total=total
+  result.message="Tests: "+passed+"/"+total+" passed"
+  return result
+end function

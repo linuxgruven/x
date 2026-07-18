@@ -1,0 +1,20 @@
+// TEST 3: Nested FOR loops with pivot
+// Expected: Inner loop should complete all iterations for each outer iteration
+// Pivot should work correctly at the innermost level
+
+_printnow <color=#ff0>== NESTED FOR LOOP PIVOT TEST ==</color>
+
+_setvar(outers, [A, B])
+_setvar(inners, [1, 2])
+
+for outer in _getvar(outers)
+  _printnow <color=#00bfff>[OUTER]</color> = _getvar(outer)
+  for inner in _getvar(inners)
+    _printnow <color=#0f0>  [INNER]</color> = _getvar(outer)-_getvar(inner)
+    proxy -q
+    _printnow <color=#0f0>  [AFTER PIVOT]</color> = _getvar(outer)-_getvar(inner)
+  endfor
+  _printnow <color=#00bfff>[OUTER DONE]</color> = _getvar(outer)
+endfor
+
+_printnow <color=#ff0>== NESTED COMPLETE ==</color>

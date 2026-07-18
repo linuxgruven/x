@@ -1,0 +1,96 @@
+// Man page for shadow
+manShadow="SHADOW(1)                        X Shell Manual                        SHADOW(1)
+
+<b>NAME</b>
+    shadow - Root password cache system
+<b>SYNOPSIS</b>
+    <b>shadow</b> <b>-a</b> [IP] ([PASSWORD])
+    <b>shadow</b> <b>-l</b>
+    <b>shadow</b> <b>-r</b> [FILE]
+    <b>shadow</b> <b>-w</b> [<b>-d</b>]
+    <b>shadow</b> <b>-x</b> [<b>-q</b>]
+<b>DESCRIPTION</b>
+    The <b>shadow</b> cache system is used to cache ip|root password combinations.
+    This is used to speed up the process of logging into a r00ted system
+    or using start -t or su variants. You will know that you have a <b>shadow</b>
+    password for the system you are logged into when you see the [<color=#20ff98>R</color>]
+    status indicator. The <b>shadow</b> system is populated when using commands
+    such as 'dict -l' and 'dict lp' or you can add custom entries using
+    the <b>shadow</b> -a command. Every now and then it might be a good idea to clear
+    the cache. When creating a <b>shadow</b> file to be read in with <b>shadow</b> -r, use
+    the following format:
+    ip:password
+    ip:password
+    ip:password
+    ...
+    If you are restoring from a backup file, its ok to have both
+    encrypted and decrypted line items.
+    ip:password
+    ¶¶¹×ªw\O¥
+    ip:password
+<color=#e4ff34>*** -w flag NOT compatible with file objects ***</color>
+<b>OPTIONS</b>
+    <b>-a</b> [IP] ([PASSWORD])
+    Add new IP and password to cache
+    Prompts for credentials if not provided
+
+    <b>-l</b>
+    List all cached shadow passwords
+    Shows IP addresses with stored credentials
+
+    <b>-r</b> [FILE]
+    Read shadow file into cache
+    Prompts for file path if not specified
+    Supports both encrypted and plaintext formats
+
+    <b>-w</b> [<b>-d</b>]
+    Write cache to shadow file in current directory
+    Use <b>-d</b> flag to write decrypted plaintext format
+    Default writes encrypted format
+
+    <b>-x</b> [<b>-q</b>]
+    Clear all shadow passwords from cache
+    Use <b>-q</b> for quiet mode without feedback
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Adding Credentials</color>
+    <b>shadow -a</b>
+    Add new credentials with prompts
+
+    <b>shadow -a target.host r00tpass123</b>
+    Add specific IP and password
+
+    <color=#e4ff34># Viewing Credentials</color>
+    <b>shadow -l</b>
+    List all cached passwords
+
+    <color=#e4ff34># Import and Export</color>
+    <b>shadow -r</b>
+    Import with file prompt
+
+    <b>shadow -r /home/user/backup.shadow</b>
+    Import specific shadow file
+
+    <b>shadow -w</b>
+    Export encrypted to ./shadow
+
+    <b>shadow -w -d</b>
+    Export decrypted plaintext
+
+    <color=#e4ff34># Cache Management</color>
+    <b>shadow -x</b>
+    Clear cache with confirmation
+
+    <b>shadow -x -q</b>
+    Silent cache clear
+
+    <color=#e4ff34># Workflow Example</color>
+    <b>dict -l</b>
+    Dictionary attack populates shadow
+
+    <b>shadow -l</b>
+    Verify captured credentials
+
+    <b>shadow -w</b>
+    Backup for later use
+<b>SEE ALSO</b>
+    <b>dict</b>, <b>brute</b>, <b>rainbow</b>"

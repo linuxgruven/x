@@ -1,0 +1,50 @@
+aptclient=include_lib("/lib/aptclient.so")
+if not aptclient then aptclient=include_lib(current_path+"/aptclient.so")
+if not aptclient then exit("<color=#ff4b4b>[!] Missing aptclient.so</color>")
+if params then interval=to_int(params[0]) else interval=300
+if not interval or interval<0.01 then interval=0.01
+if interval>300 then interval=300
+u=active_user
+if u=="root" then dest="/root" else dest="/home/"+u
+computer=host_computer(get_shell)
+libs=["metaxploit.so","crypto.so"]
+print "<color=#4bff4b>[+] Auto-updater started (every "+str(interval)+"s)</color>"
+for lib in libs
+  f=File(computer,dest+"/"+lib)
+  if not f then f=File(computer,"/lib/"+lib)
+  if f then
+    print "<color=#4bff4b>[+] Found "+lib+" => "+path(f)+"</color>"
+  else
+    print "<color=#ffff4b>[~] "+lib+" not found, downloading to "+dest+"...</color>"
+    o=install(aptclient,lib,dest)
+    if o==true then print "<color=#4bff4b>[+] "+lib+" installed => "+dest+"</color>" else print "<color=#ff4b4b>[!] "+lib+": "+o+"</color>"
+  end if
+end for
+while true
+  updated=0
+  for lib in libs
+    f=File(computer,dest+"/"+lib)
+    if not f then f=File(computer,"/lib/"+lib)
+    if not f then
+      print "<color=#ff4b4b>[!] "+lib+" not found</color>"
+      continue
+    end if
+    p=path(f)
+    d=parent_path(p)
+    r=check_upgrade(aptclient,p)
+    if r==true then
+      print "<color=#ffff4b>[~] Updating "+lib+" ("+p+")...</color>"
+      o=install(aptclient,lib,d)
+      if o==true then
+        print "<color=#4bff4b>[+] "+lib+" updated</color>"
+        updated=updated+1
+      else
+        print "<color=#ff4b4b>[!] "+lib+": "+o+"</color>"
+      end if
+    else if typeof(r)=="string" then
+      print "<color=#ff4b4b>[!] "+lib+": "+r+"</color>"
+    end if
+  end for
+  if updated>0 then print "<color=#4bff4b>[+] "+str(updated)+" lib(s) updated => "+current_date+"</color>"
+  wait interval
+end while

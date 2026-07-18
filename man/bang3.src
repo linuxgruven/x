@@ -1,0 +1,40 @@
+// Man page for bang3
+manBang3="!!!(1)                         X Shell Manual                         !!!(1)
+
+<b>NAME</b>
+    !!! - Print last issued command
+<b>SYNOPSIS</b>
+    <b>!!!</b>
+<b>DESCRIPTION</b>
+    Display the last command that was issued without executing it.
+    Useful for verifying what command was last run or for copying
+    the command text.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View Last Command</color>
+    <b>scan -l</b>
+    Execute a command
+
+    <b>!!!</b>
+    Print scan -l without executing
+
+    <color=#e4ff34># Verification Workflow</color>
+    <b>exploit -l 192.168.1.50 ssh s</b>
+    Run complex command
+
+    <b>!!!</b>
+    Verify what was executed
+
+    <b>!</b>
+    Re-execute if correct
+
+    <color=#e4ff34># Command Comparison</color>
+    <b>!!!</b>
+    Show last command
+
+    <b>!!</b>
+    Show full command history
+
+    <b>!</b>
+    Execute last command
+<b>SEE ALSO</b>
+    <b>!</b>, <b>!!</b>"

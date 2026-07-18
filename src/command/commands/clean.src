@@ -1,0 +1,28 @@
+// =============================================================================
+// CLEAN
+// Clear file contents; accepts path or prompts with GUI file selector.
+// =============================================================================
+Command.clean=function(Obj,argv)
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE then
+    if not argv then argv=[]
+    for _line in globals.G_pipe.stdin.split(char(10));_line=trim(_line);if _line then push(argv,_line);end for
+    globals.G_pipe.stdin=null
+  end if
+  if not argv then
+    targetFile=Io.file(Obj,Obj.user.home,"Select a file to clean:")
+    if targetFile isa Error or targetFile isa Warning then return targetFile
+    result=set_content(targetFile,"")
+    if result isa string then return Error.set(result)
+    Info.info("Complete")
+    return
+  end if
+  for arg in argv
+    targetFile=Io._getFile(Obj,arg)
+    if targetFile isa Error then
+      Error.set(targetFile.message)
+      continue
+    end if
+    result=set_content(targetFile,"")
+    if result isa string then Error.set(result) else Info.info("Cleared: "+name(targetFile))
+  end for
+end function

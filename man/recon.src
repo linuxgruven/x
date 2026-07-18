@@ -1,0 +1,143 @@
+// Man page for recon
+manRecon="RECON(1)                         X Shell Manual                         RECON(1)
+
+<b>NAME</b>
+    recon - Remote reconnaissance and data gathering
+<b>SYNOPSIS</b>
+    <b>recon</b> [--extreme] IP
+    <b>recon</b> [--extreme] <b>-a</b> IP
+    <b>recon</b> [--extreme] <b>-s</b> [<b>-f</b> FILE|NAME] [<b>-p</b> PATH] IP
+    <b>recon</b> [--extreme] <b>-r</b> IP
+    <b>recon</b> [--extreme] <b>--filter</b> [<b>-u</b>] [<b>--save</b>] [<b>-i</b> LAN_IP] IP
+    <b>recon</b> [--subjects] IP
+    <b>recon</b> <b>-g</b> [<b>--grep</b> PATTERN] [<b>--filter</b>] IP
+    <b>recon</b> <b>--file</b> PATH
+<b>DESCRIPTION</b>
+    Network intelligence gathering tool for collecting public information and
+    social engineering data. Retrieves email addresses, user information, and
+    network details from target systems. The --extreme flag enables maximum
+    network address enumeration during LAN bounce discovery. Router LAN bounce
+    is used when available, otherwise recon falls back to direct exploits.
+
+    By default recon builds a user dataset including passwords, email accounts,
+    bank data, and any binary files found in the user's home folder when
+    readable. Use <b>-r</b> to collect email-focused data only.
+    Use <b>--filter</b> for interactive dataset filtering. Filter prompts stop on
+    empty input or cancel. Use <b>--save</b> to write results to reconData.txt.
+
+    When binary files are present in a user's home directory they are listed
+    under <b>FILES FOUND</b> in the user dataset output.
+<b>OPTIONS</b>
+    <b>recon IP</b>
+    Basic reconnaissance on target
+    Gather company info and user dataset
+
+    <b>recon -a IP</b>
+    Extended recon with admin email attack
+    Attempts to crack the admin email account too
+
+    <b>recon -s IP</b>
+    Search for specific files on network
+    Use -f for filename and -p for search root path
+    Defaults: -f decipher, -p /etc
+
+    <b>recon -r IP</b>
+    Reverse/email-focused reconnaissance
+    Collect email dataset instead of full user dataset
+
+    <b>recon --file PATH</b>
+    Process IP list from file
+    Batch reconnaissance, one IP per line
+
+    <b>recon --filter IP</b>
+    Interactively filter printed dataset
+    Use with -u for user dataset filtering
+
+    <b>-u</b>
+    Show/filter user dataset instead of email dataset
+
+    <b>--save</b>
+    Save full recon results to reconData.txt in current directory
+
+    <b>-i</b> LAN_IP
+    Restrict LAN bounce targeting to a specific LAN IP
+
+    <b>--extreme</b>
+    Expand LAN bounce address enumeration from 0-50 to 0-255
+
+    <b>--subjects</b>
+    Fetch and display email subject lines for each account found
+
+    <b>--view</b>
+    Display the contents of text files found in user home directories
+
+    <b>-g</b>
+    Grab mode: scan full filesystem of every reachable LAN computer,
+    read all text files, and display contents attributed to each user.
+    System-owned files are shown separately under SYSTEM FILE blocks.
+
+    <b>--grep</b> PATTERN
+    Filter grab output to only show entries matching PATTERN (text in
+    filename, path, or file content). Used with <b>-g</b>.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Recon</color>
+    <b>recon 203.0.113.50</b>
+    Gather company info and user data
+
+    <b>recon 198.51.100.10</b>
+    Standard reconnaissance
+
+    <color=#e4ff34># Extended Recon</color>
+    <b>recon -a 203.0.113.75</b>
+    Attack admin email too
+
+    <b>recon --extreme 198.51.100.25</b>
+    Maximum network addressing
+
+    <color=#e4ff34># File Search</color>
+    <b>recon -s -f passwords.txt 203.0.113.100</b>
+    Search for specific file
+
+    <b>recon -s -p /home 198.51.100.50</b>
+    Search in specific path
+
+    <color=#e4ff34># Email Dataset</color>
+    <b>recon -r 203.0.113.241</b>
+    Collect email-focused recon data
+
+    <color=#e4ff34># Filtering</color>
+    <b>recon -u --filter 203.0.113.241</b>
+    Filter user dataset interactively
+
+    <b>recon --filter 203.0.113.241</b>
+    Filter email dataset interactively
+
+    <b>recon --filter -i 192.168.0.7 203.0.113.241</b>
+    Filter data while targeting one LAN IP
+
+    <color=#e4ff34># Saving Results</color>
+    <b>recon --save 203.0.113.241</b>
+    Save recon results to reconData.txt
+
+    <color=#e4ff34># Email Subjects</color>
+    <b>recon --subjects 203.0.113.50</b>
+    Include email subjects in output
+
+    <b>recon --view 203.0.113.50</b>
+    Show contents of found text files inline
+
+    <color=#e4ff34># Grab Mode</color>
+    <b>recon -g 203.0.113.50</b>
+    Full filesystem grab — reads all text files per user
+
+    <b>recon -g --grep password 203.0.113.50</b>
+    Grab and filter to entries containing 'password'
+
+    <b>recon -g --filter 203.0.113.50</b>
+    Grab with interactive filter prompt
+
+    <color=#e4ff34># Batch Operations</color>
+    <b>recon --file targets.txt</b>
+    Recon from IP list
+<b>SEE ALSO</b>
+    <b>dig</b>, <b>scan</b>, <b>nslookup</b>"

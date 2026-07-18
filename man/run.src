@@ -1,0 +1,532 @@
+// Man page for run
+manRun="RUN(1)                           X Shell Manual                           RUN(1)
+
+<b>NAME</b>
+    run - Advanced bash script interpreter with full programming features
+<b>SYNOPSIS</b>
+    <b>@script</b>
+    <b>run </b><b>script|path</b>
+    <b>run </b><b>-e </b><b>[NAME]</b>
+    <b>run </b><b>--list</b>
+    <b>run </b><b>-n </b><b>[NAME]</b>
+    <b>run </b><b>-o</b>
+    <b>run </b><b>--DEBUG </b><b>script</b>
+    <b>run </b><b>--ALLOWABS </b><b>script</b>
+<b>DESCRIPTION</b>
+    The bash interpreter is a full-featured scripting engine with structured control
+    flow, user-defined functions, loops, conditionals, array operations, and typed input
+    prompts. Scripts are stored in /payload/data/bash and can be invoked with 'run'
+    or '@script_name'. Scripts execute commands across objects and support automation.
+
+    <b>CONTROL FLOW STRUCTURES:</b>
+    <b>if/elif/else/endif</b> - Conditional branching with comparison operators
+      Operators: ==, !=, <, >, <=, >=, and, or, not, ! (bang NOT prefix)
+      Example: if _getvar(age) >= 18 and _getvar(age) < 65
+    <b>switch/case/default/endswitch</b> - Pattern matching with multiple cases
+      Example: switch _getvar(day) | case Monday | _print Workday | endswitch
+    <b>while/endwhile</b> - Condition-based loops
+      Example: while _getvar(count) < 10
+    <b>until/enduntil</b> - Loop until condition becomes true
+      Example: until _getvar(ready) == 1
+    <b>for/endfor</b> - Iteration over lists, ranges, or variables
+      Example: for i in [1,2,3] or for i in range(1,10)
+      Example: for i in myListVar or for i in _getvar(myList)
+    <b>break</b> - Exit current loop immediately
+    <b>continue</b> - Skip to next loop iteration
+    <b>try/catch/end try</b> - Error handling with optional error capture
+      Wraps commands in a try block; if any command errors, execution jumps to catch.
+      Use 'catch varName' to capture the error message into a variable.
+      Catches both Error errors and explicit _throw calls.
+      Example: try | scan --c $1 router s | catch err | _print Failed: _getvar(err) | end try
+    <b>_throw message</b> - Raise an error inside a try block
+      Stops execution and jumps to catch with the given message.
+      Example: _throw Connection failed
+
+    <b>FUNCTIONS:</b>
+    <b>func name(param1,param2) / endfunc</b> - Define functions with parameters and recursion
+      Recursion depth: 10 levels with true local variable scope
+      Example: func multiply(x,y) | _return _getvar(x)*_getvar(y) | endfunc
+    <b>_return expression</b> - Return value from function with arithmetic support
+      Example: _return _getvar(a)+_getvar(b)
+    <b>return</b> - Exit script/function immediately (optionally print message)
+      Example: return green(Script complete!)
+      Note: return only prints messages, it does not execute commands.
+      To return home from a script, use _home instead.
+
+    <b>BUILT-IN VARIABLES:</b>
+    <b>COMPUTER</b> - Current session computer object (auto-set, updates on pivot)
+      Properties: .local_ip, .public_ip, .active_net_card, .get_name, .get_ports,
+        .is_network_active, .network_devices, .network_gateway, .show_procs
+      Use with _setvar: _setvar(ip, COMPUTER.public_ip)
+      Use with _print:  _setvar(ip, COMPUTER.public_ip) then _print IP: _getvar(ip)
+    <b>SHELL</b> - Current session shell object (auto-set, updates on pivot)
+      Properties: .host_computer (returns computer object)
+      Use: _setvar(comp, SHELL.host_computer)
+      Chain: _setvar(ip, SHELL.host_computer.local_ip)
+    <b>ROOT</b> - Root filesystem file object (auto-set, updates on pivot)
+      Properties: .path, .name, .permissions, .owner, .group, .size, .is_folder,
+        .is_binary, .is_symlink, .parent, .allow_import, .get_content,
+        .get_files, .get_folders, .delete
+      Use: _setvar(folders, ROOT.get_folders)
+
+    <b>VARIABLES & ARITHMETIC:</b>
+    <b>_setvar(name,value)</b> - Set variable (strings, numbers, lists)
+    <b>_getvar(name)</b> - Retrieve variable value (auto-substituted)
+      Arithmetic operators: +, -, *, /, %, ** (power)
+      String concatenation: _setvar(msg,_getvar(greeting) + _getvar(name))
+      Example: _setvar(sum,_getvar(x)+_getvar(y)*2)
+      List literals: _setvar(items,[apple,banana,cherry])
+
+    <b>ARRAY OPERATIONS:</b>
+    <b>_push list value</b> - Add item to end of list
+    <b>_pop list</b> - Remove item from end of list
+    <b>_pull list</b> - Remove item from start of list
+    <b>_len name</b> - Get length of array or string
+    <b>_in list value</b> - Check if value exists in array
+      Also usable as a function expression: _in(list,value) returns 1 or 0
+      Example: if _in(_getvar(fruits),apple)==1
+
+    <b>BUILT-IN FUNCTIONS:</b>
+    String: len(val), upper(val), lower(val), substr(str,start[,end]), concat(...), contains(str,search), replace(str,search,replacement)
+      starts_with(str,prefix) - returns 1 if str starts with prefix, 0 otherwise
+      ends_with(str,suffix) - returns 1 if str ends with suffix, 0 otherwise
+      str_count(str,sub) - count non-overlapping occurrences of sub in str
+    Math: floor(val), ceil(val), abs(val), round(val), min(a,b), max(a,b), random(min,max), timestamp(), date()
+      clamp(val,min,max) - constrain val to [min,max] range
+      pow(base,exp) - raise base to the power of exp (integer exponents; negative exponents supported)
+    Array: join(list,delim), split_str(string,delim), trim_str(string)
+    File: _fs_read(path), file_read(path)
+      file_read() is an alias for _fs_read()
+      _fs_glob(pattern) - expand wildcard pattern, returns list of matching paths
+      Example: _setvar(files,_fs_glob(/home/*.txt))
+      _File(path) - returns a file object (or null if not found), uses Io._getFile for full path resolution
+      Use .is_folder to check if directory, .is_binary to check if binary, .permissions for perms
+      Use .get_content to read content, .name for filename, .size for size, etc.
+      Always store get_content in an intermediate var before calling len():
+      Example: _setvar(f,_File(/etc/passwd))
+               if _getvar(f)    // null check before accessing properties
+               _setvar(content,_getvar(f).get_content)
+               _setvar(chars,len(content))
+               endif
+      _Files(path) - returns list of file objects in a directory (files + folders), or null
+      Use .name to get entry name, .is_folder to check type.
+      Example: _setvar(entries,_Files(/lib)) | for e in _getvar(entries) | _print _getvar(e).name | endfor
+      _read(path) - shorthand: read file content in one step, returns empty string if not found
+      Example: _setvar(content,_read(/etc/passwd))
+      _write(path, content) - write content to file (creates if missing), returns 1 on success
+      Example: _write(/home/myfile.txt, hello world) | _setvar(ok,_write(_getvar(p),_getvar(data)))
+      file_ext(name) - extract file extension including dot, empty string if none
+      Example: _setvar(ext,file_ext(readme.txt))   // ext = "".txt""
+      get_cwd() - returns current working directory path as string
+      Example: _setvar(dir,get_cwd()) | _print Working in: _getvar(dir)
+    Network: _isValidIP(val) - returns 1 if val is a valid IP address
+      _isLanIP(val) - returns 1 if val is a LAN/private IP address
+      Example: if _isValidIP(_getvar(ip)) == 1 | if _isLanIP(_getvar(ip)) == 0
+    Permissions: _fs_canwrite(path), _fs_canexec(path)
+      Optional second arg 'file' returns file object instead of 1/0
+      Use _File(path).permissions to get permission string directly
+    Context: get_user(), get_home(), get_shell_type(), get_root()
+      get_computer_lan_ip(), get_computer_public_ip()
+      Aliases: get_lanIP(), get_publicIP()
+      Optional 'object' or 'file' arg returns the object instead of a string value.
+      User object has: .name (username), .user (type), .raw (root/user/guest/hobo), .home (file object)
+      File object has: .path, .name, .permissions
+      Computer object has: .local_ip, .public_ip
+      Shell object has: .host_computer
+    Type casting: to_string(val), to_int(val), to_float(val), typeof(val)
+      Example: _setvar(n,to_int(_getvar(str))) | _setvar(s,to_string(42))
+    Type inspection: typeof_val(val) returns typeof(), get_type(val) returns .type property or typeof()
+      get_type() intelligently returns .type property (shell/computer/file) for objects with .type,
+      otherwise returns typeof() result.
+      Example: if get_type(_getvar(s)) != shell | _home | endif
+      Example: _setvar(objType,get_type(_getvar(s))) | _print Type: _getvar(objType)
+    Layer: get_layer() returns current context layer (main/proxy/pivot/decoy/shell/computer/file)
+      Returns current execution context layer type for session tracking and management.
+      Example: if get_layer() == shell or get_layer() == computer
+    Boolean: to_yesno(val), to_truefalse(val)
+    Time: timestamp() returns Unix time, date() returns formatted DD/MMM/YYYY - HH:MM
+    Map: map([key,val,...]), map_set(map,key,val), map_get(map,key), map_del(map,key), map_has(map,key), map_keys(map), map_values(map), map_len(map)
+    JSON: json(value), json_parse(string)
+    File: map_save(map,path), map_load(path)
+      Example: _setvar(now,timestamp()) | _print date()
+      Example: _setvar(userObj,get_user(object)) | _print _getvar(userObj).name
+      Example: _print Welcome get_user()! Writable: to_yesno(_fs_canwrite(/etc/passwd))
+
+    <b>TYPED INPUT PROMPTS:</b>
+    <b>get_string</b> - Prompt for string input
+    <b>get_integer</b> - Prompt for integer (auto-converts)
+    <b>get_decimal</b> - Prompt for decimal (auto-converts)
+    <b>get_any</b> - Prompt for any value (unlimited use)
+    <b>get_yesno</b> - Prompt for yes/no input (returns 1 or 0)
+      Accepts 'yes', 'y', 'no', 'n' (case-insensitive). Empty input defaults to 0 (no).
+      All prompts accept optional custom message:
+      Example: _setvar(name,get_string)
+      Example: _setvar(name,get_string(Enter your name:))
+      Example: _setvar(confirm,get_yesno(Continue?))
+      Example: if _getvar(confirm)==1
+
+    <b>menu(items_list, style, color, case_mode)</b> - Interactive menu selector
+      Displays selectable menu items and returns a 0-based index of the selected item.
+      style: numbers or letters
+      color: optional, defaults to cyan
+        Named: cyan, green, red, yellow, magenta, orange, blue, lime, white
+        Hex: #00bfff or 00bfff
+      case_mode: optional for letters mode, defaults to insensitive
+        insensitive: accepts lowercase or uppercase letter input
+        strict: requires uppercase label input (A-Z)
+      Example: _setvar(choice,menu(_getvar(items),numbers,green))
+      Example: _setvar(choice,menu(_getvar(items),letters,cyan,insensitive))
+      Example: _setvar(choice,menu(_getvar(items),letters,cyan,strict))
+
+    <b>OTHER COMMANDS:</b>
+    <b>_print</b> - Print output with variable substitution and color support (queued)
+      Output is queued for execution after other commands in the current batch.
+      Color functions: orange(), cyan(), magenta(), lime(), bred(), green(), password(),
+      blue(), liteblue(), yellow(), white(), purple(), iyellow(), liteGrey(), error(),
+      red(), grey(), black(), bold()
+      Example: _print blue(Success!) or _print <color=#ff0000>Error</color>
+    <b>_printnow</b> - Same as _print but prints immediately (not queued)
+      Use when output order matters relative to prompts or sub-commands.
+      Example: _printnow green(Starting...) // prints before any get_string prompts
+    <b>_fs_read</b> - Read file content from file system (accepts path or file object)
+      Accesses the current filesystem root. Can pass file paths or file objects.
+      Example: _setvar(data,_fs_read /etc/passwd)
+    <b>_fs_view</b> - Display file content directly (accepts path or file object)
+      Accesses the current filesystem root. Prints content without storing in variable.
+      Example: _fs_view /etc/passwd or _fs_view config.txt
+    <b>_fs_write</b> - Write content to file (accepts path or file object, creates if needed)
+      Accesses the current filesystem root. Can pass file paths or file objects.
+      Example: _fs_write /var/output.txt Hello World
+    <b>_fs_find</b> - Search for files by name or content (-c content, -e exact)
+      Searches directory tree. Default: substring match. Use -e for exact, -c for content.
+      Example: _fs_find /home test or _fs_find /etc passwd -e or _fs_find /var/log error -c
+    <b>_fs_put</b> - Upload file to remote system (shell connections only)
+      Uses scp to transfer from local to remote. Requires an active shell connection.
+      Example: _fs_put /home/user/file.txt /var/file.txt
+    <b>_fs_get</b> - Download file from remote system (shell connections only)
+      Uses scp to transfer from remote to local. Requires an active shell connection.
+      Example: _fs_get /etc/passwd /var/passwd
+    <b>_home</b> - Safe bash-script-friendly alternative to home command
+      Closes all tracked sessions and returns to caller safely. Prevents IPC deadlock.
+      Example: _home
+    <b>_sys_whoami</b> - Get current access level (root/user/guest/hobo)
+      Example: _print Current access: _sys_whoami
+      Example: if _sys_whoami == root | _print green(Root access) | endif
+    <b>_sys_whatami</b> - Get execution context type (shell, computer, file, etc)
+      Example: _print Context: _sys_whatami
+      Example: if _sys_whatami == shell | _print Connected to shell | endif
+    <b>_fs_pwd</b> - Print current working directory
+      Example: _print Working directory: _fs_pwd
+
+    <b>NETWORK RECONNAISSANCE:</b>
+    Network commands auto-detect context: when used in _setvar() they return data
+    (lists/maps), otherwise they print formatted output.
+    <b>_net_ports</b> - Scan router for open ports and services
+      Detects all ports (including port 0), shows service info and port forwarding.
+      Print mode: _net_ports 192.168.1.1
+      Data mode:  _setvar(ports, _net_ports 192.168.1.1)
+    <b>_net_router</b> - Get/display detailed router information
+      Shows public/LAN IPs, BSSID, ESSID, and kernel version.
+      Print mode: _net_router 192.168.1.1
+      Data mode:  _setvar(info, _net_router 192.168.1.1)
+    <b>_net_devices</b> - List all devices on router LAN
+      Discovers all devices connected to the router's network.
+      Print mode: _net_devices 192.168.1.1
+      Data mode:  _setvar(devices, _net_devices 192.168.1.1)
+    <b>_net_devports</b> - Show open ports for specific LAN device
+      Displays all open ports for a device on the LAN.
+      Print mode: _net_devports 192.168.1.1 192.168.1.5
+      Data mode:  _setvar(ports, _net_devports 192.168.1.1 192.168.1.5)
+    <b>_net_fwrules</b> - Display router firewall rules
+      Shows firewall configuration and security policies.
+      Print mode: _net_fwrules 192.168.1.1
+      Data mode:  _setvar(rules, _net_fwrules 192.168.1.1)
+    <b>_net_random</b> - Generate random public IP address
+      Returns random public IP (excludes private ranges). Use for runtime random IPs.
+      Example: _setvar(target,_net_random) | _net_ports _getvar(target)
+
+    <b>EXPLOIT COMMANDS:</b>
+    High-level exploit automation. All commands that return an object store it in $hold.
+    Use <b>_hold CMD</b> or <b>_setvar(name, _hold)</b> to dispatch commands to the result.
+    Optional flags (where supported): <b>--root</b>, <b>--user</b>, <b>--guest</b> prefer access level; <b>--port N</b> targets a specific port.
+    <b>_scan IP</b> - Scan target IP for exploitable ports; returns structured result map
+      Print mode: _scan 1.2.3.4
+      Data mode:  _setvar(result, _scan 1.2.3.4)
+      Returns raw data — use _print _getvar(result) to inspect what is available
+    <b>_shell IP [--root|--user|--guest] [--port N]</b> - Auto shell exploit on target IP
+      Finds and runs the best available shell exploit; stores ShellObject in $hold on success.
+      Example: _shell 1.2.3.4 --root | _hold ls /home | _hold home
+    <b>_computer IP [--root|--user|--guest] [--port N]</b> - Auto computer exploit on target IP
+      Finds and runs the best available computer exploit; stores ComputerObject in $hold.
+      Example: _computer 1.2.3.4 | _hold ls | _hold home
+    <b>_file IP [--root|--user|--guest] [--port N]</b> - Auto file exploit on target IP
+      Finds and runs the best available file exploit; stores FileObject in $hold.
+      Example: _file 1.2.3.4 --root | _hold ls | _hold home
+    <b>_firewall IP [--port N]</b> - Disable firewall on target IP
+      All firewall exploits do the same thing, so any available one is used.
+      Requires IP to be a router. Check with: _fs_find /lib kernel_router.so -e
+      Example: _firewall 1.2.3.4
+    <b>_rootpass IP NEWPASSWORD [--port N]</b> - Change root password on target IP
+      Finds and runs the best root-password exploit with the supplied new password.
+      Example: _rootpass 1.2.3.4 mynewpass
+    <b>_userpass IP NEWPASSWORD [--port N]</b> - Change user password on target IP
+      Finds and runs the best user-password exploit with the supplied new password.
+      Example: _userpass 1.2.3.4 mynewpass
+    <b>_bounce IP [LAN_IP] [--port N]</b> - LAN bounce; pivot to a device on the target router's LAN via WAN-side exploit
+      Auto-detects LAN IP if not supplied. Stores ComputerObject in $hold.
+      Requires IP to be a router. Check with: _fs_find /lib kernel_router.so -e
+      Example: _bounce 1.2.3.4 10.0.0.5 | _hold ls | _hold home
+    <b>_netbounce IP [LAN_IP] [--port N]</b> - Internal LAN bounce; pivot to a device via an internal-network exploit
+      Like _bounce but uses the internal LAN exploit type rather than the WAN-side bounce.
+      Requires IP to be a router. Check with: _fs_find /lib kernel_router.so -e
+      Example: _netbounce 1.2.3.4 192.168.1.5 | _hold ls | _hold home
+    <b>_local [TYPE] [PASSWORD|LAN_IP] [--lib NAME]</b> - Attack current machine's /lib folder using local exploit libraries
+      Requires an active shell.
+      TYPE: shell (default), computer, file, firewall, bounce, rootpass, userpass
+      bounce requires router context and accepts an optional LAN_IP target.
+      rootpass/userpass require a PASSWORD argument.
+      --lib NAME filters to a specific library (partial name match, case-insensitive).
+      Stores result object in $hold on success (shell/computer/file/bounce types).
+      Example: _local                          (shell exploit, scan all libs)
+      Example: _local computer                 (computer exploit)
+      Example: _local firewall                 (disable firewall)
+      Example: _local rootpass newpass123       (change root password)
+      Example: _local bounce 192.168.1.50      (LAN bounce from router)
+      Example: _local shell --lib libhttp       (shell via http library only)
+      Data mode: _setvar(sh, _local shell) | _print _getvar(sh).user.name
+    <b>_lan [IP]</b> - Scan LAN devices; no arg = own LAN, IP arg = target's LAN via shell exploit
+      Print mode: _lan  or  _lan 1.2.3.4
+      Data mode:  _setvar(devices, _lan 1.2.3.4)
+      Returns raw data — use _print _getvar(devices) to inspect what is available
+    <b>_wifi</b> - List visible WiFi networks
+      Print mode: _wifi
+      Data mode:  _setvar(nets, _wifi)
+      Returns raw data — use _print _getvar(nets) to inspect what is available
+    <b>_dig [ARGS]</b> - Run the dig command (alias for dig)
+      Must be run from a router. Accepts the same arguments as the standard dig command.
+      Example: _dig 1.2.3.4  or  _setvar(result, _dig 1.2.3.4 --cache)
+    <b>_holduser</b> - Get the username of the currently held object
+      Returns the username string from $hold, or empty string if no hold or no user info.
+      Example: _setvar(user, _holduser) | _print Logged in as: _getvar(user)
+
+    <b>SYSTEM COMMANDS:</b>
+    <b>_fs_mkdir path</b> - Create directory
+      Example: _fs_mkdir /home/user/newdir
+    <b>_fs_cd path</b> - Change working directory
+      Example: _fs_cd /var/log
+    <b>_sleep seconds</b> - Wait N seconds before continuing
+      Example: _sleep 3
+    <b>_exit [code]</b> - Stop the current script and return to the shell prompt (does NOT close x)
+      Optionally prints an error if code != 0.
+      Use this instead of 'exit' — bare 'exit' closes x entirely.
+      Example: _exit
+      Example: _exit 1
+    <b>_net_ping IP</b> - Check if host is reachable
+      Example: if _net_ping(192.168.1.1) == 1
+    <b>_net_port IP PORT</b> - Check if specific port is open on host
+      Example: if _net_port(192.168.1.1,22) == 1
+    <b>_sys_procs</b> - Show running processes
+    <b>_sys_kill PID</b> - Terminate process by PID
+    <b>do</b> - Repeat command execution
+      Flags: -c N (repeat N times), --while (loop until q pressed), -n S (sleep S sec between)
+      Example: do -c 5 _print Hello
+      Example: do --while _print Looping
+      Example: do -c 10 -n 2 _net_ping 192.168.1.1
+    <b>pause</b> - Wait for user to press Enter
+    <b>// comment</b> - Single-line or inline comments (URL-aware)
+
+    <b>MAP & JSON BUILTINS:</b>
+    Maps are key-value stores (dictionaries). Keys are always strings.
+    Values can be strings, numbers, lists, or nested maps.
+    <b>map()</b> - Create empty map; or map(key,val,...) with initial pairs
+      Example: _setvar(m,map()) | _setvar(m,map(""ip"",""10.0.0.1"",""port"",22))
+    <b>map_set(map,key,value)</b> - Set key-value pair, returns modified map
+      Example: _setvar(m,map_set(_getvar(m),""host"",""server1""))
+    <b>map_get(map,key)</b> - Get value by key (null if missing)
+      Example: _setvar(v,map_get(_getvar(m),""host""))
+    <b>map_del(map,key)</b> - Remove key, returns modified map
+      Example: _setvar(m,map_del(_getvar(m),""old_key""))
+    <b>map_has(map,key)</b> - Returns 1 if key exists, 0 otherwise
+      Example: if map_has(_getvar(m),""user"")==1
+    <b>map_keys(map)</b> - Returns list of all keys
+    <b>map_values(map)</b> - Returns list of all values
+    <b>map_len(map)</b> - Returns number of entries
+    <b>json(value)</b> - Serialize map/list/value to compact JSON string
+      Example: _setvar(s,json(_getvar(m))) | _print _getvar(s)
+    <b>json_parse(string)</b> - Parse JSON string to map/list
+      Example: _setvar(m,json_parse(""{""name"":""alice""}""))
+    <b>map_save(map,path)</b> - Serialize map to JSON and write to file (1=success, 0=fail)
+      Example: _setvar(ok,map_save(_getvar(m),""/home/user/config.json""))
+    <b>map_load(path)</b> - Read JSON file and parse to map (null on failure)
+      Example: _setvar(m,map_load(""/home/user/config.json""))
+    Maps also support dot-access on variables:
+      _setvar(r,_getvar(m).ip) reads the ""ip"" key from map m
+
+    <b>COMMAND RESULT FLAGS:</b>
+    After any <b>scan --</b> flag completes, <b>$scan_ok</b> is set automatically.
+    Reset to false at the start of every scan -- call.
+    $scan_ok: true = success, false = failure.
+              Always check $scan_ok after every scan -- call before running commands
+              that depend on the result — errors are printed but do not stop the script.
+              On success, use <b>_hold</b> to dispatch commands to the captured session,
+              or <b>_setvar(name, _hold)</b> to name it for later use with <b>OBJ(name)</b>.
+
+    Flags that set $scan_ok:
+      <b>--c</b>  Remote custom exploit (returns computer/shell)
+      <b>--s</b>  Remote shell exploit  (returns shell)
+      <b>--b</b>  Bounce attack via LAN (returns computer)
+      <b>--l</b>  Local custom exploit  (returns computer/shell)
+      <b>--e</b>  Exploit-file scan     (returns exploit object)
+      <b>--n</b>  LAN custom exploit    (returns computer/shell)
+
+      Example:  scan --b -p $1 -l $2
+                if $scan_ok then
+                  _hold ls
+                  _hold cat /etc/passwd
+                  _hold home
+                else
+                  _print red(Bounce failed)
+                endif
+      Example:  scan --s $1 http s
+                if $scan_ok then
+                  _hold ls /home
+                  _hold home
+                endif
+      Example:  scan --c 1.2.3.4 http s
+                if not $scan_ok then
+                  return
+                endif
+      Example:  scan --l http s
+                if $scan_ok then
+                  _hold wipe -l
+                  _hold home
+                endif
+
+    <b>_hold CMD [ARGS...]</b> - Run a command on the held object
+      Dispatches CMD to the shell or computer returned by the last scan -- call.
+      Use <b>_hold home</b> or <b>_hold exit</b> to close the held session and clear $hold.
+      Error if $hold is null (scan_ok was false or not inside a script).
+
+    <b>_setvar(name, _hold)</b> - Store the held object into the named OBJ slot
+      Saves the current $hold object into $OBJ[name] for later use with OBJ(name).
+      The $hold flag continues to be set — this is a copy, not a move.
+      Useful when bouncing to multiple targets and needing to reference each by name.
+      Example:  scan --b -p 1.2.3.4 -l 192.168.1.5
+                if $scan_ok
+                  _setvar(target1, _hold)
+                endif
+                scan --b -p 5.6.7.8 -l 192.168.2.3
+                if $scan_ok
+                  _setvar(target2, _hold)
+                endif
+                OBJ(target1) list -sB
+                OBJ(target2) ls
+                OBJ(target1) home
+                OBJ(target2) home
+
+    <b>OBJ(name) CMD [ARGS...]</b> - Run a command on a named stored object
+      Dispatches CMD to the object previously stored via _setvar(name, _hold).
+      Use <b>OBJ(name) home</b> or <b>OBJ(name) exit</b> to close the session and clear the slot.
+      Error if name was never set or is null.
+      Example:  scan --b -p $1 -l $2
+                if $scan_ok
+                  _setvar(comp, _hold)
+                  _print green(We're in, executing commands)
+                  OBJ(comp) list -sB
+                  OBJ(comp) ls
+                  OBJ(comp) home
+                else
+                  _print red(Bounce failed)
+                endif
+
+    Note: $scan_ok persists across bash function calls — it is NOT reset by function scope save/restore.
+
+    <b>PIPES:</b>
+    Commands can be chained with | to pipe output between commands.
+      Example: _fs_find /home test | _print
+
+    <b>SCRIPT FORMATS:</b>
+    Inline (semicolon-separated): _setvar(x,10); _print _getvar(x)
+    Multiline: Traditional line-by-line execution
+
+    <b>PARAMETERS:</b>
+    Pass parameters using $1, $2, etc. Example: run script.src 192.168.1.1 router
+    <b>$STDIN</b> - Piped input from previous command. Available inside scripts when invoked via pipe.
+      Example: echo 192.168.1.1 | run script.src  (inside script: _print Target: $STDIN)
+      Combined with args: echo 10.0.0.1 | run script.src router  ($STDIN=10.0.0.1, $1=router)
+    <b>Note:</b> $1-$9 and $STDIN are substituted across the entire script before execution.
+      To use literal $N inside commands (e.g. awk field references), wrap in single quotes.
+      Single-quoted strings are skipped by parameter substitution.
+      Example: echo 10.20.30.40 | awk -F. '{print $2}'  // $2 is protected, awk gets it
+
+    <b>FLAGS:</b>
+    <b>--DEBUG</b>       - Show execution details and breakpoints
+    <b>--SIGBREAK</b>    - Break execution on warnings
+    <b>--SIGCONT</b>     - Continue execution after errors
+    <b>--ALLOWABS</b>    - Allow absolute paths (security override)
+    <b>--ONERROR cmd</b> - Execute command on error
+    <b>--STARTOVER</b>   - Automatically re-run script from start on any error (SIGSTOP)
+                      Loops indefinitely until script completes without error.
+                      Resets script variables ($VARS) on each retry.
+    <b>--reset</b>       - Clear all persisted bash FLAGS (hold, scan_ok, OBJ named holds)
+                      Use this to wipe session state between runs.
+
+    <color=#e4ff34>*** SIGSTOP errors terminate all script execution ***</color>
+    The bash interpreter is a powerful automation tool for complex hacking routines.
+<b>OPTIONS</b>
+    <b>@script</b>
+    Invoke bash script using @script_name shorthand.
+    <b>run </b><b>script|path</b>
+    Run script from bash folder or full path (requires --ALLOWABS for absolute paths).
+    <b>run </b><b>-e </b><b>[NAME]</b>
+    Edit existing bash script in vi editor.
+    <b>run </b><b>--list</b>
+    List all available bash scripts in bash folder.
+    <b>run </b><b>-n </b><b>[NAME]</b>
+    Create new bash script with name in vi editor.
+    <b>run </b><b>-o</b>
+    Open bash folder for viewing/editing all scripts.
+<b>EXAMPLE:</b>
+    <b>Basic script execution:</b>
+    run myscript.src
+    @myscript
+    <b>With parameters:</b>
+    run script.src 192.168.1.1 router
+    // Inside script: _print Target: $1 Device: $2
+    <b>With pipe input:</b>
+    echo 192.168.1.1 | run script.src
+    // Inside script: _print Target: $STDIN
+    cat targets.txt | run scanner.src --verbose
+    // Inside script: _print Scanning: $STDIN with flags: $1
+    <b>Conditional example:</b>
+    _setvar(age,25)
+    if _getvar(age) >= 18
+      _print Access granted
+    else
+      _print Access denied
+    endif
+    <b>Loop example:</b>
+    for ip in [192.168.1.1,192.168.1.2,192.168.1.3]
+      _print Scanning _getvar(ip)
+      scan --c _getvar(ip) router
+    endfor
+    <b>Function example:</b>
+    func calculate(a,b)
+      _setvar(result,_getvar(a)*_getvar(b))
+      _return _getvar(result)
+    endfunc
+    _setvar(answer,calculate(6,7))
+    _print 6 * 7 = _getvar(answer)
+    <b>Debug mode:</b>
+    run --DEBUG script.src
+    <b>Automation scan:</b>
+    scan --c $1 router s;root;cd /lib;libs -g 0;scan --l init 3 $2;home
+    run script.src 28.30.115.200 10.0.4.7
+    run --ONERROR home @bash_script 28.30.115.200 10.0.4.7
+    Will call the specified command if an error is encountered.
+    <b>Retry on error:</b>
+    run --STARTOVER myscript.src 192.168.1.1
+    Script will restart from top whenever a SIGSTOP error occurs.
+    <b>Clear session state:</b>
+    run --reset
+    Wipes all persisted FLAGS including named OBJ holds and scan_ok."

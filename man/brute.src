@@ -1,0 +1,124 @@
+// Man page for brute
+manBrute="BRUTE(1)                         X Shell Manual                         BRUTE(1)
+
+<b>NAME</b>
+    brute - Brute force password cracking
+<b>SYNOPSIS</b>
+    <b>brute -l</b> [-u USER] [-c] [-C] [-n] [-N]
+    <b>brute -i</b> [-c] [-C] [-n] [-N]
+    <b>brute -c</b> COIN USER [-c] [-C] [-n] [-N]
+    <b>brute -e</b> EMAIL [-c] [-C] [-n] [-N]
+    <b>brute -s</b> IP PORT [-c] [-C] [-n] [-N]
+    <b>brute -f</b> IP PORT [-c] [-C] [-n] [-N]
+<b>DESCRIPTION</b>
+    Brute force attack tool that exhaustively tries every possible combination
+    of characters until password is cracked. Supports local accounts, email,
+    cryptocurrency wallets, SSH, and FTP services. More thorough but slower
+    than dictionary attacks.
+
+    Progress is printed every 500 attempts showing the current password being
+    tested, e.g. <b>[~] abc</b>. Press <b>q</b> to abort (may not stop instantly — takes
+    effect at the next 500-cycle progress checkpoint).
+<b>OPTIONS</b>
+    <b>-l</b>
+    Local brute force attack
+    Optional -u flag for specific user
+
+    <b>-i</b>
+    Insert cracked root password
+    Saves to cache file
+
+    <b>-c COIN USER</b>
+    Cryptocurrency wallet attack
+    Crack coin account password
+
+    <b>-e EMAIL</b>
+    Email account attack
+    Brute force email password
+
+    <b>-s IP PORT</b>
+    SSH brute force
+    Target remote SSH service
+
+    <b>-f IP PORT</b>
+    FTP brute force
+    Target remote FTP service
+
+<b>MODIFIERS</b>
+    These flags can be appended to any attack mode to tune the character set:
+
+    <b>-c</b>
+    Capitals first character only
+    Restricts position 0 to A-Z and positions 1+ to a-z (lowercase only),
+    reducing the search space when the target password starts with an
+    uppercase letter followed by lowercase characters
+
+    <b>-C</b>
+    Mixed case first character
+    Position 0 cycles through a-z then A-Z (52 letters); positions 1+ are
+    a-z only. Use when the password may start with any letter case but
+    subsequent characters are lowercase.
+
+    <b>-n</b>
+    No numbers
+    Exclude digits 0-9 from the character set entirely
+
+    <b>-N</b>
+    Numbers only
+    Restrict the entire character set to digits 0-9 only (overrides all other flags)
+
+    Combining <b>-C -n</b> gives a-zA-Z first char, a-z subsequent chars.
+    Combining <b>-c -n</b> gives A-Z first char, a-z subsequent chars.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Local Attacks</color>
+    <b>brute -l</b>
+    Brute force all local users
+
+    <b>brute -l -u root</b>
+    Target root user specifically
+
+    <b>brute -l -c</b>
+    Attack with capitals-first passwords only
+
+    <b>brute -l -C</b>
+    Attack with mixed-case first char (a-z + A-Z at pos 0)
+
+    <b>brute -l -n</b>
+    Attack with letters-only passwords (no digits)
+
+    <b>brute -l -N</b>
+    Attack with digits-only passwords (0-9)
+
+    <b>brute -l -c -n</b>
+    Attack with uppercase-first, letters-only passwords
+
+    <b>brute -i</b>
+    Crack and cache root password
+
+    <b>brute -i -c -n</b>
+    Insert with reduced character set
+
+    <color=#e4ff34># Account Attacks</color>
+    <b>brute -c btc admin</b>
+    Crack Bitcoin wallet
+
+    <b>brute -c btc admin -c -n</b>
+    Crack wallet with uppercase-first, no-digit passwords
+
+    <b>brute -e user@mail.com</b>
+    Crack email account
+
+    <b>brute -e user@mail.com -n</b>
+    Crack email with letters-only passwords
+
+    <color=#e4ff34># Remote Attacks</color>
+    <b>brute -s 203.0.113.50 22</b>
+    SSH brute force
+
+    <b>brute -s 203.0.113.50 22 -c</b>
+    SSH brute force with capitals-first passwords
+
+    <b>brute -f 198.51.100.10 21 -n</b>
+    FTP brute force with letters-only passwords
+<b>SEE ALSO</b>
+    <b>dict</b>, <b>hc</b>, <b>decipher</b>"

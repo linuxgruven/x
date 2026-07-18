@@ -1,0 +1,214 @@
+// =============================================================================
+// DDOS
+// Denial of service tools: flood, spawn shells, stress test hardware.
+// =============================================================================
+Command.ddos=function(Obj,argv)
+	if not argv then return Man.help(["ddos"])
+	mode=lower(argv[0])
+	// Pack metaxploit from shell context or fall back to local copy
+	_packMeta=function
+		if Obj.type=="shell" then
+			m=Builder.packMetaxploit(Obj)
+			if m isa Error then
+				if not Gui.yesNo("Failed to pack metaxploit.so, do you want to continue?",false) then return null
+				return Library.metaxploit
+			end if
+			return m
+		end if
+		if not Library.haveMetaxploit then return null
+		return Library.metaxploit
+	end function
+	// Continuous reverse shell spawning mode - runs until poll_input!="q" is false
+	rshell=function(args)
+		metaxploit=_packMeta
+		if not metaxploit then return
+		// Enable watcher app if configured for monitoring spawned shells
+		counter=0
+		publicIp=Obj.computer.public_ip
+		// Infinite loop spawning reverse shells with incrementing names
+		Utility.pressQ
+		while poll_input!="q";rshell_client(metaxploit,publicIp,1222,"DDOS"+counter);Info.info("Spawned DOS"+counter);counter+=1;end while
+	end function
+	rshellNumber=function(args)
+		metaxploit=_packMeta
+		if not metaxploit then return
+		if not args then return Error.set("You must specify a number of files to spawn")
+		count=to_int(args[0])
+		if not count isa number then return Error.set("You must specify a number of files to spawn")
+		publicIp=Obj.computer.public_ip
+		i=1;while i<=count;rshell_client(metaxploit,publicIp,1222,"DDOS"+i);Info.info("Spawned DOS"+i);i+=1;end while
+	end function
+	fileNumber=function(args)
+		if not args then return Error.set("You must specify a number of files to spawn")
+		count=to_int(args[0])
+		if not count isa number then return Error.set("You must specify a number of files to spawn")
+		Info.info("Spawning files...")
+		if Obj.type=="file" then
+			sourceFile=FileHelper.useFile(Obj)
+			if sourceFile isa Error then return
+			currentPath=path(Obj.dir.current)
+			num=1;while num<=count;result=copy(sourceFile,currentPath,str(num));if result isa string then break;num+=1;end while
+			return Info.info("Spawned "+count+" files :)")
+		end if
+		computer=Obj.computer
+		currentPath=path(Obj.dir.current)
+		num=1;while num<=count;result=touch(computer,currentPath,str(num));if result isa string then break;num+=1;end while
+		Info.info("Spawned "+count+" files :)")
+	end function
+	// Fill filesystem to capacity - creates 3225 files (13 folders × 250 files)
+	files=function(args)
+		remaining=3225-len(Io.getAll(Obj.root))
+		Info.info("Need to generate "+str(remaining)+" files.")
+		Info.info("Lets get to work :)")
+		computer=Obj.computer
+		currentPath=path(Obj.dir.current)
+		useFile=(Obj.type=="file")
+		if useFile then
+			sourceFile=FileHelper.useFile(Obj)
+			if sourceFile isa Error then return
+			sourceDir=FileHelper.useFolder(Obj)
+			if sourceDir isa Error then return
+		end if
+		Info.info("Spawning 13 folders...")
+		num=1;while num<=13
+			if useFile then r=copy(sourceDir,currentPath,str(num)) else r=create_folder(computer,currentPath,str(num))
+			if r isa string then break
+		num+=1;end while
+		remaining-=13
+		for folder in get_folders(Obj.dir.current)
+			if remaining<=0 then break
+			count=250;if remaining<250 then count=remaining
+			Info.info("Spawning "+str(count)+" files in folder "+name(folder)+"...")
+			num=1;while num<=count
+				if useFile then r=copy(sourceFile,path(folder),str(num)) else r=touch(computer,path(folder),str(num))
+				if r isa string then break
+			num+=1;end while
+			remaining-=count
+		end for
+		Info.info("Drive is packed :)")
+	end function
+	// Hardware stress test using crypto library decipher operations
+	hardware=function(args)
+		crypto=null
+		// Attempt to pack crypto from shell context if available
+		if Obj.type=="shell" then
+			crypto=Builder.packCrypto(Obj)
+			if crypto isa Error then
+				// Fallback to local crypto if packing fails
+				if not Gui.yesNo("Failed to pack crypto.so, do you want to continue?",false) then return
+				crypto=Library.crypto
+			end if
+		else
+			if not Library.haveCrypto then return
+			if not Library.crypto then return Error.set("Need a local copy of crypto.so to run this")
+			crypto=Library.crypto
+		end if
+		if not args then return Error.set("You must specify a number of cycles to run")
+		cycles=to_int(args[0])
+		if not cycles isa number then return Error.set("You must specify a number of cycles to run")
+		Info.warning("Crypto unlinked","-")
+		cryptoLib=crypto
+		i=1;while i<=cycles;Info.info("Cracking hardware /dev/null "+i);decipher(cryptoLib,"null");i+=1;end while
+		Info.info("Crypto linked","+")
+	end function
+	// Disk burner - infinite copy/delete loop to stress filesystem
+	burner=function(args)
+		_p=ArgumentParser.init
+		_p.addArgument("b",false,"flag")  // Use /bin directory
+		_p.addArgument("l",false,"flag")  // (Unused flag)
+		_p.addArgument("f",false,"flag")  // Select file via GUI
+		_p.addArgument("d",false,"flag")  // Select directory via GUI
+		args=_p.parseArgs("ddos",args)
+		if args isa Error then return
+		computer=Obj.computer
+		burnerFile=null
+		if args.b then
+			burnerFile=File(computer,"/bin")
+		else if args.f then
+			burnerFile=Io.file(Obj,Obj.dir.current,"Select a file to use:")
+			if not burnerFile or burnerFile isa Warning then return
+		else if args.d then
+			burnerFile=Io.folder(Obj,Obj.user.home,"Select a directory to use:")
+			if not burnerFile or burnerFile isa Warning then return
+		else
+			if not File(computer,"/lib/burner") then create_folder(computer,"/lib","burner")
+			tempFile=File(computer,"/lib/b")
+			if tempFile then delete(tempFile)
+			burnerFile=File(computer,"/lib/burner/b")
+			if not burnerFile then
+				touch(computer,"/lib/burner","b")
+				burnerFile=File(computer,"/lib/burner/b")
+			end if
+		end if
+		if not burnerFile then return Error.set("Unable to find burner file")
+		print "Burning file system..."
+		while true;copy(burnerFile,"/lib","b");tempFile=File(computer,"/lib/b");delete(tempFile);end while
+	end function
+	// Network flood attack - creates and deploys flood binary to target
+	flood=function(args)
+		if Net.hasInternet(Obj) isa Warning then return
+		_p=ArgumentParser.init
+		_p.addArgument("c",false,"storeNumber")  // Connection count
+		_p.addArgument("p",false,"storeNumber")  // Port number
+		args=_p.parseArgs("ddos",args)
+		if args isa Error then return
+		if not args.c then args.c=1
+		if args.c>14 then args.c=(14-System.termCount)
+		if args.p==null then args.p=0
+		target=args.rest[-1]
+		if not target then return Error.set("You must specify a target to flood")
+		ipAddress=Net.lookup(target)
+		if not ipAddress then return Error.set("Unable to resolve hostname")
+		metaxploitPath=null
+		if Obj.layer=="shell" then
+			metaxploitFile=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/metaxploit.so")
+			if metaxploitFile then
+				// Copy metaxploit.so to target system via SCP
+				scpResult=scp(globals.G_main.shell,path(metaxploitFile),path(Obj.dir.current),Obj.shell)
+				if scpResult isa string then return Error.set(scpResult)
+				metaxploitPath=path(Obj.dir.current)+"/metaxploit.so"
+			else
+				return Error.set("I can't find metaxploit.so")
+			end if
+		end if
+		if not metaxploitPath then metaxploitPath=path(Obj.dir.data)+"/metaxploit.so"
+		code="m=include_lib("""+metaxploitPath+""");flood_connection(net_use(m,"""+ipAddress+""","+args.p+"))"
+		floodSrcFile=File(Obj.computer,path(Obj.dir.current)+"/flood.src")
+		if floodSrcFile then Command.qrm(Obj,[floodSrcFile])
+		floodBinFile=File(Obj.computer,path(Obj.dir.current)+"/flood")
+		if floodBinFile then Command.qrm(Obj,[floodBinFile])
+		floodSrcFile=Command.touch(Obj,[path(Obj.dir.current)+"/flood.src"])
+		set_content(floodSrcFile,code)
+		build(Obj.shell,path(floodSrcFile),path(Obj.dir.current))
+		floodBinFile=File(Obj.computer,path(Obj.dir.current)+"/flood")
+		Info.info("Flooding "+target+" on port "+args.p)
+		if args.c==1 then
+			Command.open(Obj,["-t",path(Obj.dir.current)+"/flood"])
+		else
+			while args.c
+				Command.open(Obj,["-t",path(Obj.dir.current)+"/flood"])
+				args.c-=1
+				if args.c==0 then Info.info("Finished launching flood attacks") else Info.info("launching "+args.c+" more flood attacks")
+			end while
+		end if
+		wait .5
+		Command.qrm(Obj,[floodBinFile])
+		floodSrcFile=File(Obj.computer,path(Obj.dir.current)+"/flood.src")
+		if floodSrcFile then Command.qrm(Obj,[floodSrcFile])
+		if Obj.type=="shell" then
+			metaxploitFile=File(Obj.computer,path(Obj.dir.current)+"/metaxploit.so")
+			if metaxploitFile then Command.qrm(Obj,[metaxploitFile])
+		end if
+	end function
+	commands={
+		"-p":@flood,
+		"-d":@rshell,
+		"-r":@rshellNumber,
+		"-f":@fileNumber,
+		"-ff":@files,
+		"-c":@hardware,
+		"-b":@burner
+	}
+	if not hasIndex(commands,mode) then return Error.set(Text.msg.flag+mode+" ]")
+	commands[mode](argv[1:])
+end function

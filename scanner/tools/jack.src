@@ -1,0 +1,164 @@
+GN=function(t);return "<color=#0ceb86>"+t+"</color>";end function
+RD=function(t);return "<color=#f00>"+t+"</color>";end function
+YL=function(t);return "<color=#ff0>"+t+"</color>";end function
+WH=function(t);return "<color=#fff>"+t+"</color>";end function
+GY=function(t);return "<color=#888>"+t+"</color>";end function
+BL=function(t);return "<color=#00f>"+t+"</color>";end function
+_p=@print
+_s=@str
+_ui=@user_input
+_tl=function(x);return x.lower;end function
+shell=get_shell
+comp=host_computer(shell)
+u=active_user
+if u=="root" then home="/root" else home="/home/"+u
+listPath=home+"/Documents/passwords"
+words=[]
+filesLoaded=0
+crypto=include_lib("/lib/crypto.so")
+_loadFile=function(f)
+  if not f then return null
+  if is_folder(f) then return null
+  if is_binary(f) then return null
+  ct=f.get_content
+  if not ct then return null
+  return split(ct,char(10))
+end function
+_loadDir=function(dir)
+  if not dir or not is_folder(dir) then return []
+  fl=get_files(dir)
+  if not fl then return []
+  all=[]
+  for f in fl
+    lines=_loadFile(f)
+    if not lines then continue
+    all=all+lines
+    filesLoaded=filesLoaded+1
+  end for
+  return all
+end function
+_loadPath=function(p)
+  if not p or not p.len then return []
+  f=comp.File(p)
+  if not f then return []
+  if is_folder(f) then return _loadDir(f)
+  lines=_loadFile(f)
+  if not lines then return []
+  filesLoaded=1
+  return lines
+end function
+_isMd5=function(h)
+  if not h or not h.len then return false
+  return h.matches("^[a-f0-9]{32}$")
+end function
+_md5Hits=function(p,target)
+  if not p or not p.len then return null
+  if md5(p)==target then return p
+  if p.len and p[0].matches("[a-z]") then
+    c=capitalize(p)
+    if md5(c)==target then return c
+  end if
+  if p.len and p[0].matches("[A-Z]") then
+    c=lowerFirst(p)
+    if md5(c)==target then return c
+  end if
+  return null
+end function
+_crackMd5=function(target)
+  target=_tl(target)
+  _p GY("[i] Cracking MD5 "+BL(target)+"...")
+  n=0
+  for p in words
+    if poll_input=="q" then
+      _p RD("[!] Aborted")
+      return null
+    end if
+    hit=_md5Hits(p,target)
+    if hit then
+      _p GN("[+] Found password: ")+YL(hit)
+      return hit
+    end if
+    n=n+1
+    if n==500 then
+      _p GY("[~] "+_s(words.len-n)+" remaining...")
+      n=0
+    end if
+  end for
+  if crypto then
+    p=crypto.decipher(target)
+    if p then
+      _p GN("[+] Found password: ")+YL(p)+GY(" (decipher)")
+      return p
+    end if
+  end if
+  _p RD("[!] Password not found")
+  return null
+end function
+_crackEmail=function(addr)
+  addr=addr.trim
+  _p GY("[i] Cracking email ")+BL(addr)+GY("...")
+  n=0
+  for p in words
+    if poll_input=="q" then
+      _p RD("[!] Aborted")
+      return null
+    end if
+    r=mail_login(addr,p)
+    if r and not r isa string then
+      _p GN("[+] Found password: ")+YL(p)
+      shell.launch("/usr/bin/Mail.exe","-login")
+      return p
+    end if
+    n=n+1
+    if n==500 then
+      _p GY("[~] "+_s(words.len-n)+" remaining...")
+      n=0
+    end if
+  end for
+  _p RD("[!] Password not found")
+  return null
+end function
+_runTarget=function(t)
+  if not t or not t.trim.len then return
+  t=t.trim
+  if _isMd5(t) then
+    _crackMd5(t)
+    return
+  end if
+  if indexOf(t,"@")!=null then
+    _crackEmail(t)
+    return
+  end if
+  _p RD("[!] Enter an email address or 32-char MD5 hash")
+end function
+listDir=comp.File(listPath)
+if listDir and is_folder(listDir) then
+  words=_loadDir(listDir)
+  if words.len then _p GN("[+] Loaded ")+WH(_s(words.len))+GN(" passwords from ")+WH(listPath)
+end if
+if not words.len then
+  _p YL("[!] No password lists found in ")+WH(listPath)
+  while not words.len
+    pp=_ui(GY("Password list path ('b' cancel): "))
+    if not pp or not pp.trim.len then exit(RD("[!] Cancelled"))
+    if _tl(pp)=="b" then exit(RD("[!] Cancelled"))
+    words=_loadPath(pp.trim)
+    if not words.len then
+      _p RD("[!] No passwords loaded from ")+WH(pp.trim)
+      continue
+    end if
+    _p GN("[+] Loaded ")+WH(_s(words.len))+GN(" passwords from ")+WH(pp.trim)
+  end while
+end if
+_p GN("[+] Ready — ")+WH(_s(words.len))+GN(" passwords, ")+WH(_s(filesLoaded))+GN(" file(s)")
+_p GY("    Enter email or MD5 hash (q to quit, press q during crack to abort)")
+if params and params.len then
+  _runTarget(params[0])
+  if params.len<2 then exit
+end if
+while true
+  t=_ui(BL("jack> "))
+  if not t or not t.trim.len then continue
+  if _tl(t)=="q" or _tl(t)=="quit" or _tl(t)=="exit" then break
+  _runTarget(t)
+end while

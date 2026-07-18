@@ -1,0 +1,11 @@
+binTouch="if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""touch_usage""))
+pathFile=get_abs_path(params[0])
+pathParent=parent_path(pathFile)
+computer=host_computer(get_shell)
+if pathParent==pathFile then pathParent=current_path
+parentDir=File(computer,pathParent)
+if not parentDir then exit(""touch: ""+pathParent+"" not found"")
+if not has_permission(parentDir,""w"") then exit(""touch: permission denied"")
+arrayPath=pathFile.split(""/"")
+output=touch(computer,path(parentDir),arrayPath[len(arrayPath)-1])
+if output and output!=1 then print(output)"

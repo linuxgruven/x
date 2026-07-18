@@ -1,0 +1,1020 @@
+// =============================================================================
+// SHELL_OBJECT
+// Shell session handler; exploitation, scanning, and system manipulation through shell access.
+// =============================================================================
+ShellObject={}
+//Root pivot function
+//Deploys X framework to root shell and launches pivot session
+//Parameters:
+//  s - Root shell object
+//  argv - Command arguments (y flag for default directory)
+//Returns: None (launches pivot session)
+ShellObject.rootPivot=function(s,argv)
+  //Load pivot cleanup operations
+  Boot.pivotCOLoad
+  //Parse arguments for directory selection
+  _p=ArgumentParser.init
+  _p.addArgument("y",false,"flag")
+  argv=_p.parseArgs("rootPivot",argv)
+  if argv isa Error then return
+  p=null
+  //Get computer and user references
+  c=host_computer(s)
+  u=Utility.getUserEX(s)
+	//Check if X already installed on target
+	if File(c,path(u.home)+"/x") then
+    //Offer to launch existing installation
+    if Gui.yesNo("There is a copy of x already installed on this host, launch it?") then return launch(s,path(u.home)+"/x",Kernel.key+" pivot")
+    Info.info("Removing a posable rogue copy of x...")
+    //Remove existing X installation
+    f=File(c,path(u.home)+"/x")
+    Crack.qrm(c,path(u.home),f)
+  end if
+  //Select installation directory
+  if not argv.y then
+    //Prompt for directory or use default
+    if Gui.yesNo("The default directory is "+white(path(u.home))+" use this directory?") then d=u.home else d=Io.folderEX(s,u.home,"Select a directory:")
+		if d isa Warning then
+			Info.info("Using the default directory: "+green(path(u.home)))
+			d=u.home
+		end if
+    p=path(d)
+  else
+    //Use default directory with -y flag
+    p=path(u.home)
+  end if
+  //Create payload directory structure
+  create_folder(c,p,"payload")
+  create_folder(c,p+"/payload","data")
+	//Copy X framework to target system
+	x=scp(globals.G_main.shell,path(File(globals.G_main.computer,globals.G_attributes.program_path)),p,s)
+  if x isa string then return Error.set(x)
+  //Load pivot cleanup operations
+  Boot.pivotCOLoad
+	//Launch X in pivot mode
+	launch(s,p+"/x",Kernel.key+" pivot")
+end function
+//Pack metaxploit and router objects
+//Caches packed objects for reuse in scanning operations
+//Parameters:
+//  Obj - Session object to pack for
+//  i - Optional IP for router packing
+//Returns: True if successful, false otherwise
+ShellObject.packMeta=function(Obj,i=null)
+  //Return if already packed (no IP) or packing with IP
+  if not i and Obj.packMetaxploit then return true
+  //Pack computer object with metaxploit and router
+  _=Builder.packCO(Obj,i)
+  if _ isa Error then return false
+  //Cache metaxploit library
+  Obj.packMetaxploit=_.metaxploit
+  //Cache router and reinitialize network if IP provided
+  if i then
+    Obj.packRouter=_.router
+    Obj.net=Net.initNetwork(Obj,Obj.packRouter)
+  end if
+  return true
+end function
+//Pack crypto library
+//Caches crypto library for encryption operations
+//Parameters:
+//  Obj - Session object to pack for
+//Returns: True if successful or already packed, false on error
+ShellObject.packCrypto=function(Obj)
+  //Pack if not already cached
+  if not Obj.packCrypto then
+    _=Builder.packCrypto(Obj)
+    if _ isa Error then return false
+    //Cache crypto library
+    Obj.packCrypto=_
+    return true
+  end if
+  return true
+end function
+ShellObject.headlessSu=function(Obj,argv=null)
+  co=get_custom_object
+  //Clear root shell cache
+  co.packRootShell=null
+	//Try dictionary crack if have password access
+	if Obj.pwa.access then
+		p=Crack.suDictPasswd(Obj)
+		if p then Builder.packEXSu(Obj.shell,Obj.meta.public_ip,p)
+  //Use provided password
+  else if argv then
+    if Builder.packEXSu(Obj.shell,Obj.meta.public_ip,argv[0]) then return Exploit.getShell(co.packRootShell,false,[],true)
+  //Try cached password from Shadow
+  else
+    p=Shadow.returnPassword(Obj.meta.public_ip)
+    if p then Builder.packEXSu(Obj.shell,Obj.meta.public_ip,p)
+  end if
+  //Return root shell from cache
+  if typeof(co.packRootShell)=="shell" then return Exploit.getShell(co.packRootShell,false,[],true)
+  //Try exploit to get root shell
+  s=Exploit.tryShell(Obj,true)
+  if typeof(s)=="shell" then return Exploit.getShell(s,false,[],true)
+  //Failed to get root
+  return Error.set("Unable to su to root")
+end function
+//Main entry point for shell session
+//Creates or restores shell session on target system
+//Parameters:
+//  this - Session object container
+//  ex - Either shell object (new session) or saved state (restore)
+//  isPiviting - Flag indicating if launching pivot after creation
+//  argz - Arguments to pass to pivot command
+//  headless - Flag for returning session without entering command loop
+//  cmds - Optional command string to execute via AI after initialization
+//Returns: Session object if headless, none otherwise
+ShellObject.run=function(this,ex,isPiviting=false,argz=[],headless=false,cmds=null,restoreState=null)
+  //Store continuation commands
+  self.cmds=cmds
+  restored=BaseObject.init(self,ex,"shell")
+  if restored isa Error then return restored
+  if not restored then
+		//Store shell object reference
+		self.object=ex
+    self.type=typeof(ex)
+		//Get computer for shell
+		self.computer=host_computer(ex)
+		self.shell=ex
+    //No root shell yet
+    self.rootShell=null
+    //Initialize packed objects cache to null
+    self.packMetaxploit=null
+    self.packRouter=null
+    self.packCrypto=null
+    self.packAppliance=null
+    self.packTraffic=null
+		//Build network metadata (handle limited shells)
+		if typeof(self.computer)=="computer" then self.meta={
+      "public_ip":public_ip_pc(self.computer),
+      "local_ip":self.computer.local_ip
+      } else self.meta={
+        "public_ip":"LIMITED",
+        "local_ip":"COMMANDS"
+      }
+		//Create root directory file reference
+		self.root=File(host_computer(ex),"/")
+		//Get current user information
+		self.user=Utility.getUser(self)
+    //Initialize directory tracking
+    self.dir={
+      "current":self.user.home,
+      "last":null
+    }
+    //Initialize network interface
+    if is_network_active(self.computer) then self.net=Net.initNetwork(self,get_router(public_ip_pc(self.computer))) else self.net=Net.initNetwork(self)
+    //Detect machine type from local IP
+    self.machineType=System.getMachine(self,self.computer.local_ip)
+		self.pwa=Gui.pwAccess(self)
+    //Set green SHELL hardware unit display
+    self.hw_unit=green(upper(self.type))
+		//Set layer for command routing
+		self.layer="shell"
+    self.nick="Shell Session"
+    //Get computer hostname
+    self.compName=get_name(self.computer)
+	end if
+  //Restore saved session state after fresh init (reinstantiation)
+  if restoreState then
+    self.id=restoreState.id
+    if hasIndex(restoreState,"history") then self.history=restoreState.history
+    if hasIndex(restoreState,"dir") and restoreState.dir then self.dir=restoreState.dir
+    if hasIndex(restoreState,"nick") then self.nick=restoreState.nick
+    if hasIndex(restoreState,"crp") then self.crp=restoreState.crp
+  end if
+  //Bind session to this for command functions
+  this=@self
+  //Update GUI cache with current session state
+  gui=function;Gui.updateCP(this);end function
+	//Continue bash macro after shell command
+	continueBash=function
+		//Debug logging if enabled
+		if globals.G_bash.DEBUG then print orange("Function Call->continueBash from (SHELL)")
+		//Update GUI state
+		gui
+		//Resume bash macro execution
+		Bash.continueMacro(this)
+  end function
+	//System object access command
+	__system=function(argv)
+		//Show system object for this session
+		System.scobj(this,argv)
+	end function
+	//Commands list command
+	__cmds=function(argv)
+		//Return shell command list
+		return Man.commands(["shell"])
+	end function
+	//Application launch command
+	__start=function(argv)
+		if not argv then return Man.help(["start"])
+    Arg1=lower(argv[0])
+		this=outer.this
+		//Start X framework from current or specified directory
+		startX=function(arg)
+			//Use argument or default to current directory /x
+			if arg then Arg1=arg[0] else Arg1=path(this.dir.current)+"/x"
+			//Find X file
+			f=File(this.computer,Arg1)
+			//Launch X with proxy key
+			if f then launch(this.shell,path(f),Kernel.key+" proxy") else return Error.set("X not found")
+		end function
+		//Launch terminal application
+		terminal=function(arg)
+      //Use Builder to launch Terminal.exe
+      Builder.launchApp(this,"Terminal.exe",arg)
+		end function
+    //Terminate current session and start terminal
+    term=function(arg)
+      //Confirm before terminating X session
+      if Gui.yesNo("This will terminate your current x session. Continue?",false) then start_terminal(this.shell)
+    end function
+		//Command map for start options
+		cmds={
+      "-t":@terminal,
+      "--terminal":@term,
+      "x":@startX
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	//File download command
+	__get=function(argv)
+		if not argv then return Man.help(["get"])
+    Arg1=lower(argv[0])
+		this=outer.this
+		//Download /etc/passwd file
+		passwd=function
+			//Source passwd file
+			g="/etc/passwd"
+			//Destination Downloads directory
+			d=path(globals.G_main.user.home)+"/Downloads"
+			//SCP from target to main shell
+			x=scp(this.shell,g,d,globals.G_main.shell)
+			//Show success or error
+			if x==1 then Info.info("passwd successfully downloaded to Downloads") else Info.error(x)
+		end function
+		//Download all libraries from /lib
+		librarys=function
+			//Get library files
+			z=get_files(File(this.computer,"/lib"))
+			//Check permission
+			if not z then return Error.set("Don't have permission too read /lib")
+			//Ask for destination directory
+			if Gui.yesNo("The default download to location is: "+white(path(this.user.home)+"/Downloads")+" use this directory?") then d=path(globals.G_main.user.home)+"/Downloads" else d=Io.folder(globals.G_main,globals.G_main.user.home,"Select a directory:")
+			//Use default if no directory selected
+			if d isa Warning then
+				Info.info("Using the default download location: "+green(path(this.user.home)+"/Downloads"))
+				d=path(this.user.home)+"/Downloads"
+			end if
+			//Download each library file
+			for l in z;if d then scp(this.shell,"/lib/"+name(l),path(d),globals.G_main.shell) else scp(this.shell,"/lib/"+name(l),d,globals.G_main.shell);end for
+			Info.info("Complete :-)")
+		end function
+		//Command map for get options
+		cmds={
+      "-p":@passwd,
+      "-l":@librarys
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1]
+	end function
+	//System manipulation command
+	__set=function(argv)
+		if not argv then return Man.help(["set"])
+    Arg1=lower(argv[0])
+		this=outer.this
+		//Create ghost user (tux attack)
+		ghostUser=function(arg)
+			//Execute tux ghost user creation
+			Attack.tux(this,arg)
+		end function
+		//Show system users
+		users=function(arg)
+			//Display user list
+			System.users(this)
+		end function
+		//Lock file permissions
+		lockFile=function(arg)
+			//Execute file locking
+			Io.lock(this,arg)
+		end function
+		//Create zip archive
+		zipFile=function(arg)
+			//Execute zip creation
+			Io.zip(this,arg)
+		end function
+		//Script kiddy attack (script all users out)
+		scriptKiddy=function(arg)
+			//Execute script kiddy attack
+			Attack.scriptOut(this)
+		end function
+		//Setup server encryption (R1 or S1)
+		encryption=function(arg)
+			//Execute encryption setup
+			System.setupEncryption(this,arg)
+		end function
+		//Command map for set options
+		cmds={
+      "-s":@scriptKiddy,
+      "-t":@ghostUser,
+      "-u":@users,
+      "-f":@lockFile,
+      "-z":@zipFile,
+      "--senc":@encryption
+    }+Command.setBase(this)
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	//Comprehensive scanning command with multiple modes
+	__scan=function(argv)
+    //Check for piped stdin input
+    inputFromPipe=null
+    if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+      inputFromPipe=globals.G_pipe.stdin
+      if typeof(inputFromPipe)=="string" then
+        inputFromPipe=trim(inputFromPipe)
+      else if inputFromPipe isa Error then
+        return Error.set("","",true)
+      else
+        inputFromPipe=str(inputFromPipe)
+        inputFromPipe=trim(inputFromPipe)
+      end if
+    end if
+    if not argv and not inputFromPipe then return Man.help(["scan"])
+    //Check for active root dsession and warn user
+    if globals.G_settings.dsession then
+      if System.dsession(this) isa Warning then
+        if not Gui.yesNo("You have a active root dsession, do you want to continue?") then return
+      end if
+    end if
+		if argv then Arg1=argv[0] else Arg1=inputFromPipe
+		this=outer.this
+		//Scan local ports with metaxploit
+		local=function(arg)
+      if not ShellObject.packMeta(this) then return
+			//Execute local port scan
+			Exploit.scanLocal(this,true)
+		end function
+		//Scan LAN for routers
+		localNet=function(arg)
+			if not ShellObject.packMeta(this) then return
+			//Execute LAN shell scan
+			Net.lanShell(this,this.packMetaxploit)
+		end function
+		//Custom local port scan with specific ports
+		customLocal=function(arg)
+      if not ShellObject.packMeta(this) then return
+			//Execute custom port scan with provided arguments
+			Exploit.scanLocalCustom(this,arg,true)
+		end function
+		//Scan specific partial object (0day)
+		scanPObject=function(arg)
+			//Check PObject error state
+			if globals.G_errors.pobject isa Error then return Error.set("PObjects are in an error state, please check the log")
+			if not ShellObject.packMeta(this) then return
+			//Target partial object for scanning
+			PartialObject.target(arg,false,true,this.packMetaxploit,{"public_ip":this.meta.public_ip,"local_ip":this.meta.local_ip,"metaLib":null})
+		end function
+		//Scan directory for 0day vulnerabilities
+		scanPODirectory=function(arg)
+			//Check PObject error state
+			if globals.G_errors.pobject isa Error then return Error.set("PObjects are in an error state, please check the log")
+			//Use argument or current directory
+			if arg then z=arg[0] else z=path(this.dir.current)
+      if not ShellObject.packMeta(this) then return
+			//Get directory file reference
+			z=File(this.computer,z)
+			//Scan each library file in directory
+			for f in get_files(z)
+				//Load library with metaxploit
+				m=load(this.packMetaxploit,path(f))
+				if not m then continue
+				//Load debugger for library
+				d=PartialObject.loadDebugger(m)
+				if d isa Error then return
+        //Try to solve for vulnerabilities
+        r=PartialObject.trySolve(d,m)
+				if r.result isa Error then return r.result
+				//Skip if no issues found
+				if r.result=="No potential issues have been found" then
+					Info.info(lib_name(m)+":"+version(m))+":> no issues found"
+					continue
+				end if
+				//Get partial object data
+				p=PartialObject.getPData(r.result,m)
+				if p isa Error then
+					globals.G_errors.pobject=p
+					return
+				end if
+				//Save to database
+				PartialObject.saveToDatabase(m,p)
+			end for
+			Info.info("Scan complete")
+		end function
+    //Scan all local libraries for 0day vulnerabilities
+    localPO=function(arg)
+      //Check PObject error state
+      if globals.G_errors.pobject isa Error then return Error.set("PObjects are in an error state, please check the log")
+      if not ShellObject.packMeta(this) then return
+			//Scan each library in /lib
+			for f in get_files(File(this.computer,"/lib"))
+				//Load library with metaxploit
+				e=load(this.packMetaxploit,path(f))
+				if not e then continue
+				//Show processing status
+				Info.info("Processing "+lib_name(e)+":"+version(e)+"...")
+				//Load debugger for library
+				g=PartialObject.loadDebugger(e)
+				if g isa Error then return
+        //Try to solve for vulnerabilities
+        r=PartialObject.trySolve(g,e)
+				//Skip if no issues found
+				if r.result=="No potential issues have been found" then
+					Info.info(lib_name(e)+":"+version(e))+":> no issues found"
+					continue
+				end if
+				//Get partial object data
+				t=PartialObject.getPData(r.result,e)
+				if t isa Error then
+					globals.G_errors.pobject=t
+					return
+				end if
+				//Create payload and save if valid
+				o=payload(g,t.memory,path(f))
+				if o isa list then
+					if o[2].lib_name==null then continue
+					PartialObject.saveToDatabase(e,t)
+				end if
+			end for
+    end function
+		//Custom LAN scan with range argument
+		lanCustom=function(arg)
+			//Parse -r argument for IP range
+			_p=ArgumentParser.init
+			_p.addArgument("r",false,"store")
+			arg=_p.parseArgs("scan",arg)
+			if arg isa Error then return
+      if not ShellObject.packMeta(this,this.meta.local_ip) then return
+			//Execute custom LAN attack
+			Attack.lanCustom(this,arg)
+		end function
+		//Scan random IP address
+		random=function(arg)
+			if not ShellObject.packMeta(this) then return
+			//Scan random IP from Net.rip
+			Attack.scan(this,Net.rip)
+		end function
+		//Scan specific IP address
+		runScan=function(i)
+			if not ShellObject.packMeta(this) then return
+			//Execute scan on provided IP
+			Attack.scan(this,i)
+		end function
+    //Custom local exploit scan
+    localExploit=function(arg)
+      if not ShellObject.packMeta(this,this.meta.local_ip) then return
+      //Execute local exploit scan
+      Exploit.scanForExploit(this,arg,true)
+    end function
+		//Headless bounce attack - run commands on target then return
+		bounceHeadless=function(arg);Attack.bounce(arg,false);end function
+		//Headless shell bounce - get shell on target and run commands
+		shellBounce=function(arg);return Attack.shellBounce(arg,this);end function
+		//Custom remote scan - passes this so Attack.scanCustom uses shell's packed metaxploit
+		customRemote=function(arg)
+			if not ShellObject.packMeta(this) then return
+			return Attack.scanCustom(arg,false,this)
+		end function
+		//Command map for scan modes
+		cmds={
+      "-lp":@localPO,
+      "-n":@localNet,
+      "--n":@lanCustom,
+      "-pd":@scanPODirectory,
+      "-p":@scanPObject,
+      "-l":@local,
+      "-r":@random,
+      "--l":@customLocal,
+      "--e":@localExploit,
+      "--b":@bounceHeadless,
+      "--s":@shellBounce,
+      "--c":@customRemote
+		}
+		//Execute scan command or IP scan
+		if hasIndex(cmds,Arg1) then
+      restArgs=argv[1:]
+      if inputFromPipe then
+        if (Arg1=="-p" or Arg1=="-pd") and (not restArgs or len(restArgs)==0) then
+          restArgs=split(trim(inputFromPipe)," ")
+        else if Arg1=="--b" then
+          parts=split(trim(inputFromPipe)," ")
+          if len(parts)>=2 then restArgs=["-p",parts[0],"-l",parts[1]]+restArgs
+        else if Arg1=="--s" or Arg1=="--c" then
+          restArgs=split(trim(inputFromPipe)," ")+restArgs
+        end if
+      end if
+      if indexOf(Arg1,"--")==0 then
+        globals.G_bash.FLAGS["scan_ok"]=false
+        globals.G_bash.FLAGS["hold"]=null
+        globals.G_bash.CANCONT=true
+        _prevActive=globals.G_bash.ACTIVE
+        globals.G_bash.ACTIVE=true
+        _fn=cmds[Arg1]
+        r=_fn(restArgs)
+        globals.G_bash.ACTIVE=_prevActive
+        globals.G_bash.CANCONT=false
+        if not globals.G_bash.FLAGS["scan_ok"] then globals.G_bash.FLAGS["scan_ok"]=(r!=null and not (r isa Error))
+        return
+      end if
+        _fn=cmds[Arg1]
+			_fn(restArgs)
+		else
+			//If starts with -, invalid flag; otherwise treat as IP
+			if indexOf(Arg1,"-")!=null then return Error.set("check your syntax...there is no flag [ "+Arg1+" ]") else return runScan(Arg1)
+		end if
+	end function
+	//Build and launch LAN scanner tool
+	__scanlan=function(argv)
+		//Remove existing scanner binary
+		f=File(this.computer,path(this.user.home)+"/s")
+		if f then Command.qrm(this,[f])
+		//Create source file
+		f=Command.touch(this,["-x","s.src"])
+		if f isa Error then return
+		//Write scanlan source code
+		_sys=System.getSystem
+		_sf=File(_sys.computer,path(_sys.dir.srcTools)+"/scanlan")
+		if not _sf then return Error.set("Missing scanlan source")
+		set_content(f,get_content(_sf))
+		//Build and launch if successful
+		if build(this.shell,path(f),path(this.user.home))=="" then launch(this.shell,path(this.user.home)+"/s")
+		//Clean up source file
+		f=File(this.computer,path(this.user.home)+"/s.src")
+		if f then Command.qrm(this,[f])
+		//Clean up binary
+		f=File(this.computer,path(this.user.home)+"/s")
+		if f then Command.qrm(this,[f])
+	end function
+  //Service management command (start/stop services)
+  __service=function(argv)
+    if not argv then return Man.help(["service"])
+    Arg1=lower(argv[0])
+    this=outer.this
+    //Helper: validate service library and daemon exist
+    _checkService=function(libFile,daemonName,serviceName)
+      l=File(this.computer,"/lib/"+libFile)
+      if not l then return Warning.set(serviceName+" service is not installed")
+      s=File(this.computer,"/server/"+daemonName)
+      if not s then return Warning.set(daemonName+" is not in /server")
+      return "/server/"+daemonName
+    end function
+    //Helper: validate action and launch daemon
+    _runService=function(arg,serviceName,libFile,daemonName)
+      if not arg then return Error.set(Text.msg.flag+serviceName+" [start|stop]")
+      d=_checkService(libFile,daemonName,serviceName)
+      if d isa Warning then return d
+      a=lower(arg[0])
+      if a!="start" and a!="stop" then return Error.set(Text.msg.flag+a+" ]")
+      launch(this.object,d,a)
+    end function
+    ssh=function(arg);_runService(arg,"ssh","libssh.so","sshd");end function
+    rshell=function(arg);_runService(arg,"rshell","librshell.so","rshelld");end function
+    http=function(arg);_runService(arg,"http","libhttp.so","httpd");end function
+    repo=function(arg);_runService(arg,"repository","librepository.so","repod");end function
+    ftp=function(arg);_runService(arg,"ftp","libftp.so","ftpd");end function
+    chat=function(arg);_runService(arg,"chat","libchat.so","chatd");end function
+    //Service command map (6 services)
+    q={
+      "ssh":@ssh,
+      "rshell":@rshell,
+      "http":@http,
+      "repo":@repo,
+      "ftp":@ftp,
+      "chat":@chat
+    }
+    //Validate and execute service command
+    if not hasIndex(q,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+    q[Arg1](argv[1:])
+  end function
+  //Standard pivot with X deployment
+  __pivot=function(argv)
+    //Parse flags: -y auto-yes, --full upload entire payload
+    _p=ArgumentParser.init
+    _p.addArgument("y",false,"flag")
+    _p.addArgument("full",true,"flag")
+    argv=_p.parseArgs("pivot",argv)
+    if argv isa Error then return
+    p=null
+		//Check for existing X installation
+		if File(this.computer,path(this.user.home)+"/x") then
+      //Ask to launch existing X
+      if Gui.yesNo("There is a copy of x already installed on this host, launch it?") then
+        globals.rmIPCKey(this.id)
+        Boot.pivotCOLoad
+        return launch(this.shell,path(this.user.home)+"/x",Kernel.key+" pivot")
+      end if
+      //Remove existing X
+      Info.info("Removing a posable rogue copy of x...")
+      f=File(this.computer,path(this.user.home)+"/x")
+      Command.qrm(this,[f])
+    end if
+    //Select directory (auto-yes or prompt)
+    if not argv.y and not argv.full then
+      if Gui.yesNo("The default directory is "+white(path(this.user.home))+" use this directory?") then d=this.user.home else d=Io.folder(this,this.dir.current,"Select a directory:")
+			//Use default if selection fails
+			if d isa Warning then
+				Info.info("Using the default directory: "+green(path(this.user.home)))
+				d=this.user.home
+			end if
+      p=path(d)
+    else
+      p=path(this.user.home)
+    end if
+    //SCP X framework to target
+    x=scp(globals.G_main.shell,path(File(globals.G_main.computer,globals.G_attributes.program_path)),p,this.shell)
+    if x isa string then return Error.set(x)
+    //Full pivot: upload entire local payload directory via scp (handles recursion)
+    if argv.full then
+      localPayload=globals.G_main.dir.payload
+      if localPayload then
+        Info.info("Uploading full payload...")
+        //Remove any existing payload folder so scp doesn't nest inside it
+        existing=File(this.computer,p+"/payload")
+        if existing then delete(existing)
+        x=scp(globals.G_main.shell,path(localPayload),p,this.shell)
+        if x isa string then Info.error(x)
+      else
+        Warning.set("Local payload directory not found, skipping full upload")
+      end if
+    else
+      //Create payload directory structure
+      create_folder(this.computer,p,"payload")
+      create_folder(this.computer,p+"/payload/","data")
+    end if
+    //Load pivot configuration
+    Boot.pivotCOLoad
+		//Launch X in pivot mode
+		launch(this.shell,p+"/x",Kernel.key+" pivot")
+    //Exit current session
+    __exit([])
+  end function
+  //Watch system log and auto-share changes
+  __logWatcher=function(argv)
+    //Optional interval argument
+    if argv then T=to_int(argv[0]) else T=null
+    //Get system log file
+    f=File(this.computer,"/var/system.log")
+    //Check write permission for log clearing
+    if not has_permission(f,"w") then return Error.set("You do not have the permissions to perform a log watch")
+    //Launch run utility if watcher app enabled
+    //Interval mode (send log every T seconds)
+    if T isa number then
+      clear_screen
+      Info.info("Watching...")
+      while poll_input!="q"
+        wait T
+        Info.info("Sending system log to share")
+        Share.putFile(this,[path(f)])
+        clear_screen
+        Info.info("Watching...")
+      end while
+    else
+      //Continuous mode (watch for changes)
+      Log.log(this,0)
+      clear_screen
+      Info.info("Watching...")
+      while poll_input!="q"
+        f=File(this.computer,"/var/system.log")
+        //Send log if not empty
+        if f and to_int(size(f))!=0 then
+          Info.info("Sending system log to share")
+          Share.putFile(this,["/var/system.log"])
+          Log.log(this,0)
+          wait .02
+          clear_screen
+          Info.info("Watching...")
+        end if
+      end while
+    end if
+  end function
+  //Root pivot with password acquisition
+  __proot=function(argv)
+    co=get_custom_object
+    //Clear root shell cache
+    co.packRootShell=null
+		//Try dictionary crack if have password access
+		if this.pwa.access then
+			p=Crack.suDictPasswd(this)
+			if p then Builder.packEXSu(this.shell,this.meta.public_ip,p)
+    //Use provided password
+    else if argv then
+      if Builder.packEXSu(this.shell,this.meta.public_ip,argv[0]) then return Exploit.getShell(co.packRootShell)
+    //Try cached password from Shadow
+    else
+      p=Shadow.returnPassword(this.meta.public_ip)
+      if p then Builder.packEXSu(this.shell,this.meta.public_ip,p)
+    end if
+    //Get root shell from cache or try exploitation
+    if typeof(co.packRootShell)=="shell" then s=co.packRootShell else s=Exploit.tryShell(this,true)
+    //Fail if no root shell obtained
+    if typeof(s)!="shell" then return Error.set("Failed to get a root shell, try a normal pivot")
+    //Execute root pivot
+    ShellObject.rootPivot(s,argv)
+    //Exit current session
+    __exit([])
+  end function
+	//0day/partial object operations
+	__pobject=function(argv)
+		if not argv then return Man.help(["0day"])
+    //Check 0day validity and pack if needed
+    if Date.remaining0day(current_date) then
+      if not this.packMetaxploit then
+        _=Builder.packCO(this)
+        if _ isa Error then return
+        this.packMetaxploit=_.metaxploit
+        this.packRouter=_.router
+      end if
+    end if
+		//Launch partial object hub
+		PartialObject.hub(this,argv,false,true)
+	end function
+  //Library packing command (crypto, meta, router, smart, traffic)
+  __pack=function(argv)
+    if not argv then return Man.help(["pack"])
+    this=outer.this
+    Arg1=pull(argv)
+    //Parse -y (auto-yes) and -i (IP for router) arguments
+    _p=ArgumentParser.init
+    _p.addArgument("y",false,"flag")
+    _p.addArgument("i",false,"store")
+    argv=_p.parseArgs("pack",argv)
+    if argv isa Error then return
+    //Pack all libraries at once
+    all=function;Builder.packAll(this);end function
+    crypto=function
+      r=Builder.packCrypto(this,argv.y)
+      if r isa Error then
+        this.packCrypto=null
+        return
+      end if
+      this.packCrypto=r
+    end function
+    meta=function
+      r=Builder.packMetaxploit(this,argv.y)
+      if r isa Error then
+        this.packMetaxploit=null
+        return
+      end if
+      this.packMetaxploit=r
+    end function
+    router=function
+      if argv.i then r=Builder.packRouter(this,argv.i) else r=Builder.packRouter(this)
+      if r isa Error then
+        this.packRouter=null
+        return
+      end if
+      this.packRouter=r
+    end function
+    smart=function
+      r=Builder.packAppliance(this)
+      if r isa Error then
+        this.packAppliance=null
+        return
+      end if
+      this.packAppliance=r
+    end function
+    traffic=function
+      r=Builder.packTraffic(this)
+      if r isa Error then
+        this.packTraffic=null
+        return
+      end if
+      this.packTraffic=r
+    end function
+    check=function
+      if this.packMetaxploit then print yellow("]"+"-"*10+"[")+" "+green("Metaxploit is loaded") else print yellow("]"+"-"*10+"[")+" "+red("Metaxploit is not loaded")
+      if this.packRouter then print yellow("]"+"-"*10+"[")+" "+green("Router is loaded") else print yellow("]"+"-"*10+"[")+" "+red("Router is not loaded")
+      if this.packCrypto then print yellow("]"+"-"*10+"[")+" "+green("Crypto is loaded") else print yellow("]"+"-"*10+"[")+" "+red("Crypto is not loaded")
+      if this.packAppliance then print yellow("]"+"-"*10+"[")+" "+green("Appliance is loaded") else print yellow("]"+"-"*10+"[")+" "+red("Appliance is not loaded")
+      if this.packTraffic then print yellow("]"+"-"*10+"[")+" "+green("Traffic is loaded") else print yellow("]"+"-"*10+"[")+" "+red("Traffic is not loaded")
+    end function
+		//Pack command map
+		cmds={
+      "--check":@check,
+      "-a":@all,
+      "-c":@crypto,
+      "-m":@meta,
+      "-r":@router,
+      "-s":@smart,
+      "-t":@traffic
+		}
+		//Validate and execute pack command
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1]
+  end function
+	//Library management system command
+	__lms=function(argv)
+		//Check library system status
+		if System.checkLibs isa Error then return
+    //Pack metaxploit if not already cached
+    if not this.packMetaxploit then
+      _=Builder.packCO(this)
+      if _ isa Error then return
+      this.packMetaxploit=_.metaxploit
+      this.packRouter=_.router
+    end if
+		//Launch library server hub
+		LibServer.hub(this,argv,true)
+	end function
+	//Switch user to root command
+	__su=function(argv)
+    _p=ArgumentParser.init
+    _p.addArgument("b",false,"flag")
+    _p.addArgument("c",false,"flag")
+    _p.addArgument("C",false,"flag")
+    _p.addArgument("n",false,"flag")
+    _p.addArgument("N",false,"flag")
+    argv=_p.parseArgs("su",argv)
+    if argv isa Error then return
+    //-b flag: brute force su via shell (-c capitals first, -n no numbers)
+    if argv.b then return Crack.suBrute(this,argv)
+    //If stdin is piped in, use it as the password
+    if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin then
+      stdinPass=trim(globals.G_pipe.stdin)
+      if stdinPass then
+        if not argv.rest then argv.rest=[stdinPass] else if not len(argv.rest) then push(argv.rest,stdinPass)
+      end if
+    end if
+    co=get_custom_object
+    //Clear root shell cache
+    co.packRootShell=null
+    //Use provided password first (from argument or pipe)
+    if argv.rest and len(argv.rest)>0 then
+      if Builder.packEXSu(this.shell,this.meta.public_ip,argv.rest[0]) then return Exploit.getShell(co.packRootShell)
+		//Try dictionary crack if have password access
+		else if this.pwa.access then
+			p=Crack.suDictPasswd(this)
+			if p then Builder.packEXSu(this.shell,this.meta.public_ip,p)
+    //Try cached password from Shadow
+    else
+      p=Shadow.returnPassword(this.meta.public_ip)
+      if p then Builder.packEXSu(this.shell,this.meta.public_ip,p)
+    end if
+    //Return root shell from cache
+    if typeof(co.packRootShell)=="shell" then return Exploit.getShell(co.packRootShell)
+    //Try exploit to get root shell
+    s=Exploit.tryShell(this,true)
+    if typeof(s)=="shell" then return Exploit.getShell(s)
+    //Failed to get root
+    return Error.set("Unable to su to root")
+	end function
+  //Exit session with cleanup
+  __exit=function(argv)
+		//Debug: Show IPC state during cleanup
+		if globals.G_bash.DEBUG then
+			print green("IPC STACK BEFORE CLOSE:")+globals.G_IPC.indexes
+			print orange("Function Call->close (SHELL)")
+		end if
+		//Remove from IPC tracking
+		Ipc.removeObj(this.id)
+		//Debug: Show IPC state after cleanup
+		if globals.G_bash.DEBUG then print yellow("IPC STACK AFTER CLOSE: ")+globals.G_IPC.indexes
+    //Set bash break signal
+    globals.G_bash.SIGBREAK=true
+    //Remove from session list
+    globals.rmSession(this)
+    //Set back flag for navigation
+    globals.G_attributes.back=true
+    //If under proxy/pivot, set home so proxy catches it instead of also exiting
+    if globals.G_hasPivoted then globals.G_attributes.home=true
+    //Stop session loop
+    this.running=false
+	end function
+  //Close session without cleanup
+  __close=function(argv)
+    //Simply stop running loop
+    this.running=false
+	end function
+  //Bash script execution command
+  __run=function(argv);BaseObject.runBash(this,argv);end function
+  //Build complete command map (22+ shell commands + file/computer/shell callbacks)
+  self.commands={
+    "pack":@__pack,
+    "su":@__su,
+    "scanlan":@__scanlan,
+    "lms":@__lms,
+    "0day":@__pobject,
+    "scan":@__scan,
+    "run":@__run,
+    "proot":@__proot,
+    "lws":@__logWatcher,
+    "pivot":@__pivot,
+    "service":@__service,
+    "start":@__start,
+    "sys":@__system,
+    "?":@__cmds,
+    "help":@__cmds,
+    "cmds":@__cmds,
+    "get":@__get,
+    "set":@__set,
+    "x":@__exit,
+    "exit":@__exit,
+    "c":@__close,
+    "close":@__close
+  }+Command.fileCallbacks(self)+Command.computerCallbacks(self)+Command.shellCallbacks(self)
+	//Add to IPC tracking (unless headless mode)
+	if not headless then Ipc.addObject(self)
+  //Auto-pivot if isPiviting flag set
+  if isPiviting then
+    gui
+    __pivot(argz)
+  end if
+	//Return session object if headless mode
+	if headless then
+    headless=false
+    return self
+  end if
+	//Process continuation and deferred commands (with su handling + root checking)
+  BaseObject.processGlobalCmds(self,true,true)
+	//Continue bash if RUN flag set
+	if globals.G_bash.RUN then continueBash
+  //Auto-add to session manager if enabled
+  if globals.G_settings.autoAddSessions then Session.check(this,[])
+	//Main command loop
+	while self.running
+    //Handle bash macro continuation
+    if globals.G_bash.RUN then
+			while globals.G_bash.RUN;continueBash;end while
+		end if
+    //Exit if back flag set
+    if globals.G_attributes.back then break
+    //Check for network changes if dynamic LAN IPs enabled
+    if globals.G_settings.dynamicLanIPS then Net.checkChange(self)
+		//Update GUI cache
+		gui
+    //Build prompt string
+    promptStr=BaseObject.buildPrompt(self,"c = Close")
+    //Get user input and parse
+    //Get user input and parse (quote-aware)
+    _rawInput=trim(user_input(promptStr,0,0,1))
+    c=Pipe._parseArgs(_rawInput)
+    if c then c=c.removeSpace
+		if not c then continue
+    //Check for chain operators (&&, ;) and pipes (|)
+    cmdStr=join(c," ")
+    if BaseObject.handleChainOrPipe(self,c,cmdStr,_rawInput) then continue
+    //Cache lower command token for reuse
+    cmdKey=lower(c[0])
+    //Cache raw token and first char
+    firstToken=c[0]
+    firstChar=firstToken[0]
+    //Handle history operators (!, !!, !!!)
+    if cmdKey=="!" or cmdKey=="!!" or cmdKey=="!!!" then
+      c=BaseObject.handleHistory(self,cmdKey)
+      if not c then continue
+      cmdKey=lower(c[0])
+      firstToken=c[0]
+      firstChar=firstToken[0]
+      //Re-check for pipe/chain in recalled command
+      cmdStr=join(c," ")
+      if BaseObject.handleChainOrPipe(self, c, cmdStr) then continue
+    end if
+    //Handle * - wildcard command search
+    if BaseObject.handleWildcard(self,firstToken) then continue
+    //Handle @ - execute bash script directly
+    if firstChar=="@" then
+      __run(c)
+      continue
+    end if
+    //Check for command alias
+    _aliasApplied=false
+    if hasIndex(globals.G_settings.alias,cmdKey) then
+      origArgs=c[1:]
+      c=globals.G_settings.alias[cmdKey]
+      if origArgs then c=c+origArgs
+      if c then cmdKey=lower(c[0]);_aliasApplied=true
+    end if
+    //Handle pipe/chain in alias-expanded command (only if alias changed the command)
+    if _aliasApplied then
+      cmdStr=join(c," ")
+      if BaseObject.handleChainOrPipe(self,c,cmdStr) then continue
+    end if
+    //Handle @ in alias-expanded command
+    if cmdKey[0]=="@" then
+      __run(c)
+      continue
+    end if
+    //Execute command if exists
+    if hasIndex(self.commands,cmdKey) then
+      f=self.commands[cmdKey]
+      BaseObject.addToHistory(self,c)
+      f(c[1:])
+    else
+      Info.error(Text.msg.command+c[0]+" ]")
+    end if
+	end while
+  //Snapshot session state for potential future reinstantiation
+  Session._snapshotState(self)
+end function

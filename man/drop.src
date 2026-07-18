@@ -1,0 +1,29 @@
+// Man page for drop
+manDrop="DROP(1)                          X Shell Manual                          DROP(1)
+
+<b>NAME</b>
+    drop - is a alias to the [-x] commands|flags
+<b>SYNOPSIS</b>
+    <b>drop </b><b>-m</b>
+    Clears all files from /lib except for init.so and net.so
+    <b>drop </b><b>-a</b>
+    Clears all password and virtual|hard files.
+    [shadow] [cache] [dirty] [vfile] [share] [libs]
+    <b>drop </b><b>-p</b>
+    Clears all passwords.
+    [shadow] [cache]
+    <b>drop </b><b>-f</b>
+    Clears all files.
+    [vfile] [share] [libs]
+    <b>drop </b><b>-w</b>
+    Clears the shadow file [shadow].
+    <b>drop </b><b>-c</b>
+    Clears the cache [cache].
+    <b>drop </b><b>-d</b>
+    Clears the dirty file [dirty].
+    <b>drop </b><b>-v</b>
+    Clears the vfile file cache [vfile].
+    <b>drop </b><b>-l</b>
+    Clears the shared libs folder [libs].
+    <b>drop </b><b>-s</b>
+    Clears the share folder [share]."

@@ -1,0 +1,98 @@
+print "<color=#20ff98>Installing X's password lists...</color>"
+import_code("./list1.src")
+import_code("./list2.src")
+import_code("./list3.src")
+import_code("./list4.src")
+import_code("./list5.src")
+import_code("./list6.src")
+import_code("./list7.src")
+import_code("./list8.src")
+import_code("./list9.src")
+import_code("./list10.src")
+import_code("./list11.src")
+c=host_computer(get_shell)
+if not File(c,home_dir+"/Documents") then create_folder(c,home_dir,"Documents")
+_findAll=function(dir,fName,results)
+  for sub in get_folders(dir)
+    if name(sub)==fName then push(results,sub)
+    _findAll(sub,fName,results)
+  end for
+end function
+payloadDir=File(c,home_dir+"/payload")
+if not payloadDir then
+  print "<color=#ffff00>Locating payload...</color>"
+  _found=[]
+  _findAll(File(c,"/"),"payload",_found)
+  if not _found then exit("<color=red>payload folder not found. Please run X at least once to set up X's file structure.</color>")
+  if len(_found)==1 then
+    payloadDir=_found[0]
+    print "<color=#20ff98>Found payload at: "+path(payloadDir)+"</color>"
+  else
+    print "<color=#ffff00>Multiple payload folders found:</color>"
+    _i=0
+    _len=len(_found)
+    while _i<_len
+      print "<color=#ffffff>  ["+(_i+1)+"] "+path(_found[_i])+"</color>"
+      _i=_i+1
+    end while
+    print "<color=#ffffff>  [0] Cancel</color>"
+    _choice=to_int(user_input("<color=#87ceeb>Select payload (0 to cancel, 1-"+_len+"): </color>"))
+    if _choice==0 then exit("<color=#ffff00>Cancelled.</color>")
+    if _choice<1 or _choice>_len then exit("<color=red>Invalid selection.</color>")
+    payloadDir=_found[_choice-1]
+    print "<color=#20ff98>Using payload at: "+path(payloadDir)+"</color>"
+  end if
+end if
+payload=path(payloadDir)
+d=File(c,payload+"/password/list")
+if not d then exit("<color=red>password/list folder not found. Please run X at least once.</color>")
+touch(c,path(d),"list1")
+f=File(c,path(d)+"/list1")
+set_content(f,join(split(list1,char(10)),char(10)))
+print "<color=#aaaaaa>  Installed list1</color>"
+touch(c,path(d),"list2")
+f=File(c,path(d)+"/list2")
+set_content(f,join(split(list2,char(10)),char(10)))
+print "<color=#aaaaaa>  Installed list2</color>"
+touch(c,path(d),"list3")
+f=File(c,path(d)+"/list3")
+set_content(f,join(split(list3,char(10)),char(10)))
+print "<color=#aaaaaa>  Installed list3</color>"
+touch(c,path(d),"list4")
+f=File(c,path(d)+"/list4")
+set_content(f,join(split(list4,char(10)),char(10)))
+print "<color=#aaaaaa>  Installed list4</color>"
+touch(c,path(d),"list5")
+f=File(c,path(d)+"/list5")
+set_content(f,join(split(list5,char(10)),char(10)))
+print "<color=#aaaaaa>  Installed list5</color>"
+touch(c,path(d),"list6")
+f=File(c,path(d)+"/list6")
+set_content(f,join(split(list6,char(10)),char(10)))
+print "<color=#aaaaaa>  Installed list6</color>"
+touch(c,path(d),"list7")
+f=File(c,path(d)+"/list7")
+set_content(f,join(split(list7,char(10)),char(10)))
+print "<color=#aaaaaa>  Installed list7</color>"
+touch(c,path(d),"list8")
+f=File(c,path(d)+"/list8")
+set_content(f,join(split(list8,char(10)),char(10)))
+print "<color=#aaaaaa>  Installed list8</color>"
+touch(c,path(d),"list9")
+f=File(c,path(d)+"/list9")
+set_content(f,join(split(list9,char(10)),char(10)))
+print "<color=#aaaaaa>  Installed list9</color>"
+touch(c,path(d),"list10")
+f=File(c,path(d)+"/list10")
+set_content(f,join(split(list10,char(10)),char(10)))
+print "<color=#aaaaaa>  Installed list10</color>"
+touch(c,path(d),"list11")
+f=File(c,path(d)+"/list11")
+set_content(f,join(split(list11,char(10)),char(10)))
+print "<color=#aaaaaa>  Installed list11</color>"
+print "<color=#20ff98>Finished installing password lists</color>"
+if params.indexOf("--delete") != null then
+  f=File(c,program_path)
+  if f then delete(f)
+  print "<color=#20ff98>Installer deleted.</color>"
+end if

@@ -1,0 +1,21 @@
+// Man page for decrypt
+manDecrypt="DEC(1)                       X Shell Manual                       DEC(1)
+
+<b>NAME</b>
+    dec - Decrypt file with X algorithm
+<b>SYNOPSIS</b>
+    <b>dec </b><b>FILE </b>(SEED|KEY)
+<b>DESCRIPTION</b>
+    Decrypt files encrypted with the enc function. Uses X encryption
+    algorithm, which is immune to crypto library overflows.
+<b>OPTIONS</b>
+    <b>FILE SEED</b> - Decrypt
+    Decrypt file with optional seed or key.
+<b>EXAMPLE:</b>
+    <b>dec secret.txt</b>
+    Decrypt file
+
+    <b>dec data.bin mykey123</b>
+    Decrypt with specific key
+<b>SEE ALSO</b>
+    <b>enc</b>, <b>pzip</b>"

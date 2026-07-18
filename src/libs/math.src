@@ -1,0 +1,123 @@
+// =============================================================================
+// MATH
+// Math library; string distance, sorting, statistical, and numerical algorithm utilities.
+// =============================================================================
+Math={}
+//max - Return maximum of two values
+//Args: x (number), y (number)
+//Returns: larger value
+Math.max=function(x,y)
+  //Return x if greater
+  if x>y then return x
+  //Otherwise return y
+  return y
+end function
+//min - Return minimum of two or three values
+//Args: x (number), y (number), z (number, optional)
+//Returns: smallest value
+Math.min=function(x,y,z=null)
+  //Two-arg fast path
+  if z==null then
+    if x<y then return x else return y
+  end if
+  //Three-arg path
+  r=x
+  if y<r then r=y
+  if z<r then r=z
+  return r
+end function
+//percent - Calculate percentage
+//Args: x (number), y (number)
+//Returns: (x/y)*100 or Error
+Math.percent=function(x,y)
+	//Validate x is number
+	if not x isa number then return Error.set("x expected int")
+	//Validate y is number
+	if not y isa number then return Error.set("y expected int")
+	//Guard against division by zero
+	if y==0 then
+		Error.set("Division by zero")
+		return 0
+	end if
+	//Calculate and return percentage
+	return (x/y)*100
+end function
+//median - Calculate median (middle value)
+//Args: x (list of numbers)
+//Returns: median value or Error
+Math.median=function(x)
+	//Validate input is list
+	if not x isa list then return Error.set("x expected list")
+	//Validate list is not empty
+	if not len(x) then return Error.set("List cannot be empty")
+	//Validate all elements are numbers
+	for i in x;if not x[__i_idx] isa number then return Error.set("x[i] expected number");end for
+	//Create sorted copy of list
+	sorted=x[0:]
+	sorted.sort
+	//Get list length
+	n=len(sorted)
+	//If odd length, return middle element If even length, return average of two middle elements
+	if n%2==1 then return sorted[floor(n/2)] else return (sorted[n/2-1]+sorted[n/2])/2
+end function
+//average - Calculate arithmetic mean
+//Args: x (list of numbers)
+//Returns: average or Error
+Math.average=function(x)
+	//Validate input is list
+	if not x isa list then return Error.set("x list expected")
+	//Sum all elements
+	s=0
+	for i in x;if not x[__i_idx] isa number then return Error.set("x[i] expected integer");s+=x[__i_idx];end for
+	//Divide by element count
+	return s/len(x)
+end function
+//decimalToBinary - Convert decimal to binary (iterative)
+//Args: x (number)
+//Returns: binary number as integer, or Error
+Math.decimalToBinary=function(x)
+	//Validate input is number
+	if not x isa number then return Error.set("x int expected")
+	//Zero is its own binary representation
+	if x==0 then return 0
+	//Build binary string from least-significant bit upward
+	b=""
+	while x>0;b=str(x%2)+b;x=floor(x/2);end while
+	return to_int(b)
+end function
+//binaryToDecimal - Convert binary to decimal (iterative)
+//Args: x (number or string)
+//Returns: decimal number
+Math.binaryToDecimal=function(x)
+	//Convert to string if needed
+	if x isa string then b=x else b=str(x)
+	//Initialize sum
+	s=0
+	//Iterate through binary digits
+	_len=len(b);i=0;while i<_len;s=s*2+to_int(b[i]);i+=1;end while
+	//Return decimal value
+	return s
+end function
+//compare - Compare two values
+//Args: x (any), y (any)
+//Returns: ">", "<", or "=="
+Math.compare=function(x,y)
+	//Return > if x greater than y
+	if x>y then return ">"
+	//Return < if x less than y
+	if x<y then return "<"
+	//Return == if x equals y
+	if x==y then return "=="
+end function
+//exp - Exponential function (e^x) using Taylor series
+//Args: x (number)
+//Returns: e^x calculated using Taylor series expansion
+//Notes: Accurate for small values of x (typical in bloom filter calculations)
+Math.exp=function(x)
+	if x==0 then return 1
+	//Taylor series: e^x = 1 + x + x²/2! + x³/3! + x⁴/4! + ...
+	result=1
+	term=1
+	i=1;while i<=20;term=term*x/i;result=result+term;if abs(term)<0.000001 then break;i+=1;end while
+	return result
+end function

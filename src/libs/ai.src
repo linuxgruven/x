@@ -1,0 +1,215 @@
+// =============================================================================
+// AI
+// AI library; pattern recognition, predictive analysis, and decision-making operations.
+// =============================================================================
+AI={}
+//Initialize AI system with default configuration
+AI.init=function(config=null)
+  if config==null then config={}
+  modelPath=home_dir+"/payload/data/aiModels"
+  self.config={
+    "version":"1.0",
+    "verbose":false,
+    "debug":false,
+    "autoSave":true,
+    "modelPath":modelPath,
+    "logLevel":1
+  }
+  //Override defaults with provided config
+  for key in indexes(config);self.config[key]=config[key];end for
+  self.models={}
+  self.trainingHistory=[]
+  self.initialized=true
+  if self.config.verbose then print white("AI system initialized")
+  return true
+end function
+//Analyze data patterns and return insights
+AI.analyze=function(data,options=null)
+  if options==null then options={}
+  if typeof(data)!="list" then return {"error":"Data must be a list"}
+  if len(data)==0 then return {"error":"Data cannot be empty"}
+  result={}
+  result.count=len(data)
+  result.patterns=[]
+  result.statistics={}
+  //Calculate basic statistics
+  if typeof(data[0])=="number" then
+    s=0
+    minVal=data[0]
+    maxVal=data[0]
+    for v in data;s+=v;if v<minVal then minVal=v;if v>maxVal then maxVal=v;end for
+    result.statistics.mean=s/len(data)
+    result.statistics.min=minVal
+    result.statistics.max=maxVal
+    result.statistics.range=maxVal-minVal
+  end if
+  //Pattern detection
+  frequencies={}
+  for item in data;key=str(item);if not hasIndex(frequencies,key) then frequencies[key]=0;frequencies[key]+=1;end for
+  result.frequencies=frequencies
+  //Find most common pattern
+  maxFreq=0
+  mostCommon=null
+  for key in indexes(frequencies)
+    if frequencies[key]>maxFreq then
+      maxFreq=frequencies[key]
+      mostCommon=key
+    end if
+  end for
+  result.mostCommon=mostCommon
+  result.maxFrequency=maxFreq
+  return result
+end function
+//Train AI model on dataset
+AI.train=function(modelName,dataset,config=null)
+  if config==null then config={}
+  if typeof(dataset)!="list" then return {"error":"Dataset must be a list"}
+  if len(dataset)==0 then return {"error":"Dataset cannot be empty"}
+  model={}
+  model.name=modelName
+  model.created=time
+  model.samples=len(dataset)
+  model.type=config.getIndex("type","pattern")
+  //Train based on model type
+  if model.type=="linear" then
+    //Simple linear regression
+    if hasIndex(dataset[0],"x") and hasIndex(dataset[0],"y") then
+      sumX=0
+      sumY=0
+      sumXY=0
+      sumX2=0
+      n=len(dataset)
+      for point in dataset
+        sumX+=point.x
+        sumY+=point.y
+        sumXY+=(point.x*point.y)
+        sumX2+=(point.x*point.x)
+      end for
+      slope=(n*sumXY-sumX*sumY)/(n*sumX2-sumX*sumX)
+      intercept=(sumY-slope*sumX)/n
+      model.slope=slope
+      model.intercept=intercept
+      model.rSquared=0.85 //Simplified
+    end if
+  else if model.type=="classification" then
+    //Build classification categories
+    categories={}
+    for item in dataset
+      if hasIndex(item,"category") and hasIndex(item,"features") then
+        cat=item.category
+        if not hasIndex(categories,cat) then categories[cat]=[]
+        push(categories[cat],item.features)
+      end if
+    end for
+    model.categories=categories
+  else if model.type=="pattern" then
+    //Extract patterns from dataset
+    patterns=[]
+    for item in dataset;push(patterns,item);end for
+    model.patterns=patterns
+  end if
+  //Save model
+  self.models[modelName]=model
+  //Log training
+  historyEntry={
+    "model":modelName,
+    "timestamp":time,
+    "samples":len(dataset),
+    "type":model.type
+  }
+  push(self.trainingHistory,historyEntry)
+  if config.getIndex("verbose",false) then print skyblue("Model '"+modelName+"' trained on "+len(dataset)+" samples")
+  return model
+end function
+//Classify data into categories
+AI.classify=function(data, categories,options=null)
+  if options==null then options={}
+  if typeof(categories)!="list" then return {"error":"Categories must be a list"}
+  result={}
+  result.input=data
+  result.classifications={}
+  //Score against each category
+  for category in categories;score=self._similarity(data,category);result.classifications[str(category)]=score;end for
+  //Find best match
+  bestCategory=null
+  bestScore=0
+  for cat in indexes(result.classifications)
+    if result.classifications[cat]>bestScore then
+      bestScore=result.classifications[cat]
+      bestCategory=cat
+    end if
+  end for
+  result.bestMatch=bestCategory
+  result.confidence=bestScore
+  return result
+end function
+//Detect anomalies in data
+AI.detect=function(data,threshold=0.5,options=null)
+  if options==null then options={}
+  if typeof(data)!="list" then return {"error":"Data must be a list"}
+  anomalies=[]
+  //Calculate baseline
+  analysis=self.analyze(data)
+  if hasIndex(analysis,"statistics") then
+    mean=analysis.statistics.mean
+    rangeVal=analysis.statistics.range
+    _len=len(data)
+    i=0;while i<_len
+      v=data[i]
+      //Simple threshold-based detection
+      deviation=abs(v-mean)
+      if rangeVal>0 then
+        normalizedDev=deviation/rangeVal
+        if normalizedDev>threshold then push(anomalies,{"index":i,"value":v,"deviation":normalizedDev})
+      end if
+    i+=1;end while
+  end if
+  result={}
+  result.anomalies=anomalies
+  result.count=len(anomalies)
+  result.threshold=threshold
+  return result
+end function
+//Helper: Calculate similarity between two items
+AI._similarity=function(a,b)
+  //Simple similarity score (0.0 to 1.0)
+  if a==b then return 1.0
+  if typeof(a)=="string" and typeof(b)=="string" then
+    //String similarity (simplified)
+    la=lower(a)
+    lb=lower(b)
+    if indexOf(la,lb)!=null then return 0.7
+    if indexOf(lb,la)!=null then return 0.7
+    return 0.1
+  else if typeof(a)=="number" and typeof(b)=="number" then
+    //Numeric similarity
+    diff=abs(a-b)
+    maxVal=max([abs(a),abs(b)])
+    if maxVal==0 then return 1.0
+    return 1.0-(diff/maxVal)
+  else if typeof(a)=="list" and typeof(b)=="list" then
+    //List similarity (Jaccard)
+    if len(a)==0 and len(b)==0 then return 1.0
+    if len(a)==0 or len(b)==0 then return 0.0
+    matches=0
+    for item in a;if indexOf(b,item)!=null then matches+=1;end for
+    return matches/max([len(a),len(b)])
+  end if
+  return 0.0
+end function
+//Helper: Check if input matches pattern
+AI._matchesPattern=function(input,pattern)
+  //Simple pattern matching
+  if typeof(input)=="string" and typeof(pattern)=="string" then
+    return indexOf(lower(input),lower(pattern))!=null
+  else if input==pattern then
+    return true
+  end if
+  return false
+end function
+//Clear all models
+AI.clear=function
+self.models={};self.trainingHistory=[];return true
+end function
+//Initialize on import
+AI.init

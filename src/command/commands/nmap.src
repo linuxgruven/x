@@ -1,0 +1,368 @@
+// =============================================================================
+// NMAP
+// Scan network ports and detect services on a target IP.
+// =============================================================================
+Command.nmap=function(Obj,argv)
+  // Check for piped stdin input first (check for null, not truthiness - empty string is valid)
+  inputFromPipe=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    inputFromPipe=globals.G_pipe.stdin
+    // Check if stdin is an Error object - if so, abort silently (error already displayed)
+    if typeof(inputFromPipe)=="string" then
+      inputFromPipe=trim(inputFromPipe)
+    else if inputFromPipe isa Error then
+      return Error.set("","",true)
+    else
+      inputFromPipe=str(inputFromPipe)
+      inputFromPipe=trim(inputFromPipe)
+    end if
+  end if
+  if not argv and not inputFromPipe then return Man.help(["nmap"])
+  // -sn: ping sweep — must check BEFORE ArgumentParser.check which splits "-sn" into ["-s","-n"]
+  _snMode=false
+  _snTarget=null
+  if argv then
+    if len(argv)>0 and argv[0]=="-sn" then
+      _snMode=true
+      if len(argv)>1 then _snTarget=argv[1] else if inputFromPipe then _snTarget=inputFromPipe
+      argv=argv[1:]  // remove "-sn" before ArgumentParser.check splits it into ["-s","-n"]
+    end if
+  end if
+  argv=ArgumentParser.check(argv)
+  if _snMode then
+    if not _snTarget then return Error.set("Usage: nmap -sn <public_ip>")
+    if not is_valid_ip(_snTarget) then return Error.set("Invalid IP: "+_snTarget)
+    r=get_router(_snTarget)
+    if not r then return Error.set("No router found at "+_snTarget)
+    Info.info("Discovering LAN behind "+_snTarget+"...")
+    visited={}
+    walkRouter=function(r,indent,label)
+      rLan=local_ip(r)
+      if hasIndex(visited,rLan) then return
+      visited[rLan]=1
+      print(indent+rLan+" ["+label+"]")
+      for ip in devices_lan_ip(r)
+        if hasIndex(visited,ip) then continue
+        child=get_router(ip)
+        if child!=null then
+          walkRouter(child,indent+"  ","Router")
+        else
+          visited[ip]=1
+          print(indent+"  "+ip+" [Device]")
+        end if
+      end for
+    end function
+    walkRouter(r,"","Edge Router")
+    return
+  end if
+  _p=ArgumentParser.init
+  _p.addArgument("r",false,"flag")     // Remote IP scan
+  _p.addArgument("l",false,"flag")     // Local IP scan
+  _p.addArgument("p",false,"flag")     // Public IP scan
+  _p.addArgument("w",false,"flag")     // Show whois data
+  _p.addArgument("post",true,"flag")   // Post-processing mode
+  argv=_p.parseArgs("nmap",argv)
+  if argv isa Error then return
+  if (argv.r and argv.l) or (argv.r and argv.p) or (argv.l and argv.p) then return Error.set("Flags -r, -l, and -p are mutually exclusive")
+  argv=_p.checkRedirect(Obj,"nmap",argv)
+  if argv isa Error then return
+  argv=_p.parsePath(Obj,argv)
+  if argv isa Error then return
+  targetIP=null
+  if argv.l then
+    if not Utility.checkValid(Obj,true) then return Warning.set("nmap -l is not available until local (pivot or launched)")
+    targetIP=Obj.meta.local_ip
+  else if argv.p then
+    targetIP=Obj.meta.public_ip
+  else if argv.r then
+    targetIP=Net.rip
+  else if inputFromPipe then
+    targetIP=inputFromPipe
+  else
+    if not argv.rest or len(argv.rest)==0 then return Man.help(["nmap"])
+    targetIP=argv.rest[0]
+  end if
+  resolvedIP=Net.lookup(targetIP)
+  if not is_valid_ip(resolvedIP) then
+    if indexOf(targetIP,"/")!=null then return Error.set("Invalid ip: "+split(targetIP,"/")[-1]) else return Error.set("Invalid ip: "+targetIP)
+  end if
+  if Obj.layer!="file" and not Obj.net.hasInternet then return Error.set("No internet access")
+  ports=[]
+  router=null
+  if Obj.layer=="shell" then
+    // Shell layer: build LAN device map for local IPs
+    if is_lan_ip(resolvedIP) then
+      Info.info("Querying "+resolvedIP+"...")
+      lanMap={}
+      // Recursive function to build LAN device map from network info
+      genLan=function(devices)
+        for device in devices
+          if device["ports"] then
+            portList=[]
+            for portData in device["ports"];push(portList,portData["port"]);end for
+            if not portList then lanMap[device["ip"]]=[] else lanMap[device["ip"]]=portList
+          else
+            lanMap[device["ip"]]=[]
+          end if
+          if device["devices"] then genLan(device["devices"])
+        end for
+      end function
+      // CONTEXT ROUTING: Pack network info through correct execution context
+      // When pivoted/proxied, direct calls would scan proxy's network, not target's
+      networkInfo=Builder.packNetworkInfo(Obj)
+      if not networkInfo then return Error.set("nmap internal error")
+      genLan(networkInfo)
+      for entry in lanMap
+        if entry.key==resolvedIP then
+          ports=lanMap[resolvedIP]
+          break
+        end if
+      end for
+      if not ports then return Info.info("No ports found on : "+resolvedIP)
+      // CONTEXT ROUTING: Get router through Builder to handle execution context
+      router=Builder.packRouter(Obj)
+    else
+      // CONTEXT ROUTING: Get router for specific IP through correct context
+      router=Builder.packRouter(Obj,resolvedIP)
+    end if
+  else
+    if is_lan_ip(resolvedIP) then
+      if not Utility.checkValid(Obj) then return Warning.set("nmap cannot be used for lan ip's from a "+Obj.layer+" object")
+      router=get_router
+    else
+      router=get_router(resolvedIP)
+    end if
+  end if
+  if router==null then return Error.set("IP address not found")
+  if not is_lan_ip(resolvedIP) then
+    // WAN: add router port (0) + all used ports
+    ports=[0]+used_ports(router)
+  else
+    // LAN: add router port (0) if ports exist, else get device ports
+    if ports then insert(ports,0,0) else ports=[0]+device_ports(router,resolvedIP)
+  end if
+  if ports isa string then return Error.set(ports)
+  if not ports then return Info.info("No ports")
+  header=ljust("PORT",8)+ljust("STATE",8)+ljust("SERVICE",12)+ljust("VERSION",10)+"LAN"
+  startMsg="Starting X nmap v"+Kernel.version+" at "+current_date
+  if _p.write then
+    outputLines=[]
+    portData={}
+    push(outputLines,header)
+    for port in ports
+      // Handle router port (port 0) - special case for router service
+      if port==0 then
+        lanIP=null
+        // Check if scanning different IP than router's local IP
+        if local_ip(router)!=resolvedIP then
+          hasWebPort=false
+          // Look for port 8080 (web service) to get LAN IP
+          for portObj in ports
+            if portObj==0 then continue
+            if port_number(portObj)==8080 then
+              lanIP=get_lan_ip(portObj)
+              hasWebPort=true
+              break
+            end if
+          end for
+          // Skip if LAN IP and no web port found
+          if is_lan_ip(resolvedIP) and not hasWebPort then continue
+        end if
+        service="router"
+        version=kernel_version(router)
+        if not lanIP then lanIP=local_ip(router)
+        state="open"
+        line=ljust(str(port),8)+ljust(state,8)+ljust(service,12)+ljust(version,10)+lanIP
+        push(outputLines,line)
+        entry={
+          "port":str(port),
+          "state":state,
+          "service":service,
+          "version":version,
+          "lan":lanIP
+        }
+        portData[__port_idx]=entry
+        continue
+      end if
+      info=split(port_info(router,port)," ")
+      service=info[0]
+      version=info[1]
+      lanIP=get_lan_ip(port)
+      portNum=port_number(port)
+      state="open"
+      // Determine closed state: closed OR in firewall blocked ports (WAN only)
+      if (is_closed(port) or hasIndex(Net.FWPorts,port_number(port))) and not is_lan_ip(resolvedIP) then state="closed"
+      line=ljust(str(portNum),8)+ljust(state,8)+ljust(service,12)+ljust(version,10)+lanIP
+      if indexOf(outputLines,line)==null then push(outputLines,line) else continue
+      entry={
+        "port":str(portNum),
+        "state":state,
+        "service":service,
+        "version":version,
+        "lan":lanIP
+      }
+      portData[__port_idx]=entry
+    end for
+    insert(outputLines,0,"Ports Found: "+len(portData))
+    insert(outputLines,0,"  Target IP: "+targetIP)
+    insert(outputLines,0,startMsg)
+    if argv.w then
+      push(outputLines,"")
+      whoisData=whois(public_ip(router))
+      if indexOf(whoisData,"Domain name")!=null then
+        whoisData=whoisData.replace("Domain name: ","")
+        whoisData=whoisData.replace("Administrative contact: ","")
+        whoisData=whoisData.replace("Email address: ","")
+        whoisData=whoisData.replace("Phone: ","")
+        lines=split(whoisData,char(10))
+        if bssid_name(router) then push(outputLines,ljust("BSSID",22)+" : "+bssid_name(router))
+        if essid_name(router) then push(outputLines,ljust("ESSID",22)+" : "+essid_name(router))
+        push(outputLines,ljust("PUBLIC IP",22)+" : "+public_ip(router))
+        push(outputLines,ljust("PRIVATE IP",22)+" : "+local_ip(router))
+        if len(lines)>0 then push(outputLines,ljust("WEBSITE",22)+" : "+lines[0])
+        if len(lines)>0 then push(outputLines,ljust("DOMAIN",22)+" : "+lines[0].replace("www.",""))
+        if len(lines)>0 then push(outputLines,ljust("COMPANY",22)+" : "+split(lines[0],"\.")[1])
+        if len(lines)>1 then push(outputLines,ljust("ADMIN",22)+" : "+lines[1])
+        if len(lines)>2 then push(outputLines,ljust("EMAIL",22)+" : "+lines[2])
+        if len(lines)>3 then push(outputLines,ljust("PHONE",22)+" : "+lines[3])
+      end if
+      push(outputLines,ljust("ROUTER VERSION",22)+" : "+kernel_version(router))
+      rules=firewall_rules(router)
+      push(outputLines,"Scanning firewall rules...")
+      if not len(rules) then
+        push(outputLines,"Firewall rules: N/A")
+      else
+        fwData=self.firewallRules(rules)
+        for rule in fwData;push(outputLines,rule);end for
+      end if
+    end if
+    argv["data"]=outputLines
+    _p.out(Obj,argv)
+  else
+    if globals.G_pipe.PIPE_MODE then
+      outputLines=[]
+      portData={}
+      push(outputLines,header)
+      for port in ports
+        if port==0 then
+          lanIP=null
+          if local_ip(router)!=resolvedIP then
+            hasWebPort=false
+            for portObj in ports
+              if portObj==0 then continue
+              if port_number(portObj)==8080 then
+                lanIP=get_lan_ip(portObj)
+                hasWebPort=true
+                break
+              end if
+            end for
+            if is_lan_ip(resolvedIP) and not hasWebPort then continue
+          end if
+          service="router"
+          version=kernel_version(router)
+          if not lanIP then lanIP=local_ip(router)
+          state="open"
+          line=ljust(str(port),8)+ljust(state,8)+ljust(service,12)+ljust(version,10)+lanIP
+          push(outputLines,line)
+          continue
+        end if
+        info=split(port_info(router,port)," ")
+        service=info[0]
+        version=info[1]
+        lanIP=get_lan_ip(port)
+        portNum=port_number(port)
+        state="open"
+        if (is_closed(port) or hasIndex(Net.FWPorts,port_number(port))) and not is_lan_ip(resolvedIP) then state="closed"
+        line=ljust(str(portNum),8)+ljust(state,8)+ljust(service,12)+ljust(version,10)+lanIP
+        if indexOf(outputLines,line)==null then push(outputLines,line)
+      end for
+      for line in outputLines;push(globals.G_pipe.stdout,line);end for
+      return
+    end if
+    portData={}
+    print liteGrey(startMsg)
+    for port in ports
+      if port==0 then
+        lanIP=null
+        if local_ip(router)!=resolvedIP then
+          hasWebPort=false
+          for portObj in ports
+            if portObj==0 then continue
+            if port_number(portObj)==8080 then
+              lanIP=get_lan_ip(portObj)
+              hasWebPort=true
+              break
+            end if
+          end for
+          if is_lan_ip(resolvedIP) and not hasWebPort then continue
+        end if
+        service="router"
+        version=kernel_version(router)
+        if not lanIP then lanIP=local_ip(router)
+        state=green("open")
+        entry={
+          "port":green(str(port)),
+          "state":state,
+          "service":blue(service),
+          "version":blue(version),
+          "lan":lime(lanIP)
+        }
+        portData[__port_idx]=entry
+        continue
+      end if
+      info=split(port_info(router,port)," ")
+      service=info[0]
+      version=info[1]
+      lanIP=get_lan_ip(port)
+      portNum=port_number(port)
+      state="open"
+      if (is_closed(port) or hasIndex(Net.FWPorts,port_number(port))) and not is_lan_ip(resolvedIP) then state="closed"
+      if state=="open" then state=green(state) else state=red(state)
+      entry={
+        "port":green(str(portNum)),
+        "state":state,
+        "service":blue(service),
+        "version":blue(version),
+        "lan":lime(lanIP)
+      }
+      portData[__port_idx]=entry
+    end for
+    print liteGrey("  Target IP: "+resolvedIP)
+    print liteGrey("Ports Found: "+len(portData))
+    if not portData then return
+    columns=[]
+    push(columns,join([grey("PORT"),grey("STATE"),grey("SERVICE"),grey("VERSION"),grey("LAN")],"  "))
+    for entry in portData;data=entry.value;push(columns,join([data.port,data.state,data.service,data.version,data.lan],"  "));end for
+    print format_columns(join(columns,char(10)))
+    if argv.w then
+      print ""
+      whoisData=whois(public_ip(router))
+      if indexOf(whoisData,"Domain name")!=null then
+        whoisData=whoisData.replace("Domain name: ","")
+        whoisData=whoisData.replace("Administrative contact: ","")
+        whoisData=whoisData.replace("Email address: ","")
+        whoisData=whoisData.replace("Phone: ","")
+        lines=split(whoisData,char(10))
+        if bssid_name(router) then print blue(ljust("BSSID",22))+yellow(" : ")+white(bssid_name(router))
+        if essid_name(router) then print blue(ljust("ESSID",22))+yellow(" : ")+white(essid_name(router))
+        print blue(ljust("PUBLIC IP",22))+yellow(" : ")+white(public_ip(router))
+        print blue(ljust("PRIVATE IP",22))+yellow(" : ")+white(local_ip(router))
+        if len(lines)>0 then print blue(ljust("WEBSITE",22))+yellow(" : ")+white(lines[0])
+        if len(lines)>0 then print blue(ljust("DOMAIN",22))+yellow(" : ")+white(lines[0].replace("www.",""))
+        if len(lines)>0 then print blue(ljust("COMPANY",22))+yellow(" : ")+white(split(lines[0],"\.")[1])
+        if len(lines)>1 then print blue(ljust("ADMIN",22))+yellow(" : ")+white(lines[1])
+        if len(lines)>2 then print blue(ljust("EMAIL",22))+yellow(" : ")+white(lines[2])
+        if len(lines)>3 then print blue(ljust("PHONE",22))+yellow(" : ")+white(lines[3])
+      end if
+      print blue(ljust("ROUTER VERSION",22))+yellow(" : ")+white(kernel_version(router))
+      rules=firewall_rules(router)
+      print green("Scanning firewall rules...")
+      if not len(rules) then
+        print green("Firewall rules: N/A")
+      else
+        fwData=self.firewallRules(rules)
+        for rule in fwData;print rule;end for
+      end if
+    end if
+  end if
+end function

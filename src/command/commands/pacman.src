@@ -1,0 +1,508 @@
+// =============================================================================
+// PACMAN
+// Package manager; install, sync, upgrade, and search Grey Hack repositories.
+// =============================================================================
+Command.pacman=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+  if (not argv or not len(argv)) and not hasPipeInput then return Man.help(["pacman"])
+  if hasPipeInput then
+    if not argv then argv=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(argv,line);end for
+  end if
+  if Net.hasInternet(Obj) isa Warning then return
+  if not Library.aptclient then Library.aptclient=Io.getLib(Obj,"aptclient.so","aptclientLib")
+  if not Library.aptclient then
+    SavedLibs.install(Obj,["apt"])
+    Library.aptclient=Io.getLib(Obj,"aptclient.so","aptclientLib")
+  end if
+  if not Library.aptclient then return Error.set("Unable to locate the aptclient.so library")
+  message=function;Info.info("Reading package lists...");end function
+  checkUpgrade=function(dirPath)
+    packages=[]
+    dir=File(Obj.computer,dirPath)
+    if dir!=null then
+      for file in get_files(dir);upgradeStatus=check_upgrade(Library.aptclient,path(file));if upgradeStatus==1 then push(packages,name(file));end for
+    end if
+    return packages
+  end function
+  ensureSystemDirAccess=function(installPath,packageName)
+    currentUser=Obj.user.name
+    if currentUser=="root" then return true
+    if Obj.rootShell then return true
+    systemDirs=["/bin","/usr/bin"]
+    needsRoot=false
+    for sysDir in systemDirs;if installPath==sysDir then needsRoot=true;end for
+    if not needsRoot then return true
+    Info.warning("Installing to "+installPath+" requires root permissions")
+    rootPass=Gui.inputPass("Enter root password:")
+    if not rootPass then return Error.set("Root password required for system directory installation")
+    if not globals.G_hasPivoted then rootShell=get_shell("root",rootPass)else rootShell=Builder.getShell(Obj,"root",rootPass)
+    if not rootShell then return Error.set("Invalid root password or failed to get root shell")
+    Obj.rootShell=rootShell
+    return true
+  end function
+  chmodInstalledFile=function(installPath,packageName)
+    systemDirs=["/bin","/usr/bin"]
+    needsChmod=false
+    for sysDir in systemDirs;if installPath==sysDir then needsChmod=true;end for
+    if not needsChmod then return true
+    currentUser=Obj.user.name
+    if currentUser=="root" then return true
+    if not Obj.rootShell then return Warning.set("No root shell available for chmod")
+    filePath=installPath+"/"+packageName
+    targetFile=File(host_computer(Obj.rootShell),filePath)
+    if not targetFile then return Warning.set("Installed file not found: "+filePath)
+    chmodResult=Command.chmodFile(targetFile,"755")
+    if chmodResult isa Error then return chmodResult
+    Info.info("Set permissions on "+filePath+" to -rwxr-xr-x")
+    return true
+  end function
+  runUpdate=function(arg)
+    _p=ArgumentParser.init
+    _p.addArgument("e",false,"flag")  // Include exploit scan during update
+    _p.addArgument("l",false,"flag")  // Limit scan to LAN only
+    _p.addArgument("f",false,"flag")  // Fast update (skip slower checks)
+    _p.addArgument("c",false,"storeNumber")  // Max concurrent connections
+    _p.addArgument("force",true,"flag")  // Long flag: --force (bypass version check)
+    arg=_p.parseArgs("pacman",arg)
+    if arg isa Error then return arg
+    if arg.f and arg.force then return Error.set("Can't use both -f and --force flags")
+    if not arg.c then arg.c=10
+    //seen: libname_version keys already handled this update run (skip repeat canScan/headless)
+    seen={}
+    processShellExploits=function(metaLib,exploit)
+      shell=Exploit.overflow(metaLib,exploit.m,exploit.s,null,"pacman")
+      if typeof(shell)!="shell" then return
+      shell=Exploit.tryShellEX(shell,true)
+      if not shell or shell isa Error then return
+      shellMetaLib=Builder.packCOEX(shell).metaxploit
+      if not shellMetaLib then return
+      computer=host_computer(shell)
+      for libFile in get_files(File(computer,"/lib"))
+        library=load(shellMetaLib,path(libFile))
+        if not library then continue
+        libKey=lib_name(library)+"_"+version(library)
+        if hasIndex(outer.seen,libKey) then continue
+        outer.seen[libKey]=1
+        if Exploit.haveAlready(library) then
+          if Exploit.canScan(library) then Exploit.headless(library)
+          continue
+        end if
+        Info.info("Adding "+lib_name(library)+":"+version(library),"A",true)
+        Exploit.headless(library)
+      end for
+      Info.info("Checking|Clearing log on "+green(computer.public_ip)+":"+yellow(computer.local_ip),"+")
+      Log.trylogwipe(shell)
+    end function
+		doUpdateLocal=function(arg)
+			if not Library.haveMetaxploit then return
+			Info.info("Updating the exploit database...")
+			Info.info("Making "+green(str(arg.c))+" passes...")
+			totalPasses=arg.c
+			passCount=0
+			initialStats=Exploit.stats
+			initialExploits=to_int(initialStats[0])
+			initialPayloads=to_int(initialStats[1])
+			while arg.c!=0
+				targetIP=Net.rip
+				router=null
+        lastTarget=null
+				router=get_router(targetIP)
+				if not router then continue
+				ports=used_ports(router)
+				if not ports then continue
+				if Net.isPortsClose(ports) then continue
+				if globals.G_settings.monitorDirtyips then Dirty.add(targetIP)
+				for metaData in Exploit.extract(router,targetIP)
+          if metaData isa Error then continue
+          if metaData.public_ip+metaData.local_ip!=lastTarget then lastTarget=metaData.public_ip+metaData.local_ip
+          libKey=lib_name(metaData.metaLib)+"_"+version(metaData.metaLib)
+          //First sighting: scan/add. Later sightings: still try shell harvest for /lib finds.
+          if not hasIndex(seen,libKey) then
+            seen[libKey]=1
+            if Exploit.haveAlready(metaData.metaLib) then
+              if Exploit.canScan(metaData.metaLib) then Exploit.headless(metaData.metaLib)
+            else
+              exploitData=Exploit.get(metaData.metaLib)
+              if not exploitData then
+                Info.info("Adding "+lib_name(metaData.metaLib)+":"+version(metaData.metaLib),"A",true)
+                Exploit.headless(metaData.metaLib)
+              end if
+            end if
+          end if
+          if not hasIndex(globals.G_exploitCache,libKey) then continue
+          for exploit in Exploit._ex(libKey);if exploit.e=="s" then processShellExploits(metaData.metaLib,exploit);end for
+				end for
+				arg.c-=1
+				passCount+=1
+				Info.info(green(str(passCount))+" passe(s) out of "+green(str(totalPasses))+" made...","+")
+			end while
+			Info.info("Database update complete")
+			finalStats=Exploit.stats
+			exploitsAdded=to_int(finalStats[0])-initialExploits
+			payloadsAdded=to_int(finalStats[1])-initialPayloads
+			if exploitsAdded or payloadsAdded then
+				print green("[Exploits added to the Database]----["+white(str(exploitsAdded))+"]")
+				print green("[Payloads added to the Database]----["+white(str(payloadsAdded))+"]")
+			end if
+		end function
+		doUpdate=function(arg)
+      if not Library.haveMetaxploit then return
+      Info.info("Updating the exploit database...")
+      if arg.force then Info.info("Force update enabled")
+			Info.info("Making "+green(str(arg.c))+" passes...")
+			totalPasses=arg.c
+			passCount=0
+      initialStats=Exploit.stats
+      initialExploits=to_int(initialStats[0])
+      initialPayloads=to_int(initialStats[1])
+			while arg.c!=0
+				targetIP=Net.rip
+				router=null
+				router=get_router(targetIP)
+				if not router then continue
+				ports=used_ports(router)
+				if not ports then continue
+				if Net.isPortsClose(ports) then continue
+				if globals.G_settings.monitorDirtyips then Dirty.add(targetIP)
+				for metaData in Exploit.extract(router,targetIP)
+          if metaData isa Error then continue
+          libKey=lib_name(metaData.metaLib)+"_"+version(metaData.metaLib)
+          if hasIndex(seen,libKey) then continue
+          seen[libKey]=1
+          if arg.f then
+            if Exploit.haveAlready(metaData.metaLib) then
+              if Exploit.canScan(metaData.metaLib) then
+                Info.info("Updating "+lib_name(metaData.metaLib)+":"+version(metaData.metaLib),"U",true)
+                Exploit.headless(metaData.metaLib)
+              end if
+            else
+              Info.info("Adding "+lib_name(metaData.metaLib)+":"+version(metaData.metaLib),"A",true)
+              Exploit.headless(metaData.metaLib)
+            end if
+          else if arg.force then
+            Info.info("Force Scanning "+lib_name(metaData.metaLib)+":"+version(metaData.metaLib),"F",true)
+            Exploit.headless(metaData.metaLib)
+          else
+            if Exploit.haveAlready(metaData.metaLib) then
+              if Exploit.canScan(metaData.metaLib) then Exploit.headless(metaData.metaLib)
+              continue
+            end if
+            Info.info("Adding "+lib_name(metaData.metaLib)+":"+version(metaData.metaLib),"A",true)
+            Exploit.headless(metaData.metaLib)
+          end if
+				end for
+				arg.c-=1
+				passCount+=1
+				Info.info(green(str(passCount))+" passe(s) out of "+green(str(totalPasses))+" made...","+")
+			end while
+			Info.info("Database update complete")
+      finalStats=Exploit.stats
+      exploitsAdded=to_int(finalStats[0])-initialExploits
+      payloadsAdded=to_int(finalStats[1])-initialPayloads
+      if exploitsAdded or payloadsAdded then
+        print green("[Exploits added to the Database]----["+white(str(exploitsAdded))+"]")
+        print green("[Payloads added to the Database]----["+white(str(payloadsAdded))+"]")
+      end if
+		end function
+    if arg.e then
+      return doUpdate(arg)
+    else if arg.l then
+      return doUpdateLocal(arg)
+    end if
+		message
+		update(Library.aptclient)
+  end function
+  runInstall=function(arg)
+    _p=ArgumentParser.init
+    _p.addArgument("m",false,"flag")  // Install metaxploit.so library
+    _p.addArgument("c",false,"flag")  // Install crypto.so library
+    _p.addArgument("b",false,"flag")  // Install both metaxploit.so and crypto.so
+    _p.addArgument("i",false,"store")  // Override final install path
+    _p.addArgument("p",false,"store")  // Suggested install path for package
+    arg=_p.parseArgs("pacman",arg)
+    if arg isa Error then return arg
+    message
+    installLibrary=function(Obj,packageName)
+      status=check_upgrade(Library.aptclient,path(Obj.dir.data)+"/"+packageName)
+      if status isa string then
+        Info.info("Not installed, installing "+packageName+"...")
+        result=install(Library.aptclient,packageName,path(Obj.dir.data))
+        if result isa string then return Error.set(result)
+        Info.info(packageName+" installed")
+      else if status==0 then
+        Info.info("No "+packageName+" upgrade needed at this time")
+      else if status==1 then
+        Info.info("Upgrade available, upgrading "+packageName+"...")
+        result=install(Library.aptclient,packageName,path(Obj.dir.data))
+        if result isa string then return Error.set(result)
+        Info.info(packageName+" upgraded")
+        if packageName=="metaxploit.so" then
+          Info.info(packageName+" upgraded")
+          Info.info("Need to re-initialize metaxploit call 'reload -m'.")
+        else
+          Info.info(packageName+" upgraded")
+        end if
+      end if
+    end function
+    getInstallPath=function(packageName,specifiedPath)
+      if specifiedPath then return specifiedPath
+      // .exe files go to /usr/bin
+      if indexOf(packageName,".exe")!=null then
+        Info.info("No path flag set, using /usr/bin")
+        return "/usr/bin"
+      // .so libraries go to /lib
+      else if indexOf(packageName,".so")!=null then
+        Info.info("No path flag set, using /lib")
+        return "/lib"
+      // Everything else goes to /bin
+      else
+        Info.info("No path flag set, using /bin")
+        return "/bin"
+      end if
+    end function
+    if arg.m then
+      installLibrary(Obj,"metaxploit.so")
+    else if arg.c then
+      installLibrary(Obj,"crypto.so")
+    else if arg.b then
+      installLibrary(Obj,"metaxploit.so")
+      installLibrary(Obj,"crypto.so")
+    else
+      packages=arg.rest
+      if not packages or not len(packages) then return Error.set("No package specified")
+      successCount=0
+      failCount=0
+      for packageName in packages
+        installPath=getInstallPath(packageName,arg.p)
+        if not arg.i then finalInstallPath=installPath else finalInstallPath=arg.i
+        // Check and handle root permissions for system directories
+        accessCheck=ensureSystemDirAccess(finalInstallPath,packageName)
+        if accessCheck isa Error then
+          Info.error("Failed to install "+packageName+": "+accessCheck)
+          failCount+=1
+          continue
+        end if
+        result=install(Library.aptclient,packageName,finalInstallPath)
+        if not result then
+          Info.error("Failed to install "+packageName+": Internal error")
+          failCount+=1
+          continue
+        end if
+        if result isa string then
+          Info.error("Failed to install "+packageName+": "+result)
+          failCount+=1
+          continue
+        end if
+        chmodInstalledFile(finalInstallPath,packageName)
+        Info.info(packageName+" installed")
+        successCount+=1
+      end for
+      if len(packages)>1 then Info.info("Installation complete: "+successCount+" succeeded, "+failCount+" failed")
+    end if
+  end function
+  runSearch=function(arg)
+    if not arg then return Man.help(["pacman"])
+		query=arg[0]
+		message
+		for line in split(search(Library.aptclient,query),char(10));if not len(line) then continue;if indexOf(line,"not found in any repository")!=null then return Error.set(line);print white(line);end for
+	end function
+  runShow=function(arg)
+    if arg then
+      repoIP=arg[0]
+    else
+      repos=Utility.getRepos(Obj)
+      if not len(repos) then return Info.info("No repositories found, use 'pacman -Sr' to add one")
+      repoIP=repos[0]
+    end if
+    if is_valid_ip(repoIP) then
+      print yellow("Showing packages for repository: "+repoIP)
+      message
+			packageList=show(Library.aptclient,repoIP)
+			packageList=split(trim(packageList),char(10))
+			listPL(packageList)
+		else
+			Info.error(repoIP+": is not a valid repository ip")
+		end if
+  end function
+  addrepo=function(arg)
+    _p=ArgumentParser.init
+    _p.addArgument("r",false,"store")       // Repo IP to add
+    _p.addArgument("p",false,"storeNumber") // Port (default 1542)
+    arg=_p.parseArgs("pacman",arg)
+    if arg isa Error then return arg
+    if not arg.p then arg.p=1542
+    repo={
+      "ip":null,
+      "port":arg.p
+    }
+    if not arg.r then
+      // No -r flag: fetch a random public repository
+      configFile=File(Obj.computer,"/etc/apt/sources.txt")
+      if not configFile then System.genAptConfig(Obj)
+      repo=Net.getRepo
+    else
+      // Manual repo entry via -r IP and optional -p PORT
+      repo.ip=arg.r
+    end if
+    if not is_valid_ip(repo.ip) then return Error.set(repo.ip+": is not a valid ip")
+    message
+    result=add_repo(Library.aptclient,repo.ip,repo.port)
+    if result then return Error.set(result)
+    Info.info("Repository "+repo.ip+" added successfully Updating...")
+    runUpdate([])
+  end function
+	delrepo=function(arg)
+    if not arg then return Man.help(["pacman"])
+		repoIP=arg[0]
+		message
+		result=del_repo(Library.aptclient,repoIP)
+		if result then Info.error(result)
+		Info.info("Repository "+repoIP+" removed successfully Updating...")
+		runUpdate([])
+	end function
+	listRepos=function(arg)
+		repos=Utility.getRepos(Obj)
+		if len(repos) then
+			Info.info("Reading /etc/apt/sources.txt...")
+			for repo in repos;print white(repo);end for
+		else
+			Info.error("No repositories found")
+		end if
+	end function
+  runUpgrade=function(arg)
+    _p=ArgumentParser.init
+    _p.addArgument("y",false,"flag")  // Auto-confirm upgrade (no prompt)
+    _p.addArgument("i",false,"store")  // Override final install path
+    _p.addArgument("a",false,"store")  // Package name to upgrade
+    _p.addArgument("p",false,"store")  // Path to install to
+    arg=_p.parseArgs("pacman",arg)
+    if arg isa Error then return arg
+    getInstallPath=function(packageName,specifiedPath)
+      if specifiedPath then return specifiedPath
+      if not packageName then
+        Info.info("No path flag set, using /lib")
+        return "/lib"
+      end if
+      if indexOf(packageName,".exe")!=null then
+        Info.info("No path flag set, using /usr/bin")
+        return "/usr/bin"
+      else if indexOf(packageName,".so")!=null then
+        Info.info("No path flag set, using /lib")
+        return "/lib"
+      else
+        Info.info("No path flag set, using /bin")
+        return "/bin"
+      end if
+    end function
+    arg.p=getInstallPath(arg.a,arg.p)
+    if not arg.i then arg.i=arg.p
+    message
+    if arg.a then
+      status=check_upgrade(Library.aptclient,arg.a,arg.p)
+      if status==null then return Error.set("Internal error")
+      if status isa string then return Error.set(status)
+      if not status then return Info.info("No updates needed")
+      Info.info("The following package will be updated:")
+      Info.info(arg.a)
+      if not arg.y then
+        if Gui.yesNo("Do you want to continue?") then
+          // Check and handle root permissions for system directories
+          accessCheck=ensureSystemDirAccess(arg.i,arg.a)
+          if accessCheck isa Error then return accessCheck
+          result=install(Library.aptclient,arg.a,arg.i)
+          if not result then return Error.set("Internal error")
+          if result isa string then return Error.set(result)
+          chmodInstalledFile(arg.i,arg.a)
+          Info.info(arg.a+" installed")
+        else
+          return Warning.set("aborted")
+        end if
+      else
+        // Check and handle root permissions for system directories
+        accessCheck=ensureSystemDirAccess(arg.i,arg.a)
+        if accessCheck isa Error then return accessCheck
+        result=install(Library.aptclient,arg.a,arg.i)
+        if not result then return Error.set("Internal error")
+        if result isa string then return Error.set(result)
+        chmodInstalledFile(arg.i,arg.a)
+        Info.info(arg.a+" installed")
+      end if
+    else
+      // Bulk upgrade: scan directory and upgrade all outdated packages
+      upgradablePackages=checkUpgrade(arg.p)
+      if not upgradablePackages then return Info.info("No updates needed")
+      Info.info("The following packages will be updated:")
+      print yellow("-"*32)
+			for package in upgradablePackages;print white(package);end for
+			print yellow("-"*32)
+      if not arg.y then
+        if Gui.yesNo("Do you want to continue?") then
+          // Check and handle root permissions for system directories
+          accessCheck=ensureSystemDirAccess(arg.i,upgradablePackages[0])
+          if accessCheck isa Error then return accessCheck
+          count=0
+          for package in upgradablePackages
+            result=install(Library.aptclient,package,arg.i)
+            if result==null then
+              Info.error("Internal error")
+            else if result isa string then
+              Error.set(result)
+            else if result isa number then
+              chmodInstalledFile(arg.i,package)
+              Info.info(package+" updated")
+            end if
+            count+=1
+          end for
+          Info.info(count+" packages updated")
+        else
+          Info.warning("aborted")
+        end if
+      else
+        // Check and handle root permissions for system directories
+        accessCheck=ensureSystemDirAccess(arg.i,upgradablePackages[0])
+        if accessCheck isa Error then return accessCheck
+        count=0
+        for package in upgradablePackages
+          result=install(Library.aptclient,package,arg.i)
+          if result==null then
+            Info.error("Internal error")
+          else if result isa string then
+            Error.set(result)
+          else if result isa number then
+            chmodInstalledFile(arg.i,package)
+            Info.info(package+" updated")
+          end if
+          count+=1
+        end for
+        Info.info(count+" packages updated")
+      end if
+    end if
+  end function
+  runSetup=function(arg)
+    if not File(Obj.computer,"/etc/apt") then
+      Info.info("Creating apt structure...")
+      result=create_folder(Obj.computer,"/etc","apt")
+      if result isa string then return Error.set(result)
+    end if
+    sourcesFile=Command.touch(Obj,["/etc/apt/sources.txt"])
+		if sourcesFile isa Error then return
+    if sourcesFile then set_content(sourcesFile,System.toJSON({"official_server":true,"sourceList":{}}))
+    if Gui.yesNo("Do you want to add a random repo?") then Command.pacman(Obj,["-Sr"])
+  end function
+  // Dispatch table: maps pacman flags to handler functions
+  cmds={
+    "-Sl":@listRepos,
+    "-Sv":@runShow,
+    "-Sy":@runUpdate,
+    "-Ss":@runSearch,
+    "-Si":@runInstall,
+    "-Sr":@addrepo,
+    "-Sd":@delrepo,
+    "-Su":@runUpgrade,
+    "setup":@runSetup
+  }
+  // Validate subcommand exists and invoke corresponding handler
+  if not hasIndex(cmds,argv[0]) then return Error.set("Check your syntax, there is no flag ["+argv[0]+"]")
+  cmds[argv[0]](argv[1:])
+end function

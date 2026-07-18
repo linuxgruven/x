@@ -1,0 +1,141 @@
+// =============================================================================
+// HASHCAT
+// MD5 hash cracking and generation; crypto, wordlist, and brute-force modes.
+// =============================================================================
+Command.hashcat=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  if not argv and not hasPipeInput then return Man.help(["hc"])
+  if hasPipeInput then
+    if not argv then argv=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(argv,line);end for
+  end if
+  mode=lower(argv[0])
+  // Decipher hash with crypto library (requires crypto)
+  doDecipher=function(args)
+    if not args then return Warning.set("Missing hash")
+    hash=args[0]
+    if not Library.haveCrypto then return
+    if globals.G_crypto then crypto=globals.G_crypto else crypto=Library.crypto
+    // Validate MD5 hash format (32 hexadecimal characters)
+    if not hash.matches("^[a-f0-9]{32}$") then return Error.set("Bad hash")
+    Info.info("Valid hash...")
+    password=Crack.doDecipher(crypto,hash)
+    if not password or password isa Error then return
+    if password then print blue("Deciphered is: ")+yellow(password)
+  end function
+  // Dictionary attack on hash using rainbow tables
+  dictionary=function(args)
+    if not args then return Warning.set("Missing hash")
+    hash=args[0]
+    // Validate MD5 hash format (32 hexadecimal characters)
+    if not hash.matches("^[a-f0-9]{32}$") then return Error.set("Bad hash")
+    Info.info("Valid hash...")
+    // Load rainbow tables if not already in memory
+    if not globals.G_rainbow then Crack.loading
+    Info.info("Running...")
+    password=Crack.hash(hash)
+    if password then print yellow("The password for "+white(hash)+" is [ "+green(password)+" ]") else Info.info("Unable to crack hash :-(","=")
+  end function
+  // Generate MD5 hash from plaintext word
+  getmd5=function(args)
+    if not args then return Warning.set("Missing [ word ]")
+    word=args[0]
+    print yellow("The hash for "+white(word)+" is [ "+orange(md5(word))+" ]")
+  end function
+  // Process hash file with batch cracking
+  file=function(args)
+    _p=ArgumentParser.init
+    _p.addArgument("b",false,"flag")  // Dictionary/brute force mode
+    _p.addArgument("o",false,"flag")  // Overwrite file with results
+    _p.addArgument("d",false,"flag")  // Decipher mode
+    args=_p.parseArgs("hashcat",args)
+    if args isa Error then return
+    args=_p.checkRedirect(Obj,"hashcat",args)
+    if args isa Error then return
+    args=_p.parsePath(Obj,args)
+    if args isa Error then return
+    if not args.rest then return Error.set("Missing file")
+    hashFile=Io._getFile(Obj,args.rest[0])
+    if hashFile isa Error then return hashFile
+    if not args.b and not args.d then return Error.set("Missing the [-b] or [-d] flag")
+    // Disable overwrite if no write permission
+    if args.o and not has_permission(hashFile,"w") then args.o=false
+    // Dictionary/brute force mode using rainbow tables
+    if args.b then
+      // Load rainbow tables if not already in memory
+      if not globals.G_rainbow then Crack.loading
+      results=[]
+      for line in split(get_content(hashFile),char(10))
+        if not line then continue
+        password=null
+        // Split line by colon to separate user:hash or hash:user
+        parts=split(line,":")
+        if not len(parts)==2 then continue
+        first=parts[0]
+        second=parts[1]
+        // Check if second part is MD5 hash (user:hash format)
+        if second and second.matches("^[a-f0-9]{32}$") then
+          password=Crack.hash(second)
+          if args.o then
+            if first then push(results,first+":"+password) else push(results,password)
+          else
+            if first then push(results,green(first+yellow(":")+password)) else push(results,green(password))
+          end if
+        else if first and first.matches("^[a-f0-9]{32}$") then
+          // Check if first part is MD5 hash (hash:user format)
+          password=Crack.hash(first)
+          if args.o then
+            if second then push(results,second+":"+password) else push(results,password)
+          else
+            if second then push(results,green(second+yellow(":")+password)) else push(results,green(password))
+          end if
+        end if
+      end for
+      if not results then return Info.info("No passwords found")
+      if args.o then set_content(hashFile,join(results,char(10))) else listNHNC(results)
+    // Decipher mode using crypto library
+    else if args.d then
+      if not Library.haveCrypto then return
+      if globals.G_crypto then crypto=globals.G_crypto else crypto=Library.crypto
+      results=[]
+      for line in split(get_content(hashFile),char(10))
+        if not len(line) then continue
+        password=null
+        // Split line by colon to separate user:hash or hash:user
+        parts=split(line,":")
+        if not len(parts)==2 then continue
+        first=parts[0]
+        second=parts[1]
+        // Check if second part is MD5 hash (user:hash format)
+        if second and second.matches("^[a-f0-9]{32}$") then
+          password=Crack.doDecipher(crypto,second)
+          if not password or password isa Error then continue
+          if args.o then
+            if first then push(results,first+":"+password) else push(results,password)
+          else
+            if first then push(results,green(first+yellow(":")+password)) else push(results,green(password))
+          end if
+        else if first and first.matches("^[a-f0-9]{32}$") then
+          // Check if first part is MD5 hash (hash:user format)
+          password=Crack.doDecipher(crypto,first)
+          if not password or password isa Error then continue
+          if args.o then
+            if second then push(results,second+":"+password) else push(results,password)
+          else
+            if second then push(results,green(second+yellow(":")+password)) else push(results,green(password))
+          end if
+        end if
+      end for
+      if not results then return Info.info("No passwords found")
+      if args.o then set_content(hashFile,join(results,char(10))) else listNHNC(results)
+    end if
+  end function
+  commands={
+    "-d":@doDecipher,   // Decipher with crypto
+    "-h":@dictionary,   // Dictionary attack
+    "-w":@getmd5,       // Generate MD5 hash
+    "-f":@file          // Process file
+  }
+  if not hasIndex(commands,mode) then return Error.set(Text.msg.flag+mode+" ]")
+  commands[mode](argv[1:])
+end function

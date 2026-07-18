@@ -1,0 +1,29 @@
+// =============================================================================
+// REPL
+// Launch the Glosure interactive REPL or execute a Glosure source file.
+// =============================================================================
+Command.repl=function(Obj,argv)
+  opts={}
+  file=null
+  scriptArgs=[]
+  _len=len(argv)
+  i=0
+  while i<_len
+    a=argv[i]
+    if a=="-i" then
+      opts["interactive"]=true
+    else if a=="-e" then
+      i+=1
+      if i<len(argv) then opts["eval"]=argv[i]
+    else if a=="-p" then
+      i+=1
+      if i<len(argv) then opts["prefix"]=argv[i]
+    else if file==null then
+      file=a
+    else
+      push(scriptArgs,a)
+    end if
+    i+=1
+  end while
+  Glosure.run(Obj,Obj.commands,file,scriptArgs,opts)
+end function

@@ -1,0 +1,366 @@
+// =============================================================================
+// RSHELL
+// Full reverse-shell manager; imports servers, spawns shells, caches history, and transfers files.
+// =============================================================================
+Rshell=new RshellCommon
+// Adapter overrides for ShellObject-wrapped entries (.object / .meta / .dir)
+Rshell._getShell=function(entry);return entry.object;end function
+Rshell._getPublicIP=function(entry);return entry.meta.public_ip;end function
+Rshell._getLocalIP=function(entry);return entry.meta.local_ip;end function
+Rshell._getComputer=function(entry);return host_computer(entry.object);end function
+Rshell._getUserName=function(entry);return entry.user.name;end function
+Rshell._getDefaultUploadDir=function(entry);return path(entry.dir.current);end function
+Rshell._getRemoteFile=function(entry,filePath);return Io.getFile(entry,filePath);end function
+// Store shells from the import list as wrapped ShellObjects keyed by id
+Rshell._storeShells=function(z);for r in z;s=Exploit.getShell(r,false,[],true);if not hasIndex(s,"object") then continue;globals.G_rshell.rshells[s.id]=s;end for;end function
+// Helper: Generate rshell client loader template
+Rshell._loaderTemplate=function(ip,port,procName);return "_g=function;p=File(host_computer(get_shell),""/"");d=get_folders(p)+get_files(p);while len(d);f=pull(d);if is_folder(f) then d=d+get_folders(f)+get_files(f);if name(f)==""metaxploit.so"" or name(f)=="".metaxploit.so"" then;l=include_lib(path(f));if l and typeof(l)==""MetaxploitLib"" then return l;end if;end while;end function;m=_g;if m then rshell_client(m,"""+ip+""","+port+","""+procName+""")";end function
+Rshell.historyImport=function
+  // Rebuild history map from currently tracked shells
+  globals.G_rshell.history={}
+  for r in values(globals.G_rshell.rshells);globals.G_rshell.history[r.id]=r;end for
+  return {}
+end function
+Rshell.history=function(Obj,argv)
+  if not argv then return Man.help(["rshell"])
+  Arg1=lower(argv[0])
+  display=function(z)
+    if not globals.G_rshell.history then return Info.info(Rshell._MSG_HISTORY_EMPTY)
+    Info.info("Available Reverse Shell's in history:")
+    l=[]
+    for v in values(globals.G_rshell.history);push(l,Rshell._formatShellDisplay(v));end for
+    listNHNC(l)
+  end function
+  use=function(z)
+    if not globals.G_rshell.history then return Info.info(Rshell._MSG_HISTORY_EMPTY)
+    if z then x=to_int(z[0]) else x=null
+    if not x isa number then return Error.set(Rshell._MSG_ID_EXPECTED)
+    if not hasIndex(globals.G_rshell.history.values,x) then return Error.set(Rshell._MSG_INVALID_ID)
+    s=globals.G_rshell.history.values[x]
+    ShellObject.run(ShellObject,s.object)
+  end function
+  clear=function(z)
+    // Drop the cached history map
+    globals.G_rshell.history={}
+  end function
+  cmds={
+    "-l":@display,
+    "-u":@use,
+    "--use":@use,
+    "-c":@clear
+  }
+  if not hasIndex(cmds,Arg1) then return Error.set("Check your syntax, there is no help for [ "+Arg1+" ]")
+	cmds[Arg1](argv[1:])
+end function
+Rshell.clear=function(argv)
+  if not argv then return Man.help(["rshell"])
+  Arg1=argv[0]
+  servers=function(x)
+    // Forget imported server binaries
+    globals.G_rshell.servers={}
+  end function
+  rshells=function(x)
+    // Clear live shell handles
+    globals.G_rshell.rshells={}
+  end function
+  history=function(x)
+    // Clear only the history
+    globals.G_rshell.history={}
+  end function
+  clearAll=function(x)
+    // Full reset of rshell state
+    globals.G_rshell.servers={}
+    globals.G_rshell.rshells={}
+    globals.G_rshell.history={}
+  end function
+  cmds={
+    "-h":@history,
+    "-s":@servers,
+    "-r":@rshells,
+    "-a":@clearAll
+  }
+  if not hasIndex(cmds,Arg1) then return Error.set("Check your syntax, there is no help for [ "+Arg1+" ]")
+	cmds[Arg1](argv[1:])
+end function
+Rshell.dump=function(argv)
+  if not argv then p=path(globals.G_main.dir.current) else p=path(argv[0])
+  if not globals.G_rshell.servers then return Info.info(self._MSG_NO_SERVERS)
+  // Touch a dump file and serialize imported server names
+  f=Command.touch(globals.G_main,["-y",p+"/rssl.dat"])
+  if f isa Error then return
+  if set_content(f,join(globals.G_rshell.servers.indexes,char(10))) isa number then Info.info("Dumped rshell server's to: "+p+"/rssl.dat")
+end function
+Rshell.refresh=function(z=true)
+  if not globals.G_rshell.servers then return Error.set("You do not have any rshell servers imported")
+  // Save current rshells to history, then rebuild from server
+  self.historyImport
+  globals.G_rshell.rshells={}
+  for l in globals.G_rshell.servers
+    _rs=rshell_server(l.value)
+    if not _rs isa list then continue
+    for r in _rs
+      // Rebuild shell object from server and verify type
+      s=Exploit.getShell(r,false,[],true)
+      // Only keep valid shell objects; skip bad ones
+      if not hasIndex(s,"object") then continue
+      if indexOf(typeof(s.object),"shell")!=null then globals.G_rshell.rshells[s.id]=s else Warning.set("Check your rshell server port forwarding")
+    end for
+  end for
+  // Merge history shells not returned by server; deduplicate by IP fingerprint
+  fingerprints={}
+  for v in globals.G_rshell.rshells.values;fingerprints[self._getPublicIP(v)+":"+self._getLocalIP(v)]=true;end for
+  for k in globals.G_rshell.history.indexes;h=globals.G_rshell.history[k];fp=self._getPublicIP(h)+":"+self._getLocalIP(h);if not hasIndex(fingerprints,fp) then globals.G_rshell.rshells[k]=h;end for
+  if z then Info.info("RShell list refreshed")
+end function
+Rshell.view=function
+  if self.refresh(false) isa Error then return
+	if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS+" to view")
+  Info.info("Available Reverse Shell's:")
+	l=[]
+  for v in values(globals.G_rshell.rshells);push(l,self._formatShellDisplay(v));end for
+	listNHNC(l)
+end function
+Rshell.killSingle=function(x,n=null)
+  v=self._validateAndGetShell(x)
+  if not v then return
+  processNames=self._PROCESS_LIST
+	if n then processNames=processNames+[n]
+  id=self._killProcess(v,v.id,processNames)
+  if id then
+    if hasIndex(globals.G_rshell.rshells,id) then remove(globals.G_rshell.rshells,id)
+    if hasIndex(globals.G_rshell.history,id) then remove(globals.G_rshell.history,id)
+  end if
+end function
+Rshell.shellBuild=function(Obj)
+	b=path(Obj.dir.current)
+	z="rs"
+	y=z+".src"
+	w=File(Obj.computer,path(Obj.dir.current)+"/rs")
+	if w then Command.qrm(Obj,[w])
+	f=Command.touch(Obj,[b+"/"+y])
+  if f isa Error then return
+  // Prompt operator for process name, target IP, and port
+	x=Gui.input({"text":"What would you like the process name to be?","default":"ps"})
+	r=System.rshell
+	if not r then i=Gui.input({"text":"What ip would you like to use?","default":Obj.meta.public_ip}) else i=Gui.input({"text":"What ip would you like to use?","default":r})
+	if not i then
+		if not r then i=Obj.meta.public_ip else i=r
+	end if
+	p=Gui.inputInt({"text":"What port number would you like to use?","default":1222})
+	if not p isa number then return Error.set(p+" is not a port")
+	Info.info("All set ready to build")
+	Info.info("building now...")
+  set_content(f,self._loaderTemplate(i,p,x))
+	x=build(Obj.shell,path(Obj.dir.current)+"/"+y,b)
+	q=File(Obj.computer,path(Obj.dir.current)+"/"+y)
+	if q then Command.qrm(Obj,[q])
+	if x!="" then return Error.set(x)
+	Info.info("Complete")
+	return 1
+end function
+Rshell.shellInstall=function(Obj)
+  B=null
+  if File(Obj.computer,path(Obj.user.home)+"/rs") then B=1
+  if not B then
+    if not File(globals.G_main.computer,path(globals.G_main.dir.data)+"/rs") then B=Rshell.shellBuild(Obj)
+  end if
+	if B isa Error then return
+	d=null
+	i=null
+	if Obj.user.name=="root" then d="/root/Config" else d="/home/"+Obj.user.name+"/Config"
+	if Gui.yesNo("What directory would you like to use? (default is "+white(d)+")") then
+		i=d
+	else
+    // Let user pick an install directory if they decline default
+		c=Io.folder(Obj,Obj.user.home,"Select a directory:")
+    if c isa Warning then i=d else i=path(c)
+	end if
+	Info.info("Installing...")
+	s=globals.G_main.shell
+	m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/metaxploit.so")
+	copy(m,path(globals.G_main.dir.data)+"/",".metaxploit.so")
+	m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.metaxploit.so")
+	scp(s,path(m),i+"/",Obj.shell)
+	Command.qrm(globals.G_main,[m])
+  if B==1 then
+    f=File(Obj.computer,path(Obj.user.home)+"/rs")
+    move(f,i+"/",".rs")
+  else
+    f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/rs")
+    copy(f,path(globals.G_main.dir.data)+"/",".rs")
+    t=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.rs")
+    scp(s,path(t),i+"/",Obj.shell)
+    Command.qrm(globals.G_main,[t])
+  end if
+	Info.info("Installation complete. Launching: "+i+"/.rs")
+  if launch(Obj.shell,i+"/.rs")==1 then Info.info("We're good to go :-)") else Info.error("Unable to launch: "+i+"/.rs")
+end function
+Rshell.build=function(Obj)
+	if Obj.layer=="shell" then return self.shellBuild(Obj)
+	b=path(Obj.dir.data)
+	// XFIX1.0: dddd name trick obsolete for script binaries (size ≈ 0.65 * source)
+	z="dddd"
+	y=z+".src"
+  w=File(Obj.computer,path(Obj.dir.data)+"/"+y)
+  if w then Command.qrm(Obj,[w])
+	w=File(Obj.computer,path(Obj.dir.data)+"/rs")
+	if w then Command.qrm(Obj,[w])
+  f=Command.touch(Obj,[b+"/"+y])
+  if f isa Error then return
+  // Gather process name, server IP, and port for payload
+	x=Gui.input({"text":"What would you like the process name to be?","default":"ps"})
+	r=System.rshell
+	if not r then i=Gui.input({"text":"What server ip would you like to use?","default":Obj.meta.public_ip}) else i=Gui.input({"text":"What server ip would you like to use?","default":r})
+	if not i then
+		if not r then i=Obj.meta.public_ip else i=r
+	end if
+	p=Gui.inputInt({"text":"What port number would you like to use?","default":1222})
+  if not p isa number then return Error.set(p+" is not a port")
+	Info.info("All set ready to build")
+	Info.info("building now...")
+  set_content(f,self._loaderTemplate(i,p,x))
+	x=build(Obj.shell,path(Obj.dir.data)+"/"+y,b)
+	if x=="" then
+		f=File(Obj.computer,path(Obj.dir.data)+"/"+z)
+		if f then rename(f,"rs")
+		Info.info("Complete")
+	else
+		return Error.set(x)
+	end if
+	q=File(Obj.computer,path(Obj.dir.data)+"/"+y)
+	if q then Command.qrm(Obj,[q])
+	return 1
+end function
+Rshell.install=function(Obj)
+  if not Library.haveMetaxploit then return
+  if Obj.layer=="shell" then return self.shellInstall(Obj)
+  B=null
+  if File(Obj.computer,path(Obj.dir.data)+"/rs") then B=1
+  if not B then
+    if not File(globals.G_main.computer,path(globals.G_main.dir.data)+"/rs") then
+      B=self.build(Obj)
+    end if
+  end if
+  if B isa Error then return
+	i=null
+	if Obj.user.name=="root" then d="/root/Config" else d="/home/"+Obj.user.name+"/Config"
+  if not File(Obj.computer,d) then d=path(Obj.user.home)
+	if Gui.yesNo("What directory would you like to use? (default is "+white(d)+")") then
+		i=d
+	else
+    // Allow custom install path when default declined
+		c=Io.folder(Obj,Obj.user.home,"Select a directory:")
+    if c isa Warning then i=d else i=path(c)
+	end if
+	Info.info("Installing...")
+  if B==1 then
+    s=Obj.shell
+    m=File(Obj.computer,path(Obj.dir.data)+"/metaxploit.so")
+    copy(m,path(Obj.dir.data)+"/",".metaxploit.so")
+    m=File(Obj.computer,path(Obj.dir.data)+"/.metaxploit.so")
+    move(m,i+"/",".metaxploit.so")
+    f=File(Obj.computer,path(Obj.dir.data)+"/rs")
+    copy(f,path(Obj.dir.data)+"/",".rs")
+    t=File(Obj.computer,path(Obj.dir.data)+"/.rs")
+    move(t,i+"/",".rs")
+  else
+    s=globals.G_main.shell
+    m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/metaxploit.so")
+    copy(m,path(globals.G_main.dir.data)+"/",".metaxploit.so")
+    m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.metaxploit.so")
+    scp(s,path(m),i+"/",Obj.shell)
+    Command.qrm(globals.G_main,[m])
+    f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/rs")
+    copy(f,path(globals.G_main.dir.data)+"/",".rs")
+    t=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.rs")
+    scp(s,path(t),i+"/",Obj.shell)
+    Command.qrm(globals.G_main,[t])
+  end if
+	Info.info("Installation complete. Launching: "+i+"/.rs")
+	if launch(Obj.shell,i+"/.rs")==1 then Info.info("We're good to go :-)") else Info.error("Unable to launch: "+i+"/.rs")
+end function
+Rshell.shell=function(x)
+  s=self._validateAndGetShell(x)
+  if not s then return
+  ShellObject.run(ShellObject,s.object)
+end function
+Rshell.start=function(argv,Obj=null)
+	if not Library.haveMetaxploit then return
+	if argv then Arg1=argv[0] else Arg1=null
+  if not Arg1 then Arg1=System.rshell
+  if not Arg1 then
+    srvIps=globals.G_rshell.servers.indexes
+    if srvIps and len(srvIps)==1 then
+      Arg1=srvIps[0]
+    else if srvIps and len(srvIps)>1 then
+      CH=[green("Select a rshell server ip to use")]
+      for ip in srvIps;push(CH,yellow(ip));end for
+      push(CH,iyellow("Cancel"))
+      UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true)
+      if UCH!=len(CH)-1 then Arg1=srvIps[UCH-1]
+    end if
+  end if
+  if not Arg1 then Arg1=Gui.inputIP({"text":"What rshell server ip would you like to use?"})
+  if Arg1==null then return Error.set("Invalid rshell server ip")
+	if len(argv)>=2 then Arg2=to_int(argv[1]) else Arg2=null
+  if not Arg2 then Arg2=1222
+  if len(argv)>=3 then Arg3=argv[2] else Arg3=null
+  if not Arg3 then Arg3="ps"
+  // Choose metaxploit context and launch client
+  if not Obj then
+    r=rshell_client(Library.metaxploit,Arg1,Arg2,Arg3)
+  else
+    _=Builder.packMetaxploit(Obj)
+    if _ isa Error then return Error.set("Unable to start an rshell")
+    Obj.packMetaxploit=_
+    r=rshell_client(_,Arg1,Arg2,Arg3)
+  end if
+  if r isa string then
+    Info.info(r)
+  else
+    // Directly track the ShellObject we used — avoids rshell_server timing issues
+    if Obj then globals.G_rshell.rshells[Obj.id]=Obj
+    // Save to history so refresh can recover it if server misses timing
+    self.historyImport
+    Info.info("Up and running you sneaky dog")
+  end if
+end function
+Rshell.exec=function(argv)
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS)
+  if not len(argv)>=2 then return Error.set("RShell id and command expected")
+  x=to_int(argv[0])
+  s=self._validateAndGetShell(x)
+  if not s then return
+  print green("Executing ["+join(argv[1:]," ")+"] on [ "+yellow(s.meta.public_ip)+":"+yellow(s.meta.local_ip)+" ]")
+  Arg1=argv[1]
+  // Route command to bash, script (@run), or built-in command map
+  if Arg1=="do" then
+    Bash.do(s,clone(argv))
+  else if Arg1[0]=="@" then
+    s.commands["run"](argv[1:])
+  else
+    if hasIndex(s.commands,Arg1) then s.commands[Arg1](argv[2:])
+  end if
+end function
+Rshell.execAll=function(argv)
+  if globals.G_bash.SIGBREAK then globals.G_bash.SIGBREAK=false
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS)
+  if not argv then return Error.set("Command expected")
+  Arg1=argv[0]
+  d=join(argv," ")
+  c=globals.G_rshell.rshells.values
+	for s in c
+    arg=clone(argv)
+    print green("Executing ["+join(argv," ")+"] on [ "+yellow(s.meta.public_ip)+":"+yellow(s.meta.local_ip)+" ]")
+  // Respect stop/break flags during broadcast execution
+    if globals.G_bash.SIGBREAK then break
+    if globals.G_bash.SIGSTOP then return Bash.clear
+    if Arg1=="do" then
+      Bash.do(s,arg)
+    else if Arg1[0]=="@" then
+      s.commands["run"](arg)
+    else
+      if hasIndex(s.commands,Arg1) then s.commands[Arg1](arg[1:])
+    end if
+	end for
+end function

@@ -1,0 +1,82 @@
+toolXserver="chatDir=home_dir+""/chat""
+msgPath=chatDir+""/messages""
+usersPath=chatDir+""/users""
+outboxPath=chatDir+""/outbox""
+maxMessages=100
+trimTo=60
+computer=host_computer(get_shell)
+if not File(computer,chatDir) then create_folder(computer,home_dir,""chat"")
+if not File(computer,outboxPath) then create_folder(computer,chatDir,""outbox"")
+msgFile=File(computer,msgPath)
+if not msgFile then
+	touch(computer,chatDir,""messages"")
+	msgFile=File(computer,msgPath)
+end if
+set_content(msgFile,"""")
+usersFile=File(computer,usersPath)
+if not usersFile then
+	touch(computer,chatDir,""users"")
+	usersFile=File(computer,usersPath)
+end if
+set_content(usersFile,"""")
+outboxFolder=File(computer,outboxPath)
+if outboxFolder then
+	for item in outboxFolder.get_folders
+		item.delete
+	end for
+	for item in outboxFolder.get_files
+		item.delete
+	end for
+end if
+ip=computer.public_ip
+if is_network_active(computer) then ip=public_ip(get_router)
+print(""<color=#88ff88>==== X CHAT SERVER ====</color>"")
+print(""<color=#e4ff34>IP:</color> ""+ip)
+print(""<color=#88ff88>Running. CTRL+C to stop.</color>"")
+print("""")
+delimiter=char(31)
+appendMsg=function(line)
+	msgFile=File(outer.computer,outer.msgPath)
+	if not msgFile then return
+	content=get_content(msgFile)
+	if content then set_content(msgFile,content+char(10)+line) else set_content(msgFile,line)
+end function
+while true
+	wait(0.5)
+	outboxFolder=File(computer,outboxPath)
+	if outboxFolder then
+		for outFile in outboxFolder.get_files
+			fileName=outFile.name
+			if indexOf(fileName,"".lock"")!=null then continue
+			lockPath=outboxPath+""/""+fileName+"".lock""
+			touch(computer,outboxPath,fileName+"".lock"")
+			content=get_content(outFile)
+			if not content then
+				lockFile=File(computer,lockPath)
+				if lockFile then lockFile.delete
+				continue
+			end if
+			set_content(outFile,"""")
+			lockFile=File(computer,lockPath)
+			if lockFile then lockFile.delete
+			for line in split(content,char(10))
+				if not line then continue
+				appendMsg(line)
+				idx=indexOf(line,delimiter)
+				if idx!=null then print(line[:idx]+"" ""+line[idx+1:]) else print(line)
+			end for
+		end for
+	end if
+	msgFile=File(computer,msgPath)
+	if msgFile then
+		content=get_content(msgFile)
+		if content then
+			msgLines=split(content,char(10))
+			if len(msgLines)>maxMessages then
+				msgLines=msgLines[len(msgLines)-trimTo:]
+				set_content(msgFile,join(msgLines,char(10)))
+				print(""<color=#e4ff34>[SERVER] Trimmed to ""+trimTo+"" messages</color>"")
+			end if
+		end if
+	end if
+end while"

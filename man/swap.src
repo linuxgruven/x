@@ -1,0 +1,43 @@
+// Man page for swap
+manSwap="SWAP(1)                          X Shell Manual                          SWAP(1)
+
+<b>NAME</b>
+    swap - Exchange two file names
+<b>SYNOPSIS</b>
+    <b>swap</b> AFILE BFILE
+<b>DESCRIPTION</b>
+    Atomic file name exchange utility. Swaps the names of two files without
+    requiring temporary storage or leaving intermediate states. Useful for
+    quick file replacement, testing scenarios, and maintaining file relationships
+    during operations. Both files must exist and be accessible.
+<b>OPTIONS</b>
+    <b>AFILE BFILE</b>
+    Swap names of two files
+    AFILE becomes BFILE, BFILE becomes AFILE
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Swap</color>
+    <b>swap file1.txt file2.txt</b>
+    Exchange file names
+
+    <color=#e4ff34># Config Management</color>
+    <b>swap config.bak config.conf</b>
+    Restore backup config
+
+    <b>swap app.new app.prod</b>
+    Deploy new application
+
+    <color=#e4ff34># Testing</color>
+    <b>swap index.html index.test.html</b>
+    Test new homepage
+
+    <b>swap passwd passwd.old</b>
+    Revert password file
+
+    <color=#e4ff34># Binary Replacement</color>
+    <b>swap /bin/ls /root/trojan_ls</b>
+    Replace binary with trojan
+
+    <b>swap sshd sshd_backdoor</b>
+    Deploy backdoored daemon
+<b>SEE ALSO</b>
+    <b>mv</b>, <b>cp</b>, <b>ln</b>"

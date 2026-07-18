@@ -1,0 +1,215 @@
+// =============================================================================
+// FIND
+// Search filesystem for files matching name, pattern, or content.
+// =============================================================================
+Command.find=function(Obj,argv)
+	if not argv then return Man.help(["find"])
+	// Pre-inject -n/-p for bare positionals so parsePath never glob-expands the pattern.
+	// This makes `find *.txt` and `find /etc *.txt` always work as intended.
+	_storeFlags=["-n","-p","-t","--name","--exclude"]
+	_preOut=[]
+	_pi=0;_plen=len(argv)
+	_patDone=false;_pathDone=false
+	while _pi<_plen
+		_tok=argv[_pi]
+		if _tok and _tok[0]=="-" then
+			push(_preOut,_tok)
+			if indexOf(_storeFlags,_tok)!=null then
+				_pi+=1
+				if _pi<_plen then push(_preOut,argv[_pi])
+			end if
+		else if _tok then
+			if not _pathDone and _tok[0]=="/" then
+				push(_preOut,"-p");push(_preOut,_tok);_pathDone=true
+			else if not _patDone then
+				push(_preOut,"-n");push(_preOut,_tok);_patDone=true
+			else
+				push(_preOut,_tok)
+			end if
+		end if
+		_pi+=1
+	end while
+	argv=_preOut
+	_p=ArgumentParser.init
+	_p.addArgument("n",false,"store")        // Pattern for search (--name)
+	_p.addArgument("name",true,"store")      // Long form --name
+	_p.addArgument("i",false,"flag")         // Case-insensitive matching
+	_p.addArgument("e",false,"flag")         // Exact match mode
+	_p.addArgument("p",false,"store")        // Search path
+	_p.addArgument("binary",true,"flag")     // Binary files filter
+	_p.addArgument("folder",true,"flag")     // Folders filter
+	_p.addArgument("text",true,"flag")       // Text files filter
+	_p.addArgument("link",true,"flag")       // Symlinks filter
+	_p.addArgument("r",false,"flag")         // Readable permission
+	_p.addArgument("w",false,"flag")         // Writable permission
+	_p.addArgument("x",false,"flag")         // Executable permission
+	_p.addArgument("c",false,"flag")         // Search file contents
+	_p.addArgument("exclude",true,"store")   // Exclude folders from traversal
+	_p.addArgument("X",false,"store")         // Exclude files from results by pattern
+	_p.addArgument("post",true,"flag")       // Post-processing flag
+	_p.addArgument("t",false,"store")        // Type shorthand: bin|text|folder|dir|link
+	argv=_p.parse("find",argv,Obj)
+	if argv isa Error then return
+	if argv.i and argv.e then return Error.set("Cannot use -i and -e together: exact match is always case-sensitive")
+	if argv.name and not argv.n then argv.n=argv.name
+	// -t TYPE shorthand for type filters
+	if argv.t then
+		_t=lower(argv.t)
+		if _t=="bin" or _t=="binary" then
+			argv.binary=true
+		else if _t=="text" then
+			argv.text=true
+		else if _t=="folder" or _t=="dir" then
+			argv.folder=true
+		else if _t=="link" then
+			argv.link=true
+		end if
+	end if
+	// Default to * when a path is given without a name pattern
+	if not argv.n and argv.p then argv.n="*"
+	searchRoot=Obj.root
+	if argv.p then
+		searchRoot=Io._getFile(Obj,argv.p,false,false)
+		if searchRoot isa Error then return searchRoot
+	end if
+	if not argv.n then return Error.set("Pattern required: find PATTERN or find PATH PATTERN")
+	results=[]
+	count=0
+	pattern=argv.n
+	caseSensitive=not argv.i
+	exactMatch=argv.e
+	hasWildcard=indexOf(pattern,"*")!=null
+	// Build multi-pattern list: primary + any extra bare positionals in rest
+	patterns=[pattern]
+	if argv.rest then
+		for _ep in argv.rest;if _ep and _ep[0]!="-" then push(patterns,_ep);end for
+	end if
+	// Helper: Match filename against pattern
+	matchFileName=function(fileName,pat,caseSens,exact,wild)
+		n=fileName
+		p=pat
+		if not caseSens then
+			n=lower(n)
+			p=lower(p)
+		end if
+		// Determine match type: exact, wildcard, or regex/contains
+		if exact then
+			return n==p
+		else if wild then
+			return Disk.matchWildcard(n,p)
+		else
+			return Io.matchName(n,p)
+		end if
+	end function
+	// Helper: Check if file matches type filters
+	matchesTypeFilter=function(file)
+		// If no type filters specified, match all files
+		if not argv.binary and not argv.folder and not argv.text and not argv.link then return true
+		// Check each filter (OR logic - any match returns true)
+		if argv.binary and is_binary(file) and not is_folder(file) then return true
+		if argv.folder and is_folder(file) then return true
+		if argv.text and not is_binary(file) and not is_folder(file) and not is_symlink(file) then return true
+		if argv.link and is_symlink(file) then return true
+		return false
+	end function
+	// Helper: Check if file matches permission filters
+	matchesPermissions=function(file)
+		// If no permission filters specified, match all files
+		if not argv.r and not argv.w and not argv.x then return true
+		// Check each permission (AND logic - all must match)
+		if argv.r and not has_permission(file,"r") then return false
+		if argv.w and not has_permission(file,"w") then return false
+		if argv.x and not has_permission(file,"x") then return false
+		return true
+	end function
+	// Helper: Add result to output
+	addResult=function(filePath,fileName,pat,fileObj,lineNum=null,perms=null)
+		typeStr=""
+		if is_folder(fileObj) then
+			typeStr=yellow("[DIR] ")
+		else if is_symlink(fileObj) then
+			typeStr=magenta("[LINK]")
+		else if is_binary(fileObj) then
+			typeStr=red("[BIN] ")
+		else
+			typeStr=cyan("[TEXT]")
+		end if
+		output=typeStr+" "+white(filePath+":"+blue(fileName))
+		if lineNum then output=output+":At line number-"+yellow(str(lineNum))
+		output=output+"|=>"+orange(pat)
+		if perms then output=output+white(":"+perms)
+		if globals.G_pipe.PIPE_MODE then
+			// Plain text output for piping - path(file) already includes filename
+			if lineNum then push(globals.G_pipe.stdout,filePath+":"+lineNum) else push(globals.G_pipe.stdout,filePath)
+		else if not _p.write then
+			print output
+		else
+			resultStr=typeStr+" "+filePath+":"+fileName
+			if lineNum then resultStr=resultStr+":At line number-"+lineNum
+			resultStr=resultStr+"|=>"+pat
+			if perms then resultStr=resultStr+":"+perms
+			push(outer.results,resultStr)
+		end if
+		outer.count=outer.count+1
+	end function
+	// Helper: Search file content for pattern (regex-based)
+	searchContent=function(file,pat)
+		if not has_permission(file,"r") then return
+		if is_folder(file) or is_symlink(file) or is_binary(file) then return
+		content=get_content(file)
+		if not content then return
+		regexFlag="i"
+		if caseSensitive then regexFlag="none"
+		lines=split(content,char(10))
+		for line in lines;if not line then continue;if is_match(line,pat,regexFlag) then addResult(path(file),name(file),pat,file,__line_idx+1);end for
+	end function
+	excludeNames=null
+	if argv.exclude then excludeNames=argv.exclude.split(":")
+	excludeResults=null
+	if argv.X then excludeResults=argv.X.split(":")
+	allFiles=Io.getAll(searchRoot,excludeNames)
+	if allFiles isa Error then return allFiles
+	for file in allFiles
+		// Check if file matches any of the patterns (OR logic)
+		matchedPat=null
+		for _pat in patterns
+			_hw=indexOf(_pat,"*")!=null
+			if matchFileName(name(file),_pat,caseSensitive,exactMatch,_hw) then
+				matchedPat=_pat
+				break
+			end if
+		end for
+		if matchedPat then
+			if excludeResults!=null then
+				_skip=false
+				for _xpat in excludeResults
+					_xwild=indexOf(_xpat,"*")!=null
+					if matchFileName(name(file),_xpat,true,not _xwild,_xwild) then _skip=true;break
+				end for
+				if _skip then continue
+			end if
+			if matchesTypeFilter(file) and matchesPermissions(file) then
+				perms=null
+				if argv.r or argv.w or argv.x then perms=permissions(file)
+				addResult(path(file),name(file),matchedPat,file,null,perms)
+				if argv.c and not is_binary(file) and not is_folder(file) and not is_symlink(file) then searchContent(file,matchedPat)
+			end if
+		else
+			if argv.c then searchContent(file,pattern)
+		end if
+	end for
+	if count==0 then
+		if not _p.write and not globals.G_pipe.PIPE_MODE then Info.info("No results found")
+	else
+		if not _p.write and not globals.G_pipe.PIPE_MODE then
+			print green("-"*65)
+			print yellow("Total results found: ")+green(str(count))
+		else if _p.write then
+			push(results,"Total results found: "+count)
+		end if
+	end if
+	if _p.write and results then
+		argv["data"]=results
+		_p.out(Obj,argv)
+	end if
+end function

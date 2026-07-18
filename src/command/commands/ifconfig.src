@@ -1,0 +1,47 @@
+// =============================================================================
+// IFCONFIG
+// Display or configure the Ethernet (eth0) network interface.
+// =============================================================================
+Command.ifconfig=function(Obj,argv)
+  // Validate argument count - must be 0 (status) or 3 (connect)
+  if len(argv) and len(argv)!=3 then return Man.help(["ifconfig"])
+  computer=Obj.computer
+  if active_net_card(computer)=="WIFI" then return Warning.set("Ethernet is not active")
+  if not len(argv) then
+    if not Obj.net.hasInternet then
+      print blue("Hostname: - "+get_name(computer))
+      print red("Public IP: - 0.0.0.0")
+      print red("Local IP : - 0.0.0.0")
+      print red("Gateway  : - 0.0.0.0")
+      return Error.set("Not connected to a network")
+    end if
+    router=Obj.net.router
+    gatewayIp=network_gateway(computer)
+    isPipe=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+    if isPipe then
+      push(globals.G_pipe.stdout,"card: eth0")
+      push(globals.G_pipe.stdout,"hostname: "+get_name(computer))
+      push(globals.G_pipe.stdout,"public_ip: "+computer.public_ip)
+      push(globals.G_pipe.stdout,"local_ip: "+computer.local_ip)
+      if gatewayIp=="0.0.0.0" then push(globals.G_pipe.stdout,"gateway: "+local_ip(router)) else push(globals.G_pipe.stdout,"gateway: "+gatewayIp)
+      return
+    end if
+    print blue("Active card: eth0")
+    print orange("--------------------------")
+    print blue("Hostname : - "+get_name(computer))
+    print blue("Public IP: - "+computer.public_ip)
+    print blue("Local IP : - "+computer.local_ip)
+    // Use router local IP if gateway is 0.0.0.0, otherwise use actual gateway
+    if gatewayIp=="0.0.0.0" then print blue("Gateway  : - "+local_ip(router)) else print blue("Gateway  : - "+gatewayIp)
+    return
+  end if
+  interface=argv[0]
+  ipAddress=argv[1]
+  if not is_valid_ip(ipAddress) then return Error.set("Invalid ip address")
+  gateway=argv[2]
+  if not is_valid_ip(gateway) then return Error.set("Invalid gateway")
+  result=connect_ethernet(computer,interface,ipAddress,gateway)
+  if len(result)>0 then return Error.set(result)
+  Obj.net=Net.initNetwork(Obj)
+  return true
+end function

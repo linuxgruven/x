@@ -1,0 +1,69 @@
+// Man page for favs
+manFavs="FAVS(1)                          X Shell Manual                          FAVS(1)
+
+<b>NAME</b>
+    favs - Manage favorite and trusted IP addresses
+<b>SYNOPSIS</b>
+    <b>favs</b>
+    <b>favs </b><b>-i </b><b>IP </b><b>NICK[NAME]</b>
+    <b>favs </b><b>-r </b><b>INDEX</b>
+    <b>favs </b><b>-e</b>
+<b>DESCRIPTION</b>
+    The favs command manages favorite and trusted IP addresses for quick
+    access and automated operations. When you add your rshell server to favs
+    with the nickname rshell, the command rshell -s automatically retrieves
+    the IP from the favorites list. Adding trusted IPs enables passwordless X
+    launch on those systems when using password-protected configurations.
+<b>OPTIONS</b>
+    <b>favs</b> - List Favorites
+      Display all favorite and trusted IP addresses.
+
+    <b>-i IP NICK[NAME]</b> - Add Favorite
+      Add new favorite or trusted IP with nickname.
+
+    <b>-r INDEX</b> - Remove Favorite
+      Remove favorite or trusted IP by index number.
+
+    <b>-e</b> - Edit Favorites
+      Edit existing favorite and trusted records.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># List Favorites</color>
+    <b>favs</b>
+    View all saved IPs
+
+    <color=#e4ff34># Add Favorites</color>
+    <b>favs -i 222.222.222.222 rshell</b>
+    Add rshell server
+
+    <b>favs -i 198.51.100.42 homebase</b>
+    Add home server
+
+    <b>favs -i 203.0.113.5 target</b>
+    Add target system
+
+    <color=#e4ff34># Remove Favorites</color>
+    <b>favs -r 0</b>
+    Remove first entry
+
+    <b>favs -r 3</b>
+    Remove fourth entry
+
+    <color=#e4ff34># Edit Favorites</color>
+    <b>favs -e</b>
+    Interactive edit mode
+
+    <color=#e4ff34># RShell Integration</color>
+    <b>favs -i 192.0.2.100 rshell</b>
+    Set rshell server
+
+    <b>rshell -s</b>
+    Auto-connects to rshell favorite
+
+    <color=#e4ff34># Trusted Systems</color>
+    <b>favs -i 198.51.100.10 trusted</b>
+    Add trusted system
+
+    <b>favs -i 203.0.113.20 backup</b>
+    Add backup server
+<b>SEE ALSO</b>
+    <b>rshell</b>, <b>cache</b>, <b>shadow</b>"

@@ -1,0 +1,14 @@
+// Man page for arrow2
+manArrow2=">>(1)                        X Shell Manual                        >>(1)
+
+<b>NAME</b>
+    command >> FILE - Append output to file
+<b>DESCRIPTION</b>
+    Append command output to existing file. File must exist. All
+    output goes to file, not terminal. Adds to end of file.
+<b>EXAMPLE:</b>
+    <b>echo New entry >> log.txt</b>
+    Add line to log file
+
+    <b>ps >> processes.txt</b>
+    Append process list to file"

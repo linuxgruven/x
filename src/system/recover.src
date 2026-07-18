@@ -1,0 +1,118 @@
+// =============================================================================
+// RECOVER
+// Backup and recovery module; preserves critical system files and executables in a protected directory.
+// =============================================================================
+Recover={
+  "files":[
+    "/boot/System.map",
+    "/boot/initrd.img",
+    "/boot/kernel.img",
+    "/etc/xorg.conf",
+    "/etc/fstab",
+    "/sys/xorg.sys",
+    "/sys/network.cfg",
+    "/sys/config.sys",
+    "/lib/init.so",
+    "/lib/net.so",
+    "/lib/kernel_module.so",
+    "/lib/aptclient.so",
+    "/bin/ssh",
+    "/bin/chmod",
+    "/bin/useradd",
+    "/bin/reboot",
+    "/bin/sudo",
+    "/bin/rm",
+    "/bin/ls",
+    "/bin/apt-get",
+    "/usr/bin/Terminal.exe",
+    "/usr/bin/Browser.exe",
+    "/usr/bin/FileExplorer.exe",
+    "/usr/bin/Settings.exe",
+    "/usr/bin/LogViewer.exe",
+    "/usr/bin/CodeEditor.exe",
+    "/usr/bin/Mail.exe",
+    "/usr/bin/Notepad.exe",
+    "/usr/bin/ScanLan.exe"
+  ]
+}
+Recover.start=function(Obj,argv)
+  if not argv then return Man.help(["rec"])
+  Arg1=lower(argv[0])
+  c=Obj.computer
+  f=File(c,"/root")
+  if not f or not has_permission(f,"w") then return Error.set("You do not have the permissions to run recover")
+  // Restore files from /.rec backup to their original paths
+  recover=function
+    b=File(Obj.computer,"/.rec")
+    if not b then return Warning.set("No backup found!")
+    // Strips /.rec prefix and copies file back to original location;
+    // rebuilds up to 2 levels of parent directories if missing
+    copyFile=function(f)
+      c=Obj.computer
+      m=path(f).remove("/.rec")
+      n=path(parent(f)).remove("/.rec")
+      if File(c,m) then return
+      pp=name(parent(parent(f)))
+      pf=name(parent(f))
+      if not File(c,"/"+pp) then create_folder(c,"/",pp)
+      if not File(c,"/"+pp+"/"+pf) then create_folder(c,"/"+pp,pf)
+      if not File(c,"/"+pf) then create_folder(c,"/",pf)
+      Info.info("Recovering: "+m)
+      copy(f,n,name(f))
+    end function
+    // Recursively walks /.rec and restores everything
+    init=function(o);for f in get_folders(o);copyFile(f);end for;for f in get_files(o);copyFile(f);end for;end function
+    init(b)
+    Info.info("Successfully recovered! chmod the files and run reboot")
+  end function
+  // Creates /.rec with copies of all critical files plus a compiled rec binary
+  backup=function
+    if Obj.type=="computer" then return Warning.set("Unable to perform a backup with a Computer Object")
+    r=File(c,"/.rec")
+    if r then
+      Info.info("Deleting previous backup...")
+      delete(r)
+    end if
+    create_folder(c,"/",".rec")
+    r=File(c,"/.rec")
+    for f in Recover.files
+      f=File(c,f)
+      if f then
+        Info.info("Backing up: "+path(f))
+        pp=name(parent(parent(f)))
+        pf=name(parent(f))
+        pPath=path(parent(f))
+        if not File(c,"/.rec/"+pp) then create_folder(c,"/.rec",pp)
+        if not File(c,"/.rec/"+pp+"/"+pf) then create_folder(c,"/.rec/"+pp,pf)
+        if not File(c,"/.rec/"+pf) then create_folder(c,"/.rec",pf)
+        // Remove stale backup copy before overwriting
+        existing=File(c,"/.rec"+pPath+"/"+name(f))
+        if existing then delete(existing)
+        copy(f,"/.rec"+pPath,name(f))
+      end if
+    end for
+    Info.info("Compiling program...")
+    f=Command.touch(Obj,["/.rec/rec.src"])
+    if f isa Error then return
+    _sys=System.getSystem
+    _sf=File(_sys.computer,path(_sys.dir.srcTools)+"/recover")
+    if not _sf then return Error.set("Missing recover source")
+    set_content(f,get_content(_sf))
+    Command.build(Obj,["/.rec/rec.src","/.rec"])
+    Info.info("Cleaning up...")
+    delete(f)
+    // Lock down /.rec so only root can access it
+    chmod(r,"u-wrx")
+    chmod(r,"g-wrx")
+    chmod(r,"o-wrx")
+    set_owner(r,"root",1)
+    set_group(r,"root",1)
+    Info.info("Successfully backed up! Run '/.rec/rec -r' to recover")
+  end function
+  cmds={
+    "-r":@recover,
+    "-b":@backup,
+  }
+  if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+  cmds[Arg1]
+end function

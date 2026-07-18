@@ -1,0 +1,22 @@
+// =============================================================================
+// SMTP_USER_LIST
+// Enumerate valid user accounts from a target SMTP server.
+// =============================================================================
+Command.smtp_user_list=function(argv)
+  if not argv then return Man.help(["smtp"])
+  _p=ArgumentParser.init
+  _p.addArgument("p",false,"storeNumber")  // Port (default 25)
+  argv=_p.parse("smtp",argv)
+  if argv isa Error then return
+  hasCrypto=Library.haveCrypto
+  if hasCrypto then crypto=Library.crypto else return
+  if not argv.rest or not len(argv.rest)>0 then return Error.set("Missing target")
+  if not argv.p then argv.p=25
+  Info.info("Connecting...")
+  userList=smtp_user_list(crypto,argv.rest[0],argv.p)
+  if not userList then return Error.set("Invalid parameters")
+  if userList isa string then return Error.set(userList)
+  print blue("Starting smtp-mail-list...")+char(10)+green("###### Scan started ######")
+  for username in userList;print yellow(username);end for
+  print blue("###### Scan completed ######")+char(10)+green(str(len(userList)))+blue(" results")
+end function

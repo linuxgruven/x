@@ -1,0 +1,15 @@
+// Man page for active
+manActive="ACTIVE(1)                        X Shell Manual                        ACTIVE(1)
+
+<b>NAME</b>
+    active - Show active network interface
+<b>SYNOPSIS</b>
+    <b>active</b>
+<b>DESCRIPTION</b>
+    Shows the currently active network interface. Displays which network
+    adapter is currently handling network traffic.
+<b>EXAMPLE:</b>
+    <b>active</b>
+    Display active network interface
+<b>SEE ALSO</b>
+    <b>ifconfig</b>, <b>iwconfig</b>"

@@ -1,0 +1,91 @@
+// Man page for cal
+manCal="CAL(7)                           X Shell Manual                           CAL(7)
+
+<b>NAME</b>
+    cal - Display calendar
+<b>SYNOPSIS</b>
+    <b>cal</b>
+    <b>cal</b> <i>MONTH</i> [<i>YEAR</i>]
+    <b>cal</b> <i>YEAR</i>
+    <b>cal -y</b>
+    <b>cal -3</b>
+    <b>cal -m</b>
+    <b>cal --year</b> <i>YYYY</i>
+    <b>cal > cal.txt</b>
+<b>DESCRIPTION</b>
+    Display a simple calendar in the terminal. By default shows the current
+    month with today highlighted. Use -y to display all 12 months of the
+    current year in a 3-column by 4-row grid. Pass a month (1-12) and
+    optional year to display a specific month. Pass a single number >12
+    to display that full year. Use -3 for a three-month view centered on
+    the current or selected month. Use -m to start weeks on Monday instead
+    of Sunday. Supports output redirection to save the calendar to a text
+    file. Use > to overwrite or >> to append.
+
+    *** Redirect output is never printed to the tty ***
+<b>OPTIONS</b>
+    <b>cal</b> - Display current month
+      Print the current month calendar with today highlighted.
+
+    <b>cal</b> <i>MONTH</i> - Display specific month
+      Print a specific month (1-12) of the current year.
+
+    <b>cal</b> <i>MONTH</i> <i>YEAR</i> - Display specific month and year
+      Print a specific month of a specific year.
+
+    <b>cal</b> <i>YEAR</i> - Display full year
+      A single number >12 is treated as a year. Shows all 12 months.
+
+    <b>cal -y</b> - Display full year
+      Print all 12 months of the current year in a grid layout.
+
+    <b>cal --year</b> <i>YYYY</i> - Display specific year
+      Print all 12 months for the given year. Implies -y.
+      Today is only highlighted when viewing the current year.
+
+    <b>cal -3</b> - Three-month view
+      Display previous, current, and next month side by side.
+      Combines with month/year args: cal -3 6 2025 shows May-Jul.
+
+    <b>cal -m</b> - Monday start
+      Start weeks on Monday (ISO style) instead of Sunday.
+      Combines with all other options.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Display current month</color>
+    <b>cal</b>
+    Show current month calendar in terminal
+
+    <color=#e4ff34># Display a specific month</color>
+    <b>cal 6</b>
+    Show June of this year
+
+    <color=#e4ff34># Display a specific month and year</color>
+    <b>cal 3 2025</b>
+    Show March 2025
+
+    <color=#e4ff34># Display full year</color>
+    <b>cal -y</b>
+    Show all 12 months of the current year
+
+    <color=#e4ff34># Display a specific year</color>
+    <b>cal --year 2002</b>
+    Show all 12 months for the year 2002
+
+    <color=#e4ff34># Three-month view</color>
+    <b>cal -3</b>
+    Show previous, current, and next month
+
+    <color=#e4ff34># Monday-start weeks</color>
+    <b>cal -m</b>
+    Show current month with Monday as first day of week
+
+    <color=#e4ff34># Combined</color>
+    <b>cal -3 -m 6 2025</b>
+    Three-month view around June 2025 with Monday start
+
+    <color=#e4ff34># Save to File</color>
+    <b>cal > cal.txt</b>
+    Save current month calendar to cal.txt (overwrite)
+
+    <b>cal -y >> cal.txt</b>
+    Append full year calendar to cal.txt"

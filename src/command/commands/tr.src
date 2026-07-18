@@ -1,0 +1,239 @@
+// =============================================================================
+// TR
+// Translate, delete, or squeeze characters in a file or stdin.
+// =============================================================================
+Command.tr=function(Obj,argv)
+  argv=ArgumentParser.check(argv)
+  // Check for stdin from pipe FIRST (check for null, not truthiness - empty string is valid)
+  usePipedInput=false
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then usePipedInput=true
+  deleteMode=false
+  squeezeMode=false
+  complementMode=false
+  writeMode=false
+  startIdx=0
+  _argvLen=len(argv)
+  while startIdx<_argvLen
+    arg=argv[startIdx]
+    if arg=="-d" or arg=="--delete" then
+      deleteMode=true
+      startIdx+=1
+    else if arg=="-s" or arg=="--squeeze" then
+      squeezeMode=true
+      startIdx+=1
+    else if arg=="-c" or arg=="--complement" then
+      complementMode=true
+      startIdx+=1
+    else if arg=="-w" or arg=="--write" then
+      writeMode=true
+      startIdx+=1
+    else
+      break
+    end if
+  end while
+  minArgs=1
+  if not usePipedInput then minArgs=2
+  if len(argv)-startIdx<minArgs then return Error.set("Missing arguments: tr [OPTIONS] SET1 [SET2] FILE")
+  set1=argv[startIdx]
+  if len(set1)>1 then
+    firstCode=code(set1[0])
+    lastCode=code(set1[-1])
+    if (firstCode==34 or firstCode==39 or firstCode==8220 or firstCode==8221) and (lastCode==34 or lastCode==39 or lastCode==8220 or lastCode==8221) then set1=set1[1:-1]
+  end if
+  set2=""
+  fileIdx=startIdx+1
+  if not deleteMode and len(argv)-startIdx>=2 then
+    set2=argv[startIdx+1]
+    // Strip quotes from set2
+    if len(set2)>1 then
+      firstCode=code(set2[0])
+      lastCode=code(set2[-1])
+      if (firstCode==34 or firstCode==39 or firstCode==8220 or firstCode==8221) and (lastCode==34 or lastCode==39 or lastCode==8220 or lastCode==8221) then set2=set2[1:-1]
+    end if
+    fileIdx=startIdx+2
+  end if
+  if not usePipedInput then
+    if fileIdx>=len(argv) then return Error.set("Missing file operand")
+  end if
+  filePath=null
+  if fileIdx<len(argv) then filePath=argv[fileIdx]
+  lines=[]
+  fileObj=null
+  if not usePipedInput then
+    // Resolve file path to file object
+    fileObj=Io._getFile(Obj,filePath)
+    if fileObj isa Error then return fileObj
+    // Check read permissions
+    if not has_permission(fileObj,"r") then return Error.set(name(fileObj)+": Permission denied")
+    // Validate not binary or folder
+    if Io.isBinFolder(fileObj) then return Error.set(name(fileObj)+": cannot process binary file or directory")
+    // Read file content
+    content=get_content(fileObj)
+    if not content then return Info.info(name(fileObj)+": empty file")
+    // Split content into lines
+    lines=split(content,char(10))
+  else
+    // Use piped input
+    stdinData=globals.G_pipe.stdin
+    if typeof(stdinData)=="string" then
+      lines=split(stdinData,char(10))
+    else if stdinData isa list then
+      lines=stdinData
+    else
+      lines=[str(stdinData)]
+    end if
+  end if
+  expandRange=function(str)
+    result=""
+    _len=len(str)
+    i=0
+    while i<_len
+      // Check for range pattern (char-char)
+      if i+2<_len and str[i+1]=="-" then
+        startChar=str[i]
+        endChar=str[i+2]
+        startCode=code(startChar)
+        endCode=code(endChar)
+        if startCode<=endCode then
+          c=startCode;while c<=endCode;result=result+char(c);c+=1;end while
+          i=i+3
+        else
+          result=result+startChar
+          i+=1
+        end if
+      else
+        result=result+str[i]
+        i+=1
+      end if
+    end while
+    return result
+  end function
+  processEscapes=function(str)
+    result=""
+    _len=len(str)
+    i=0
+    while i<_len
+      currentCode=code(str[i])
+      if currentCode==92 and i+1<_len then
+        // Skip zero-width space (char 8203) that may be copied from man pages
+        nextIdx=i+1
+        if code(str[nextIdx])==8203 and nextIdx+1<_len then nextIdx+=1
+        nextChar=str[nextIdx]
+        charsToSkip=nextIdx-i+1
+        if nextChar=="n" then
+          result=result+char(10)  // newline
+          i=i+charsToSkip
+        else if nextChar=="t" then
+          result=result+char(9)   // tab
+          i=i+charsToSkip
+        else if nextChar=="r" then
+          result=result+char(13)  // carriage return
+          i=i+charsToSkip
+        else if code(nextChar)==92 then
+          result=result+char(92)      // literal backslash
+          i=i+charsToSkip
+        else
+          result=result+str[i]
+          i+=1
+        end if
+      else
+        result=result+str[i]
+        i+=1
+      end if
+    end while
+    return result
+  end function
+  set1=expandRange(set1)
+  set1=processEscapes(set1)
+  if len(set2)>0 then
+    set2=expandRange(set2)
+    set2=processEscapes(set2)
+  end if
+  // Special case: if SET1 is newline only and we're translating,
+  // join all lines with SET2 instead of processing character-by-character
+  if not deleteMode and not squeezeMode and set1==char(10) and len(lines)>1 then
+    results=[join(lines,set2)]
+  else
+    // Process each line normally
+    // Build lookup maps for O(1) character checks
+    set1Map={}
+    _len=len(set1);i=0;while i<_len;set1Map[set1[i]]=i;i+=1;end while
+    set2Map={}
+    _len=len(set2);i=0;while i<_len;set2Map[set2[i]]=1;i+=1;end while
+    results=[]
+    for line in lines
+      text=str(line)
+      modified=""
+      // Delete mode: remove all characters in set1
+      if deleteMode then
+        i=0;textLen=len(text)
+        while i<textLen
+          char=text[i]
+          inSet=hasIndex(set1Map,char)
+          if complementMode then
+            if inSet then modified=modified+char
+          else
+            if not inSet then modified=modified+char
+          end if
+          i+=1
+        end while
+      else
+        // Translate mode: replace characters from set1 with set2
+        i=0;textLen=len(text)
+        while i<textLen
+          char=text[i]
+          if hasIndex(set1Map,char) then
+            pos=set1Map[char]
+            if pos<len(set2) then
+              modified=modified+set2[pos]
+            else
+              if len(set2)>0 then modified=modified+set2[-1] else modified=modified+char
+            end if
+          else
+            modified=modified+char
+          end if
+          i+=1
+        end while
+      end if
+      // Squeeze mode: compress repeated characters
+      if squeezeMode and len(modified)>0 then
+        squeezed=""
+        lastChar=""
+        i=0;modLen=len(modified)
+        while i<modLen
+          char=modified[i]
+          if len(set2)>0 then
+            if hasIndex(set2Map,char) then
+              if char!=lastChar then squeezed=squeezed+char
+            else
+              squeezed=squeezed+char
+            end if
+          else
+            if hasIndex(set1Map,char) then
+              if char!=lastChar then squeezed=squeezed+char
+            else
+              squeezed=squeezed+char
+            end if
+          end if
+          lastChar=char
+          i+=1
+        end while
+        modified=squeezed
+      end if
+      push(results,modified)
+    end for
+  end if // end special case check
+  if globals.G_pipe.PIPE_MODE then
+    for line in results;push(globals.G_pipe.stdout,line);end for
+    return
+  end if
+  if writeMode and fileObj then
+    // Check write permissions
+    if not has_permission(fileObj,"w") then return Error.set(name(fileObj)+": Permission denied")
+    // Join results and write back to file
+    outputContent=join(results,char(10))
+    set_content(fileObj,outputContent)
+    return Info.info("File updated: "+path(fileObj))
+  end if
+  for line in results;print white(line);end for
+end function

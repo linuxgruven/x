@@ -1,0 +1,95 @@
+// =============================================================================
+// AGENT_COMMAND_REGISTRY
+// Agent command registry; dynamic command knowledge wrapper and lookup system.
+// =============================================================================
+AgentCommandRegistry={}
+//Get command knowledge from cache (populated by man page parsing)
+AgentCommandRegistry.get=function(cmdName)
+  outLvl=globals.G_agent.config.outputLevel
+  if not hasIndex(globals.G_agent,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
+  //Load knowledge if empty
+  if len(globals.G_agent.commandKnowledgeCache.indexes)==0 then
+    savedLevel=outLvl
+    outLvl=0
+    globals.G_agent.loadKnowledge
+    outLvl=savedLevel
+  end if
+  normalizedName=trim(lower(cmdName))
+  //Check cache
+  if hasIndex(globals.G_agent.commandKnowledgeCache,normalizedName) then return globals.G_agent.commandKnowledgeCache[normalizedName]
+  //Try to learn from man page
+  return globals.G_agent.getCommandInfo(cmdName)
+end function
+AgentCommandRegistry.has=function(cmdName);knowledge=self.get(cmdName);return knowledge!=null;end function
+//Match natural language query to best command using man page knowledge
+AgentCommandRegistry.matchQuery=function(queryWords)
+  outLvl=globals.G_agent.config.outputLevel
+  if not hasIndex(globals.G_agent,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
+  //Load knowledge if empty
+  if len(globals.G_agent.commandKnowledgeCache.indexes)==0 then
+    savedLevel=outLvl
+    outLvl=0
+    globals.G_agent.loadKnowledge
+    outLvl=savedLevel
+  end if
+  //Filter stop words (using shared map for O(1) lookup)
+  sw=AgentCore._STOP_WORDS
+  meaningfulWords=[]
+  for word in queryWords;if len(word)>2 and not hasIndex(sw,word) then push(meaningfulWords,lower(word));end for
+  //Score each command by matching query words against purpose/description
+  bestCommand=null
+  bestScore=0
+  for cmdName in globals.G_agent.commandKnowledgeCache.indexes
+    knowledge=globals.G_agent.commandKnowledgeCache[cmdName]
+    score=0
+    //Command name in query = strong signal
+    if meaningfulWords.indexOf(cmdName)!=null then score=score+10
+    //Check purpose
+    if hasIndex(knowledge,"purpose") then
+      purposeLower=lower(knowledge.purpose)
+      for word in meaningfulWords;if indexOf(purposeLower,word)!=null then score=score+2;end for
+    end if
+    //Check raw description
+    if hasIndex(knowledge,"raw") then
+      rawLower=lower(knowledge.raw)
+      for word in meaningfulWords;if indexOf(rawLower,word)!=null then score+=1;end for
+    end if
+    if score>bestScore then
+      bestScore=score
+      bestCommand=cmdName
+    end if
+  end for
+  return {"command":bestCommand,"score":bestScore}
+end function
+//Extract semantic flag meanings from man page flag descriptions
+AgentCommandRegistry.getSemanticFlags=function(cmdName)
+  knowledge=self.get(cmdName)
+  if not knowledge or not hasIndex(knowledge,"flags") then return {}
+  semanticMap={}
+  //Map flag descriptions to semantic meanings
+  for flag in knowledge.flags.indexes
+    desc=lower(knowledge.flags[flag])
+    flagLetter=flag[1]  //Strip dash
+    //Pattern matching on flag descriptions
+    if indexOf(desc,"random")!=null then semanticMap.random=flagLetter
+    if indexOf(desc,"localhost")!=null or (indexOf(desc,"local")!=null and indexOf(desc,"scan")!=null) then semanticMap.localhost=flagLetter
+    if indexOf(desc,"public")!=null then semanticMap.public=flagLetter
+    if indexOf(desc,"recursive")!=null or indexOf(desc,"recurse")!=null then semanticMap.recursive=flagLetter
+    if indexOf(desc,"force")!=null then semanticMap.force=flagLetter
+    if indexOf(desc,"verbose")!=null then semanticMap.verbose=flagLetter
+    if indexOf(desc,"quiet")!=null or indexOf(desc,"silent")!=null then semanticMap.quiet=flagLetter
+    if indexOf(desc,"all")!=null then semanticMap.all=flagLetter
+    if indexOf(desc,"port")!=null then semanticMap.port=flagLetter
+    if indexOf(desc,"pattern")!=null then semanticMap.pattern=flagLetter
+    if indexOf(desc,"count")!=null or indexOf(desc,"number")!=null then semanticMap.count=flagLetter
+  end for
+  return semanticMap
+end function
+//Legacy compatibility - hardcoded commands structure (kept minimal for backward compat)
+//This is ONLY used for commands that have special parsing needs not in man pages
+AgentCommandRegistry.commands={
+  //Special case: scan has structured port shortcuts and object types in man page
+  "scan":{"expectsObj":true},
+  //Special case: crack doesn't use shell object
+  "crack":{"expectsObj":false}
+}

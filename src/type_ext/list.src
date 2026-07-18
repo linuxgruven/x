@@ -1,0 +1,314 @@
+// =============================================================================
+// LIST
+// Functional, display, comparison, and data-transform utilities for the list type.
+// =============================================================================
+list.toMap=function
+	l=self[0:]
+	m={}
+	for i in indexes(l);if l[i][1] isa list and len(l[i][1])==2 and l[i][1][0] isa string then m[l[i][0]]=l[i][1].toMap else m[l[i][0]]=l[i][1];end for
+	return m
+end function
+// Call func(element) for each item
+list.each=function(func);for i in self;func(i);end for;end function
+// Return new list with each element replaced by func(element)
+list.map=function(func)
+	r=self[0:]
+	for i in indexes(self);r[i]=func(r[i]);end for
+	return r
+end function
+// Return new list with elements removed where func returns true
+list.reject=function(func)
+	r=self[0:]
+	i=0
+	while i<len(r)
+		if func(r[i])==true then
+			r.remove(i)
+			continue
+		end if
+		i+=1
+	end while
+	return r
+end function
+// Return new list keeping only elements where func returns true
+list.select=function(func)
+	r=[]
+	for i in self;if func(i) then push(r,i);end for
+	return r
+end function
+// Recursively flatten nested lists into a single flat list
+list.flat=function
+	r=[]
+	for i in self;if i isa list then r+=i.flat else push(r,i);end for
+	return r
+end function
+// Remove null and empty-string elements; numbers are always kept (including 0)
+removeSpace=function(self)
+  r=[]
+  for a in self;if not (a isa number) and not a then continue;push(r,a);end for
+  return r
+end function
+list.removeSpace=@removeSpace
+// Returns alignment spacing string based on display index
+// displayIdx : the number that will be printed (1-based or 0-based)
+_listPad=function(displayIdx)
+  if displayIdx<=9 then return "   "
+  if displayIdx<100 then return "  "
+  return " "
+end function
+// Print each element in white, no numbering
+listPL=function(self);for a in self;print white(str(self[__a_idx]));end for;end function
+list.listPL=@listPL
+// Print 1-based numbered list with bracket index and padding
+listNH=function(self);for a in self;s=purple("["+white(str(__a_idx+1))+"]");print s+_listPad(__a_idx+1)+white(str(self[__a_idx]));end for;end function
+list.listNH=@listNH
+// Return list as 1-based numbered strings "01: item" (does not print)
+showNumbersGet=function(self,m)
+  l=[]
+  for a in self;if __a_idx<9 then push(l,"0"+(__a_idx+1)+": "+a) else push(l,(__a_idx+1)+": "+a);end for
+  return l
+end function
+list.showNumbersGet=@showNumbersGet
+// Print 0-based numbered list with bracket index and padding
+listNHZ=function(self);for a in self;s=purple("["+white(str(__a_idx))+"]");print s+_listPad(__a_idx)+white(str(self[__a_idx]));end for;end function
+list.listNHZ=@listNHZ
+// Print list with dash-bullet brackets instead of index numbers
+attackList=function(self);for a in self;s=purple("["+white(" - ")+"]");print s+_listPad(__a_idx)+white(str(self[__a_idx]));end for;end function
+list.attackList=@attackList
+// Print 0-based numbered list without colorizing content
+listNHNC=function(self);for a in self;s=purple("["+white(str(__a_idx))+"]");print s+_listPad(__a_idx)+self[__a_idx];end for;end function
+list.listNHNC=@listNHNC
+// Print each element with a leading space, no index
+listNN=function(self);for a in self;print " "+white(str(self[__a_idx]));end for;end function
+list.listNN=@listNN
+// Print 0-based numbered list using name of each element (file objects)
+listFN=function(self);for a in self;s=purple("["+white(str(__a_idx))+"]");print s+_listPad(__a_idx)+white(name(self[__a_idx]));end for;end function
+list.listFN=@listFN
+// Print 1-based numbered list showing name + path for each file object
+listFNP=function(self);for a in self;s=purple("["+white(str(__a_idx+1))+"]");print s+_listPad(__a_idx)+white(name(self[__a_idx])+" "+path(self[__a_idx]));end for;end function
+list.listFNP=@listFNP
+// Print list as a menu: index 0 is an unindexed header, rest are 0-based numbered
+list.toList=function
+  for a in self
+    if __a_idx==0 then
+      print self[0]
+      continue
+    end if
+    s=purple("["+white(str(__a_idx))+"]")
+    print s+_listPad(__a_idx)+self[__a_idx]
+  end for
+end function
+// Convert list of strings to list of integers
+list.toNumber=function
+  l=[]
+  for i in self;push(l,to_int(i));end for
+  return l
+end function
+// Print in a 5-column grid; each row-start item is indented 2 spaces
+list.man=function
+  if not len(self) then return
+  l=[]
+  for i in self
+    if __i_idx%5==0 then push(l,ljust("  "+i,12)) else push(l,ljust(i,12))
+    if not (__i_idx+1)%5 then
+      print join(l,"")
+      l=[]
+    end if
+  end for
+  if l then print join(l,"")
+end function
+// Print in a 5-column grid with no indentation
+list.tree=function
+  if not len(self) then return
+  l=[]
+  for i in self
+    push(l,i)
+    if not (__i_idx+1)%5 then
+      print join(l,"")
+      l=[]
+    end if
+  end for
+  if l then print join(l,"")
+end function
+// Compare self to l; returns {r: relation, l: differences}
+// r = "=" equal, "#" changed, "+" items added, "-" items removed
+list.compare=function(l)
+  r={
+    "r":"=",
+    "l":[]
+  }
+  if len(self)==len(l) then
+    for e in l;if indexOf(self,e)!=null then continue else push(r.l,"line ["+(__e_idx+1)+"]:"+e);end for
+    if r.l then r.r="#"
+    return r
+  else if len(self)<len(l) then
+    for e in l;if indexOf(self,e)!=null then continue else push(r.l,"line ["+(__e_idx+1)+"]:"+e);end for
+    r.r="+"
+    return r
+  else if len(self)>len(l) then
+    for e in self;if indexOf(l,e)!=null then continue else push(r.l,"line ["+(__e_idx+1)+"]:"+e);end for
+    r.r="-"
+    return r
+  end if
+  return r
+end function
+// Produce a unified diff between self and l using c/a/d operation codes
+list.diff=function(l)
+  r=[]
+  R=[]
+  L=[]
+	if len(self)==len(l) then
+		for e in l
+			if self[__e_idx]==e then continue
+      push(R,(__e_idx+1)+"c")
+      push(R,"< "+self[__e_idx])
+      push(L,(__e_idx+1)+"c")
+      push(L,"> "+e)
+		end for
+		if not R or not L then return r
+    r+=R
+    push(r,"---")
+    r+=L
+    return r
+	else if len(self)<len(l) then
+		for e in l
+			if indexOf(self,e)!=null then
+        if hasIndex(self,__e_idx) then
+          if self[__e_idx]==e then continue
+          push(R,(__e_idx+1)+"c")
+          push(R,"< "+self[__e_idx])
+          push(L,(__e_idx+1)+"c")
+          push(L,"> "+e)
+        else
+          push(R,(__e_idx+1)+"d")
+          push(R,"< "+e)
+          push(L,(__e_idx+1)+"a")
+          push(L,"> "+e)
+        end if
+      else
+        if hasIndex(self,__e_idx) then
+          push(R,(__e_idx+1)+"c")
+          push(R,"< "+self[__e_idx])
+          push(L,(__e_idx+1)+"c")
+          push(L,"> "+e)
+        else
+          push(R,(__e_idx+1)+"d")
+          push(R,"< "+e)
+          push(L,(__e_idx+1)+"a")
+          push(L,"> "+e)
+        end if
+      end if
+		end for
+		if (not R) and (not L) then return r
+    r+=R
+    push(r,"---")
+    r+=L
+		return r
+  else if len(self)>len(l) then
+    for e in self
+      if indexOf(l,e)!=null then
+          if hasIndex(l,__e_idx) then
+            if l[__e_idx]==e then continue
+            push(R,(__e_idx+1)+"c")
+            push(R,"< "+self[__e_idx])
+            push(L,(__e_idx+1)+"c")
+            push(L,"> "+l[__e_idx])
+          else
+            push(R,(__e_idx+1)+"a")
+            push(R,"< "+e)
+            push(L,(__e_idx+1)+"d")
+            push(L,"> "+e)
+          end if
+        else
+          if hasIndex(l,__e_idx) then
+            push(R,(__e_idx+1)+"c")
+            push(R,"< "+self[__e_idx])
+            push(L,(__e_idx+1)+"c")
+            push(L,"> "+l[__e_idx])
+          else
+            push(R,(__e_idx+1)+"a")
+            push(R,"< "+e)
+            push(R,(__e_idx+1)+"d")
+            push(R,"> "+e)
+          end if
+      end if
+    end for
+    if not R or not L then return r
+    r+=R
+    push(r,"---")
+    r+=L
+    return r
+  end if
+end function
+// Split into sub-lists of size n
+list.split=function(n)
+  r=[]
+  if not n then return r
+  _len=len(self);i=0;while i<_len;push(r,self[i:i+n]);i=i+n;end while
+  return r
+end function
+// True if v exists anywhere in self
+hasAny=function(self,v);for i in self;if i==v then return true;end for;end function
+list.hasAny=@hasAny
+// Count how many times v appears in self
+getCount=function(self,v)
+  c=0
+  for i in self;if i==v then c+=1;end for
+  return c
+end function
+list.getCount=@getCount
+// Count how many times trim(element)==v
+getTCount=function(self,v)
+  c=0
+  for i in self;if trim(i)==v then c+=1;end for
+  return c
+end function
+list.getTCount=@getTCount
+// Return smallest value in list
+list.min=function
+  m=self[0]
+  for i in self;if i<m then m=i;end for
+  return m
+end function
+// Return largest value in list
+list.max=function
+  m=self[0]
+  for i in self;if i>m then m=i;end for
+  return m
+end function
+// Sort WiFi entries ["essid strength% bssid" ...] by signal strength descending
+sortWifi=function(self)
+  p={}
+  for w in self
+    w=split(w," ")
+    r=to_int(w[1][:-1])
+    if not hasIndex(p,r) then p[r]={}
+    p[r][w[2]]=w[0]
+  end for
+  s=[]
+  for r in sort(p.indexes)
+    f=p[r]
+    for w in sort(f.indexes);push(s,f[w]+" "+r+"% "+w);end for
+  end for
+  reverse(s)
+  return s
+end function
+list.sortWifi=@sortWifi
+// Build a path string from component list; absolute if first element is "/"
+buildPath=function(self,t=null);if not self then return self;if self[0]=="/" then return join(self,"/")[1:]+t else return("/"+join(self,"/"))+t;end function
+list.buildPath=@buildPath
+// Remove duplicate elements preserving first-seen order
+distinct=function(self)
+  seen={}
+  l=[]
+  for i in self
+    if not hasIndex(seen,i) then
+      seen[i]=1
+      push(l,i)
+    end if
+  end for
+  return l
+end function
+list.distinct=@distinct
+// Remove all occurrences of o by iterating backwards to avoid index shift
+strip=function(self,o);i=len(self)-1;while i>=0;if self[i]==o then remove(self,i);i-=1;end while;return self;end function
+list.strip=@strip

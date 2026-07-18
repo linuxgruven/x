@@ -1,0 +1,72 @@
+// =============================================================================
+// AGENT_UTIL
+// Agent utilities: IP handling, subnet expansion, user prompts, port/capability lookups
+// =============================================================================
+//Determine which list flag to use (-sB for rainbow tables, -sD for decipher)
+//Centralized logic to ensure consistent behavior across all agent code paths
+//Parameters: promptUser (boolean) - whether to prompt user if rainbow tables available
+//Returns: "-sB" (rainbow) or "-sD" (decipher)
+AgentCore.getListFlag=function(promptUser=true)
+  outLvl=globals.G_agent.config.outputLevel
+  if outLvl>=2 then print yellow("[AI] Choosing password cracking method...")
+  //First check if rainbow index is already loaded in memory
+  if hasIndex(globals,"G_rainbowIndex") and globals.G_rainbowIndex then
+    if typeof(globals.G_rainbowIndex)=="map" and len(globals.G_rainbowIndex)>0 then
+      if outLvl>=2 then
+        print yellow("  * Rainbow index in memory: YES")
+        print green("  -> Using list -sB (faster rainbow lookup)")
+      end if
+      return "-sB"
+    end if
+  end if
+  //Check if rainbow table files exist on disk
+  s=System.getSystem
+  if s and hasIndex(s,"dir") and hasIndex(s.dir,"rainbow") then
+    files=get_files(s.dir.rainbow)
+    if files and typeof(files)=="list" and len(files)>0 then
+      //Rainbow tables available - use them automatically
+      if outLvl>=2 then
+        print yellow("  * Rainbow table files: "+len(files)+" found")
+        print green("  -> Using list -sB (faster rainbow lookup)")
+      end if
+      return "-sB"
+    end if
+  end if
+  //Default to decipher if no rainbow tables available
+  if outLvl>=2 then
+    print yellow("  * Rainbow tables: NOT FOUND")
+    print yellow("  -> Using list -sD (direct decipher - slower)")
+  end if
+  return "-sD"
+end function
+//Get port number from cached knowledge
+AgentCore._getPortForService=function(serviceName)
+  debug=globals.G_agent.config.debug
+  if not serviceName then return null
+  //Check cached scan knowledge for port mappings
+  if hasIndex(self,"commandKnowledgeCache") and hasIndex(globals.G_agent.commandKnowledgeCache,"scan") then
+    scanKnowledge=globals.G_agent.commandKnowledgeCache.scan
+    if hasIndex(scanKnowledge,"ports") and hasIndex(scanKnowledge.ports,serviceName) then
+      port=scanKnowledge.ports[serviceName]
+      if debug then print green("[DEBUG] Agent: Using cached port knowledge: "+serviceName+" = "+port)
+      return port
+    end if
+  end if
+  return null
+end function
+//Get command capabilities from cached knowledge
+AgentCore._getCommandCapabilities=function(cmdName)
+  if not cmdName then return []
+  capabilities=[]
+  if hasIndex(self,"commandKnowledgeCache") and hasIndex(globals.G_agent.commandKnowledgeCache,cmdName) then
+    knowledge=globals.G_agent.commandKnowledgeCache[cmdName]
+    if hasIndex(knowledge,"supportsStealth") and knowledge.supportsStealth then push(capabilities,"stealth")
+    if hasIndex(knowledge,"canEscalate") and knowledge.canEscalate then push(capabilities,"escalate")
+    if hasIndex(knowledge,"cracksPasswords") and knowledge.cracksPasswords then push(capabilities,"passwords")
+    if hasIndex(knowledge,"escalatesToRoot") and knowledge.escalatesToRoot then push(capabilities,"root")
+    if hasIndex(knowledge,"scansPorts") and knowledge.scansPorts then push(capabilities,"ports")
+    if hasIndex(knowledge,"supportsOverflow") and knowledge.supportsOverflow then push(capabilities,"overflow")
+    if hasIndex(knowledge,"supportsInjection") and knowledge.supportsInjection then push(capabilities,"injection")
+  end if
+  return capabilities
+end function

@@ -1,0 +1,57 @@
+testBounceTest="// bounce — Test for _bounce
+// _bounce = bounce via edge or internal router
+// Usage: @bounce <public_ip> [lan_ip]
+// Example: @bounce 91.0.0.1 192.168.1.50
+
+_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  BOUNCE / NETBOUNCE TEST</color>
+_print <color=#eb0cc6>========================================</color>
+_print cyan(Public IP:) $1
+_print cyan(LAN IP:   ) $2
+_print
+
+// --- Test 1: _bounce with just public IP (auto LAN) ---
+_print <color=#00bfff>[1/3]</color> Auto LAN — _bounce $1
+_bounce $1
+
+if not $cmd_ok
+  _print <color=#ff0000>[X] _bounce $1 failed</color>
+  _home
+endif
+
+_print <color=#00ff00> Got object — running _hold commands</color>
+_hold whoami
+_hold ls
+_print
+
+// --- Test 2: _bounce with explicit LAN IP ---
+_print <color=#00bfff>[2/3]</color> Explicit LAN — _bounce $1 $2
+_bounce $1 $2
+
+if $cmd_ok
+  _print <color=#00ff00> Got object with explicit LAN IP</color>
+  _hold whoami
+else
+  _print <color=#ffff00>[!] _bounce with explicit LAN IP failed (non-fatal)</color>
+endif
+_print
+
+// --- Test 3: data mode --- capture object, inspect meta ---
+_print <color=#00bfff>[3/3]</color> Data mode
+_setvar(obj, _bounce $1)
+
+if not $cmd_ok
+  _print <color=#ff0000>[X] data mode _bounce failed</color>
+  _home
+endif
+
+_setvar(pub,  _getvar(obj).meta.public_ip)
+_setvar(user, _getvar(obj).user.name)
+_print white(  public_ip =) <color=#00ff00>_getvar(pub)</color>
+_print white(  user      =) <color=#00ff00>_getvar(user)</color>
+_print
+
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>  TEST COMPLETE</color>
+_print <color=#00ff00>========================================</color>
+_hold home"

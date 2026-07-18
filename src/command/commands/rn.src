@@ -1,0 +1,19 @@
+// =============================================================================
+// RN
+// Rename a file or directory in place.
+// =============================================================================
+Command.rn=function(Obj,argv)
+  argCount=len(argv)
+  if argCount!=2 then return Man.help(["rn"])
+  newName=argv[-1]
+  if len(newName)>128 then return Error.set("Filename too long")
+  _p=ArgumentParser.init
+  argv=_p.parseArgs("rn",argv)
+  if argv isa Error then return
+  argv=_p.parsePath(Obj,argv)
+  if argv isa Error then return
+  sourceFile=Io._getFile(Obj,argv.rest[0])
+  if sourceFile isa Error then return
+  result=rename(sourceFile,newName)
+  if result then Error.set(result)
+end function

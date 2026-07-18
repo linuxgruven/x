@@ -1,0 +1,47 @@
+// =============================================================================
+// BIT
+// Bitwise operations on two integers.
+// Direct: bit -OPERATOR X Y
+// Pipe:   echo 255 | bit -and 240   (piped value = X, arg = Y)
+//   Flags: -and  -or  -xor  -ls (left shift)  -rs (right shift)
+// =============================================================================
+Command.bit=function(Obj,argv)
+  hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  isPipeOut=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  if not argv or len(argv)<2 then return Man.help(["bit"])
+  if not hasPipeIn and len(argv)<3 then return Man.help(["bit"])
+  flag=lower(argv[0])
+  if flag!="-and" and flag!="-or" and flag!="-xor" and flag!="-ls" and flag!="-rs" then return Error.set(Text.msg.flag+argv[0]+" ]")
+  doOp=function(x,y)
+    if flag=="-and" then
+      r=bitAnd(x,y)
+      label=Math.decimalToBinary(x)+" AND "+Math.decimalToBinary(y)
+    else if flag=="-or" then
+      r=bitOr(x,y)
+      label=Math.decimalToBinary(x)+" OR "+Math.decimalToBinary(y)
+    else if flag=="-xor" then
+      r=bitXor(x,y)
+      label=Math.decimalToBinary(x)+" XOR "+Math.decimalToBinary(y)
+    else if flag=="-ls" then
+      r=bitwise("<<",x,y)
+      label=Math.decimalToBinary(x)+" << "+str(y)
+    else if flag=="-rs" then
+      r=bitwise(">>",x,y)
+      label=Math.decimalToBinary(x)+" >> "+str(y)
+    end if
+    if isPipeOut then
+      push(globals.G_pipe.stdout,str(r))
+    else
+      print blue(label)
+      print green(str(r))
+    end if
+  end function
+  y=val(argv[1])
+  if hasPipeIn then
+    stdinData=globals.G_pipe.stdin
+    if stdinData isa list then lines=stdinData else lines=split(trim(str(stdinData)),char(10))
+    for line in lines;line=trim(line);if line then doOp(val(line),y);end for
+  else
+    doOp(val(argv[1]),val(argv[2]))
+  end if
+end function

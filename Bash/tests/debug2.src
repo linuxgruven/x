@@ -1,0 +1,88 @@
+// DEBUG TEST 2: Chapters 4-5 (Strings, Math/Types)
+// Tests the showcase functions we rewrote
+// If this produces output, the showcase rewrites are OK.
+
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>  [PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>  [FAIL]</color> _getvar(label)
+  endif
+endfunc
+
+// -- CH4: String Showcase --
+_print <color=#eb0cc6>=== CHAPTER 4 START ===</color>
+func stringShowcase()
+  _setvar(s, hello)
+  _setvar(s2, HELLO)
+  _setvar(r, len(s))
+  _print <color=#aaaaaa>  len of "hello" =</color> _getvar(r)
+  _setvar(r, upper(s))
+  _print <color=#aaaaaa>  upper of "hello" =</color> _getvar(r)
+  _setvar(r, lower(s2))
+  _print <color=#aaaaaa>  lower of "HELLO" =</color> _getvar(r)
+  _setvar(r, substr(_getvar(s), 1, 4))
+  _print <color=#aaaaaa>  substr "hello" 1 4 =</color> _getvar(r)
+  _setvar(r, contains(s, ell))
+  _print <color=#aaaaaa>  contains "hello" "ell" =</color> _getvar(r)
+  _setvar(oldC, l)
+  _setvar(newC, rr)
+  _setvar(r, replace(s, oldC, newC))
+  _print <color=#aaaaaa>  replace "hello" l rr =</color> _getvar(r)
+  _setvar(r, concat(foo, bar))
+  _print <color=#aaaaaa>  concat "foo" + "bar" =</color> _getvar(r)
+endfunc
+stringShowcase()
+
+// String functions with asserts
+_setvar(r, len(hello))
+assert(len of hello is 5, _getvar(r), 5)
+_setvar(r, upper(hello))
+assert(upper of hello is HELLO, _getvar(r), HELLO)
+_setvar(r, lower(WORLD))
+assert(lower of WORLD is world, _getvar(r), world)
+_setvar(r, substr(hello, 1, 4))
+assert(substr hello 1 4 is ell, _getvar(r), ell)
+
+_print <color=#eb0cc6>=== CHAPTER 4 DONE ===</color>
+
+// -- CH5: Math Showcase --
+_print <color=#eb0cc6>=== CHAPTER 5 START ===</color>
+func mathShowcase()
+  _setvar(r, floor(3.7))
+  _print <color=#aaaaaa>  floor of 3.7 =</color> _getvar(r)
+  _setvar(r, ceil(3.2))
+  _print <color=#aaaaaa>  ceil of 3.2 =</color> _getvar(r)
+  _setvar(r, round(3.5))
+  _print <color=#aaaaaa>  round of 3.5 =</color> _getvar(r)
+  _setvar(r, abs(-42))
+  _print <color=#aaaaaa>  abs of -42 =</color> _getvar(r)
+  _setvar(r, min(5, 12))
+  _print <color=#aaaaaa>  min of 5 12 =</color> _getvar(r)
+  _setvar(r, max(5, 12))
+  _print <color=#aaaaaa>  max of 5 12 =</color> _getvar(r)
+  _setvar(r, random(1, 100))
+  _print <color=#aaaaaa>  random 1 to 100 =</color> _getvar(r)
+endfunc
+mathShowcase()
+
+// Type casting
+_setvar(numStr, to_string(42))
+_print <color=#aaaaaa>  to_string of 42 =</color> _getvar(numStr)
+_setvar(num, to_int(99))
+_print <color=#aaaaaa>  to_int of 99 =</color> _getvar(num)
+_setvar(dec, to_float(3.14))
+_print <color=#aaaaaa>  to_float of 3.14 =</color> _getvar(dec)
+_setvar(r, to_yesno(1))
+_print <color=#aaaaaa>  to_yesno of 1 =</color> _getvar(r)
+_setvar(r, to_truefalse(0))
+_print <color=#aaaaaa>  to_truefalse of 0 =</color> _getvar(r)
+
+// typeof
+_setvar(myStr, hello)
+_setvar(myList, [1, 2, 3])
+_print <color=#aaaaaa>  typeof_val myStr =</color> typeof_val(myStr)
+_print <color=#aaaaaa>  typeof_val myList =</color> typeof_val(myList)
+
+_print <color=#eb0cc6>=== CHAPTER 5 DONE ===</color>
+_print <color=#00ff00>=== DEBUG TEST 2 COMPLETE ===</color>

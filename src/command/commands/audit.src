@@ -1,0 +1,357 @@
+// =============================================================================
+// AUDIT
+// Security audit: scan filesystem permissions, open ports, running processes.
+// Whitelist: /home/tux/payload is expected at 755 and is not flagged.
+// =============================================================================
+Command.audit=function(Obj,argv)
+  if not Obj.computer then return Error.set("Audit requires computer access")
+  _p=ArgumentParser.init
+  _p.addArgument("q",false,"flag")    // Quick mode: filesystem permissions only
+  _p.addArgument("p",false,"flag")    // Ports check only
+  _p.addArgument("r",false,"flag")    // Processes check only
+  _p.addArgument("f",false,"flag")    // Full mode: all checks (default)
+  argv=_p.parse("audit",argv,Obj)
+  if argv isa Error then return
+  c=Obj.computer
+  score=100
+  // Mode selection: default runs all checks
+  doPerms=true
+  doPorts=true
+  doProcs=true
+  if argv.q then
+    doPorts=false
+    doProcs=false
+  end if
+  if argv.p then
+    doPerms=false
+    doProcs=false
+    doPorts=true
+  end if
+  if argv.r then
+    doPerms=false
+    doPorts=false
+    doProcs=true
+  end if
+  // Payload whitelist prefix
+  payloadPath="/home/tux/payload"
+  _PIPE=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  out=[]
+  _out=function(t);push(outer.out,t);end function
+  _out("======================================")
+  _out("  X SECURITY AUDIT REPORT")
+  _out("======================================")
+  _out("")
+  // --- FILESYSTEM PERMISSION SCAN ---
+  if doPerms then
+    _out("[ FILESYSTEM CHECKS ]")
+    allFiles=Io.getAll(Obj.root)
+    if allFiles isa Error then
+      _out("[WARNING] Unable to scan filesystem")
+      score-=5
+    else
+      otherCount=0
+      for f in allFiles
+        p=permissions(f)
+        if len(p)<10 then continue
+        fp=path(f)
+        // Whitelist: skip /home/tux/payload tree
+        inPayload=indexOf(fp,payloadPath)==0
+        if inPayload then continue
+        // Check other permissions: positions 7(r), 8(w), 9(x)
+        otherPerms=""
+        if p[7]=="r" then otherPerms=otherPerms+"r"
+        if p[8]=="w" then otherPerms=otherPerms+"w"
+        if p[9]=="x" then otherPerms=otherPerms+"x"
+        if len(otherPerms)==0 then continue
+        isGuest=indexOf(fp,"/home/guest")==0
+        // Full other rwx outside guest = wide open, flag it
+        otherRWX=p[7]=="r" and p[8]=="w" and p[9]=="x"
+        // Flag: guest paths OR full other rwx anywhere
+        if not isGuest and not otherRWX then continue
+        isFold=is_folder(f)
+        // Score by worst permission: w > r > x
+        penalty=0
+        if p[8]=="w" then
+          penalty=5
+        else if p[7]=="r" then
+          penalty=3
+        else
+          penalty=1
+        end if
+        if isFold then penalty=penalty-1
+        if penalty<1 then penalty=1
+        if otherRWX and not isGuest then
+          if isFold then _out("[CRITICAL] World-open directory: "+fp+" ("+p+") — others have full rwx access") else _out("[CRITICAL] World-open file: "+fp+" ("+p+") — others have full rwx access")
+          score-=penalty*2
+        else
+          if isFold then _out("[WARNING] Guest-accessible directory: "+fp+" ("+p+") ["+otherPerms+"] — attackers can pivot into your system") else _out("[WARNING] Guest-accessible file: "+fp+" ("+p+") ["+otherPerms+"] — attackers can use guest to attack from here")
+          score-=penalty
+        end if
+        otherCount+=1
+      end for
+      if otherCount==0 then _out("[OK]      No guest-accessible items found") else _out("[SUMMARY] "+otherCount+" guest-accessible item(s) found")
+    end if
+    _out("")
+  end if
+  // --- /ETC/PASSWD CHECK ---
+  if doPerms then
+    _out("[ ACCOUNT CHECKS ]")
+    passwdFile=File(c,"/etc/passwd")
+    if not passwdFile then
+      _out("[OK]      No /etc/passwd (hardened)")
+    else if not has_permission(passwdFile,"r") then
+      _out("[INFO]    /etc/passwd exists but is not readable")
+    else
+      content=get_content(passwdFile)
+      if content and len(content)>0 then
+        lines=split(content,char(10))
+        userNames=[]
+        for ln in lines
+          ln=trim(ln)
+          if not len(ln) then continue
+          parts=split(ln,":")
+          if len(parts)>=1 then push(userNames,parts[0])
+        end for
+        if len(userNames)>0 then
+          _out("[WARNING] /etc/passwd has "+len(userNames)+" account entries (exposes login info): "+join(userNames,", "))
+          score-=2
+        else
+          _out("[OK]      /etc/passwd is empty")
+        end if
+      else
+        _out("[OK]      /etc/passwd is empty")
+      end if
+    end if
+    _out("")
+  end if
+  // --- GUEST FOLDER CHECK ---
+  if doPerms then
+    _out("[ GUEST ACCOUNT ]")
+    guestDir=File(c,"/home/guest")
+    guestIssues=0
+    if guestDir then
+      expectedDirs=["Config","Desktop","Downloads",".Trash"]
+      children=get_files(guestDir)+get_folders(guestDir)
+      for child in children
+        n=name(child)
+        if indexOf(expectedDirs,n)==null then
+          _out("[WARNING] Unexpected item in /home/guest/: "+n)
+          score-=3
+          guestIssues+=1
+        else
+          if is_folder(child) then
+            contents=get_files(child)+get_folders(child)
+            if len(contents)>0 then
+              _out("[WARNING] /home/guest/"+n+" is not empty ("+len(contents)+" items)")
+              score-=3
+              guestIssues+=1
+            end if
+          end if
+        end if
+      end for
+      for expected in expectedDirs
+        found=File(c,"/home/guest/"+expected)
+        if not found then
+          _out("[WARNING] Missing /home/guest/"+expected)
+          guestIssues+=1
+        end if
+      end for
+      if guestIssues==0 then _out("[OK]      Guest account is clean")
+    else
+      _out("[OK]      No guest account")
+    end if
+    _out("")
+  end if
+  // --- SENSITIVE CONFIG FILES CHECK ---
+  if doPerms then
+    _out("[ SENSITIVE CONFIG FILES ]")
+    sensitiveFiles=[
+      {"name":"Bank.txt","severity":"CRITICAL","msg":"bank credentials exposed — attacker can drain accounts","penalty":15},
+      {"name":"Mail.txt","severity":"CRITICAL","msg":"email credentials exposed — attacker can hijack email","penalty":15},
+      {"name":"Browser.txt","severity":"WARNING","msg":"browser bookmarks exposed — attacker can target saved servers","penalty":3},
+      {"name":"Map.conf","severity":"WARNING","msg":"map data exposed — attacker can discover stored servers","penalty":3}
+    ]
+    sensitiveCount=0
+    homeDir=File(c,"/home")
+    if homeDir then
+      for userDir in get_folders(homeDir)
+        if name(userDir)=="guest" then continue
+        configDir=File(c,"/home/"+name(userDir)+"/Config")
+        if not configDir then continue
+        for sf in sensitiveFiles
+          f=File(c,"/home/"+name(userDir)+"/Config/"+sf.name)
+          if not f then continue
+          if has_permission(f,"r") then
+            _out("["+sf.severity+"] "+name(userDir)+"/Config/"+sf.name+" — "+sf.msg)
+            score-=sf.penalty
+            sensitiveCount+=1
+          else
+            _out("[INFO]    "+name(userDir)+"/Config/"+sf.name+" exists but is not readable")
+          end if
+        end for
+      end for
+    end if
+    if sensitiveCount==0 then _out("[OK]      No sensitive config files found")
+    _out("")
+  end if
+  // --- SYSTEM BINARIES CHECK ---
+  if doPerms then
+    _out("[ SYSTEM BINARIES ]")
+    usrBinExpected=["FileExplorer.exe","Terminal.exe","Mail.exe","Browser.exe","Notepad.exe","Settings.exe","LogViewer.exe","CodeEditor.exe","ImageViewer.exe","PDFReader.exe","Map.exe","Manual.exe","ScanLan.exe","Chat.exe"]
+    usrBinOptional=["ConfigLan.exe","AdminMonitor.exe"]
+    binExpected=["cd","ls","ps","pwd","ifconfig","iwconfig","iwlist","cat","rm","mv","cp","ssh","ftp","mkdir","rmdir","chmod","reboot","whois","sudo","useradd","userdel","passwd","nslookup","build","touch","chown","chgrp","groupadd","groupdel","groups","kill","ping","apt-get","man","whoami","ln","scp","airmon","aireplay","aircrack","bash"]
+    binOptional=["nmap"]
+    binIssues=0
+    usrBinDir=File(c,"/usr/bin")
+    if usrBinDir then
+      usrBinFiles=get_files(usrBinDir)
+      usrBinNames=[]
+      for f in usrBinFiles;push(usrBinNames,name(f));end for
+      for expected in usrBinExpected
+        if indexOf(usrBinNames,expected)==null then
+          _out("[CRITICAL] Missing /usr/bin/"+expected+" — may have been deleted by attacker")
+          score-=5
+          binIssues+=1
+        end if
+      end for
+      for fn in usrBinNames
+        if indexOf(usrBinExpected,fn)==null and indexOf(usrBinOptional,fn)==null then
+          _out("[WARNING] Unexpected /usr/bin/"+fn+" — possible backdoor or trojan")
+          score-=3
+          binIssues+=1
+        end if
+      end for
+    else
+      _out("[CRITICAL] /usr/bin directory not found")
+      score-=10
+      binIssues+=1
+    end if
+    binDir=File(c,"/bin")
+    if binDir then
+      binFiles=get_files(binDir)
+      binNames=[]
+      for f in binFiles;push(binNames,name(f));end for
+      for expected in binExpected
+        if indexOf(binNames,expected)==null then
+          _out("[CRITICAL] Missing /bin/"+expected+" — may have been deleted by attacker")
+          score-=5
+          binIssues+=1
+        end if
+      end for
+      for fn in binNames
+        if indexOf(binExpected,fn)==null and indexOf(binOptional,fn)==null then
+          _out("[WARNING] Unexpected /bin/"+fn+" — possible backdoor or trojan")
+          score-=3
+          binIssues+=1
+        end if
+      end for
+    else
+      _out("[CRITICAL] /bin directory not found")
+      score-=10
+      binIssues+=1
+    end if
+    if binIssues==0 then _out("[OK]      System binaries intact")
+    _out("")
+  end if
+  // --- OPEN PORTS CHECK ---
+  if doPorts then
+    _out("[ OPEN PORTS ]")
+    localPorts=get_ports(c)
+    if not localPorts or len(localPorts)==0 then
+      _out("[OK]      No open ports detected")
+    else
+      r=get_router(public_ip_pc(c))
+      for p in localPorts
+        pn=port_number(p)
+        svc="unknown"
+        ver="?"
+        if r then
+          info=port_info(r,p)
+          if info then
+            parts=split(info," ")
+            if len(parts)>=1 then svc=parts[0]
+            if len(parts)>=2 then ver=parts[1]
+          end if
+        end if
+        _out("[INFO]    Port "+str(pn)+" open: "+svc+" "+ver)
+      end for
+    end if
+    _out("")
+  end if
+  // --- PROCESS SCAN ---
+  if doProcs then
+    _out("[ RUNNING PROCESSES ]")
+    procStr=show_procs(c)
+    if not procStr or len(procStr)==0 then
+      _out("[OK]      No processes found")
+    else
+      procLines=split(procStr,char(10))
+      suspiciousCount=0
+      // Skip header line (index 0)
+      for line in procLines[1:]
+        if not len(trim(line)) then continue
+        parts=split(line," ")
+        if len(parts)<5 then continue
+        user=parts[0]
+        procName=parts[4]
+        // Highlight unexpected root processes
+        safeRootProcs=["kernel_task","Xorg"]
+        if user=="root" and indexOf(safeRootProcs,procName)==null then
+          _out("[CRITICAL] Unexpected root process: "+procName+" (user: "+user+")")
+          score-=10
+          suspiciousCount+=1
+        else
+          _out("[INFO]    "+user+": "+procName)
+        end if
+      end for
+      if suspiciousCount==0 then _out("[OK]      No unexpected root processes")
+    end if
+    _out("")
+  end if
+  // --- FINAL SCORE ---
+  if score<0 then score=0
+  _out("======================================")
+  if score>=90 then
+    _out("  SCORE: "+score+"/100  [ CLEAN ]")
+  else if score>=70 then
+    _out("  SCORE: "+score+"/100  [ MODERATE RISK ]")
+  else if score>=50 then
+    _out("  SCORE: "+score+"/100  [ HIGH RISK ]")
+  else
+    _out("  SCORE: "+score+"/100  [ CRITICAL ]")
+  end if
+  _out("======================================")
+  if _PIPE then
+    for line in out;push(globals.G_pipe.stdout,line);end for
+    return true
+  end if
+  for line in out
+    if indexOf(line,"[CRITICAL]")!=null then
+      print bold(red(line))
+    else if indexOf(line,"[WARNING]")!=null then
+      print red(line)
+    else if indexOf(line,"[SUMMARY]")!=null then
+      print yellow(line)
+    else if indexOf(line,"[OK]")!=null then
+      print green(line)
+    else if indexOf(line,"[INFO]")!=null then
+      print white(line)
+    else if indexOf(line,"SCORE:")!=null then
+      if score>=90 then
+        print bold(green(line))
+      else if score>=70 then
+        print bold(yellow(line))
+      else if score>=50 then
+        print bold(orange(line))
+      else
+        print bold(red(line))
+      end if
+    else if indexOf(line,"===")!=null or indexOf(line,"AUDIT")!=null then
+      print bold(white(line))
+    else if indexOf(line,"[")!=null and indexOf(line,"]")!=null then
+      print bold(yellow(line))
+    else
+      print line
+    end if
+  end for
+end function

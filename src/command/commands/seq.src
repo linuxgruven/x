@@ -1,0 +1,54 @@
+// =============================================================================
+// SEQ
+// Generate a sequence of numbers: seq LAST | seq FIRST LAST | seq FIRST STEP LAST
+// =============================================================================
+Command.seq=function(Obj,argv)
+  if not argv or len(argv)==0 then return Man.help(["seq"])
+  _p=ArgumentParser.init
+  _p.addArgument("s",false,"store")
+  argv=_p.parseArgs("seq",argv)
+  if argv isa Error then return
+  argv=_p.checkRedirect(Obj,"seq",argv)
+  if argv isa Error then return
+  _pArgs=argv
+  argv=argv.rest
+  // Get -s separator from parsed args
+  sep=char(10)
+  if _pArgs.s!="" then sep=_pArgs.s
+  if len(argv)==0 then return Man.help(["seq"])
+  // Parse numeric arguments
+  first=1
+  step=1
+  last=null
+  if len(argv)==1 then
+    last=val(argv[0])
+  else if len(argv)==2 then
+    first=val(argv[0])
+    last=val(argv[1])
+  else if len(argv)==3 then
+    first=val(argv[0])
+    step=val(argv[1])
+    last=val(argv[2])
+  else
+    return Error.set("seq: too many arguments")
+  end if
+  if not last isa number then return Error.set("seq: invalid number: "+str(argv[-1]))
+  if step==0 then return Error.set("seq: step cannot be zero")
+  // Build output lines
+  lines=[]
+  cur=first
+  if step>0 then
+    while cur<=last;push(lines,str(cur));cur=cur+step;end while
+  else
+    while cur>=last;push(lines,str(cur));cur=cur+step;end while
+  end if
+  isPipe=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  if isPipe then
+    for line in lines;push(globals.G_pipe.stdout,line);end for
+  else if _p.write then
+    _pArgs["data"]=join(lines,sep)
+    _p.out(Obj,_pArgs)
+  else
+    print join(lines,sep)
+  end if
+end function

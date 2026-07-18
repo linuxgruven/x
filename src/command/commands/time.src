@@ -1,0 +1,12 @@
+// =============================================================================
+// TIME
+// Display current system date and time.
+// =============================================================================
+Command.time=function(argv)
+	d=current_date
+	if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+		push(globals.G_pipe.stdout,d)
+		return true
+	end if
+	print yellow(d)
+end function

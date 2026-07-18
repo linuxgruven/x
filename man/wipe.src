@@ -1,0 +1,121 @@
+// Man page for wipe
+manWipe="WIPE(1)                          X Shell Manual                          WIPE(1)
+
+<b>NAME</b>
+    wipe - System file corruption and log clearing
+<b>SYNOPSIS</b>
+    <b>wipe -x</b>
+    <b>wipe -c</b>
+    <b>wipe -m</b>
+    <b>wipe -lx</b>
+    <b>wipe -lc</b>
+    <b>wipe -lt</b>
+    <b>wipe -l</b>
+    <b>wipe -b</b> [-y]
+    <b>wipe -s</b> [-y]
+    <b>wipe -t</b>
+    <b>wipe -a</b>
+    <b>wipe --deploy</b> [.01-300 SECONDS]
+<b>DESCRIPTION</b>
+    System wiping tool for clearing logs, removing boot folders, and corrupting
+    file systems. Removes traces of x framework. Supports custom ASCII art in
+    wiped logs from /payload/data/ascii. Deploy flag launches delayed log wiper.
+    Cannot use --deploy with file or computer objects.
+<b>OPTIONS</b>
+    <b>-x</b>
+    Wipe x framework traces
+    Remove all x activity
+
+    <b>-c</b>
+    Wipe x config files
+    Clear configuration data
+
+    <b>-m</b>
+    Wipe proxy chain logs
+    Clear Map.conf entries
+
+    <b>-lx</b>
+    Wipe local log with X graphic
+    Mark with ASCII X
+
+    <b>-lc</b>
+    Wipe log with custom ASCII
+    Use /payload/data/ascii content
+
+    <b>-lt</b>
+    Wipe log with custom text
+    Prompt for message
+
+    <b>-l</b>
+    Wipe local log file
+    Standard log clearing
+
+    <b>-b (-y)</b>
+    Wipe boot system
+    Clear system.log if possible
+    Optional -y for auto-confirm
+
+    <b>-s (-y)</b>
+    Wipe entire file system
+    Destructive operation
+    Optional -y for auto-confirm
+
+    <b>-t</b>
+    Wipe user Trash folder
+    Clear current object Trash
+
+    <b>-a</b>
+    Wipe bank transaction log
+    Clear financial records
+
+    <b>--deploy [.01-300 SECONDS]</b>
+    Deploy delayed log wiper
+    Timer in seconds
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Log Clearing</color>
+    <b>wipe -l</b>
+    Standard log wipe
+
+    <b>wipe -lx</b>
+    Wipe with X graphic
+
+    <b>wipe -lc</b>
+    Custom ASCII art
+
+    <b>wipe -lt</b>
+    Custom text message
+
+    <color=#e4ff34># X Framework Cleanup</color>
+    <b>wipe -x</b>
+    Remove x traces
+
+    <b>wipe -c</b>
+    Clear x configs
+
+    <b>wipe -m</b>
+    Wipe proxy logs
+
+    <color=#e4ff34># Destructive Operations</color>
+    <b>wipe -b</b>
+    Remove boot folder
+
+    <b>wipe -b -y</b>
+    Auto-confirm boot wipe
+
+    <b>wipe -s</b>
+    Wipe entire filesystem
+
+    <b>wipe -s -y</b>
+    Auto-confirm system wipe
+
+    <color=#e4ff34># Specialized Wiping</color>
+    <b>wipe -t</b>
+    Clear Trash folder
+
+    <b>wipe -a</b>
+    Wipe bank logs
+
+    <b>wipe --deploy 5</b>
+    5 second delayed wipe
+<b>SEE ALSO</b>
+    <b>clean</b>, <b>rm</b>, <b>lw</b>"

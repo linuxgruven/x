@@ -1,0 +1,51 @@
+testLocalTest="// local — Test for _local bash command
+// _local attacks the current machine's /lib folder
+// Usage: @local
+
+_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  LOCAL EXPLOIT TEST</color>
+_print <color=#eb0cc6>========================================</color>
+_print
+
+// --- Test 1: default (shell) ---
+_print <color=#00bfff>[1/4]</color> Default type — _local
+_local
+
+if $cmd_ok
+  _print <color=#00ff00> _local shell succeeded</color>
+  _hold whoami
+else
+  _print <color=#ffff00>[!] _local shell failed (non-fatal)</color>
+endif
+_print
+
+// --- Test 2: explicit shell type ---
+_print <color=#00bfff>[2/4]</color> Explicit type — _local shell
+_local shell
+
+if $cmd_ok
+  _print <color=#00ff00> _local shell (explicit) succeeded</color>
+  _hold whoami
+else
+  _print <color=#ffff00>[!] _local shell (explicit) failed (non-fatal)</color>
+endif
+_print
+
+// --- Test 3: data mode ---
+_print <color=#00bfff>[3/4]</color> Data mode
+_setvar(sh, _local shell)
+
+if $cmd_ok
+  _setvar(uname, _getvar(sh).user.name)
+  _setvar(uraw,  _getvar(sh).user.raw)
+  _print white(  user.name =) <color=#00ff00>_getvar(uname)</color>
+  _print white(  user.raw  =) <color=#00ff00>_getvar(uraw)</color>
+else
+  _print <color=#ffff00>[!] data mode _local failed (non-fatal)</color>
+endif
+_print
+
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>  TEST COMPLETE</color>
+_print <color=#00ff00>========================================</color>
+_hold home"

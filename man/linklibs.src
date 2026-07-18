@@ -1,0 +1,55 @@
+// Man page for linklibs
+manLinklibs="LINKLIBS(1)                      X Shell Manual                      LINKLIBS(1)
+
+<b>NAME</b>
+    linklibs - Remote library linking for performance
+<b>SYNOPSIS</b>
+    <b>linklibs</b> <b>-a</b>
+    <b>linklibs</b> <b>-m</b>
+    <b>linklibs</b> <b>-c</b>
+    <b>linklibs</b> <b>-u</b>
+<b>DESCRIPTION</b>
+    Remote hardware acceleration system for exploit scanning and hash cracking.
+    Links powerful remote libraries to enhance performance on weak systems. Ideal
+    for router operations or low-powered devices. Calling without parameters toggles
+    all libraries - links both if none active, unlinks all if any are linked.
+<b>OPTIONS</b>
+    <b>-a</b>
+    Link all libraries
+    metaxploit and crypto both
+
+    <b>-m</b>
+    Link metaxploit only
+    For exploit scanning
+
+    <b>-c</b>
+    Link crypto only
+    For hash deciphering
+
+    <b>-u</b>
+    Unlink all libraries
+    Return to local processing
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Link All</color>
+    <b>linklibs -a</b>
+    Link both libraries
+
+    <color=#e4ff34># Selective Linking</color>
+    <b>linklibs -m</b>
+    Link metaxploit for scanning
+
+    <b>linklibs -c</b>
+    Link crypto for cracking
+
+    <color=#e4ff34># Toggle Mode</color>
+    <b>linklibs</b>
+    Auto link if none active
+
+    <b>linklibs</b>
+    Auto unlink if any active
+
+    <color=#e4ff34># Unlink</color>
+    <b>linklibs -u</b>
+    Unlink all libraries
+<b>SEE ALSO</b>
+    <b>libs</b>, <b>decipher</b>, <b>scan</b>"

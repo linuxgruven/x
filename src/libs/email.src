@@ -1,0 +1,390 @@
+// =============================================================================
+// EMAIL
+// Email library; account management, client interface, and SMTP operations.
+// =============================================================================
+Email={
+  "account":{"user":null,"pass":null},
+  "mail":null,
+  "messages":[],
+  "CREDS_FILE":"/.erc"
+}
+// XFIX1.0: MetaMail fetch/read/send/delete* share a 2s global cooldown.
+// XFIX1.0: Uncomment when 1.0 ships; call before those ops (skip wait on first use).
+// XFIX1.0: Email._metaMailArmed=false
+// XFIX1.0: Email._metaMailWait=function
+// XFIX1.0: 	if self._metaMailArmed then System.tryWait(2) else self._metaMailArmed=true
+// XFIX1.0: end function
+// XFIX1.0: packMailLogin unnecessary — mail_login works from local host.
+// XFIX1.0: Email._mailLogin=function(email,password);return mail_login(email,password);end function
+// Helper: build full path to .erc credentials file
+Email._credsPath=function
+  return path(globals.G_main.dir.data)+self.CREDS_FILE
+end function
+// Monitor inbox with auto-refresh
+Email.monitor=function(argv)
+  if len(argv)<3 then return Man.help(["email"])
+  email=argv[0]
+  password=argv[1]
+  interval=to_int(argv[2])
+  if not interval isa number then interval=10
+  // Check for account conflict
+  if self.account.user and self.account.user!=email then return Info.info("Already logged into "+self.account.user+". Relaunch x to log into "+email)
+  // Login once before loop
+  mailObj=mail_login(email,password)
+  if mailObj isa string then return Error.set(mailObj)
+  // Monitor loop
+  Utility.pressQ
+  while poll_input!="q"
+    // XFIX1.0: self._metaMailWait
+    messages=fetch(mailObj)
+    if messages then
+      print green("="*74)
+      print blue("Checking for new mail...")
+      print green("="*30)+white(" Mail fetched ")+green("="*30)
+      for rawMsg in messages
+        headers=split(rawMsg,char(10))[2:5]
+        mailID=trim(split(headers[0],":")[-1])
+        print yellow("Mail ID : ")+white(mailID)
+        print yellow("From    : ")+green(trim(split(headers[1],":")[-1]))
+        print yellow("Subject : ")+green(trim(split(headers[2],":")[-1]))
+        // XFIX1.0: self._metaMailWait
+        content=trim(join(split(read(mailObj,mailID),char(10))[3:],char(10)))
+        for line in split(content,char(10));print white(line);end for
+        print yellow("- "*37)
+      end for
+    else
+      Info.info("Inbox is empty...retrying in "+str(interval)+" seconds")
+    end if
+    wait interval
+  end while
+  Info.info("Monitor finished")
+end function
+// Check and load saved email account
+Email.check=function
+  if self.mail then return true
+  credsFile=File(globals.G_main.computer,self._credsPath)
+  if credsFile then
+    content=get_content(credsFile)
+    if content then
+      // Decrypt credentials (format: user::pass)
+      decrypted=Encryption.encrypt(content,Kernel.key,false)
+      parts=split(decrypted,"::")
+      if len(parts)==2 then
+        self.account.user=parts[0]
+        self.account.pass=parts[1]
+        self.mail=mail_login(self.account.user,self.account.pass)
+      end if
+    end if
+  end if
+  // Attempt to load account if not logged in
+  if not self.mail then self.loadMail
+  if not self.mail then return Warning.set("No active email account")
+  return true
+end function
+// Parse raw email message into structured object
+Email._parseMessage=function(rawMsg)
+  headers=split(rawMsg,char(10))[2:5]
+  mailID=trim(split(headers[0],":")[-1])
+  // XFIX1.0: self._metaMailWait  // read() is a MetaMail op
+  return {
+    "mailID":mailID,
+    "from":trim(split(headers[1],":")[-1]),
+    "subject":trim(headers[2][9:]),
+    "content":trim(join(split(read(self.mail,mailID),char(10))[3:],char(10)))
+  }
+end function
+// Fetch messages from inbox
+Email.fetch=function
+  self.messages=[]
+  // XFIX1.0: self._metaMailWait
+  rawMessages=fetch(self.mail)
+  if not rawMessages isa list then return Error.set(rawMessages)
+  if rawMessages then
+    _len=len(rawMessages)
+    i=0
+    while i<_len
+      push(self.messages,self._parseMessage(rawMessages[i]))
+      i=i+1
+    end while
+  end if
+  return true
+end function
+// Interactive email client interface
+Email.client=function(skipCheck=false)
+  if not skipCheck and self.check!=true then return
+  // Main client loop
+  while true
+    if self.fetch!=true then return
+    count=len(self.messages)
+    header=green("  ")+white("<")+green("=====[ ")+orange("X")+white(" Outl00k")+green(" ]=====")+white(">")+green("  [")+yellow(str(count))+green("]")
+    choices=[header]
+    shortcuts={"n":-1,"c":-2,"a":-3,"d":-5,"x":-4}
+    if count then
+      for msg in self.messages
+        _subjLine=yellow("      ~ ")+white(msg.subject)
+        if indexOf(lower(msg.subject),"re:")!=null then
+          _subjLine=yellow("      ~ ")+yellow(msg.subject)
+        end if
+        push(choices,green("  >> ")+white(msg.from)+char(10)+_subjLine)
+      end for
+    else
+      push(choices,green("You have 0 messages"))
+    end if
+    acctLabel=yellow("local")
+    if self.account.user then acctLabel=green(self.account.user)
+    footer=white("["+purple("N")+"] ")+yellow("Compose")+white(" ["+purple("C")+"] ")+yellow("Clear")+white(" ["+purple("D")+"] ")+yellow("Delete All")+white(" ["+purple("A")+"] ")+yellow("Account (")+acctLabel+yellow(")")+white(" ["+purple("X")+"] ")+yellow("Exit")
+    choices[-1]=choices[-1]+char(10)+footer
+    choice=Gui.choiceHybrid(choices,shortcuts,-4)
+    if choice==-4 then return
+    if choice==-1 then
+      self._composeEmail
+    else if choice==-2 then
+      self.clear
+    else if choice==-3 then
+      self._switchAccount
+    else if choice==-5 then
+      self.deleteAll
+    else if choice isa number and choice>0 and hasIndex(self.messages,choice-1) then
+      self.read(self.messages[choice-1])
+    end if
+  end while
+end function
+// Switch active mailbox to another user's account via Builder
+Email._switchAccount=function
+  email=Gui.input({"text":"Email address"})
+  if email==null then return
+  password=Gui.inputPassNS("Password : ")
+  if not len(password) then return
+  // XFIX1.0: mm=mail_login(email,password)  // no pack needed
+  mm=Builder.packMailLogin(globals.G_main,email,password)
+  if mm isa Error or not mm then return Info.error("Login failed")
+  self.mail=mm
+  self.account.user=email
+  self.account.pass=password
+  Info.info("Logged in as "+email)
+end function
+// Helper: Compose email from client
+Email._composeEmail=function
+  address=Gui.input({"text":"Address"})
+  if address==null then return Info.error("Address can not be blank")
+  subject=Gui.input({"text":"Subject"})
+  if subject==null then return Info.error("Subject can not be blank")
+  print blue("To:"+address)
+  print blue("Subject:"+subject)
+  content=Gui.input({"text":"Content"})
+  if content==null then return Info.error("Content can not be blank")
+  // XFIX1.0: self._metaMailWait
+  result=send(self.mail,address,subject,content)
+  if result==1 then Info.info("Mail sent") else Info.error(result)
+end function
+// Read individual email message with actions
+Email.read=function(msg)
+  actionMenu={"a":"Reply","f":"Forward","d":"Delete","p":"Post...","x":"Close"}
+  // Display message
+  print orange("From    : ")+blue(msg.from)
+  print orange("Subject : ")+blue(msg.subject)
+  lines=[]
+  for line in split(msg.content,char(10));push(lines,white(line));end for
+  print char(10)+join(lines,char(10))
+  // Action loop
+  while true
+    choice=lower(Gui.choiceAlpha([char(10)+green("Select an option")],actionMenu,"x"))
+    if choice=="x" then break
+    // XFIX1.0: self._metaMailWait
+    if choice=="d" and delete_mail(self.mail,msg.mailID) then break
+    if choice=="a" then
+      content=Gui.input({"text":"Reply"})
+      if content!=null then
+        // XFIX1.0: self._metaMailWait
+        result=send(self.mail,msg.from,"Re: "+msg.subject,content)
+        if result==1 then Info.info("Reply sent") else Info.error(result)
+      end if
+    else if choice=="f" then
+      address=Gui.input({"text":"Forward to"})
+      if address!=null then
+        // XFIX1.0: self._metaMailWait
+        result=send(self.mail,address,"Fwd: "+msg.subject,msg.content)
+        if result==1 then Info.info("Forwarded") else Info.error(result)
+      end if
+    else if choice=="p" then
+      postContent=Gui.input({"text":"Post what"})
+      if postContent!=null then Command.post([postContent])
+    end if
+  end while
+end function
+// Load email account credentials
+Email.loadMail=function
+  if self.account.user and self.account.pass then
+    self.mail=mail_login(self.account.user,self.account.pass)
+    if self.mail isa string then Info.error(self.mail) else return true
+  end if
+  if self.setup then return true
+end function
+// Setup email account (first time or overwrite)
+Email.setup=function(returnMail=false)
+  credsPath=self._credsPath
+  credsFile=File(globals.G_main.computer,credsPath)
+  // Check for existing config
+  if credsFile and get_content(credsFile) then
+    if not Gui.yesNo("You already have an Email account saved...overwrite?",false) then return
+  end if
+  if Gui.yesNo("You have not set up your email account. Would you like to now?") then
+    email=Gui.input({"text":"Enter your email account"})
+    if email==null then return Error.set("Email account can not be blank")
+    password=Gui.inputPassNS("Enter your email password")
+    if not len(password) then return Error.set("Email password can not be blank")
+    // Create file if needed
+    if not credsFile then
+      credsFile=Command.touch(globals.G_main,[credsPath])
+      if credsFile isa Error then return
+    end if
+    // Test login
+    self.mail=mail_login(email,password)
+    if self.mail isa string then
+      Info.error(self.mail)
+      self.mail=null
+      return
+    end if
+    // Save encrypted credentials
+    self.account.user=email
+    self.account.pass=password
+    set_content(credsFile,Encryption.encrypt(trim(email)+"::"+trim(password),Kernel.key))
+    Info.info("Email account successfully setup")
+    if returnMail then return self.mail else return true
+  else
+    // Use local account
+    password=Gui.inputPassNS("Enter local email account password :")
+    self.mail=mail_login(user_mail_address,password)
+    if self.mail isa string then
+      self.mail=null
+      return
+    end if
+    if returnMail then return self.mail else return true
+  end if
+end function
+// View all inbox messages
+Email.view=function
+  if self.check!=true then return
+  if self.fetch!=true then return
+  if not len(self.messages) then return Info.info("You have 0 messages")
+  formattedMsgs=[]
+  for msg in self.messages
+    lines=[]
+    for line in split(msg.content,char(10));push(lines,white(line));end for
+    push(formattedMsgs,char(10)+orange("From    : ")+blue(msg.from)+char(10)+orange("Subject : ")+blue(msg.subject)+char(10)+orange("Message:")+char(10)+join(lines,char(10)))
+  end for
+  Info.info("Inbox:")
+  listNHNC(formattedMsgs)
+end function
+// Open email by index
+Email.open=function(idx)
+  if self.check!=true then return
+  if not idx isa number then return Error.set("Email id expected")
+  if not hasIndex(self.messages,idx) then return Error.set("Invalid email id")
+  msg=self.messages[idx]
+  print orange("From    : ")+blue(msg.from)
+  print orange("Subject : ")+blue(msg.subject)
+  lines=[]
+  for line in split(msg.content,char(10));push(lines,white(line));end for
+  print char(10)+join(lines,char(10))
+end function
+// Login with credentials and launch client
+Email.login=function(argv)
+  if len(argv)==2 then
+    email=argv[0]
+    password=argv[1]
+    // XFIX1.0: mm=mail_login(email,password)  // no pack needed
+    mm=Builder.packMailLogin(globals.G_main,email,password)
+    if mm isa Error or not mm then return Info.error("Login failed")
+    self.mail=mm
+    self.account.user=email
+    self.account.pass=password
+  else
+    email=user_mail_address
+    password=Gui.inputPassNS("Password : ")
+    self.mail=mail_login(email,password)
+    if not self.mail then return Error.set("Invalid email account or password")
+  end if
+  self.client
+end function
+// Remove email by index
+Email.remove=function(idx)
+  if self.check!=true then return
+  if not idx isa number then return Error.set("Email id expected")
+  if not hasIndex(self.messages,idx) then return Error.set("Invalid email id")
+  // XFIX1.0: self._metaMailWait
+  result=delete_mail(self.mail,self.messages[idx].mailID)
+  if result==1 then return Info.info("Email successfully removed")
+  if result==0 then return Error.set("Email could not be removed")
+  if result isa string then return Error.set(result)
+end function
+// Clear entire inbox
+Email.clear=function
+  if self.check!=true then return
+  if self.fetch!=true then return
+  if not len(self.messages) then return Info.info("Your inbox is already empty")
+  _len=len(self.messages)
+  i=0
+  while i<_len
+    // XFIX1.0: self._metaMailWait
+    delete_mail(self.mail,self.messages[i].mailID)
+    i=i+1
+  end while
+  self.messages=[]
+  Info.info("Inbox cleared")
+end function
+// XFIX1.0: native delete_all is one MetaMail op (+ 2s cooldown). Pre-1.0 falls back to clear.
+Email.deleteAll=function
+  if self.check!=true then return
+  // XFIX1.0: self._metaMailWait
+  // XFIX1.0: if delete_all(self.mail) then
+  // XFIX1.0:   self.messages=[]
+  // XFIX1.0:   return Info.info("Inbox cleared")
+  // XFIX1.0: end if
+  // XFIX1.0: return Info.error("delete_all failed")
+  return self.clear
+end function
+// Compose new email via GUI
+Email.newEmail=function
+  if self.check!=true then return
+  address=Gui.input({"text":"Address"})
+  if address==null then return Error.set("Address can not be blank")
+  subject=Gui.input({"text":"Subject"})
+  if subject==null then return Error.set("Subject can not be blank")
+  print blue("To     :"+address)
+  print blue("Subject:"+subject)
+  content=Gui.input({"text":"Content"})
+  if content==null then content=""
+  // XFIX1.0: self._metaMailWait
+  result=send(self.mail,address,subject,content)
+  if result==1 then Info.info("Mail sent") else Info.error(result)
+end function
+// Clear saved .erc credentials file, optionally re-prompt for new ones (-a)
+Email.clearCreds=function(argv)
+  credsFile=File(globals.G_main.computer,self._credsPath)
+  if credsFile then
+    credsFile.delete
+    Info.info(".erc cleared")
+  else
+    Info.info("No .erc file found")
+  end if
+  self.account.user=null
+  self.account.pass=null
+  self.mail=null
+  if argv and indexOf(argv,"-a")!=null then self.setup
+end function
+// Send multiple emails (bombing)
+Email.bomb=function(argv)
+  if self.check!=true then return
+  if not len(argv)>=3 then return Man.help(["email"])
+  address=argv[0]
+  subject=argv[1]
+  content=argv[2]
+  count=10
+  if len(argv)==4 then
+    count=to_int(argv[3])
+    if not count isa number then count=10
+  end if
+  // XFIX1.0: wait 2 already spaces sends; prefer Email._metaMailWait when enabled
+  i=0;while i<count;result=send(self.mail,address,subject,content);if result!=1 then return Error.set("Could not send email");wait 2;i+=1;end while
+end function

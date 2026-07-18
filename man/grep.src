@@ -1,0 +1,177 @@
+// Man page for grep
+manGrep="GREP(1)                          X Shell Manual                          GREP(1)
+
+<b>NAME</b>
+    grep - Search files for patterns
+<b>SYNOPSIS</b>
+    <b>grep</b> [-p|--pattern] PATTERN FILE [FILE...]
+    <b>grep -i|--ignore</b> [-p|--pattern] PATTERN FILE [FILE...]
+    <b>grep -n|--line</b> [-p|--pattern] PATTERN FILE [FILE...]
+    <b>grep -l</b> PATTERN FILE [FILE...]
+    <b>grep -o|--occur</b> [-p|--pattern] PATTERN FILE [FILE...]
+    <b>grep -e|--regex</b> PATTERN FILE [FILE...]
+    <b>grep -r|--recursive</b> PATTERN DIRECTORY
+    <b>grep -v|--invert</b> [-p|--pattern] PATTERN FILE [FILE...]
+    <b>grep -c|--count</b> [-p|--pattern] PATTERN FILE [FILE...]
+    <b>grep -A|--after</b> NUM PATTERN FILE [FILE...]
+    <b>grep -B|--before</b> NUM PATTERN FILE [FILE...]
+    <b>grep -C|--context</b> NUM PATTERN FILE [FILE...]
+    <b>grep -w|--word</b> [-p|--pattern] PATTERN FILE [FILE...]
+    <b>grep -m|--max</b> NUM PATTERN FILE [FILE...]
+    <b>grep -x|--exclude</b> FOLDERS PATTERN DIRECTORY
+<b>DESCRIPTION</b>
+    Search files or directories for lines matching a specified pattern and
+    display matching lines. Supports case-insensitive search, line numbers,
+    inverted matching, occurrence counting, and regular expressions. Can
+    redirect output using > (overwrite), >> (append), and --post flags.
+    Supports glob patterns: <b>grep TODO *.src</b>, <b>grep error logs/*</b>
+
+    Patterns containing regex metacharacters ( | . + * ? ^ $ { } ( ) [ ] \ )
+    automatically enable regex mode — no -e flag needed.
+    Use -p|--pattern to force literal/plain-text matching.
+
+    *** Redirect output is never printed to the tty ***
+<b>OPTIONS</b>
+    <b>[-p|--pattern] PATTERN FILE</b> - Basic Search
+      Search file or directory of files for pattern.
+
+    <b>-i|--ignore</b> - Ignore Case
+      Perform case-insensitive pattern matching.
+
+    <b>-n|--line</b> - Show Line Numbers
+      Display line numbers alongside matching lines. Format: lineNum:line
+
+    <b>-l</b> - List Files With Matches
+      Print only the names of files that contain at least one matching line.
+      Cannot be combined with -c, -n, or -o.
+
+    <b>-o|--occur</b> - Count Occurrences
+      Display number of pattern occurrences.
+
+    <b>-e|--regex</b> - Regular Expression
+      Use regular expression pattern matching.
+      Auto-enabled when pattern contains metacharacters ( | . + * ? ^ $ { } ( ) [ ] \ ).
+      Use -p|--pattern to force literal matching instead.
+
+    <b>-r|--recursive</b> - Recursive Search
+      Search directories recursively including subdirectories.
+
+    <b>-v|--invert|--non</b> - Invert Match
+      Select lines that do not match the pattern.
+
+    <b>-c|--count</b> - Count Matching Lines
+      Display count of matching lines.
+
+    <b>-A|--after NUM</b> - After Context
+      Print NUM lines of context after each match.
+
+    <b>-B|--before NUM</b> - Before Context
+      Print NUM lines of context before each match.
+
+    <b>-C|--context NUM</b> - Context
+      Print NUM lines of context before and after each match.
+      Equivalent to -A NUM -B NUM.
+
+    <b>-w|--word</b> - Whole Word
+      Match only whole words. Prevents partial matches
+      (e.g. 'root' won't match 'chroot' or 'rooted').
+
+    <b>-m|--max NUM</b> - Max Matches
+      Stop searching after NUM matching lines.
+
+    <b>-x|--exclude FOLDERS</b> - Exclude Folders
+      Skip specified folders during recursive search.
+      Folder names are colon-delimited.
+      Used with -r. Excluded folders are not entered.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man grep</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>grep</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Search</color>
+    <b>grep root /etc/passwd</b>
+    Search for 'root' in the passwd file
+
+    <b>grep -i ROOT /etc/passwd</b>
+    Case-insensitive search for root
+
+    <color=#e4ff34># Invert and Count</color>
+    <b>grep -n root /etc/passwd</b>
+    Show matching lines with line numbers
+
+    <b>grep -o root /etc/passwd</b>
+    Count how many times 'root' appears
+
+    <color=#e4ff34># List Files</color>
+    <b>grep -l root /etc/passwd</b>
+    List files that contain 'root'
+
+    <color=#e4ff34># Pipe Usage</color>
+    <b>cat /etc/passwd | grep root</b>
+    Pipe passwd output into grep
+
+    <b>ps | grep root</b>
+    Find all root-owned processes
+
+    <b>ls | grep -i config</b>
+    Find files with 'config' in name
+
+    <color=#e4ff34># Chaining</color>
+    <b>cat /etc/passwd | grep root | cut -d: -f1</b>
+    Extract root usernames only
+
+    <b>cat /etc/passwd | grep root | cut -d: -f2 | decipher | su -s</b>
+    Extract username then open shell as that user
+
+    <b>ps | grep root | wc -l</b>
+    Count root processes
+
+    <color=#e4ff34># Output Redirection</color>
+    <b>grep root /etc/passwd > /home/user/root_entries.txt</b>
+    Save matching lines to file
+
+    <b>grep root /etc/passwd --post</b>
+    Post results to global notes
+
+    <color=#e4ff34># Regex (auto-detected)</color>
+    <b>grep ""[aeiou]"" /etc/passwd</b>
+    Match lines containing any vowel
+
+    <b>grep ""^root"" /etc/passwd</b>
+    Match lines starting with root
+
+    <b>grep ""\d+\.\d+\.\d+"" /etc/network</b>
+    Match IP-like version strings
+
+    <b>grep ""root|admin"" /etc/passwd</b>
+    Match lines containing root or admin
+
+    <b>grep ""crypto|decipher"" /etc/passwd</b>
+    Match lines containing either word — | auto-enables regex, no -e needed
+    Same result as: grep ""(crypto|decipher)"" /etc/passwd
+
+    <color=#e4ff34># Recursive Search</color>
+    <b>grep -r password /etc</b>
+    Search all files under /etc for 'password'
+
+    <b>grep -r -x tables:.Trash password /</b>
+    Search all files, skipping tables and .Trash folders
+
+    <b>grep -r --exclude logs:.Trash pattern /home</b>
+    Recursive search excluding logs and .Trash
+
+    <color=#e4ff34># Context Lines</color>
+    <b>grep -A 3 root /etc/passwd</b>
+    Show 3 lines after each match
+
+    <b>grep -B 2 root /etc/passwd</b>
+    Show 2 lines before each match
+
+    <b>bc ip | recon | grep -A 1 root</b>
+    Show each root match with 1 line of context
+<b>SEE ALSO</b>
+    <b>sed</b>, <b>diff</b>, <b>cat</b>"

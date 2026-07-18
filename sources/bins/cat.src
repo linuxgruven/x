@@ -1,0 +1,7 @@
+binCat="if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""cat_usage""))
+pathFile=get_abs_path(params[0])
+file=File(host_computer(get_shell),pathFile)
+if file==null then exit(""cat: file not found: ""+pathFile)
+if is_binary(file) then exit(""cat: can't open ""+path(file)+"". Binary file"")
+if not has_permission(file,""r"") then exit(""cat: permission denied"")
+print(get_content(file))"

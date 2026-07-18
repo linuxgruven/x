@@ -1,0 +1,40 @@
+// Man page for tee
+manTee="TEE(1)                           X Shell Manual                          TEE(1)
+
+<b>NAME</b>
+    tee - Read from stdin and write to files and stdout
+<b>SYNOPSIS</b>
+    <b>tee</b> [-a] [FILE...]
+<b>DESCRIPTION</b>
+    Read from standard input and write to standard output and files
+    simultaneously. Allows capturing pipe output to files while passing
+    it through to the next command in the pipeline.
+<b>OPTIONS</b>
+    -a, --append
+        Append to files rather than overwriting them.
+
+    <b>FILE</b>
+        One or more files to write the output to. If no files are
+        specified, tee only passes input through to stdout.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Capture IP to file and scan it</color>
+    <b>bc ip | tee scan_target.txt | nmap</b>
+    Save IP address while scanning it
+
+    <color=#e4ff34># Save and display results</color>
+    <b>nmap 192.168.1.1 | tee scan_results.txt | grep open</b>
+    Write scan to file and filter for open ports
+
+    <color=#e4ff34># Append to log file</color>
+    <b>echo Status: OK | tee -a activity.log</b>
+    Add timestamped entry to log
+
+    <color=#e4ff34># Save to multiple files</color>
+    <b>ls | tee list1.txt list2.txt backup.txt</b>
+    Write directory listing to three files
+
+    <color=#e4ff34># Chain with variable storage</color>
+    <b>bc ip | tee ip.txt | pipe set IP | nmap</b>
+    Save IP to file and variable, then scan
+<b>SEE ALSO</b>
+    <b>cat</b>, <b>echo</b>, <b>pipe</b>"

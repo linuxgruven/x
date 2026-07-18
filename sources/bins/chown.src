@@ -1,0 +1,13 @@
+binChown="if len(params)<2 or (len(params)==3 and params[0]!=""-R"") then exit(command_info(""chown_usage""))
+fileOwner=params[0]
+pathFile=get_abs_path(params[1])
+isRecursive=0
+if len(params)==3 then
+	fileOwner=params[1]
+	pathFile=params[2]
+	isRecursive=1
+end if
+file=File(host_computer(get_shell),pathFile)
+if not file then exit(""chown: file not found: ""+pathFile)
+output=set_owner(file,fileOwner,isRecursive)
+if output then print(output)"

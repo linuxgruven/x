@@ -1,0 +1,37 @@
+// Man page for smtpuserlist
+manSmtpuserlist="SMTP(1)                  X Shell Manual                  SMTP(1)
+
+<b>NAME</b>
+    smtp - list user email accounts on smtp servers
+<b>SYNOPSIS</b>
+    <b>smtp </b>(<b>-p</b>) PORT IP or DOMAIN
+<b>DESCRIPTION</b>
+    Displays the user accounts registered on the server where the SMTP service is
+    running. The program also shows if those user accounts have an email account
+    associated with the SMTP server. SMTP services are mail services. By using the
+    <b>smtp</b> command with the IP of a mail server, due to a vulnerability in
+    the service, it returns a list of the existing users in the computer where the
+    SMTP service is working. If these users also have registered an email account in
+    the SMTP server, it will be indicated in the list.
+<b>OPTIONS</b>
+    <b>IP or DOMAIN</b> - List Users
+    Returns a list of users on the server.
+
+    <b>-p PORT</b> - Custom Port
+    Specify custom SMTP port.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Default Port</color>
+    <b>smtp mail.company.com</b>
+    List users on SMTP server
+
+    <b>smtp 192.168.1.100</b>
+    List users by IP
+
+    <color=#e4ff34># Custom Port</color>
+    <b>smtp -p 25 mail.server.com</b>
+    Use port 25
+
+    <b>smtp -p 587 smtp.example.com</b>
+    Use port 587
+<b>SEE ALSO</b>
+    <b>nmap</b>"

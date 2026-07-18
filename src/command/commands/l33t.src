@@ -1,0 +1,83 @@
+// =============================================================================
+// L33T
+// Convert text to leet speak (l33t5p34k) encoding and back.
+// =============================================================================
+Command.l33t=function(Obj,argv)
+  if not argv then return Man.help(["l33t"])
+  _p=ArgumentParser.init
+  _p.addArgument("t",false,"flag")    // Convert TO l33t speak
+  _p.addArgument("f",false,"flag")    // Convert FROM l33t speak
+  _p.addArgument("i",false,"store")   // Input file path
+  _p.addArgument("o",false,"store")   // Output file path
+  argv=_p.parse("l33t",argv,Obj)
+  if argv isa Error then return
+  if argv.t and argv.f then return Error.set("Cannot use both -t and -f")
+  if not argv.t and not argv.f then return Error.set("Must specify -t (to l33t) or -f (from l33t)")
+  text=""
+  if argv.i then
+    file=Io._getFile(Obj,argv.i)
+    if file isa Error then return file
+    if not has_permission(file,"r") then return Error.set(Info.message.NOR)
+    if Io.isBinFolder(file) then return Error.set("Invalid file type")
+    text=get_content(file)
+    if not text then return Error.set("Failed to read file: "+argv.i)
+  else if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin then
+    text=globals.G_pipe.stdin
+    if typeof(text)=="list" then text=join(text,char(10))
+    text=trim(text)
+  else if argv.rest and len(argv.rest)>0 then
+    text=join(argv.rest," ")
+  else
+    return Error.set("Must provide input text or -i file")
+  end if
+  result=""
+  if argv.t then result=toL33t(text) else result=fromL33t(text) //Convert from l33t
+  if argv.o then
+    outputPath=argv.o
+    f=Io._getFile(Obj,outputPath)
+    if f isa Error then f=Command.touch(Obj,[outputPath])
+    if f isa Error then return Error.set("Failed to create/access file: "+outputPath)
+    if not has_permission(f,"w") then return Error.set(Info.message.NOW)
+    r=set_content(f,result)
+    if r isa string then return Error.set(r)
+    Info.info("Wrote converted text to "+path(f))
+  else
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,result) else print white(result)
+  end if
+end function
+//Convert text to l33t speak
+toL33t=function(text)
+  //L33t character mappings (use | for L to avoid conflict with 1)
+  map={
+    "a":"4","A":"4",
+    "e":"3","E":"3",
+    "i":"1","I":"1",
+    "o":"0","O":"0",
+    "s":"5","S":"5",
+    "t":"7","T":"7",
+    "l":"|","L":"|",
+    "g":"9","G":"9",
+    "b":"8","B":"8"
+  }
+  result=""
+  _len=len(text);i=0;while i<_len;ch=text[i];if hasIndex(map,ch) then result+=map[ch] else result+=ch;i+=1;end while
+  return result
+end function
+//Convert l33t speak back to normal text
+fromL33t=function(text)
+  //Reverse l33t mappings
+  map={
+    "4":"a",
+    "3":"e",
+    "1":"i",
+    "0":"o",
+    "5":"s",
+    "7":"t",
+    "|":"l",
+    "9":"g",
+    "8":"b"
+  }
+  result=""
+  _len=len(text);i=0;while i<_len;ch=text[i];if hasIndex(map,ch) then result+=map[ch] else result+=ch;i+=1;end while
+  return result
+end function

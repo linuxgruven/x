@@ -1,0 +1,72 @@
+// =============================================================================
+// STAT
+// Display system stats: online users (-w), disk capacity (-c), file count (-f).
+// =============================================================================
+Command.stat=function(Obj,argv)
+  if not argv then
+    isFileMode=Obj.type=="file"
+    if isFileMode then return Man.help(["stat"]) else return Man.help(["stat"])
+  end if
+  mode=lower(argv[0])
+  showOnlineUsers=function
+    if Obj.type=="file" then return
+    isPipe=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+    playerCount=0
+    guestCount=0
+    for proc in split(show_procs(Obj.computer),char(10))
+      procInfo=split(proc," ")
+      isNPC=procInfo[4]=="dsession"
+      if isNPC then
+        if isPipe then push(globals.G_pipe.stdout,"npc: "+procInfo[0]) else print yellow("NPC [ "+procInfo[0]+" ] is online")
+      end if
+      isPlayer=procInfo[4]=="kernel_task" or procInfo[4]=="Xorg"
+      if isPlayer then playerCount+=1
+      isGuest=procInfo[0]=="guest" and procInfo[4]!="ssh_enc"
+      if isGuest then guestCount+=1
+    end for
+    if guestCount>0 then
+      suffix=" is"
+      if guestCount>1 then suffix="s are"
+      if isPipe then push(globals.G_pipe.stdout,"guests: "+guestCount) else print blue("Guest user"+suffix+" online")
+    end if
+    if playerCount>0 then
+      if isPipe then push(globals.G_pipe.stdout,"player: online") else print green("Player is online")
+    end if
+  end function
+  showTotalFiles=function
+    allFiles=Io.getAll(Obj.root)
+    isError=allFiles isa Error
+    if isError then fileCount=0 else fileCount=len(allFiles)
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,"total_files: "+str(fileCount)) else print yellow("There are "+white(str(fileCount))+" files total")
+  end function
+  showFileDirectoryStats=function
+    fileCount=0
+    dirCount=0
+    for item in Io.getAll(Obj.root);isFolder=is_folder(item);if not isFolder then fileCount+=1 else dirCount+=1;end for
+    maxCapacity=3125
+    totalItems=fileCount+dirCount
+    remainingCapacity=maxCapacity-totalItems
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+      push(globals.G_pipe.stdout,"max_capacity: "+str(maxCapacity))
+      push(globals.G_pipe.stdout,"total_items: "+str(totalItems))
+      push(globals.G_pipe.stdout,"remaining: "+str(remainingCapacity))
+      push(globals.G_pipe.stdout,"files: "+str(fileCount))
+      push(globals.G_pipe.stdout,"directories: "+str(dirCount))
+    else
+      print yellow("   HD maximum capacity: "+white(str(maxCapacity)))
+      print yellow("System wide file total: "+white(str(totalItems)))
+      print yellow("  Files left to create: "+white(str(remainingCapacity)))
+      print yellow("           Total files: "+white(str(fileCount)))
+      print yellow("     Total directories: "+white(str(dirCount)))
+    end if
+  end function
+  showUptime=function;if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,"uptime: "+Io.getTime) else print yellow("X uptime: ")+white(Io.getTime);end function
+  commands={
+    "-w":@showOnlineUsers,
+    "-t":@showTotalFiles,
+    "-f":@showFileDirectoryStats,
+    "-u":@showUptime
+  }
+  if not hasIndex(commands,mode) then return Error.set("Check your syntax, there is no flag ["+mode+"]")
+  commands[mode]
+end function

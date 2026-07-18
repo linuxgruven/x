@@ -1,0 +1,72 @@
+// Man page for mv
+manMv="MV(1)                            X Shell Manual                            MV(1)
+
+<b>NAME</b>
+    mv - Move or rename files and directories
+<b>SYNOPSIS</b>
+    <b>mv</b> [<b>OPTIONS</b>] <b>SOURCE DESTINATION</b>
+    <b>mv</b> [<b>-n </b><b>NAME</b>] <b>FILE DESTINATION</b>
+    <b>mv</b> <b>-z SOURCE DESTINATION</b>
+    <b>mv</b> <b>-r SOURCE DESTINATION</b>
+    <b>mv</b> <b>-l FILE FILE...DESTINATION</b>
+    <b>mv</b> <b>-i SOURCE DESTINATION</b>
+    <b>find</b> PATTERN | <b>mv</b> <b>DESTINATION</b>
+<b>DESCRIPTION</b>
+    Move or rename files and directories. Supports recursive mode to
+    move directory contents, and various special modes for advanced
+    operations. Accepts filenames from stdin via pipe — piped paths
+    become sources, destination is passed as the argument after the command.
+<b>OPTIONS</b>
+    <b>mv SOURCE DESTINATION</b>
+    Move file or directory to destination. If destination doesn't exist,
+    renames SOURCE to DESTINATION name.
+
+    <b>mv -r SOURCE DESTINATION</b>
+    Recursively move all files and folders from SOURCE directory.
+
+    <b>mv -z SOURCE DESTINATION</b>
+    Move a range of files from a directory (special mode).
+
+    <b>mv -l FILE FILE...DESTINATION</b>
+    Move multiple files to destination (list mode).
+
+    <b>mv -n NAME FILE DESTINATION</b>
+    Move file with custom name (name mode).
+
+    <b>mv -i SOURCE DESTINATION</b>
+    Interactive mode. Prompt for confirmation before overwriting an
+    existing destination file.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Move/Rename</color>
+    <b>mv file.txt /etc</b>
+    Move file to /etc directory
+
+    <b>mv oldname.txt newname.txt</b>
+    Rename file in current directory
+
+    <b>mv Desktop/file.txt .</b>
+    Move to current directory
+
+    <color=#e4ff34># Recursive Move</color>
+    <b>mv -r /home/tux/Desktop/Folder /backup</b>
+    Move all contents of Folder
+
+    <color=#e4ff34># Special Modes</color>
+    <b>mv -z /home/tux/Desktop/Folder /docs</b>
+    Move range of files
+
+    <b>mv -l file1.txt file2.txt /backup</b>
+    Move multiple files
+
+    <color=#e4ff34># Interactive Move</color>
+    <b>mv -i file.txt /etc</b>
+
+    <color=#e4ff34># Pipe Support</color>
+    <b>find *.log | mv /archive</b>
+    Move all matched files to /archive
+
+    <b>find *.tmp | mv /home/user/cleanup</b>
+    Batch move temp files for review
+    Prompt before overwriting if file already exists
+<b>SEE ALSO</b>
+    <b>cp</b>, <b>rm</b>, <b>ln</b>"

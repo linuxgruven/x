@@ -1,0 +1,139 @@
+// mailtest.src — MetaMail fetch/read debug harness
+// Run in-game:  mailtest
+// Optional:      mailtest user@domain.com password
+//
+// MetaMail API: read/delete need List(string) mail_IDs; 2s cooldown per player.
+
+GN=function(t);return "<color=#0ceb86>"+t+"</color>";end function
+RD=function(t);return "<color=#f00>"+t+"</color>";end function
+YL=function(t);return "<color=#ff0>"+t+"</color>";end function
+WH=function(t);return "<color=#fff>"+t+"</color>";end function
+GY=function(t);return "<color=#888>"+t+"</color>";end function
+CY=function(t);return "<color=#0ff>"+t+"</color>";end function
+
+addr="tux@ozafohamop.net"
+pass="x"
+if params and params.len>=1 and params[0].len then addr=params[0].trim
+if params and params.len>=2 and params[1].len then pass=params[1].trim
+
+_line=function(tag,val)
+  print YL(tag+": ")+WH(str(val))
+end function
+_type=function(tag,v)
+  tp=typeof(v)
+  extra=""
+  if tp=="string" then extra=" len="+v.len
+  if v isa list then extra=" len="+v.len
+  print YL(tag+" typeof: ")+WH(tp)+GY(extra)
+end function
+_head=function(t)
+  print ""
+  print CY("--- "+t+" ---")
+end function
+_isWaitErr=function(s)
+  if not s or typeof(s)!="string" then return false
+  return s.lower.indexOf("wait 2 second")!=null
+end function
+_bodyLen=function(v)
+  if v==null then return 0
+  if v isa list then
+    if not v.len then return 0
+    return _bodyLen(v[0])
+  end if
+  if typeof(v)!="string" then return 0
+  if _isWaitErr(v) then return 0
+  sp=v.indexOf("Subject: ")
+  if sp==null then return v.len
+  body=trim(v[sp:].split(char(10))[1:].join(char(10)))
+  return body.len
+end function
+_unwrapRead=function(raw)
+  if raw==null then return null
+  if raw isa list then
+    if not raw.len then return null
+    return raw[0]
+  end if
+  return raw
+end function
+_showBody=function(tag,raw)
+  _line(tag+" null",raw==null)
+  _type(tag,raw)
+  body=_unwrapRead(raw)
+  if body==null then
+    print RD(tag+" failed")
+    return null
+  end if
+  if _isWaitErr(body) then
+    print RD(tag+" rate limit: "+body)
+    return null
+  end if
+  if body=="Mail not found" then
+    print RD(tag+" Mail not found")
+    return null
+  end if
+  _line(tag+" bodyLen",_bodyLen(body))
+  n=200
+  if body.len<n then n=body.len
+  print WH(body[0:n]+"...")
+  return body
+end function
+
+print GN("=== MetaMail debug ===")
+_line("addr",addr)
+_line("pass",pass)
+
+_head("login")
+ml=mail_login(addr,pass)
+_type("mail_login",ml)
+if typeof(ml)!="MetaMail" then exit("login failed: "+str(ml))
+
+_head("fetch")
+msgs=ml.fetch
+_type("ml.fetch",msgs)
+if typeof(msgs)=="string" then exit("fetch failed: "+msgs)
+if not msgs or not msgs.len then exit("inbox empty")
+
+_head("inbox")
+i=0
+for m in msgs
+  i=i+1
+  subj=""
+  sp=m.indexOf("Subject: ")
+  if sp!=null then subj=trim(m[sp:][9:].split(char(10))[0])
+  print WH("["+i+"] ")+GN(subj)
+  print GY("  preview: "+m.len+" chars")
+end for
+
+pick=1
+lines=msgs[pick-1].split(char(10))
+mid=trim(lines[2].remove("MailID: "))
+_line("pick",pick)
+_line("mid",mid)
+
+_head("WRONG — read with string (expect null)")
+raw=ml.read(mid)
+_line("ml.read(string) null",raw==null)
+_type("ml.read(string)",raw)
+
+_head("wait 2s (MetaMail cooldown)")
+wait(2)
+
+_head("CORRECT — ml.read([id])")
+body=_showBody("ml.read([id])",ml.read([mid]))
+
+_head("wait 2s")
+wait(2)
+
+_head("global read(ml,[id]) — same API, list return")
+body2=_showBody("read(global,[id])",read(ml,[mid]))
+
+print ""
+print GN("=== done ===")
+if body and _bodyLen(body)>125 then
+  print GN("PASS — list read returns full body (preview was ~231 chars)")
+else if body2 and _bodyLen(body2)>125 then
+  print GN("PASS — global read returns full body")
+else
+  print RD("FAIL — no full body read; check cooldown or mail ID")
+end if
+print GY("Use ml.read([mailId]) — string arg returns null; wait 2s between calls")

@@ -1,0 +1,38 @@
+binLs="ValidateInput=function(input);return (input==""-la"" or input==""-l"" or input==""-a"");end function
+ParamsValid=function(params)
+	if len(params)>3 then return false
+	for p in params
+		if indexOf(p,""-"")!=null and not ValidateInput(p) then return false
+	end for
+	return true
+end function
+if not ParamsValid(params) then exit(command_info(""ls_usage""))
+computer=host_computer(get_shell)
+folderPath=current_path
+if params and indexOf(params[len(params)-1],""-"")==null then folderPath=get_abs_path(params[len(params)-1])
+folder=File(computer,folderPath)
+if folder==null then exit(""ls: No such file or directory"")
+if not has_permission(folder,""r"") then exit(""ls: permission denied"")
+showHide=0
+if params and indexOf(params[0],""a"")!=null then showHide=1
+showDetails=0
+if params and indexOf(params[0],""l"")!=null then showDetails=1
+subFiles=get_folders(folder)+get_files(folder)
+output=""""
+for subFile in subFiles
+	nameFile=name(subFile)
+	permission=permissions(subFile)
+	own=owner(subFile)
+	fileSize=size(subFile)
+	gp=group(subFile)
+	if showHide or indexOf(nameFile,""."")!=0 then
+		if len(output)>0 then output=output+char(10)
+		if showDetails then
+			output=output+permission+"" ""+own+"" ""+gp+"" ""+fileSize+"" 00:00 ""+nameFile
+			if is_symlink(subFile) then output=output+""-->""+path(subFile,true)
+		else
+			output=output+nameFile
+		end if
+	end if
+end for
+print(format_columns(output))"

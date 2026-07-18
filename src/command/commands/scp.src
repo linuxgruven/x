@@ -1,0 +1,61 @@
+// =============================================================================
+// SCP
+// Bidirectional secure file copy between local and remote; -u upload, -d download.
+// =============================================================================
+Command.scp=function(Obj,argv)
+  if not argv then return Man.help(["scp"])
+  mode=lower(argv[0])
+  uploadFile=function(args)
+    hasSourceArg=args and len(args)>0
+    if hasSourceArg then sourcePath=args[0] else sourcePath=null
+    if not sourcePath then
+      isFile=Gui.yesNo("Are we uploading a file?")
+      if isFile then sourcePath=path(Io.file(globals.G_main,globals.G_main.dir.current,"Select a file to upload:")) else sourcePath=path(Io.folder(globals.G_main,globals.G_main.dir.current,"Select a directory to upload:"))
+      if sourcePath isa Warning then return sourcePath
+    else
+      fileObj=Io._getFile(globals.G_main,sourcePath)
+      if fileObj isa Error then return fileObj
+      sourcePath=path(fileObj)
+    end if
+    hasDestArg=len(args)>=2
+    if hasDestArg then destPath=args[1] else destPath=path(Obj.dir.current)
+    result=scp(globals.G_main.shell,sourcePath,destPath,Obj.shell)
+    if result isa string then Info.error(result)
+  end function
+  downloadFile=function(args)
+    hasSourceArg=args and len(args)>0
+    if hasSourceArg then sourcePath=args[0] else sourcePath=null
+    if not sourcePath then
+      isFile=Gui.yesNo("Are we downloading a file?")
+      if isFile then sourcePath=path(Io.file(Obj,Obj.dir.current,"Select a file to download:")) else sourcePath=path(Io.folder(Obj,Obj.dir.current,"Select a directory to download:"))
+      if sourcePath isa Warning then return sourcePath
+    else
+      fileObj=Io._getFile(Obj,sourcePath)
+      if fileObj isa Error then return fileObj
+      sourcePath=path(fileObj)
+    end if
+    hasDestArg=len(args)>=2
+    if hasDestArg then destPath=args[1] else destPath=path(globals.G_main.dir.current)
+    result=scp(Obj.shell,sourcePath,destPath,globals.G_main.shell)
+    if result isa string then Info.error(result)
+  end function
+  commands={
+    "-u":@uploadFile,
+    "-d":@downloadFile
+  }
+  if not hasIndex(commands,mode) then return Error.set(Text.msg.flag+mode+" ]")
+  if (mode=="-u" or mode=="-d") and hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    _stdin=trim(str(globals.G_pipe.stdin))
+    if _stdin!="" then
+      _destArgs=argv[1:]
+      for _line in split(_stdin,char(10))
+        for _item in split(trim(_line)," ")
+          _item=trim(_item)
+          if _item!="" then commands[mode]([_item]+_destArgs)
+        end for
+      end for
+      return
+    end if
+  end if
+  commands[mode](argv[1:])
+end function

@@ -1,0 +1,548 @@
+// =============================================================================
+// GLOSURE
+// Lisp-like scripting interpreter integrated with x shell.
+// Based on the Glosure language (Grey Hack community).
+// =============================================================================
+Glosure={}
+// Reader: convert code string to s-expression list
+Glosure.reader=function(codeStr)
+  codeStr=values(codeStr)
+  stack=[[]]
+  while len(codeStr)
+    token=[]
+    c=pull(codeStr)
+    if (", "+char(9)+char(10)+char(13)).indexOf(c)!=null then
+      continue
+    else if c=="(" then
+      push(stack,[])
+    else if c==")" then
+      if len(stack)<2 then return Error.set("Glosure: Error: Unbalanced parenthesis.")
+      curr=pop(stack)
+      stack[-1].push(curr)
+    else if indexOf("0123456789.",c)!=null then
+      token.push(c)
+      while len(codeStr) and indexOf("0123456789.",codeStr[0])!=null;token.push(pull(codeStr));end while
+      push(stack[-1],val(join(token,"")))
+    else if c=="'" then
+      token.push(c)
+      while len(codeStr) and codeStr[0]!="'";c=pull(codeStr);token.push(c);if c=="\" then push(token,pull(codeStr));end while
+      pull(codeStr)
+      push(stack[-1],join(token,"")+"'")
+    else if c==";" then
+      while len(codeStr) and codeStr[0]!=char(10);pull(codeStr);end while
+    else
+      token.push(c)
+      while len(codeStr) and (" .'();"+char(9)+char(10)+char(13)).indexOf(codeStr[0])==null;token.push(pull(codeStr));end while
+      push(stack[-1],join(token,""))
+    end if
+  end while
+  if len(stack)!=1 then return Error.set("Glosure: Error: Unbalanced parenthesis.")
+  return ["begin"]+stack[0]
+end function
+// Env: create a lexically scoped environment
+Glosure._Env=function(__outer)
+  env={}
+  env.classID="env"
+  env.__outer=__outer
+  if __outer==null then
+    env.__outest=null
+  else
+    if __outer.__outest==null then env.__outest=env else env.__outest=__outer.__outest
+  end if
+  env.__local={}
+  env.get=function(symbol)
+    if hasIndex(self.__local,@symbol) then
+      m=self.__local
+      return @m[symbol]
+    end if
+    if self.__outer then return @self.__outer.get(symbol)
+    return Error.set("Glosure: Runtime Error: Unknown symbol '"+symbol+"'.")
+  end function
+  env.set=function(symbol,value);self.__local[@symbol]=@value;return @value;end function
+  return env
+end function
+// eval: evaluate a Glosure s-expression
+Glosure.eval=function(expr,env)
+  if @expr isa Error then return @expr
+  if not @expr isa list then
+    if not @expr isa string then return @expr
+    if expr[0]=="'" then
+      stri=expr[1:-1]
+      ret=[]
+      _len=len(stri)
+      i=0
+      while i<_len
+        if stri[i]=="\" and i<len(stri)-1 then
+          i+=1
+          if stri[i]=="t" then
+            push(ret,char(9))
+          else if stri[i]=="n" then
+            push(ret,char(10))
+          else if stri[i]=="r" then
+            push(ret,char(13))
+          else
+            push(ret,stri[i])
+          end if
+        else
+          push(ret,stri[i])
+        end if
+        i+=1
+      end while
+      return join(ret,"")
+    else
+      return env.get(expr)
+    end if
+  end if
+  if not len(expr) then return null
+  first=@expr[0]
+  if @first=="def" then
+    if len(@expr)<3 then return Error.set("Glosure: Runtime Error: def keyword requires 2 arguments.")
+    return env.set(@expr[1],Glosure.eval(@expr[2],env))
+  else if @first=="if" then
+    if len(@expr)<3 then return Error.set("Glosure: Runtime Error: if keyword requires 2 or 3 arguments.")
+    if Glosure.eval(@expr[1],env) then return Glosure.eval(@expr[2],env)
+    if len(@expr)>3 then return Glosure.eval(@expr[3],env) else return null
+  else if @first=="loop" then
+    while len(@expr)==1;;end while
+    result=null
+    for stmt in @expr[1:];result=Glosure.eval(@stmt,env);end for
+    while @result
+      for stmt in @expr[1:];result=Glosure.eval(@stmt,env);end for
+    end while
+    return @result
+  else if @first=="lambda" then
+    if len(@expr)<3 then return Error.set("Glosure: Runtime Error: lambda keyword requires 2 or more arguments.")
+    if not @expr[1] isa list then return Error.set("Glosure: Runtime Error: lambda requires a list as params.")
+    return {
+      "classID": "lambda",
+      "params": @expr[1],
+      "body": expr[2:],
+      "env": @env,
+    }
+  else if @first=="begin" then
+    result=null
+    for stmt in expr[1:];result=Glosure.eval(@stmt,env);end for
+    return @result
+  else if @first=="exec" then
+    if len(@expr)!=2 then return Error.set("Glosure: Runtime Error: exec keyword requires 1 argument.")
+    return Glosure.execute(Glosure.eval(@expr[1],env),env)
+  else if @first=="eval" then
+    if len(@expr)!=2 then return Error.set("Glosure: Runtime Error: eval keyword requires 1 argument.")
+    return Glosure.eval(Glosure.eval(@expr[1],env),env)
+  else if @first=="glosure" then
+    if len(@expr)<3 then return Error.set("Glosure: Runtime Error: glosure keyword requires 2 or more arguments.")
+    if not @expr[1] isa list then return Error.set("Glosure: Runtime Error: glosure requires a list as params.")
+    if len(@expr[1])>5 then return Error.set("Glosure: Runtime Error: glosure can only take 5 or less params.")
+    lambda={
+      "classID": "lambda",
+      "params": @expr[1],
+      "body": expr[2:],
+      "env": @env,
+    }
+    __eval=@Glosure.eval
+    __env=@env
+    buildGlosure=function
+      __eval=@outer.__eval
+      __env=@outer.__env
+      lambda=@outer.lambda
+      glosure0=function;return __eval([lambda],__env);end function
+      glosure1=function(arg0);return __eval([lambda,@arg0],__env);end function
+      glosure2=function(arg0,arg1);return __eval([lambda,@arg0,@arg1],__env);end function
+      glosure3=function(arg0,arg1,arg2);return __eval([lambda,@arg0,@arg1,@arg2],__env);end function
+      glosure4=function(arg0,arg1,arg2,arg3);return __eval([lambda,@arg0,@arg1,@arg2,@arg3],__env);end function
+      glosure5=function(arg0,arg1,arg2,arg3,arg4);return __eval([lambda,@arg0,@arg1,@arg2,@arg3,@arg4],__env);end function
+      if len(lambda.params)==0 then return @glosure0
+      if len(lambda.params)==1 then return @glosure1
+      if len(lambda.params)==2 then return @glosure2
+      if len(lambda.params)==3 then return @glosure3
+      if len(lambda.params)==4 then return @glosure4
+      return @glosure5
+    end function
+    return buildGlosure
+  else if @first=="dot" then
+    length=[]
+    temp=function(object,method,args);method=@object[@method];return method(@object);end function
+    length.push(@temp)
+    temp=function(object,method,args);method=@object[@method];return method(@object,@args[0]);end function
+    length.push(@temp)
+    temp=function(object,method,args);method=@object[@method];return method(@object,@args[0],@args[1]);end function
+    length.push(@temp)
+    temp=function(object,method,args);method=@object[@method];return method(@object,@args[0],@args[1],@args[2]);end function
+    length.push(@temp)
+    temp=function(object,method,args);method=@object[@method];return method(@object,@args[0],@args[1],@args[2],@args[3]);end function
+    length.push(@temp)
+    temp=function(object,method,args);method=@object[@method];return method(@object,@args[0],@args[1],@args[2],@args[3],@args[4]);end function
+    push(length,@temp)
+    if len(expr)<3 then return Error.set("Glosure: Runtime Error: dot keyword requires at least 2 arguments.")
+    if len(expr)>len(length) then return Error.set("Glosure: Runtime Error: dot keyword takes at most "+(len(length)-1)+" args but received "+(len(expr)-1)+".")
+    args=[]
+    for arg in expr[1:];push(args,Glosure.eval(@arg,env));end for
+    object=@args[0]
+    method=@args[1]
+    args=args[2:]
+    run=@length[len(args)]
+    return run(@object,@method,args)
+  else if @first=="array" then
+    args=[]
+    for arg in expr[1:];push(args,Glosure.eval(@arg,env));end for
+    return args
+  else if @first=="dict" then
+    args=[]
+    for arg in expr[1:];push(args,Glosure.eval(@arg,env));end for
+    if len(args)%2!=0 then push(args,null)
+    ret={}
+    _len=len(args);i=0;while i<_len;ret[@args[i]]=@args[i+1];i=i+2;end while
+    return @ret
+  else if @first=="context" then
+    return env.__local
+  else if @first=="x" then
+    if len(@expr)!=2 then return Error.set("Glosure: Runtime Error: x keyword requires exactly 1 argument.")
+    raw=@expr[1]
+    // if it's a string literal or a list expression, evaluate it; otherwise use bare symbol as name
+    if raw isa string and raw[0]=="'" then
+      name=Glosure.eval(raw,env)
+      if @name isa Error then return @name
+    else if raw isa list then
+      name=Glosure.eval(raw,env)
+      if @name isa Error then return @name
+    else
+      name=raw
+    end if
+    if not Glosure.commands then return Error.set("Glosure: Runtime Error: x: command map not available.")
+    if not hasIndex(Glosure.commands,name) then return Error.set("Glosure: Runtime Error: x: unknown command: '"+name+"'.")
+    return {"classID":"native","ref":@Glosure.commands[name],"name":name}
+  else if @first=="+" or @first=="-" or @first=="*" or @first=="/" or @first=="%" or @first=="^" then
+    if len(expr)<2 then return Error.set("Glosure: Runtime Error: "+first+" requires at least 1 argument.")
+    result=Glosure.eval(@expr[1],env)
+    if @result isa Error then return @result
+    if len(expr)>2 then
+      _len=len(expr);i=2;while i<_len
+        right=Glosure.eval(@expr[i],env)
+        if @right isa Error then return @right
+        if @first=="+" then
+          result=result+right
+        else if @first=="-" then
+          result=result-right
+        else if @first=="*" then
+          result=result*right
+        else if @first=="/" then
+          result=result/right
+        else if @first=="%" then
+          result=result%right
+        else
+          result=result^right
+        end if
+      i+=1;end while
+    end if
+    return result
+  else
+    func=Glosure.eval(@first,env)
+    args=expr[1:]
+    if @func isa Error then return @func
+    evaluatedArgs=[]
+    if @func isa map and hasIndex(func,"classID") and func.classID=="native" then
+      nref=@func.ref
+      argv=[]
+      for arg in args;evaluated=Glosure.eval(@arg,env);if @evaluated isa Error then return @evaluated;push(argv,@evaluated);end for
+      nref(argv)
+      return null
+    else if @func isa map and hasIndex(func,"classID") and func.classID=="lambda" then
+      if len(args)>len(func.params) then return Error.set("Glosure: Runtime Error: lambda takes at most "+len(func.params)+" params but received "+len(args)+".")
+      for arg in args;evaluated=Glosure.eval(@arg,env);if @evaluated isa Error then return @evaluated;push(evaluatedArgs,@evaluated);end for
+      while len(evaluatedArgs)<len(func.params);push(evaluatedArgs,null);end while
+      newEnv=Glosure._Env(func.env)
+      for i in indexes(func.params);newEnv.set(@func.params[i],@evaluatedArgs[i]);end for
+      result=null
+      for bodyExpr in func.body;result=Glosure.eval(@bodyExpr,newEnv);end for
+      return @result
+    else if @func isa funcRef then
+      for arg in args;evaluated=Glosure.eval(@arg,env);if @evaluated isa Error then return @evaluated;push(evaluatedArgs,@evaluated);end for
+      length=[]
+      temp=function(args,func);return func;end function
+      push(length,@temp)
+      temp=function(args,func);return func(@args[0]);end function
+      push(length,@temp)
+      temp=function(args,func);return func(@args[0],@args[1]);end function
+      push(length,@temp)
+      temp=function(args,func);return func(@args[0],@args[1],@args[2]);end function
+      push(length,@temp)
+      temp=function(args,func);return func(@args[0],@args[1],@args[2],@args[3]);end function
+      push(length,@temp)
+      temp=function(args,func);return func(@args[0],@args[1],@args[2],@args[3],@args[4]);end function
+      push(length,@temp)
+      if len(evaluatedArgs)>len(length)-1 then return Error.set("Glosure: Runtime Error: glosure takes at most "+(len(length)-1)+" params but received "+len(evaluatedArgs)+".")
+      run=@length[len(evaluatedArgs)]
+      return run(evaluatedArgs,@func)
+    end if
+  end if
+end function
+// GlobalEnv: build global environment with GreyScript builtins + x shell context
+Glosure.GlobalEnv=function(Obj,commands)
+  Glosure.commands=commands
+  globalEnv=Glosure._Env(null)
+  globalEnv.__local["&"]=function(a,b);return @a and @b;end function
+  globalEnv.__local["&&"]=function(a,b);return @a and @b;end function
+  globalEnv.__local["|"]=function(a,b);return @a or @b;end function
+  globalEnv.__local["||"]=function(a,b);return @a or @b;end function
+  globalEnv.__local["!"]=function(a);return not @a;end function
+  globalEnv.__local["=="]=function(a,b);return @a==@b;end function
+  globalEnv.__local["!="]=function(a,b);return @a!=@b;end function
+  globalEnv.__local[">="]=function(a,b);return @a>=@b;end function
+  globalEnv.__local["<="]=function(a,b);return @a<=@b;end function
+  globalEnv.__local[">"]=function(a,b);return @a>@b;end function
+  globalEnv.__local["<"]=function(a,b);return @a<@b;end function
+  globalEnv.__local["+"]=function(a,b);return @a+@b;end function
+  globalEnv.__local["-"]=function(a,b);return @a-@b;end function
+  globalEnv.__local["*"]=function(a,b);return @a*@b;end function
+  globalEnv.__local["/"]=function(a,b);return @a/@b;end function
+  globalEnv.__local["^"]=function(a,b);return @a^(@b);end function
+  globalEnv.__local["%"]=function(a,b);return @a%@b;end function
+  globalEnv.__local["isa"]=function(a,b);return @a isa @b;end function
+  globalEnv.__local.at=function(a,b);return @a[b];end function
+  globalEnv.__local.set=function(a,b,c);(@a)[@b]=@c;return @c;end function
+  _glosure_net_use=function(metax,ip,port);return metax.net_use(ip,port);end function
+  _glosure_dump_lib=function(session);return session.dump_lib;end function
+  _glosure_lib_name=function(lib);return lib.lib_name;end function
+  _glosure_load=function(metax,path);return metax.load(path);end function
+  _glosure_scan=function(metax,lib);return metax.scan(lib);end function
+  _glosure_scan_address=function(metax,lib,addr);return metax.scan_address(lib,addr);end function
+  _glosure_overflow=function(lib,addr,exploit,opts=null)
+    if typeof(addr)!="string" or typeof(exploit)!="string" then return null
+    if opts==null then return lib.overflow(addr,exploit)
+    if typeof(opts)!="string" then opts=str(opts)
+    return lib.overflow(addr,exploit,opts)
+  end function
+  _glosure_shell_run=function(sh,cmd);return sh.host_computer.run(cmd);end function
+  _glosure_shell_user=function(sh);return sh.active_user;end function
+  _glosure_exploit_shell=function(sh);return Exploit.getShell(sh);end function
+  _glosure_get_computer=function(sh);return Exploit.getComputer(sh);end function
+  _glosure_get_file=function(fileObj,local_ip,public_ip);return Exploit.getFile(fileObj,{"public_ip":public_ip,"local_ip":local_ip});end function
+  _glosure_used_ports=function(router);return router.used_ports;end function
+  _glosure_port_number=function(p);return p.port_number;end function
+  general={"net_use":@_glosure_net_use,"used_ports":@_glosure_used_ports,"port_number":@_glosure_port_number,"dump_lib":@_glosure_dump_lib,"lib_name":@_glosure_lib_name,"load_lib":@_glosure_load,"scan":@_glosure_scan,"scan_address":@_glosure_scan_address,"overflow":@_glosure_overflow,"shell_run":@_glosure_shell_run,"shell_user":@_glosure_shell_user,"exploit_shell":@_glosure_exploit_shell,"get_computer":@_glosure_get_computer,"get_file":@_glosure_get_file,"local_ip":@local_ip,"public_ip":@public_ip,"version":@version,"active_user":@active_user,"bitwise":@bitwise,"clear_screen":@clear_screen,"command_info":@command_info,"current_date":@current_date,"current_path":@current_path,"exit":@exit,"format_columns":@format_columns,"get_ctf":@get_ctf,"get_custom_object":@get_custom_object,"get_router":@get_router,"get_shell":@get_shell,"get_switch":@get_switch,"home_dir":@home_dir,"include_lib":@include_lib,"is_lan_ip":@is_lan_ip,"is_valid_ip":@is_valid_ip,"launch_path":@launch_path,"mail_login":@mail_login,"nslookup":@nslookup,"parent_path":@parent_path,"print":@print,"program_path":@program_path,"reset_ctf_password":@reset_ctf_password,"typeof":@typeof,"user_bank_number":@user_bank_number,"user_input":@user_input,"user_mail_address":@user_mail_address,"wait":@wait,"whois":@whois,"to_int":@to_int,"time":@time,"abs":@abs,"acos":@acos,"asin":@asin,"atan":@atan,"ceil":@ceil,"char":@char,"cos":@cos,"floor":@floor,"log":@log,"pi":@pi,"range":@range,"round":@round,"rnd":@rnd,"sign":@sign,"sin":@sin,"sqrt":@sqrt,"str":@str,"tan":@tan,"yield":@yield,"slice":@slice,"number":@number,"string":@string,"list":@list,"map":@map,"funcRef":@funcRef,"globals":@globals,"true":true,"false":false,"null":null,"File":@File,"host_computer":@host_computer,"show_procs":@show_procs,"close_program":@close_program}
+  if typeof(include_lib("/lib/testlib.so"))!="TestLib" then
+    general["get_abs_path"]=@get_abs_path
+    general["cd"]=@cd
+  end if
+  for method in general+string+list+map;globalEnv.__local[@method.key]=@method.value;end for
+  // Explicit-self wrappers: override prototype methods so (method self arg...) works
+  globalEnv.__local["split"]=function(str,sep);return str.split(sep);end function
+  globalEnv.__local["indexOf"]=function(str,val,offset=0);return str.indexOf(val,offset);end function
+  globalEnv.__local["slice"]=function(obj,from,to=null);if to==null then return obj[from:];return obj[from:to];end function
+  globalEnv.__local["trim"]=function(str);return str.trim;end function
+  globalEnv.__local["replace"]=function(str,old,newStr);return str.replace(old,newStr);end function
+  globalEnv.__local["upper"]=function(str);return str.upper;end function
+  globalEnv.__local["lower"]=function(str);return str.lower;end function
+  globalEnv.__local["hasIndex"]=function(obj,idx);return obj.hasIndex(idx);end function
+  globalEnv.__local["indexes"]=function(obj);return obj.indexes;end function
+  globalEnv.__local["values"]=function(obj);return obj.values;end function
+  globalEnv.__local["join"]=function(lst,sep="");return lst.join(sep);end function
+  globalEnv.__local["sort"]=function(lst,key=null);if key==null then return lst.sort;return lst.sort(key);end function
+  globalEnv.__local["pop"]=function(lst);return lst.pop;end function
+  globalEnv.__local["pull"]=function(lst);return lst.pull;end function
+  globalEnv.__local["remove"]=function(obj,idx);return obj.remove(idx);end function
+  globalEnv.__local["push"]=function(lst,val);lst.push(val);return lst;end function
+  // Inject x shell context
+  globalEnv.__local["obj"]=Obj
+  globalEnv.__local["Obj"]=Obj
+  globalEnv.__local["__commands"]=commands
+  return globalEnv
+end function
+// preprocess: expand macros and quotes
+Glosure.preprocess=function(expr,env)
+  if @expr isa Error then return @expr
+  if not hasIndex(env.__outest,"__macros") then env.__outest.__macros={}
+  if not hasIndex(env.__outest,"__symbols") then env.__outest.__symbols=[]
+  fmap=function(f,expr,env)
+    expr=[]+expr
+    for i in indexes(expr);expr[i]=f(@expr[i],env);end for
+    return expr
+  end function
+  deepreplace=function(expr,a,b)
+    result=[]
+    for e in expr
+      if @e isa list then
+        push(result,deepreplace(e,@a,@b))
+      else if @e==@a then
+        push(result,@b)
+      else
+        push(result,@e)
+      end if
+    end for
+    return result
+  end function
+  gensym=function(env)
+    randsym=function
+uniquesim="";i=0;while i<=7;uniquesim=uniquesim+"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"[floor(rnd*62)];i+=1;end while;return "#:G"+uniquesim
+end function
+    while true
+      sym=randsym
+      if indexOf(env.__outest.__symbols,sym)==null then
+        push(env.__outest.__symbols,sym)
+        return sym
+      end if
+    end while
+  end function
+  if not @expr isa list then
+    return @expr
+  else
+    if len(expr)==0 then
+      return fmap(@Glosure.preprocess,expr,env)
+    else
+      keyword=expr[0]
+      if keyword=="defmacro" then
+        if len(expr)!=5 then return Error.set("Glosure: Preprocessing Error: defmacro requires 4 arguments.")
+        name=@expr[1]
+        if not @name isa string then return Error.set("Glosure: Preprocessing Error: defmacro name must be a symbol.")
+        args=@expr[2]
+        if not @args isa list then return Error.set("Glosure: Preprocessing Error: defmacro args must be an s-expression.")
+        for arg in args;if not @arg isa string then return Error.set("Glosure: Preprocessing Error: each macro argument must be a symbol.");end for
+        syms=@expr[3]
+        if not @syms isa list then return Error.set("Glosure: Preprocessing Error: gensym symbols must be an s-expression.")
+        for sym in syms;if not @sym isa string then return Error.set("Glosure: Preprocessing Error: each gensym symbol must be a symbol.");end for
+        body=@expr[4]
+        if not @body isa string and not @body isa list then return Error.set("Glosure: Preprocessing Error: body must be a symbol or s-expression.")
+        if body isa list then
+          for i in indexes(syms)
+            sym=syms[i]
+            uniquesim=gensym(env)
+            syms[i]=uniquesim
+            body=deepreplace(body,sym,uniquesim)
+          end for
+          for i in indexes(args)
+            arg=args[i]
+            uniquearg=gensym(env)
+            args[i]=uniquearg
+            body=deepreplace(body,arg,uniquearg)
+          end for
+        end if
+        env.__outest.__macros[name]=[args,body]
+      else if keyword=="quote" then
+        buildString=function(expr)
+          if not expr isa list then return expr
+          ret=[]
+          for atom in expr;push(ret,buildString(atom));end for
+          return "("+join(ret," ")+")"
+        end function
+        ret=[]
+        for atom in expr[1:];push(ret,buildString(atom));end for
+        return "'"+join(ret," ")+"'"
+      else if env.__outest.__macros.hasIndex(keyword) then
+        macroname=keyword
+        macroargs=env.__outest.__macros[macroname][0]
+        macrobody=env.__outest.__macros[macroname][1]
+        args=expr[1:]
+        if len(macroargs)==0 then
+          if len(args)==0 then return Glosure.preprocess(macrobody,env)
+          expr=[]+expr
+          expr[0]=Glosure.preprocess(macrobody,env)
+          return Glosure.preprocess(expr,env)
+        else if len(macroargs)!=len(args) then
+          return Error.set("Glosure: Preprocessing Error: "+macroname+" macro requires "+len(macroargs)+" arguments.")
+        else
+          body=[]+macrobody
+          for i in indexes(args);macroarg=macroargs[i];arg=args[i];body=deepreplace(body,macroarg,arg);end for
+          return Glosure.preprocess(body,env)
+        end if
+      else
+        return fmap(@Glosure.preprocess,expr,env)
+      end if
+    end if
+  end if
+end function
+// execute: run a Glosure code string in the given environment
+Glosure.execute=function(codeStr,env)
+  parsed=Glosure.reader(codeStr)
+  if parsed isa Error then return parsed
+  preprocessed=Glosure.preprocess(parsed,env)
+  if preprocessed isa Error then return preprocessed
+  return Glosure.eval(preprocessed,env)
+end function
+// Standard Glosure Library
+Glosure.stl="
+;; Standard Glosure Library
+(defmacro defun (name arguments body) () (def name (lambda arguments body)))
+(defmacro defunction (name arguments body) () (def name (glosure arguments body)))
+(defmacro while (condition body) () (if condition (loop body condition)))
+(defmacro do-while (condition body) () (loop body condition))
+(defmacro for (initializer condition iterator body) () ((lambda ()
+    initializer
+    (if condition (loop body iterator condition)))))
+(defmacro foreach (key value collection body) (keys) ((lambda ()
+    (def keys (indexes collection))
+    (if keys (begin
+        (loop
+            (def key (pull keys))
+            (def value (at collection key))
+            body
+            keys)
+        value)))))
+(defmacro defalias (name keyword) () (defmacro name () () keyword))
+(defmacro swap (a b) (temp) (begin
+    (def temp a)
+    (def a b)
+    (def b temp)))
+(defmacro ++ (var) () (def var (+ var 1)))
+(defmacro var++ (var) (temp) (begin
+    (def temp var)
+    (def var (+ var 1))
+    temp))
+(defmacro -- (var) () (def var (- var 1)))
+(defmacro var-- (var) (temp) (begin
+    (def temp var)
+    (def var (- var 1))
+    temp))
+(def params (if (hasIndex globals 'params') (at globals 'params') (array)))
+(def script-path (program_path))
+(defun gensym () (exec '(defmacro _ () (sym) (quote sym))(_)'))
+"
+// run: entry point — starts the REPL or executes a file
+// Args: Obj (x shell context), commands (Obj.commands map), file (optional path)
+Glosure.run=function(Obj,commands,file=null,scriptArgs=[],opts={})
+  env=Glosure._Env(Glosure.GlobalEnv(Obj,commands))
+  Glosure.execute(Glosure.stl,env)
+  env.__local["args"]=scriptArgs
+  env.__local["_"]=null
+  env.__local["__interactive"]=hasIndex(opts,"interactive")
+  // -e: eval inline expression and return
+  if hasIndex(opts,"eval") then
+    result=Glosure.execute(opts.eval,env)
+    if @result isa Error then return @result
+    if @result!=null and not @result isa funcRef then print grey(str(@result))
+    return @result
+  end if
+  // Resolve file path (with optional -p prefix fallback)
+  if file then
+    if file[0]=="~" then file=path(Obj.user.home)+file[1:]
+    f=Io._getFile(Obj,file)
+    if f isa Error and hasIndex(opts,"prefix") then
+      prefix=opts.prefix
+      if prefix[0]=="~" then prefix=path(Obj.user.home)+prefix[1:]
+      f=Io._getFile(Obj,prefix+"/"+file)
+    end if
+    if f isa Error then return f
+    result=Glosure.execute(get_content(f),env)
+    // -i: fall through to interactive REPL after executing file
+    if not hasIndex(opts,"interactive") then return @result
+    env.__local["_"]=@result  // bind script return value to _ before REPL
+  end if
+  // Interactive REPL
+  ex={";quit":0,"(exit)":0,"exit":0}
+  cl={"clear":0,"(clear)":0}
+  while true
+    input=trim(user_input(Gui.replPrompt,0,0,1))
+    if not input then continue
+    if hasIndex(ex,input) then return
+    if hasIndex(cl,input) then
+      clear_screen
+      continue
+    end if
+    result=Glosure.execute(input,env)
+    if @result isa Error then
+      // Error.set already printed the message
+    else if @result!=null and not @result isa funcRef and not (@result isa map and hasIndex(result,"classID") and result.classID=="native") then
+      print grey(str(@result))
+    end if
+    env.__local["_"]=@result
+  end while
+end function

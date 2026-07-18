@@ -1,0 +1,85 @@
+// =============================================================================
+// FILE
+// Display file metadata, permissions, type, and optional octal permission format.
+// =============================================================================
+Command.file=function(Obj,argv)
+	hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+	if not argv and not hasPipeInput then return Man.help(["file"])
+	if hasPipeInput then
+		if not argv then argv=[]
+		for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(argv,line);end for
+	end if
+	_p=ArgumentParser.init
+	_p.addArgument("o",false,"flag")  // Octal permission format
+	_p.addArgument("s",false,"flag")  // System statistics
+	argv=_p.parse("file",argv,Obj)
+	if argv isa Error then return
+	if argv.s then return Io.count(Obj.root)
+	check=function(fileObj,requireRead=true,fileType="file")
+		// Check for broken symlink (null permissions indicate broken link)
+		if not permissions(fileObj) then return Warning.set("Looks like a broken symlink")
+		if fileObj==null then return Error.set("file not found: "+fileType)
+		if not has_permission(fileObj,"r") and requireRead then return Info.error("Permission denied")
+		if not is_binary(fileObj) and not get_content(fileObj) and requireRead then return Info.info(name(fileObj)+" is empty")
+		return true
+	end function
+	files=[]
+	if hasIndex(argv,"files") and argv.files and len(argv.files)>0 then
+		files=argv.files
+	else if argv.rest and len(argv.rest)>0 then
+		fileObj=Io._getFile(Obj,argv.rest[0])
+		if fileObj isa Error then return fileObj
+		files=[fileObj]
+	else
+		return Man.help(["file"])
+	end if
+	for fileObj in files
+		if not fileObj or fileObj isa Error then continue
+    if not check(fileObj) then continue
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+      push(globals.G_pipe.stdout,path(fileObj))
+      continue
+    end if
+    if is_folder(fileObj) then
+      print green("Directory at ")+orange(path(fileObj))
+      if argv.o then print yellow("Permissions:")+white("----")+blue(Io.octal(permissions(fileObj))) else print yellow("Permissions:")+white("----")+blue(permissions(fileObj))
+      print yellow("Owner:")+white("----------")+blue(owner(fileObj))
+      print yellow("Group:")+white("----------")+blue(group(fileObj))
+      fileCount=0
+      fileList=get_files(fileObj)
+      if fileList then fileCount=len(fileList)
+      print yellow("File Count:")+white("-----")+blue(str(fileCount))
+      print yellow("Directory Count:")+blue(str(len(get_folders(fileObj))))
+      print yellow("Size:")+blue(str(Io.size(val(size(fileObj)))))
+    else
+      print orange(name(fileObj))
+      print yellow("Full path:")+white("------")+blue(path(fileObj))
+      if permissions(fileObj) then
+        if argv.o then print yellow("Permissions:")+white("----")+blue(Io.octal(permissions(fileObj))) else print yellow("Permissions:")+white("----")+blue(permissions(fileObj))
+      else
+        print yellow("Permissions:")+white("----")+blue("NA")
+      end if
+      if not owner(fileObj) then print yellow("Owner:")+white("----------")+blue("NA") else print yellow("Owner:")+white("----------")+blue(owner(fileObj))
+      if not group(fileObj) then print yellow("Group:")+white("----------")+blue("NA") else print yellow("Group:")+white("----------")+blue(group(fileObj))
+      if is_symlink(fileObj) then
+      	// Symlink - show target path
+        print yellow("File type:")+white("------")+blue("symlink")
+        print yellow("Link Target:")+white("----")+blue(path(fileObj,true))
+      else if is_binary(fileObj) then
+      	// Binary file - no content analysis
+        print yellow("File type:")+white("------")+blue("binary")
+      else
+      	// Text file - show line and character counts if readable
+        print yellow("File type:")+white("------")+blue("text file")
+        if has_permission(fileObj,"r") then
+          print yellow("Line Count:")+white("-----")+blue(str(len(split(get_content(fileObj),char(10)))))
+          print yellow("Char Count:")+white("-----")+blue(str(len(get_content(fileObj))))
+        else
+          print yellow("Line Count:")+white("-----")+red("Don't have read permissions for "+name(fileObj))
+          print yellow("Char Count:")+white("-----")+red("Don't have read permissions for "+name(fileObj))
+        end if
+      end if
+      print yellow("Size:")+white("-----------")+blue(str(Io.size(val(size(fileObj)))))
+    end if
+	end for
+end function

@@ -1,0 +1,73 @@
+// Man page for tree
+manTree="TREE(1)                          X Shell Manual                          TREE(1)
+
+<b>NAME</b>
+    tree - display directory tree in Linux style
+<b>SYNOPSIS</b>
+    <b>tree</b> (<b>PATH</b>) (<b>-L</b> <b>DEPTH</b>) (<b>-p</b>) (<b>-u</b>) (<b>-g</b>) (<b>-s</b>)
+    <b>tree -w</b> (<b>PATH</b>)
+    <b>tree -d</b> (<b>PATH</b>)
+<b>DESCRIPTION</b>
+    Display a recursive directory tree using |--- and +--- connectors, matching Linux
+    tree output. Defaults to the current directory if no path is given. Color codes
+    entries by type. Output can be redirected to a file with > or >>.
+<b>COLORS</b>
+    <color=#5599ff>blue</color>     Directories
+    <color=#00ff00>green</color>    Binary files (prefixed with <color=#ff8800>*</color>)
+    <color=#ffff00>yellow</color>   Symbolic links
+    white    Regular text files
+<b>OPTIONS</b>
+    <b>PATH</b>
+        Target directory. Defaults to current directory if omitted.
+    <b>-L DEPTH</b>
+        Limit recursion to DEPTH levels. -L 1 shows top level only.
+    <b>-p</b>
+        Show file permissions (e.g. drwxr-xr-x) before each entry.
+    <b>-u</b>
+        Show file owner before each entry.
+    <b>-g</b>
+        Show file group before each entry.
+        Flags can be combined: <b>-pug</b> shows all metadata.
+    <b>-s</b>
+        Show human-readable file size before each entry (e.g. 1.2 KB).
+        Flags can be combined: <b>-pugs</b> shows all metadata including size.
+    <b>-w</b>
+        Wide columnar view with permission color coding.
+    <b>-d</b>
+        Directories only, no files shown (like tree -d on Linux).
+    <b>> FILE</b>
+        Redirect output to file (overwrite).
+    <b>>> FILE</b>
+        Redirect output to file (append).
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Current directory</color>
+    <b>tree</b>
+
+    <color=#e4ff34># Tree from path</color>
+    <b>tree /home</b>
+
+    <color=#e4ff34># Top level only</color>
+    <b>tree -L 1</b>
+
+    <color=#e4ff34># Two levels deep</color>
+    <b>tree -L 2 /etc</b>
+
+    <color=#e4ff34># Wide view</color>
+    <b>tree -w</b>
+
+    <color=#e4ff34># Directories only</color>
+    <b>tree -d</b>
+
+    <color=#e4ff34># Show permissions, owner, and group</color>
+    <b>tree -pug</b>
+
+    <color=#e4ff34># Show permissions, owner, group, and size</color>
+    <b>tree -pugs</b>
+
+    <color=#e4ff34># Permissions only, two levels deep</color>
+    <b>tree -p -L 2 /etc</b>
+
+    <color=#e4ff34># Save to file</color>
+    <b>tree > output.txt</b>
+<b>SEE ALSO</b>
+    <b>ls</b>, <b>find</b>, <b>pwd</b>"

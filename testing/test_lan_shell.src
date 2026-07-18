@@ -1,0 +1,60 @@
+_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  LAN SHELL TEST — scan --s</color>
+_print <color=#eb0cc6>========================================</color>
+_print
+
+// Test 1: basic LAN shell — get shell and run commands via _hold
+_print <color=#00bfff>[1/4]</color> Basic LAN shell on 172.16.21.9...
+scan --s 172.16.21.9
+
+if not $scan_ok
+  _print <color=#ff0000>[X] Failed to get shell on 172.16.21.9</color>
+  _home
+endif
+
+_print <color=#00ff00> Got shell — running commands via _hold</color>
+_hold whoami
+_hold ls
+_hold home
+_print
+
+// Test 2: --router flag (targets router kernel)
+_print <color=#00bfff>[2/4]</color> Router shell on 172.16.21.9 --router...
+scan --s 172.16.21.9 --router
+
+if $scan_ok
+  _print <color=#00ff00> Got router shell</color>
+  _hold whoami
+  _hold home
+else
+  _print <color=#ffff00>[!] No router shell exploit available (non-fatal)</color>
+endif
+_print
+
+// Test 3: -S flag (auto su to root)
+_print <color=#00bfff>[3/4]</color> Root shell on 172.16.21.9 -S...
+scan --s 172.16.21.9 -S
+
+if $scan_ok
+  _print <color=#00ff00> Got shell (su attempted)</color>
+  _hold whoami
+  _hold home
+else
+  _print <color=#ffff00>[!] Shell with -S failed (non-fatal)</color>
+endif
+_print
+
+// Test 4: trailing command via "then" (no _hold needed)
+_print <color=#00bfff>[4/4]</color> Trailing command on 172.16.21.9...
+scan --s 172.16.21.9 then whoami
+
+if $scan_ok
+  _print <color=#00ff00> Trailing command executed</color>
+else
+  _print <color=#ff0000>[X] Trailing command failed</color>
+endif
+_print
+
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>  TEST COMPLETE</color>
+_print <color=#00ff00>========================================</color>

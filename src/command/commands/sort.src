@@ -1,0 +1,82 @@
+// =============================================================================
+// SORT
+// Sort file lines alphabetically or numerically; -r reverses, -n numeric.
+// =============================================================================
+Command.sort=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("r",false,"flag")  // Reverse sort order
+  _p.addArgument("n",false,"flag")  // Numeric sort mode
+  argv=_p.parse("sort",argv,Obj)
+  if argv isa Error then return
+  // Check for piped stdin input BEFORE parsePath
+  usePipedInput=false
+  stdinContent=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinContent=globals.G_pipe.stdin
+    usePipedInput=true
+  end if
+  if not usePipedInput and (not argv.rest or len(argv.rest)==0) then return Man.help(["sort"])
+  files=[]
+  if usePipedInput then
+    // Process stdin content and sort it
+    content=stdinContent
+    if typeof(content)!="string" then content=str(content)
+    if not content then return
+    lines=split(content,char(10))
+    // Sort based on numeric or alphabetical mode
+    if argv.n then
+      numItems=[]
+      for line in lines;numItems.push(to_int(line));end for
+      sortedItems=numItems.sort
+      sortedLines=[]
+      for num in sortedItems;sortedLines.push(str(num));end for
+    else
+      sortedLines=lines.sort
+    end if
+    // Apply reverse if descending sort mode requested
+    if argv.r then sortedLines.reverse
+    // Check if in pipe mode
+    if globals.G_pipe.PIPE_MODE then
+      for line in sortedLines;push(globals.G_pipe.stdout,line);end for
+    else
+      for line in sortedLines;print white(line);end for
+    end if
+    return
+  else if hasIndex(argv,"files") and argv.files and len(argv.files)>0 then
+    files=argv.files
+  else if argv.rest and len(argv.rest)>0 then
+    fileObj=Io._getFile(Obj,argv.rest[0])
+    if fileObj isa Error then return fileObj
+    files=[fileObj]
+  else
+    return Error.set("Missing file argument")
+  end if
+  for fileObj in files
+    if not fileObj or fileObj isa Error then continue
+    // Read file content and check for empty files
+    content=get_content(fileObj)
+    if not content then
+      Warning.set("File is empty: "+path(fileObj))
+      continue
+    end if
+    // Split content into lines and sort
+    lines=split(content,char(10))
+    // Sort based on numeric or alphabetical mode
+    if argv.n then
+      // Numeric sort: convert to numbers, sort, convert back
+      numItems=[]
+      for line in lines;numItems.push(to_int(line));end for
+      sortedItems=numItems.sort
+      sortedLines=[]
+      for num in sortedItems;sortedLines.push(str(num));end for
+    else
+      // Alphabetical sort (case-sensitive ASCII order)
+      sortedLines=lines.sort
+    end if
+    // Apply reverse if descending sort mode requested
+    if argv.r then sortedLines.reverse
+    // Write sorted content back to file (in-place modification)
+    set_content(fileObj,join(sortedLines,char(10)))
+    Info.info("Sorted: "+path(fileObj))
+  end for
+end function

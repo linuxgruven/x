@@ -1,0 +1,95 @@
+// Man page for sssh
+manSssh="SSSH(1)                          X Shell Manual                          SSSH(1)
+
+<b>NAME</b>
+    sssh - use to securely access remote computers using a shell object
+<b>SYNOPSIS</b>
+    <b>sssh</b> (<b>-l</b>) (<b>-t</b>) (<b>-d</b>) (<b>-p</b> [<b>PORT</b>]) (<b>-P</b> [<b>PASSWORD</b>]) (<b>--start</b> [<b>N</b>]) (<b>--stop</b> [<b>N</b>]) <b>USER@IP|DOMAIN</b>
+<b>DESCRIPTION</b>
+    Shell Secure Shell returns a shell object instead of terminal for remote access. Provides
+    programmatic interface to remote computers. Interactive mode with HELP prompt or user@host
+    format for password prompt. Use -p for custom port (default 22), -P for password,
+    -t for tunneling to map public IP to current object, -l to force local main shell
+    instead of proxy. Shell object enables scripted remote operations.
+    Use -d for dictionary attack mode (no password needed, uses saved wordlist).
+    LAN IPs automatically route through the current shell.
+<b>OPTIONS</b>
+    <b>USER@IP|DOMAIN</b>
+    Connect and return shell object
+    Shell instead of terminal
+
+    <b>-p PORT</b>
+    Custom port number
+    Default: 22
+
+    <b>-P PASSWORD</b>
+    Provide password
+    Skip password prompt
+
+    <b>-t</b>
+    Enable tunneling
+    Map public IP to current object
+
+    <b>-l</b>
+    Force local main shell
+    Bypass proxy
+
+    <b>-d</b>
+    Dictionary attack mode
+    No password needed, uses saved wordlist
+
+    <b>--start N</b>
+    Start index in wordlist
+    Default: 0
+
+    <b>--stop N</b>
+    Stop index in wordlist
+    Default: end of list
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Connection</color>
+    <b>sssh tux@remotehost</b>
+    Password prompt
+
+    <b>sssh -P linux tux@remotehost</b>
+    With password flag
+
+    <b>sssh help</b>
+    Interactive mode
+
+    <color=#e4ff34># Custom Port</color>
+    <b>sssh -p 23 tux@remotehost</b>
+    Connect on port 23
+    
+    <b>sssh -p 8022 admin@server.com</b>
+    Custom SSH port
+
+    <color=#e4ff34># With Password</color>
+    <b>sssh -P linux tux@remotehost</b>
+    Provide password via flag
+
+    <color=#e4ff34># Tunneling</color>
+    <b>sssh -t tux@remotehost</b>
+    Enable tunneling
+
+    <b>sssh -t -p 2222 -P mypass root@target</b>
+    Tunnel with custom port and password
+
+    <color=#e4ff34># Local Shell</color>
+    <b>sssh -l tux@remotehost</b>
+    Force local shell
+
+    <color=#e4ff34># Dictionary Attack</color>
+    <b>sssh -d root@remotehost</b>
+    Dict attack on port 22
+
+    <b>sssh -d -p 2222 root@remotehost</b>
+    Dict attack on custom port
+
+    <b>sssh -d --start 50 --stop 200 root@remotehost</b>
+    Dict attack with wordlist slice
+
+    <color=#e4ff34># Scripted Usage</color>
+    <b>shell = sssh -P pass tux@host</b>
+    Get shell object
+<b>SEE ALSO</b>
+    <b>ssh</b>, <b>ftp</b>, <b>nmap</b>"

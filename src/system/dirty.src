@@ -1,0 +1,236 @@
+// =============================================================================
+// DIRTY
+// Dirty router log manager; tracks and scrubs compromised router logs to remove traces.
+// =============================================================================
+Dirty={}
+//Load dirty buffer from dirty.dat file
+Dirty.loadDirty=function
+	//Get system reference
+	sys=System.getSystem
+	//Get dirty.dat file
+	f=File(sys.computer,path(sys.dir.data)+"/dirty.dat")
+	//File doesn't exist, exit
+	if not f then return
+	//File is empty, exit
+	_ct=get_content(f);if not _ct then return
+	//Iterate through newline-delimited IPs
+	for i in split(_ct,char(10));globals.G_dirty[i]=i;end for
+  //Return success
+  return 1
+//End loadDirty//End loadDirty
+end function
+//Clear and reload dirty buffer from file
+Dirty.reload=function
+  //Clear current dirty buffer
+  globals.G_dirty={}
+  //Load failed, exit
+  if not self.loadDirty then return
+  //Display success message
+  Info.info("Dirty buffer reloaded")
+//End reload
+end function
+//Interactively add router IP to dirty buffer
+Dirty.edit=function
+	//Input loop
+	while true
+		//Prompt for IP
+		i=Gui.inputIP({"text":"Enter a router ip to add to the dirty buffer"})
+		//User cancelled, exit loop
+		if i==null then break
+    //IP already in buffer
+    if hasIndex(globals.G_dirty,i) then return Info.info(i+" is already in dirty")
+		//Add IP to dirty buffer
+		globals.G_dirty[i]=i
+    //Exit loop after adding
+    break
+	end while
+  //Save dirty buffer to file
+  self.save
+//End edit
+end function
+//Automatically scrub logs from dirty routers
+Dirty.router=function
+	//No dirty routers
+	if not globals.G_dirty then return(yellow("You have no dirty router logs. H4ck on..."))
+	//Display scrubbing start
+	print yellow("Scrubbing "+green(str(len(globals.G_dirty)))+" router(s)")
+	//Counter for cleaned routers
+	c=0
+	//Nested function to clean logs based on object type
+	attackLog=function(ex)
+    //No exploit result, exit
+    if not ex then return
+    //Invalid result type, exit
+    if ex isa number or ex isa string then return
+		//Get object type
+		q=typeof(ex)
+    //Shell object
+    if indexOf(q,"shell")!=null then
+      //Clean shell logs
+      return Log.shellLog(ex)
+    //Computer object
+    else if q=="computer" then
+      //Clean computer logs
+      return Log.computerLog(ex)
+    //File object
+    else if q=="file" then
+      //Clean file logs
+      return Log.fileLog(ex)
+    end if
+	end function
+  //Array to track successfully cleaned IPs
+  B=[]
+	//Iterate through dirty routers
+	for i in globals.G_dirty
+		//Display current router
+		print yellow("Scrubbing "+green(i.key)+" now...")
+		//Get router object
+		r=get_router(i.key)
+		//Router not accessible, skip
+		if not r then continue
+		//Extract exploits for router
+		y=Exploit.extract(r,i.key)
+		//Extraction failed, skip
+		if not y or y isa Error then continue
+		//Get first exploit metadata
+		m=y[0]
+    //Exploit not in cache
+    if not hasIndex(globals.G_exploitCache,m.metaLib.lib_name+"_"+m.metaLib.version) then
+      //Display warning
+      Info.warning("Database is out of date, updateing database...")
+      //Update exploit cache
+      Exploit.headless(m.metaLib)
+      //Re-extract exploits
+      y=Exploit.extract(r,i.key)
+      //Re-extraction failed, skip
+      if not y or y isa Error then continue
+      //Get first exploit metadata again
+      m=y[0]
+      //Still not in cache, skip
+      if not hasIndex(globals.G_exploitCache,m.metaLib.lib_name+"_"+m.metaLib.version) then continue
+    end if
+    //Get exploits from cache
+    q=Exploit._ex(m.metaLib.lib_name+"_"+m.metaLib.version)
+		//No exploits available, skip
+		if not len(q) then continue
+    //Flag to track if router exploit succeeded
+    f=1
+		//Iterate through exploits
+		for e in q
+			//Router-level exploit
+			if e.u=="r" then
+				//Overflow and clean logs
+				if attackLog(Exploit.overflow(m.metaLib,e.m,e.s,null,"dirty"))==1 then
+					//Increment cleaned counter
+					c+=1
+          //Add IP to cleaned list
+          push(B,i.key)
+          //Clear flag (router exploit succeeded)
+          f=null
+					//Exit exploit loop
+					break
+				end if
+      end if
+		end for
+    //Router exploit didn't succeed, try shell exploits
+    if f then
+      //Iterate through exploits again
+      for e in q
+        //Shell-level exploit
+        if e.e=="s" then
+          //Execute overflow
+          ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"dirty")
+          //Got shell from overflow
+          if indexOf(typeof(ex),"shell")!=null then
+            //Try shell exploit and clean logs
+            if attackLog(Exploit.tryShellEX(ex,true))==1 then
+              //Clear packed root shell
+              get_custom_object.packRootShell=null
+              //Increment cleaned counter
+              c+=1
+              //Add IP to cleaned list
+              push(B,i.key)
+              //Exit exploit loop
+              break
+            end if
+          end if
+        end if
+      end for
+    end if
+  end for
+  //Successfully cleaned some routers
+  if len(B) then
+    //Iterate through cleaned IPs
+    for i in B;remove(globals.G_dirty,indexOf(globals.G_dirty,i));end for
+  end if
+	//Display summary
+	print yellow("Router scrubbing complete. Cleaned [ "+green(str(c))+" ] router(s)")
+	//Still have dirty routers
+	if globals.G_dirty then
+		//Display remaining count
+		print red("You still have "+green(str(len(globals.G_dirty)))+" router(s) that")
+		//Display manual cleanup suggestion
+		print red("needs to be cleaned manually. Run [ dirty -m ]")
+	end if
+	//Save updated dirty buffer
+	self.save
+//End router
+end function
+//Save dirty buffer to dirty.dat file
+Dirty.save=function
+	//Get system reference
+	s=System.getSystem
+	//Construct dirty.dat path
+	p=path(s.dir.data)+"/dirty.dat"
+  //Get dirty.dat file
+  f=File(s.computer,p)
+  //Create file if doesn't exist
+  if not f then f=Command.touch(s.obj,[p])
+	//File creation failed, exit
+	if f isa Error then return
+  //Save IPs as newline-delimited list or empty string
+  if len(globals.G_dirty)==0 then set_content(f,"") else set_content(f,join(values(globals.G_dirty),char(10)))
+//End save
+end function
+//Add router IP to dirty buffer
+Dirty.add=function(i)
+  //LAN IP, don't add to dirty buffer
+  if is_lan_ip(i) then return
+	//Add IP if not already in buffer
+	if not hasIndex(globals.G_dirty,i) then globals.G_dirty[i]=i else return
+	//Save dirty buffer to file
+	self.save
+//End add
+end function
+//Remove router IP from dirty buffer
+Dirty.removeIP=function(i)
+	//Remove IP if in buffer
+	if hasIndex(globals.G_dirty,i) then remove(globals.G_dirty,i) else return
+	//Save dirty buffer to file
+	self.save
+//End removeIP
+end function
+//Get dirty buffer count as string
+Dirty.countRaw=function
+  //Return count as string
+  if not globals.G_dirty then return "0" else return str(len(globals.G_dirty))
+//End countRaw
+end function
+//Display dirty buffer count
+Dirty.count=function
+  //No dirty routers
+  if not globals.G_dirty then return Info.info("You have no IP's in the dirty buffer...h4ck on")
+  Info.info("There are "+str(len(globals.G_dirty))+" ip's in the dirty buffer")
+//End count
+end function
+//Clear entire dirty buffer
+Dirty.clear=function
+	//No dirty routers
+	if not globals.G_dirty then return Info.info("You have no IP's in the dirty buffer...h4ck on")
+	//Clear dirty buffer map
+	globals.G_dirty={}
+	//Save empty buffer to file
+	self.save
+	//Display success message
+	Info.info("Dirty Buffer cleared...h4ck on")
+end function

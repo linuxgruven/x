@@ -1,0 +1,75 @@
+// Man page for ddos
+manDdos="DDOS(8)                          X Shell Manual                          DDOS(8)
+
+<b>NAME</b>
+    ddos - used to destroy computer systems
+<b>SYNOPSIS</b>
+    <b>ddos -d</b>
+    <b>ddos -r</b> (COUNT)
+    <b>ddos -ff</b>
+    <b>ddos -f</b> (COUNT)
+    <b>ddos -c</b> (COUNT)
+    <b>ddos -p</b> (<b>-c</b>) COUNT (<b>-p</b>) PORT IP
+    <b>ddos -b</b><b> (-b) (-l) (-f) (-d)</b>
+<b>DESCRIPTION</b>
+    DOS is used to consume the target computers resources.
+<b>OPTIONS</b>
+    <b>-d</b> - Unlimited RShell Flood
+      Flood target with unlimited zombie rshell connections.
+
+    <b>-r COUNT</b> - RShell Flood
+      Flood target with COUNT of zombie rshell connections.
+
+    <b>-ff</b> - Unlimited File Flood
+      Flood system with unlimited files in current directory.
+
+    <b>-f COUNT</b> - File Flood
+      Flood system with COUNT files in current directory.
+
+    <b>-c COUNT</b> - Hardware Grind
+      Consume and wear down target computers hardware.
+      COUNT specifies number of decipher cycles.
+
+    <b>-p</b> - Port Flood
+      Launch a port flood attack.
+
+    <b>-b</b> - Hardware Tuning
+      Fine tune hardware health consumption.
+      -b uses bin directory as grind folder
+      -l uses small file as grind file
+      -f lets you choose grind file
+      -d lets you choose grind directory
+<b>EXAMPLE:</b>
+    <color=#e4ff34># RShell Floods</color>
+    <b>ddos -d</b>
+    Unlimited rshell zombies
+
+    <b>ddos -r 1000</b>
+    Flood with 1000 connections
+
+    <color=#e4ff34># File Floods</color>
+    <b>ddos -ff</b>
+    Unlimited file flood
+
+    <b>ddos -f 5000</b>
+    Flood with 5000 files
+
+    <color=#e4ff34># Hardware Attacks</color>
+    <b>ddos -c 10</b>
+    Hardware grind with 10 cycles
+
+    <color=#e4ff34># Port Floods</color>
+    <b>ddos -p target.ip.addr</b>
+    Port flood attack
+
+    <b>ddos -p -c 100 -p 22 target.ip.addr</b>
+    Flood specific port
+
+    <color=#e4ff34># Tuned Attacks</color>
+    <b>ddos -b -b</b>
+    Use bin directory grind
+
+    <b>ddos -b -l</b>
+    Use small file grind
+<b>SEE ALSO</b>
+    <b>0day</b>, <b>scan</b>"

@@ -1,0 +1,67 @@
+// =============================================================================
+// USERADD
+// Create a new user account; prompts for password if not given as argument.
+// Supports -n flag for bulk user creation.
+// =============================================================================
+Command.useradd=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  if not argv and not hasPipeInput then return Man.help(["useradd"])
+  if hasPipeInput then
+    if not argv then argv=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(argv,line);end for
+  end if
+  _p=ArgumentParser.init
+  _p.addArgument("n",false,"flag")
+  argv=_p.parse("useradd",argv,Obj)
+  if argv isa Error then return argv
+  if not argv.rest or len(argv.rest)<1 then return Man.help(["useradd"])
+  // Bulk mode: useradd -n 5 OR useradd -n user1:pass1 user2:pass2
+  if argv.n then
+    rest=argv.rest
+    // Check if single numeric argument (auto-generate tux1..tuxN)
+    if len(rest)==1 and val(rest[0]) isa number then
+      count=val(rest[0])
+      if count<1 or count>15 then return Error.set("Count must be 1-15")
+      i=1
+      while i<=count
+        username="tux"+i
+        password="tux"+i
+        result=create_user(Obj.computer,username,password)
+        if result==1 then Info.info("Created user: "+username) else Info.error("Failed to create "+username+": "+result)
+        i+=1
+      end while
+      return
+    end if
+    // Custom pairs: user:pass user:pass ...
+    for pair in rest
+      parts=split(pair,":")
+      if len(parts)!=2 then
+        Info.error("Invalid pair '"+pair+"' - use user:pass format")
+        continue
+      end if
+      username=parts[0]
+      password=parts[1]
+      if len(username)>15 then
+        Info.error("Username '"+username+"' too long")
+        continue
+      end if
+      if len(password)>15 then
+        Info.error("Password for '"+username+"' too long")
+        continue
+      end if
+      result=create_user(Obj.computer,username,password)
+      if result==1 then Info.info("Created user: "+username) else Info.error("Failed to create "+username+": "+result)
+    end for
+    return
+  end if
+  // Single user mode (original behavior)
+  username=argv.rest[0]
+  if len(username)>15 then return Error.set("Username too long")
+  promptMsg="Setting password for user "+username+char(10)+"New password:"
+  if len(argv.rest)>=2 then password=argv.rest[1] else password=Gui.inputPass(promptMsg)
+  if not password then return Man.help(["useradd"])
+  if len(password)>15 then return Error.set("Password too long")
+  result=create_user(Obj.computer,username,password)
+  if result==1 then return Info.info("User created OK")
+  Info.error(result)
+end function

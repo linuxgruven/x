@@ -1,0 +1,21 @@
+toolLbounce="if params then
+	if params[0]==""-h"" or params[0]==""--help"" then exit ""Usage: [command] (time)""
+end if
+computer=host_computer(get_shell)
+if not is_network_active(computer) then exit ""Connect to the internet first!""
+if active_net_card(computer)==""WIFI"" then exit ""Can't use this with a wifi connection""
+waitTime=4
+parsed=val(pop(params))
+if parsed isa number then waitTime=parsed
+gateway=network_gateway(computer)
+i=gateway
+octets=split(i,""\."")
+pop(octets)
+i=join(octets,""."")
+min=2
+max=255
+print(""Use Ctrl+C to kill proccess"")
+while 1
+	connect_ethernet(computer,""eth0"",i+"".""+floor(rnd*(max-min+1)+min),gateway)
+	wait waitTime
+end while"

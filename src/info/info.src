@@ -1,0 +1,32 @@
+// =============================================================================
+// INFO
+// Formatted print helpers for error, warn, info, and result messages.
+// =============================================================================
+Info={
+  "message":{
+    "binaryFiles":"Can not read the contents of binary files",
+    "EXPF":"Expected a file got ",
+    "noLibDatabase":"No library database connection",
+    "noDatabase":"No database connection",
+    "NOR":"Negatory on the read permissions",
+    "NOW":"Negatory on the write permissions",
+    "NOX":"Negatory on the execute permissions"
+  }
+}
+// [X] red
+Info.error=function(message,indicator="X",returnValue=true)
+  if message isa number then
+    print(white("["+error(indicator)+"] "+str(message)))
+    return
+  end if
+  print white(bold("["+error(indicator)+"] ")+message)
+  return returnValue
+end function
+// [i] green
+Info.info=function(message,indicator="i",returnValue=true);print white(bold("["+green(indicator)+"] ")+message);return returnValue;end function
+// [!] yellow
+Info.warning=function(message,indicator="!",returnValue=true);print white(bold("["+yellow(indicator)+"] ")+message);return returnValue;end function
+// [?] blue
+Info.response=function(message,indicator="?",returnValue=true);print white(bold("["+blue(indicator)+"] ")+message);return returnValue;end function
+// [MAN TOPIC] orange
+Info.man=function(message,topic);print white(bold("["+orange("MAN "+upper(topic))+"] ")+message);end function

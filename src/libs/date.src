@@ -1,0 +1,116 @@
+// =============================================================================
+// DATE
+// Date and time utilities; calculation helpers for Grey Hack game mechanics.
+// =============================================================================
+Date={}
+// Month abbreviations array
+Date.months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+// Days per month (non-leap year)
+Date.days=[31,28,31,30,31,30,31,31,30,31,30,31]
+// Get number of days in month (accounting for leap year)
+// Args: m (month abbreviation), y (year)
+// Returns: number of days in month
+Date.getMonth=function(m,y)
+  // Return base days + 1 if February in leap year
+  return self.days[indexOf(self.months,m)]+(m=="Feb" and y%4==0)
+end function
+// Convert game minutes to real-world seconds
+// Args: m (game minutes)
+// Returns: real seconds (14 game minutes = 60 real seconds)
+Date.minutesToIRLSeconds=function(m);return m*(60/14);end function
+// Convert seconds to readable time components
+// Args: s (total seconds)
+// Returns: map with days, hours, minutes, seconds
+Date.secondsReadable=function(s)
+  // Calculate days
+  d=floor(s/3600/24)
+  // Calculate remaining hours
+  h=floor(s/3600)%24
+  // Calculate remaining minutes
+  m=floor((s/60))%60
+  // Calculate remaining seconds
+  z=floor(s)%60
+  return {
+    "days":d,
+    "hours":h,
+    "minutes":m,
+    "seconds":z
+  }
+end function
+// Calculate minutes until next 0-day window
+// Args: i (current minutes), h (current hours), d (current day), m (current month), y (year)
+// Returns: minutes until next 0-day window
+Date.getNext0dayMinutes=function(i,h,d,m,y)
+  // Get month index (1-12)
+  x=indexOf(self.months,m)+1
+  // Days remaining in current month
+  z=self.getMonth(m,y)-d
+  // If even month, add next month's days
+  if x%2==0 then z=z+self.getMonth(self.months[x%len(self.months)],y)
+  // Hours remaining in day
+  r=23-h%24
+  // Minutes remaining in hour
+  e=60-i
+  // Convert days to hours and add
+  r=r+z*24
+  // Convert hours to minutes and add
+  e=e+r*60
+  return e
+end function
+// Parse date string into components
+// Args: z (date string in format "DD/MMM/YYYY-HH:MM")
+// Returns: map with day, month, year, hour, min
+Date.parseDate=function(z)
+  // Split on hyphen (date-time separator)
+  s=split(z,"-")
+  // Extract time part
+  t=trim(s[1])
+  // Extract date part
+  g=trim(s[0])
+  // Parse hour/minute
+  _tParts=split(t,":"); h=to_int(_tParts[0]);i=to_int(_tParts[1])
+  // Parse day/month/year
+  _gParts=split(g,"/");d=to_int(_gParts[0]);m=_gParts[1];y=to_int(_gParts[2])
+  return {
+    "day":d,
+    "month":m,
+    "year":y,
+    "hour":h,
+    "min":i
+  }
+end function
+// Calculate time until next 0-day window
+// Args: r (date string)
+// Returns: readable time map until next 0-day window
+Date.calculate0day=function(r)
+  // Parse input date
+  d=self.parseDate(r)
+  // Get minutes to next 0-day
+  m=self.getNext0dayMinutes(d.min,d.hour,d.day,d.month,d.year)
+  // Convert to IRL seconds and format
+  return self.secondsReadable(self.minutesToIRLSeconds(m))
+end function
+// Calculate time remaining in current 0-day window
+// Args: z (date string)
+// Returns: readable time map of remaining time, or 0 if not in window
+Date.remaining0day=function(z)
+  // Parse input date
+  d=self.parseDate(z)
+  // Get month index (1-12)
+  x=indexOf(self.months,d.month)+1
+  // Return 0 if odd month (not 0-day eligible)
+  if x%2 !=0 then return 0
+  // Return 0 if past day 14 (0-day window closed)
+  if d.day>=15 then return 0
+  // Calculate days remaining (0-day ends on day 14)
+  q=14-d.day
+  // Calculate hours remaining
+  h=24-d.hour+(q*24)
+  // Calculate minutes remaining
+  m=60-d.min+(h*60)
+  // Convert game minutes to IRL seconds
+  s=self.minutesToIRLSeconds(m)
+  // Format as readable time
+  r=self.secondsReadable(s)
+  return r
+end function

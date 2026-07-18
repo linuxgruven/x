@@ -1,0 +1,46 @@
+// Man page for hex
+manHex="HEX(1)                           X Shell Manual                           HEX(1)
+
+<b>NAME</b>
+    hex - hexadecimal calculator with arithmetic and bitwise operations
+<b>SYNOPSIS</b>
+    <b>hex VALUE</b>
+    <b>hex VALUE OPERATOR VALUE2</b>
+    <b>command | hex [OPERATOR VALUE2]</b>
+<b>DESCRIPTION</b>
+    Perform arithmetic or bitwise operations on hex or decimal values.
+    Input accepts 0x-prefixed hex (e.g. 0x2A99789D) or plain decimal.
+    Output is always shown as 0xRESULT (decimal N).
+
+    Useful for working with exploit memory addresses from mtree.
+<b>OPERATORS</b>
+    <b>+</b>        Addition
+    <b>-</b>        Subtraction
+    <b>*</b>        Multiplication
+    <b>/</b>        Integer division
+    <b>-and</b>     Bitwise AND
+    <b>-or</b>      Bitwise OR
+    <b>-xor</b>     Bitwise XOR
+    <b>-ls</b>      Left shift
+    <b>-rs</b>      Right shift
+<b>EXAMPLES</b>
+    <b>hex 0x2A99789D</b>
+    Display hex value with decimal equivalent.
+
+    <b>hex 0x2A99789D + 0x100</b>
+    Add 0x100 to a memory address.
+
+    <b>hex 0x2A99789D - 715553949</b>
+    Subtract a decimal value from a hex address.
+
+    <b>hex 0xFF -and 0x0F</b>
+    Bitwise AND — result: 0xF (decimal: 15)
+
+    <b>hex 0x1 -ls 8</b>
+    Left shift — result: 0x100 (decimal: 256)
+
+    <b>hex 715553949</b>
+    Show decimal as hex: 0x2A99789D (decimal: 715553949)
+
+    <b>cat mtree | hex + 0x100</b>
+    Add 0x100 offset to every address in an mtree file."

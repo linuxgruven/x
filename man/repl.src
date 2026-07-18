@@ -1,0 +1,193 @@
+// Man page for repl
+manRepl="REPL(1)                          X Shell Manual                          REPL(1)
+
+<b>NAME</b>
+    repl - Glosure interactive REPL and script runner
+<b>SYNOPSIS</b>
+    <b>repl</b>
+    <b>repl</b> FILE [ARGS...]
+    <b>repl</b> -e EXPR
+    <b>repl</b> -i [FILE [ARGS...]]
+    <b>repl</b> -p PATH [FILE [ARGS...]]
+<b>DESCRIPTION</b>
+    Launches the Glosure interpreter — a Lisp-like scripting language with full
+    access to the x shell commands and GreyScript builtins. With no arguments,
+    starts an interactive Read-Eval-Print Loop (REPL). Pass a file path to
+    execute a Glosure source file instead.
+
+    All x shell commands are available as glosures (first-class functions).
+    The current session context (Obj) is accessible as the symbol obj.
+
+    In the interactive REPL, the result of the last expression is always
+    bound to the symbol <b>_</b>, allowing easy result chaining without re-typing.
+<b>OPTIONS</b>
+    <b>FILE</b>
+    Path to a Glosure source file to execute.
+    Runs the file and exits when complete.
+
+    <b>-e</b> EXPR
+    Evaluate a single Glosure expression inline and print the result.
+    Does not start the interactive REPL.
+
+    <b>-i</b>
+    Interactive mode. If FILE is given, execute it then drop into the
+    REPL with all definitions still in scope. Without FILE, starts the
+    REPL directly. Useful for debugging or extending scripts interactively.
+
+    <b>-p</b> PATH
+    Set a scripts search prefix directory. FILE is resolved relative
+    to this path when it cannot be found by its literal name. Supports
+    ~ expansion for the home directory (e.g. ~/scripts). Can be combined
+    with -i for interactive mode after execution.
+<b>LANGUAGE BASICS</b>
+    <b>Syntax</b>
+    (function arg1 arg2)    Call a function
+    'hello'                 String literal (single quotes)
+    42                      Number literal
+    ; comment               Line comment
+
+    <b>Keywords</b>
+    (def name value)                    Define a variable
+    (lambda (args) body)                Anonymous function
+    (if cond then else)                 Conditional
+    (while cond body)                   While loop (STL macro)
+    (for init cond iter body)           For loop (STL macro)
+    (foreach k v collection body)       Foreach loop (STL macro)
+    (defun name (args) body)            Named function (STL macro)
+    (begin expr1 expr2 ...)             Sequence, returns last
+    (dot object 'method' args...)       Call a GreyScript method
+    (array a b c)                       Build a list
+    (dict 'k1' v1 'k2' v2)             Build a map
+
+    <b>x Shell Commands</b>
+    x shell commands are accessible via the x dispatcher:
+    (x 'cmd') returns a native command reference; call it to run the command.
+    REPL> ((x 'ls'))                     Run ls
+    REPL> ((x 'cat') '/etc/passwd')      Run cat /etc/passwd
+    REPL> ((x 'cls'))                    Clear the screen
+
+    <b>Session Context</b>
+    obj                                 Current session object
+    (at obj 'computer')                 Access Obj.computer
+    (at (at obj 'user') 'name')         Access Obj.user.name (username string)
+<b>REPL COMMANDS</b>
+    clear        Clear the screen
+    exit         Exit the REPL
+    (exit)       Exit the REPL
+    ;quit        Exit the REPL
+<b>REPL BINDINGS</b>
+    _            Last evaluated result (automatically bound after each expression)
+    args         Script arguments passed on the command line
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Start interactive REPL</color>
+    <b>repl</b>
+    Launches the Glosure REPL
+
+    <color=#e4ff34># Execute a Glosure file</color>
+    <b>repl ~/scripts/myscript.gl</b>
+    Run a Glosure source file
+
+    <color=#e4ff34># Eval a one-liner inline (no quotes needed)</color>
+    <b>repl -e (+ 10 (* 3 4))</b>
+    Prints 22 without entering the REPL
+
+    <color=#e4ff34># Run file then stay in REPL (all defs in scope)</color>
+    <b>repl -i test 177.165.65.149 22</b>
+    Runs meta_remote logic, then drops into interactive REPL
+
+    <color=#e4ff34># Use a scripts prefix to run scripts by short name</color>
+    <b>repl -p ~/scripts scan</b>
+    Runs ~/scripts/scan (no need for full path)
+
+    <color=#e4ff34># Chain results with _ (last result)</color>
+    <b>REPL> (net_use metax '10.0.0.1' 22)</b>
+    <b>REPL> (dump_lib _)</b>
+    _ holds the netSession from the previous call
+
+    <color=#e4ff34># Hello World</color>
+    <b>REPL> (print 'Hello World!')</b>
+    Prints Hello World!
+
+    <color=#e4ff34># Define and call a function</color>
+    <b>REPL> (defun square (x) (* x x))</b>
+    <b>REPL> (square 5)</b>
+    Returns 25
+
+    <color=#e4ff34># Access shell context</color>
+    <b>REPL> (at (at obj 'user') 'name')</b>
+    Returns the current username
+
+    <color=#e4ff34># Call an x command</color>
+    <b>REPL> ((x 'cat') '/etc/passwd')</b>
+    Runs cat /etc/passwd
+
+    <color=#e4ff34># Arithmetic</color>
+    <b>REPL> (+ 10 (* 3 4))</b>
+    Returns 22
+
+    <color=#e4ff34># Define a variable</color>
+    <b>REPL> (def ip '192.168.1.1')</b>
+    <b>REPL> (print ip)</b>
+    Prints 192.168.1.1
+
+    <color=#e4ff34># Conditional</color>
+    <b>REPL> (if (> 5 3) (print 'yes') (print 'no'))</b>
+    Prints yes
+
+    <color=#e4ff34># While loop — count to 5</color>
+    <b>REPL> (def i 1)</b>
+    <b>REPL> (while (<= i 5) (begin (print i) (++ i)))</b>
+    Prints 1 through 5
+
+    <color=#e4ff34># For loop</color>
+    <b>REPL> (for (def n 0) (< n 3) (++ n) (print n))</b>
+    Prints 0 1 2
+
+    <color=#e4ff34># Build and iterate a list</color>
+    <b>REPL> (def hosts (array '10.0.0.1' '10.0.0.2' '10.0.0.3'))</b>
+    <b>REPL> (foreach _ h hosts (print h))</b>
+    Prints each host
+
+    <color=#e4ff34># Lambda function</color>
+    <b>REPL> (def double (lambda (n) (* n 2)))</b>
+    <b>REPL> (double 7)</b>
+    Returns 14
+
+    <color=#e4ff34># String method via dot</color>
+    <b>REPL> (dot 'hello world' 'upper')</b>
+    Returns HELLO WORLD
+
+    <color=#e4ff34># Build a map</color>
+    <b>REPL> (def cfg (dict 'host' '10.0.0.5' 'port' 22))</b>
+    <b>REPL> (at cfg 'host')</b>
+    Returns 10.0.0.5
+
+    <color=#e4ff34># Sequence with begin</color>
+    <b>REPL> (begin (def x 10) (def y 20) (+ x y))</b>
+    Returns 30
+
+    <color=#e4ff34># Run kill -a from REPL</color>
+    <b>REPL> ((x 'kill') (array '-a'))</b>
+    Kills all processes except those in the exception list
+
+    <color=#e4ff34># Get current username</color>
+    <b>REPL> (at (at obj 'user') 'name')</b>
+    Returns current username
+
+    <color=#e4ff34># List running processes (ps)</color>
+    <b>REPL> (print (format_columns (dot (dot (get_shell) 'host_computer') 'show_procs')))</b>
+    Prints a formatted process list for the local machine
+
+    <color=#e4ff34># Random password generator</color>
+    <b>REPL> (def passgen (lambda (length) (if (> length 0) (+ (at '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ' (floor (* (rnd) 62))) (passgen (- length 1))) '')))</b>
+    lambda
+    <b>REPL> (passgen 16)</b>
+    Returns a random 16-character alphanumeric password
+    Note: def returns the lambda object — this is expected, not an error
+
+    <color=#e4ff34># Execute a Glosure script file</color>
+    <b>REPL> exit</b>
+    <b>repl ~/scripts/scan.gl</b>
+    Exit the REPL, then run a script file
+<b>SEE ALSO</b>
+    <b>exec</b>, <b>build</b>, <b>man</b>"

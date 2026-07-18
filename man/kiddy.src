@@ -1,0 +1,39 @@
+// Man page for kiddy
+manKiddy="KIDDY(1)                         X Shell Manual                         KIDDY(1)
+
+<b>NAME</b>
+    sk - Script kiddy website defacement
+
+<b>SYNOPSIS</b>
+    <b>sk</b>
+    <b>sk -f FILE</b>
+    <b>sk -w</b> [-n NAME] [-p PATH]
+
+<b>DESCRIPTION</b>
+    Deface websites with default or custom HTML content. The -w flag
+    writes the default unformatted webpage to disk for customization.
+
+<b>OPTIONS</b>
+    <b>sk</b> - Default Deface
+      Deface active computer's website with default content.
+
+    <b>-f FILE</b> - Custom Deface
+      Deface with contents from specified file.
+
+    <b>-w</b> [-n NAME] [-p PATH] - Write Template
+      Write default webpage template to disk.
+      -n: filename (default: sk)
+      -p: path (default: data folder)
+
+<b>EXAMPLE:</b>
+    <b>sk</b>
+        Deface with default page
+
+    <b>sk -f /home/tux/custom.html</b>
+        Deface with custom HTML
+
+    <b>sk -w</b>
+        Write template to data folder as sk
+
+    <b>sk -w -n mypage -p /server</b>
+        Write template to /server as mypage"

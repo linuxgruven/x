@@ -1,0 +1,20 @@
+// Man page for rn
+manRn="RN(1)                            X Shell Manual                            RN(1)
+
+<b>NAME</b>
+    rn - Rename file
+<b>SYNOPSIS</b>
+    <b>rn</b> FILE NAME
+<b>DESCRIPTION</b>
+    Rename an existing file to a new name. The file must exist and you must
+    have permission to rename it. The new name must not already exist in
+    the target directory.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Rename File</color>
+    <b>rn oldname.txt newname.txt</b>
+    Rename file in current directory
+
+    <b>rn /home/tux/data.txt backup.txt</b>
+    Rename file with full path
+<b>SEE ALSO</b>
+    <b>mv</b>, <b>cp</b>"

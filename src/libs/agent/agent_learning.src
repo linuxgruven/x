@@ -1,0 +1,414 @@
+// =============================================================================
+// AGENT_LEARNING
+// AI agent learning; advanced learning features, pattern recognition, and knowledge updates.
+// =============================================================================
+AgentLearning={}
+//Pattern Reinforcement - Weight successful patterns higher
+AgentLearning._reinforcePattern=function(command,success,context)
+  debug=globals.G_agent.config.debug
+  if not command or typeof(command)!="string" then return false
+  //Extract pattern key from command
+  patternKey=null
+  cmdLower=lower(command)
+  //Identify pattern type
+  if indexOf(cmdLower,"scan")!=null then patternKey="scan"
+  if indexOf(cmdLower,"exploit")!=null or indexOf(cmdLower,"attack")!=null then patternKey="exploit"
+  if indexOf(cmdLower,"crack")!=null then patternKey="crack"
+  if indexOf(cmdLower,"escalate")!=null or indexOf(cmdLower,"root")!=null then patternKey="escalate"
+  if indexOf(cmdLower,"backdoor")!=null then patternKey="backdoor"
+  if not patternKey then return false
+  //Track success/failure
+  if not hasIndex(self,"patternScores") then globals.G_agent.patternScores={}
+  if not hasIndex(globals.G_agent.patternScores,patternKey) then globals.G_agent.patternScores[patternKey]={"success":0,"failure":0,"total":0}
+  globals.G_agent.patternScores[patternKey].total+=1
+  if success then globals.G_agent.patternScores[patternKey].success+=1 else globals.G_agent.patternScores[patternKey].failure+=1
+  //Store in global context for persistence
+  if not hasIndex(globals.G_agent.sessionContext,"patternSuccess") then globals.G_agent.sessionContext.patternSuccess={}
+  globals.G_agent.sessionContext.patternSuccess[patternKey]=globals.G_agent.patternScores[patternKey]
+  if debug then
+    successRate=0
+    if globals.G_agent.patternScores[patternKey].total>0 then successRate=globals.G_agent.patternScores[patternKey].success/globals.G_agent.patternScores[patternKey].total*100
+    if debug then print green("[DEBUG] Pattern '"+patternKey+"' success rate: "+round(successRate)+"%")
+  end if
+  return true
+end function
+//User Preference Learning - Remember preferred flags/commands
+AgentLearning._trackUserPreferences=function(command,result)
+  debug=globals.G_agent.config.debug
+  if not command or typeof(command)!="string" then return false
+  cmdLower=lower(command)
+  //Extract flags used in command
+  flags=[]
+  parts=split(command," ")
+  baseCmd=null
+  for part in parts
+    if len(part)>=2 and part[0]=="-" then
+      push(flags,part)
+    else if not baseCmd then
+      baseCmd=part
+    end if
+  end for
+  if not baseCmd then return false
+  baseCmdLower=lower(baseCmd)
+  //Track command usage
+  if not hasIndex(self,"userPreferences") then globals.G_agent.userPreferences={}
+  if not hasIndex(globals.G_agent.userPreferences,"commands") then globals.G_agent.userPreferences.commands={}
+  if not hasIndex(globals.G_agent.userPreferences.commands,baseCmdLower) then globals.G_agent.userPreferences.commands[baseCmdLower]=0
+  globals.G_agent.userPreferences.commands[baseCmdLower]+=1
+  //Track flag preferences per command
+  if len(flags)>0 then
+    if not hasIndex(globals.G_agent.userPreferences,"flags") then globals.G_agent.userPreferences.flags={}
+    if not hasIndex(globals.G_agent.userPreferences.flags,baseCmdLower) then globals.G_agent.userPreferences.flags[baseCmdLower]={}
+    for flag in flags;if not hasIndex(globals.G_agent.userPreferences.flags[baseCmdLower],flag) then globals.G_agent.userPreferences.flags[baseCmdLower][flag]=0;globals.G_agent.userPreferences.flags[baseCmdLower][flag]+=1;end for
+  end if
+  //Store in global context
+  globals.G_agent.sessionContext.userPreferences=globals.G_agent.userPreferences
+  if debug and len(flags)>0 then print green("[DEBUG] Learned preference: "+baseCmdLower+" with flags: "+join(flags,", "))
+  return true
+end function
+//Generate predictive suggestions based on current context and result
+AgentLearning._generateSuggestions=function(result,context)
+  suggestions=[]
+  //Analyze what was just accomplished
+  if not hasIndex(result,"success") or not result.success then return suggestions
+  //Check if we have a shell but not root
+  if hasIndex(context,"hasShell") and context.hasShell then
+    if not hasIndex(context,"hasRoot") or not context.hasRoot then push(suggestions,"Escalate to root privileges")
+  end if
+  //Check if we have root but no backdoor
+  if hasIndex(context,"hasRoot") and context.hasRoot then
+    if not hasIndex(context,"hasBackdoor") or not context.hasBackdoor then push(suggestions,"Install backdoor for persistence")
+  end if
+  //Check if we just scanned and found vulnerabilities
+  if hasIndex(result,"vulnerabilities") and len(result.vulnerabilities)>0 then push(suggestions,"Exploit found vulnerabilities")
+  //Check if we just got a shell
+  if hasIndex(result,"shellObtained") and result.shellObtained then
+    push(suggestions,"Check system information")
+    push(suggestions,"Scan for privilege escalation vectors")
+  end if
+  //Check if we just cracked a password
+  if hasIndex(result,"passwordCracked") and result.passwordCracked then push(suggestions,"Use cracked credentials to login")
+  //Check if we found interesting files
+  if hasIndex(result,"interestingFiles") and len(result.interestingFiles)>0 then push(suggestions,"Examine discovered files")
+  //Pattern-based suggestions from successful operations
+  if hasIndex(context,"lastAction") then
+    action=context.lastAction
+    if action=="scan" then
+      push(suggestions,"Attempt exploitation of discovered services")
+    else if action=="exploit" then
+      push(suggestions,"Establish persistent access")
+    else if action=="crack" then
+      push(suggestions,"Try credentials on other systems")
+    end if
+  end if
+  return suggestions
+end function
+//Parse conditional logic from commands ("if X fails, try Y")
+AgentLearning._parseConditionals=function(command)
+  cmd=lower(command)
+  result={}
+  //Pattern: "X, and if Y, Z" or "X and if Y then Z"
+  if indexOf(cmd,", and if")!=null or indexOf(cmd," and if")!=null then
+    parts=split(cmd,", and if")
+    if len(parts)==1 then parts=split(cmd," and if")
+    if len(parts)>=2 then
+      primary=trim(parts[0])
+      rest=trim(parts[1])
+      if indexOf(rest,", ")!=null then
+        condParts=split(rest,", ")
+        if len(condParts)>=2 then
+          condition=trim(condParts[0])
+          action=trim(condParts[1])
+        else
+          condition="success"
+          action=rest
+        end if
+      else if indexOf(rest," then ")!=null then
+        condParts=split(rest," then ")
+        if len(condParts)>=2 then
+          condition=trim(condParts[0])
+          action=trim(condParts[1])
+        else
+          condition="success"
+          action=rest
+        end if
+      else
+        condition="success"
+        action=rest
+      end if
+      result.primary=primary
+      result.condition=condition
+      result.onCondition=action
+      result.summary=primary+" -> if "+condition+", "+action
+      return result
+    end if
+  end if
+  //Pattern: "if X has/finds/shows Y, Z" (condition on result content)
+  if indexOf(cmd,"if ")!=null and (indexOf(cmd," has ")!=null or indexOf(cmd," finds ")!=null or indexOf(cmd," shows ")!=null or indexOf(cmd," found ")!=null) then
+    parts=split(cmd,"if ")
+    if len(parts)>=2 then
+      rest=trim(parts[1])
+      //Find the condition verb
+      condVerbs=[" has "," finds "," shows "," found "]
+      for cv in condVerbs
+        cvIdx=indexOf(rest,cv)
+        if cvIdx!=null then
+          primary=trim(rest[:cvIdx])
+          afterVerb=trim(rest[cvIdx+len(cv):])
+          //Split on comma or "then" to get condition target + action
+          condTarget=null
+          action=null
+          if indexOf(afterVerb,", ")!=null then
+            cp=split(afterVerb,", ")
+            if len(cp)>=2 then
+              condTarget=trim(cp[0])
+              action=trim(cp[1])
+            end if
+          else if indexOf(afterVerb," then ")!=null then
+            cp=split(afterVerb," then ")
+            if len(cp)>=2 then
+              condTarget=trim(cp[0])
+              action=trim(cp[1])
+            end if
+          end if
+          if condTarget and action then
+            result.primary=primary
+            result.condition="has "+condTarget
+            result.onCondition=action
+            result.summary=primary+" -> if has "+condTarget+", "+action
+            return result
+          end if
+          break
+        end if
+      end for
+    end if
+  end if
+  //Pattern: "if X fails, try Y" or "if X fails then Y"
+  if indexOf(cmd,"if ")!=null and (indexOf(cmd," fails")!=null or indexOf(cmd," fail")!=null) then
+    parts=split(cmd,"if ")
+    if len(parts)>=2 then
+      rest=trim(parts[1])
+      //Extract what might fail
+      failIdx=indexOf(rest," fail")
+      if failIdx!=null then
+        primary=trim(rest[:failIdx])
+        remainder=trim(rest[failIdx:])
+        //Extract fallback after "try", "then", or comma
+        fallback=null
+        if indexOf(remainder," try ")!=null then
+          fallbackParts=split(remainder," try ")
+          if len(fallbackParts)>=2 then fallback=trim(fallbackParts[1])
+        else if indexOf(remainder," then ")!=null then
+          fallbackParts=split(remainder," then ")
+          if len(fallbackParts)>=2 then fallback=trim(fallbackParts[1])
+        else if indexOf(remainder,", ")!=null then
+          fallbackParts=split(remainder,", ")
+          if len(fallbackParts)>=2 then fallback=trim(fallbackParts[1])
+        end if
+        if fallback then
+          result.primary=primary
+          result.onFailure=fallback
+          result.summary=primary+" -> if fails, "+fallback
+          return result
+        end if
+      end if
+    end if
+  end if
+  //Pattern: "X, if it works Y" or "X, if successful Y"
+  if indexOf(cmd,", if it works")!=null or indexOf(cmd,", if successful")!=null or indexOf(cmd,", on success")!=null then
+    delims=[", if it works"," if it works",", if successful"," if successful",", on success"," on success"]
+    for delim in delims
+      delimIdx=indexOf(cmd,delim)
+      if delimIdx!=null then
+        primary=trim(cmd[:delimIdx])
+        action=trim(cmd[delimIdx+len(delim):])
+        //Strip leading comma or "then"
+        if len(action)>0 and action[0]=="," then action=trim(action[1:])
+        if indexOf(action,"then ")==0 then action=trim(action[5:])
+        if len(action)>0 then
+          result.primary=primary
+          result.condition="success"
+          result.onCondition=action
+          result.summary=primary+" -> if success, "+action
+          return result
+        end if
+        break
+      end if
+    end for
+  end if
+  //Pattern: "X or Y" (simple fallback)
+  if indexOf(cmd," or ")!=null then
+    parts=split(cmd," or ")
+    if len(parts)>=2 then
+      primary=trim(parts[0])
+      fallback=trim(parts[1])
+      //Only if both parts look like commands (not "get root or admin")
+      primaryWords=split(primary," ")
+      fallbackWords=split(fallback," ")
+      if len(primaryWords)>=2 and len(fallbackWords)>=2 then
+        result.primary=primary
+        result.onFailure=fallback
+        result.summary=primary+" or "+fallback
+        return result
+      end if
+    end if
+  end if
+  //Pattern: "X otherwise Y" or "X, otherwise Y"
+  if indexOf(cmd," otherwise ")!=null or indexOf(cmd,", otherwise ")!=null then
+    parts=split(cmd," otherwise ")
+    if len(parts)<2 then parts=split(cmd,", otherwise ")
+    if len(parts)>=2 then
+      result.primary=trim(parts[0])
+      result.onFailure=trim(parts[1])
+      result.summary=result.primary+" otherwise "+result.onFailure
+      return result
+    end if
+  end if
+  return null
+end function
+//Template learning: Record successful command sequences as templates
+AgentLearning._learnTemplate=function(sequence)
+  debug=globals.G_agent.config.debug
+  if not sequence or len(sequence)<2 then return false
+  //Create template from sequence
+  template={
+    "steps":sequence,
+    "successCount":1,
+    "lastUsed":time,
+    "signature":globals.G_agent._getSequenceSignature(sequence)
+  }
+  //Check if similar template already exists
+  if not hasIndex(globals.G_agent.sessionContext,"templates") then globals.G_agent.sessionContext.templates=[]
+  if typeof(globals.G_agent.sessionContext.templates)!="list" then globals.G_agent.sessionContext.templates=[]
+  existingIdx=-1
+  templatesLen=len(globals.G_agent.sessionContext.templates)
+  if templatesLen>0 then
+    i=0;while i<templatesLen
+      existing=globals.G_agent.sessionContext.templates[i]
+      if existing.signature==template.signature then
+        existingIdx=i
+        break
+      end if
+    i+=1;end while
+  end if
+  if existingIdx>=0 then
+    //Update existing template
+    globals.G_agent.sessionContext.templates[existingIdx].successCount+=1
+    globals.G_agent.sessionContext.templates[existingIdx].lastUsed=time
+  else
+    //Add new template
+    push(globals.G_agent.sessionContext.templates,template)
+  end if
+  if debug then print green("[DEBUG] Template learned: "+template.signature+" ("+len(sequence)+" steps)")
+  return true
+end function
+//Get signature of a command sequence for matching
+AgentLearning._getSequenceSignature=function(sequence)
+  sig=[]
+  for step in sequence
+    //Extract action type from command
+    cmdLower=lower(step)
+    actionType="unknown"
+    if indexOf(cmdLower,"scan")!=null or indexOf(cmdLower,"find")!=null or indexOf(cmdLower,"search")!=null or indexOf(cmdLower,"look for")!=null or indexOf(cmdLower,"locate")!=null then
+      actionType="scan"
+    else if indexOf(cmdLower,"exploit")!=null or indexOf(cmdLower,"attack")!=null or indexOf(cmdLower,"pwn")!=null or indexOf(cmdLower,"hack")!=null or indexOf(cmdLower,"compromise")!=null or indexOf(cmdLower,"break into")!=null then
+      actionType="exploit"
+    else if indexOf(cmdLower,"crack")!=null or indexOf(cmdLower,"break")!=null or indexOf(cmdLower,"bypass")!=null then
+      actionType="crack"
+    else if indexOf(cmdLower,"escalate")!=null or indexOf(cmdLower,"root")!=null or indexOf(cmdLower,"admin")!=null or indexOf(cmdLower,"privilege")!=null or indexOf(cmdLower,"su ")!=null or indexOf(cmdLower,"sudo")!=null then
+      actionType="escalate"
+    else if indexOf(cmdLower,"backdoor")!=null or indexOf(cmdLower,"persist")!=null or indexOf(cmdLower,"install")!=null or indexOf(cmdLower,"setup")!=null or indexOf(cmdLower,"rshell")!=null then
+      actionType="backdoor"
+    else if indexOf(cmdLower,"shell")!=null or indexOf(cmdLower,"computer")!=null or indexOf(cmdLower,"access")!=null or indexOf(cmdLower,"connect")!=null or indexOf(cmdLower,"login")!=null then
+      actionType="shell"
+    else if indexOf(cmdLower,"data")!=null or indexOf(cmdLower,"extract")!=null or indexOf(cmdLower,"get all")!=null or indexOf(cmdLower,"grab")!=null or indexOf(cmdLower,"fetch")!=null or indexOf(cmdLower,"steal")!=null or indexOf(cmdLower,"account")!=null or indexOf(cmdLower,"email")!=null or indexOf(cmdLower,"bank")!=null or indexOf(cmdLower,"password")!=null or indexOf(cmdLower,"cred")!=null or indexOf(cmdLower,"user")!=null then
+      actionType="extract"
+    else if indexOf(cmdLower,"bounce")!=null or indexOf(cmdLower,"via ")!=null or indexOf(cmdLower,"through")!=null or indexOf(cmdLower,"pivot")!=null or indexOf(cmdLower,"lateral")!=null then
+      actionType="bounce"
+    else if indexOf(cmdLower,"upload")!=null or indexOf(cmdLower,"download")!=null or indexOf(cmdLower,"copy")!=null or indexOf(cmdLower,"transfer")!=null then
+      actionType="transfer"
+    else if indexOf(cmdLower,"clean")!=null or indexOf(cmdLower,"clear")!=null or indexOf(cmdLower,"remove")!=null or indexOf(cmdLower,"delete")!=null or indexOf(cmdLower,"wipe")!=null then
+      actionType="cleanup"
+    end if
+    push(sig,actionType)
+  end for
+  return join(sig,"->")
+end function
+//Persist learning data to disk
+AgentLearning.saveLearning=function
+  debug=globals.G_agent.config.debug
+  if not globals.G_main or not hasIndex(globals.G_main,"computer") then return false
+  dataPath=path(globals.G_main.dir.data)
+  filepath=dataPath+"/agent_learning.json"
+  //Build learning data
+  data={}
+  if hasIndex(globals.G_agent,"patternScores") then data.patternScores=globals.G_agent.patternScores
+  if hasIndex(globals.G_agent,"userPreferences") then data.userPreferences=globals.G_agent.userPreferences
+  if hasIndex(globals.G_agent.sessionContext,"templates") and typeof(globals.G_agent.sessionContext.templates)=="list" then data.templates=globals.G_agent.sessionContext.templates
+  //Convert to JSON (same format as saveConfig/saveKnowledge)
+  jsonStr=System.toJSON(data,1,0)
+  comp=globals.G_main.computer
+  f=File(comp,filepath)
+  if not f then
+    comp.touch(dataPath,"agent_learning.json")
+    f=File(comp,filepath)
+  end if
+  if f then set_content(f,jsonStr)
+  if debug then print green("[DEBUG] Learning: Saved to disk ("+len(jsonStr)+" bytes)")
+  return true
+end function
+//Load learning data from disk
+AgentLearning.loadLearning=function
+  debug=globals.G_agent.config.debug
+  if not globals.G_main or not hasIndex(globals.G_main,"computer") then return false
+  dataPath=path(globals.G_main.dir.data)
+  filepath=dataPath+"/agent_learning.json"
+  f=File(globals.G_main.computer,filepath)
+  if not f then
+    if debug then print green("[DEBUG] Learning: No saved learning data found")
+    return false
+  end if
+  content=get_content(f)
+  if not content or len(content)==0 then return false
+  data=System.parse(content)
+  if not data or typeof(data)!="map" then
+    if debug then print green("[DEBUG] Learning: Could not parse learning file")
+    return false
+  end if
+  loadedCount=0
+  //Restore pattern scores
+  if hasIndex(data,"patternScores") and typeof(data.patternScores)=="map" then
+    for key in indexes(data.patternScores);globals.G_agent.patternScores[key]=data.patternScores[key];loadedCount+=1;end for
+  end if
+  //Restore user preferences
+  if hasIndex(data,"userPreferences") and typeof(data.userPreferences)=="map" then
+    globals.G_agent.userPreferences=data.userPreferences
+    loadedCount+=1
+  end if
+  //Restore templates
+  if hasIndex(data,"templates") and typeof(data.templates)=="list" then
+    if not hasIndex(globals.G_agent.sessionContext,"templates") then globals.G_agent.sessionContext.templates=[]
+    for tmpl in data.templates
+      if not tmpl or typeof(tmpl)!="map" then continue
+      //Merge with existing or add new
+      found=false
+      _len=len(globals.G_agent.sessionContext.templates)
+      if _len>0 then
+        i=0;while i<_len
+          if globals.G_agent.sessionContext.templates[i].signature==tmpl.signature then
+            if tmpl.successCount>globals.G_agent.sessionContext.templates[i].successCount then globals.G_agent.sessionContext.templates[i]=tmpl
+            found=true
+            break
+          end if
+        i+=1;end while
+      end if
+      if not found then push(globals.G_agent.sessionContext.templates,tmpl)
+      loadedCount+=1
+    end for
+  end if
+  //Sync to sessionContext
+  globals.G_agent.sessionContext.patternSuccess=globals.G_agent.patternScores
+  globals.G_agent.sessionContext.userPreferences=globals.G_agent.userPreferences
+  if debug then print green("[DEBUG] Learning: Loaded "+loadedCount+" entries from disk")
+  return true
+end function

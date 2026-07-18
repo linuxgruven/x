@@ -1,0 +1,269 @@
+// =============================================================================
+// COMPUTER_OBJECT
+// Computer session object; provides direct interactive computer access in X shell.
+// =============================================================================
+ComputerObject={}
+// Function: run
+// Purpose: Initialize and run interactive computer session
+// Args:
+//   this - Reference to return as session object
+//   ex - Computer object or existing session object to restore
+//   headless - Boolean, if true return object without entering loop (default false)
+// Returns: Session object if headless, null otherwise
+ComputerObject.run=function(this,ex,headless=false,restoreState=null)
+  restored=BaseObject.init(self,ex,"computer")
+  if restored isa Error then return restored
+  if not restored then
+		//Set object to computer
+		self.object=ex
+    //Set session type
+    self.type="computer"
+		//Set layer to computer
+		self.layer="computer"
+		//Store computer reference
+		self.computer=ex
+		//Initialize metadata with IP addresses
+		self.meta={
+      "public_ip":public_ip_pc(self.computer),
+      "local_ip":self.computer.local_ip
+    }
+		//Get root directory file object
+		self.root=File(ex,"/")
+    //Initialize network config with router if internet active, else no router
+    if is_network_active(self.computer) then self.net=Net.initNetwork(self,get_router(public_ip_pc(self.computer))) else self.net=Net.initNetwork(self)
+    //Detect machine type (router/workstation/etc)
+    self.machineType=System.getMachine(self,self.meta.local_ip)
+		//Detect user privileges and home directory
+		self.user=Utility.getUser(self)
+		self.pwa=Gui.pwAccess(self)
+		//Initialize directory tracking (start at user home)
+		self.dir={
+      "current":self.user.home,
+      "last":null
+    }
+    //Set hardware unit label
+    self.hw_unit=yellow("COMPUTER")
+    //Set default session nickname
+    self.nick="Computer Session"
+    //Get computer hostname
+    self.compName=get_name(self.computer)
+	end if
+  //Restore saved session state after fresh init (reinstantiation)
+  if restoreState then
+    self.id=restoreState.id
+    if hasIndex(restoreState,"history") then self.history=restoreState.history
+    if hasIndex(restoreState,"dir") and restoreState.dir then self.dir=restoreState.dir
+    if hasIndex(restoreState,"nick") then self.nick=restoreState.nick
+    if hasIndex(restoreState,"crp") then self.crp=restoreState.crp
+  end if
+  //Return self as this reference
+  this=@self
+  //Helper function: Update GUI display cache
+  gui=function;Gui.updateCP(this);end function
+	//Expose gui for bash macros that reference self.gui
+	self.gui=@gui
+	continueBash=function
+		if globals.G_bash.DEBUG then print orange("Function Call->continueBash from (COMPUTER)")
+		gui
+		Bash.continueMacro(this)
+  end function
+	__system=function(argv);System.scobj(this,argv);end function
+	__cmds=function(argv);return Man.commands(["computer"]);end function
+	__get=function(argv)
+		if not argv then return Man.help(["get"])
+    Arg1=lower(argv[0])
+		this=outer.this
+		passwd=function
+			g=File(this.computer,"/etc/passwd")
+			if not g then return Warning.set("Unable to find passwd")
+			if not has_permission(g,"r") then return Error.set(Info.message.NOR)
+			//Create destination file in Downloads with IP suffix
+			f=Command.touch(globals.G_main,[path(globals.G_main.user.home)+"/Downloads/passwd"+this.meta.public_ip])
+			if f isa Error then return
+			//Copy content from passwd to destination
+			e=set_content(f,get_content(g))
+			if e==1 then Info.info("passwd successfully downloaded to Downloads") else Info.error(e)
+		end function
+		//Map of get subcommands
+		cmds={
+      "-p":passwd
+		}
+		//Validate flag exists
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		//Execute subcommand
+		cmds[Arg1]
+	end function
+	//Command: set - Configure session and run attacks
+	__set=function(argv)
+		if not argv then return Man.help(["set"])
+    //Parse first argument as flag
+    Arg1=lower(argv[0])
+		//Get outer this reference
+		this=outer.this
+		//Subcommand: Run ghost user (tux) attack
+		ghostUser=function(arg)
+			//Execute tux attack
+			Attack.tux(this,arg)
+		end function
+		//Subcommand: Display system users
+		user=function(arg)
+			//Show user enumeration
+			System.users(this)
+		end function
+		//Subcommand: Run script kiddy attack
+		scriptKiddy=function(arg)
+			//Execute script kiddy attack
+			Attack.scriptOut(this)
+		end function
+		//Map of set subcommands (merge with Command.setBase)
+		cmds={
+      "-s":@scriptKiddy,
+      "-t":@ghostUser,
+      "-u":@user
+    }+Command.setBase(this)
+		//Validate flag exists
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		//Execute subcommand with remaining arguments
+		cmds[Arg1](argv[1:])
+	end function
+	//Command: exit/x - Exit session and return to previous context
+	__exit=function(argv)
+    if not headless then
+      //Debug: Show IPC state during cleanup
+      if globals.G_bash.DEBUG then
+        print green("IPC STACK BEFORE CLOSE:")+globals.G_IPC.indexes
+        print orange("Function Call->close from (COMPUTER)")
+      end if
+      //Remove session from IPC tracking
+      Ipc.removeObj(this.id)
+      //Debug: Show IPC state after cleanup
+      if globals.G_bash.DEBUG then print yellow("IPC STACK AFTER CLOSE: ")+globals.G_IPC.indexes
+      //Set signal break flag
+      globals.G_bash.SIGBREAK=true
+    end if
+    //Remove from session manager
+    globals.rmSession(this)
+    //Set back flag to exit loop
+    globals.G_attributes.back=true
+    //If under proxy/pivot, set home so proxy catches it instead of also exiting
+    if globals.G_hasPivoted then globals.G_attributes.home=true
+		//Stop session loop
+		this.running=false
+	end function
+  //Command: close/c - Close session without full exit cleanup
+  __close=function(argv)
+    //Stop session loop
+    this.running=false
+	end function
+  __run=function(argv);BaseObject.runBash(this, argv);end function
+  //Register all command callbacks (merge computer/file/custom commands)
+  self.commands={
+    "run":@__run,
+    "sys":@__system,
+    "?":@__cmds,
+    "help":@__cmds,
+    "cmds":@__cmds,
+    "get":@__get,
+    "set":@__set,
+    "x":@__exit,
+    "exit":@__exit,
+    "close":@__close,
+    "c":@__close
+  }+Command.fileCallbacks(self)+Command.computerCallbacks(self)
+  //Add session to IPC tracking if not headless
+  if not headless then Ipc.addObject(self)
+  //If headless mode, return session object without entering loop
+  if headless then
+    headless=false
+    return self
+  end if
+  //Execute continuation and deferred commands from globals
+  BaseObject.processGlobalCmds(this)
+  //If bash script is running, continue macro execution
+  if globals.G_bash.RUN then continueBash
+  //Redundant headless check (safety)
+  if headless then return self
+  //Auto-add to session manager if setting enabled
+  if globals.G_settings.autoAddSessions then Session.check(this,[])
+	//Main session loop
+	while self.running
+		//If bash script is running, enter bash execution loop
+		if globals.G_bash.RUN then
+			while globals.G_bash.RUN;continueBash;end while
+		end if
+    //Check for back flag to exit loop
+    if globals.G_attributes.back then break
+    //Check for network changes if dynamic LAN IPs enabled
+    if globals.G_settings.dynamicLanIPS then Net.checkChange(self)
+		//Update GUI display cache
+		gui
+    //Build prompt string
+    promptStr=BaseObject.buildPrompt(self,"c = Close")
+    //Get user input and split into command array (quote-aware)
+    _rawInput=trim(user_input(promptStr,0,0,1))
+    c=Pipe._parseArgs(_rawInput)
+    if c then c=c.removeSpace
+		//Skip empty input
+		if not c then continue
+    //Check for chain operators (&&, ;) and pipes (|)
+    cmdStr=join(c," ")
+    if BaseObject.handleChainOrPipe(self,c,cmdStr,_rawInput) then continue
+    //Cache lower command token for reuse
+    cmdKey=lower(c[0])
+    //Cache the raw token and first char to avoid repeated indexing
+    firstToken=c[0]
+    firstChar=firstToken[0]
+    //Handle history operators (!, !!, !!!)
+    if cmdKey=="!" or cmdKey=="!!" or cmdKey=="!!!" then
+      c=BaseObject.handleHistory(self,cmdKey)
+      if not c then continue
+      cmdKey=lower(c[0])
+      firstToken=c[0]
+      firstChar=firstToken[0]
+      //Re-check for pipe/chain in recalled command
+      cmdStr=join(c," ")
+      if BaseObject.handleChainOrPipe(self, c, cmdStr) then continue
+    end if
+    //Handle * - wildcard command search
+    if BaseObject.handleWildcard(self,firstToken) then continue
+    //Handle @ - execute bash script directly
+    if firstChar=="@" then
+      __run(c)
+      continue
+    end if
+    //Check for command alias and substitute
+    _aliasApplied=false
+    if hasIndex(globals.G_settings.alias,cmdKey) then
+      origArgs=c[1:]
+      c=globals.G_settings.alias[cmdKey]
+      if origArgs then c=c+origArgs
+      if c then cmdKey=lower(c[0]);_aliasApplied=true
+    end if
+    //Handle pipe/chain in alias-expanded command (only if alias changed the command)
+    if _aliasApplied then
+      cmdStr=join(c," ")
+      if BaseObject.handleChainOrPipe(self,c,cmdStr) then continue
+    end if
+    //Handle @ in alias-expanded command
+    if cmdKey[0]=="@" then
+      __run(c)
+      continue
+    end if
+    //Check if command exists in commands map
+    if hasIndex(self.commands,cmdKey) then
+      //Get command function callback
+      f=self.commands[cmdKey]
+      //Add to history and execute
+      BaseObject.addToHistory(self,c)
+      f(c[1:])
+    //Command not found error
+    else
+      Info.error(Text.msg.command+c[0]+" ]")
+    end if
+	//End of main session loop
+	end while
+  //Snapshot session state for potential future reinstantiation
+  Session._snapshotState(self)
+  //Return session object when exiting interactive loop
+  return self
+end function

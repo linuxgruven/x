@@ -1,0 +1,24 @@
+// =============================================================================
+// ERROR
+// Print a formatted error message and return an Error object for type-checking.
+// =============================================================================
+Error={}
+// Print error and return Error object; numeric messages are stringified
+Error.set=function(message,indicator="X",ipc=false)
+  self.ERROR={
+    "__isa":self
+  }
+  errorObj=new self
+  if ipc then return errorObj
+  if message isa number then
+    print(white("["+error(indicator)+"] "+str(message)))
+    return errorObj
+  end if
+  print white(bold("["+error(indicator)+"] ")+message)
+  if globals.G_bash.IGNORE then return errorObj
+  if globals.G_bash.RUN or globals.G_bash.IN_TRY>0 then
+    globals.G_bash.LAST_ERROR=str(message)
+    Bash.errorHandle(errorObj)
+  end if
+  return errorObj
+end function

@@ -1,0 +1,55 @@
+// =============================================================================
+// SCANADDRESS
+// Scan a specific memory zone address in a .so library for vulnerabilities.
+// =============================================================================
+Command.scanaddress=function(Obj,argv)
+  if not Library.haveMetaxploit then return
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+  if not argv and not hasPipeInput then return Man.help(["scanaddress"])
+  _p=ArgumentParser.init
+  _p.addArgument("a",false,"flag")   // Scan all zones automatically
+  _p.addArgument("v",false,"flag")   // Verbose output
+  argv=_p.parse("scanaddress",argv,Obj)
+  if argv isa Error then return
+  if not argv.rest or not len(argv.rest) then return Man.help(["scanaddress"])
+  // argv.rest[0] is always the library path
+  libPath=argv.rest[0]
+  libFile=Io._getFile(Obj,libPath)
+  if libFile isa Error then return libFile
+  metaLib=load(Library.metaxploit,path(libFile))
+  if not metaLib then return Error.set("Unable to load "+libPath)
+  // -a flag: scan all zones without needing piped input
+  if argv.a then
+    memoryZones=scan(globals.G_metaxploit,metaLib)
+    if not memoryZones or not len(memoryZones) then return Info.info("Scan completed: No issues detected")
+    for zone in memoryZones
+      if argv.v then print yellow("Scanning zone: ")+white(zone)
+      result=scan_address(globals.G_metaxploit,metaLib,zone)
+      if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+        for line in split(result,char(10));if line then push(globals.G_pipe.stdout,line);end for
+      else
+        print white(result)
+      end if
+    end for
+    return
+  end if
+  // Collect zone addresses from argv.rest[1:] and/or stdin
+  zones=[]
+  if len(argv.rest)>=2 then
+    _len=len(argv.rest);i=1;while i<_len;push(zones,argv.rest[i]);i+=1;end while
+  end if
+  if hasPipeInput then
+    for line in split(globals.G_pipe.stdin,char(10));line=trim(line);if line then push(zones,line);end for
+  end if
+  if not zones then return Man.help(["scanaddress"])
+  for zone in zones
+    if not zone then continue
+    if argv.v then print yellow("Scanning zone: ")+white(zone)
+    result=scan_address(globals.G_metaxploit,metaLib,zone)
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+      for line in split(result,char(10));if line then push(globals.G_pipe.stdout,line);end for
+    else
+      print white(result)
+    end if
+  end for
+end function

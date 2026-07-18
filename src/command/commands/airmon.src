@@ -1,0 +1,33 @@
+// =============================================================================
+// AIRMON
+// Manage WiFi monitor mode (start/stop) on network interfaces.
+// =============================================================================
+Command.airmon=function(Obj,argv)
+  if not argv then return Man.help(["airmon"])
+  if not Library.haveCrypto then return Error.set("crypto.so library not loaded")
+  if not Library.crypto then return Error.set("Failed to access crypto library")
+  action=lower(argv[0])
+  interface=null
+  if len(argv)>=2 then interface=argv[1]
+  if not interface then
+    if len(Obj.net.devices)==1 then
+      if not hasIndex(Obj.net.devices,"wlan0") then return Error.set("Only one network device found, but not a wireless interface")
+      interface=Obj.net.devices["wlan0"].name
+    else
+      interfaces=[]
+      for device in Obj.net.devices;deviceInfo={"name":green(device.value.name),"chipset":blue(device.value.chipset),"monitor":blue(device.value.supportMonitorMode)};push(interfaces,deviceInfo);end for
+      rows=[]
+      push(rows,join([grey("Interface"),grey("Chipset"),grey("Monitor_Mode")],"  "))
+      for entry in interfaces;push(rows,join([entry.name,entry.chipset,entry.monitor],"  "));end for
+      print format_columns(join(rows,char(10)))
+      interface=lower(Gui.input({"text":"Enter interface/card to use"}))
+      if interface==null then return
+    end if
+  end if
+  if action!="start" and action!="stop" then return Man.help(["airmon"])
+  Info.info("Setting monitor mode "+action+" on interface: "+interface)
+  result=airmon(Library.crypto,action,interface)
+  if not result then return Error.set("Interface '"+interface+"' not found")
+  if result isa string then return Error.set(result)
+  Info.info("Monitor mode "+action+" completed successfully on "+interface)
+end function

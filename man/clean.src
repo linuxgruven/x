@@ -1,0 +1,37 @@
+// Man page for clean
+manClean="CLEAN(1)                         X Shell Manual                         CLEAN(1)
+
+<b>NAME</b>
+    clean - Zero out file contents
+<b>SYNOPSIS</b>
+    <b>clean</b> FILE [FILE...]
+<b>DESCRIPTION</b>
+    File content eraser that zeros out files while preserving file structure.
+    Useful for clearing logs, removing evidence, and sanitizing files.
+    File remains on disk but contents become empty.
+    Multiple files can be specified; each is cleared in order.
+<b>OPTIONS</b>
+    <b>FILE [FILE...]</b>
+    One or more files to erase contents of
+    File structure preserved
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Single File</color>
+    <b>clean /var/system.log</b>
+    Clear system log
+
+    <color=#e4ff34># Multiple Files</color>
+    <b>clean system.log access.log auth.log</b>
+    Clear multiple logs at once
+
+    <color=#e4ff34># Evidence Removal</color>
+    <b>clean /root/trace.txt history.log</b>
+    Clear multiple evidence files
+
+    <color=#e4ff34># Pipe Input</color>
+    <b>find *.log | clean</b>
+    Clear all matched log files
+
+    <b>ls /var | clean</b>
+    Clear all files listed in /var
+<b>SEE ALSO</b>
+    <b>rm</b>, <b>wipe</b>, <b>qrm</b>, <b>scrub</b>"

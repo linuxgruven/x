@@ -1,0 +1,144 @@
+//******************************************************************************
+// Advanced AI Features - Usage Examples
+//******************************************************************************
+// Quick examples of how to use each of the 8 advanced features
+
+print "=========================================="
+print "Advanced AI Features - Usage Examples"
+print "=========================================="
+print ""
+
+print yellow("=" * 60)
+print "FEATURE 1: RISK ASSESSMENT"
+print yellow("=" * 60)
+print "Automatically warns about dangerous operations"
+print ""
+print "Examples:"
+print white("  ai wipe system on 192.168.1.5")
+print skyblue("  → Shows critical risk warning before execution")
+print ""
+print white("  ai rm -rf /root on localhost")
+print skyblue("  → High risk: file deletion + local system")
+print ""
+
+print yellow("=" * 60)
+print "FEATURE 2: PATTERN REINFORCEMENT"
+print yellow("=" * 60)
+print "Learns from successful/failed operations"
+print ""
+print "Examples:"
+print white("  ai scan 192.168.1.5")
+print white("  ai exploit 192.168.1.5")
+print white("  ai scan 10.0.0.1")
+print skyblue("  → Tracks success rates: scan 75%, exploit 60%")
+print skyblue("  → Future operations weighted by success history")
+print ""
+
+print yellow("=" * 60)
+print "FEATURE 3: USER PREFERENCE LEARNING"
+print yellow("=" * 60)
+print "Remembers which flags you prefer"
+print ""
+print "Examples:"
+print white("  list -a -s /home")
+print white("  list -a -R /tmp")
+print white("  list -a /root")
+print skyblue("  → Agent learns you prefer -a flag")
+print ""
+print white("  ai show all files with sizes")
+print skyblue("  → Automatically uses -a and -s flags")
+print ""
+
+print yellow("=" * 60)
+print "FEATURE 4: MULTI-TARGET OPERATIONS"
+print yellow("=" * 60)
+print "Expands subnet notation to IP lists"
+print ""
+print "Examples:"
+print white("  ai scan all hosts on 192.168.1.0/24")
+print skyblue("  → Expands to 254 IPs (192.168.1.1-254)")
+print ""
+print white("  ai attack 10.0.0.0/30")
+print skyblue("  → Expands to 2 IPs (10.0.0.1-2)")
+print ""
+
+print yellow("=" * 60)
+print "FEATURE 5: PREDICTIVE SUGGESTIONS"
+print yellow("=" * 60)
+print "Context-aware recommendations"
+print ""
+print "Examples:"
+print white("  ai get shell from 192.168.1.5")
+print skyblue("  → Success!")
+print skyblue("  💡 Suggestions:")
+print skyblue("     • Check system information")
+print skyblue("     • Scan for privilege escalation vectors")
+print ""
+print white("  # After getting guest shell")
+print skyblue("  💡 Suggestions:")
+print skyblue("     • Escalate to root privileges")
+print ""
+
+print yellow("=" * 60)
+print "FEATURE 6: CONDITIONAL LOGIC"
+print yellow("=" * 60)
+print "if/then/else command chains"
+print ""
+print "Examples:"
+print white("  ai if scan fails, try brute force")
+print skyblue("  → Executes scan first, if fails → brute force")
+print ""
+print white("  ai scan target, and if vulnerable, exploit")
+print skyblue("  → Scans, then checks for vulnerabilities → exploits")
+print ""
+print white("  ai crack password or use default credentials")
+print skyblue("  → Tries crack, on failure → tries defaults")
+print ""
+
+print yellow("=" * 60)
+print "FEATURE 7: SEMANTIC UNDERSTANDING"
+print yellow("=" * 60)
+print "Understands synonyms, negations, conjunctions"
+print ""
+print "Examples:"
+print white("  ai obtain all documents")
+print skyblue("  → Understands 'obtain' = 'get' = 'fetch'")
+print ""
+print white("  ai get shell but not from router")
+print skyblue("  → Detects negation, excludes routers")
+print ""
+print white("  ai scan target and then exploit it")
+print skyblue("  → Parses conjunction into 2 steps")
+print ""
+
+print yellow("=" * 60)
+print "FEATURE 8: TEMPLATE LEARNING"
+print yellow("=" * 60)
+print "Records successful command sequences"
+print ""
+print "Examples:"
+print white("  ai scan 192.168.1.5")
+print white("  ai exploit 192.168.1.5")
+print white("  ai backdoor 192.168.1.5")
+print skyblue("  → Template learned: scan->exploit->backdoor")
+print ""
+print white("  # Later, when you do similar operation:")
+print white("  ai scan 10.0.0.20")
+print skyblue("  → Agent recognizes pattern from template")
+print skyblue("  → Could suggest: exploit next")
+print ""
+
+print "=========================================="
+print green("All 8 features work together seamlessly!")
+print "=========================================="
+print ""
+print "Tips:"
+print "  • Enable debug mode to see feature details: " + white("ai debug on")
+print "  • Enable verbose for more information: " + white("ai verbose on")
+print "  • View current settings: " + white("ai show")
+print ""
+print "For more information, see:"
+print "  • docs/AI_ADVANCED_FEATURES.md"
+print "  • docs/AI_API.md"
+print "  • man ai"
+print ""

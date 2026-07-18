@@ -1,0 +1,10 @@
+// =============================================================================
+// POSTPW
+// Display /etc/passwd contents from the target system.
+// =============================================================================
+Command.postPW=function(Obj)
+  passwdFile=Io.getFileObj(Obj,"/etc/passwd")
+  if passwdFile isa Error then return Info.error("Passwd is missing")
+  if not has_permission(passwdFile,"r") then return Error.set(Info.message.NOR)
+  for line in split(get_content(passwdFile),char(10));if len(line) then print white(line);end for
+end function

@@ -1,0 +1,28 @@
+// dig_email.src
+// Usage: @dig_email          — scan and print all email results
+//        @dig_email 192.168.0.5  — only print entries matching that LAN IP
+
+_setvar(data, _dig -e --raw --quiet)
+_setvar(emails, _getvar(data).E)
+
+if _len(emails) == 0
+  _print red(No email results found)
+  return
+endif
+
+_print green(=== Email Results ===)
+
+_setvar(ipfilter, $1)
+for entry in _getvar(emails)
+  _setvar(eip, _getvar(entry).ip)
+  if _getvar(ipfilter) != ""
+    if _getvar(eip) != _getvar(ipfilter)
+      continue
+    endif
+  endif
+  _print white(-----------------------------)
+  _print yellow(Name:  ) _getvar(entry).name
+  _print yellow(Email: ) _getvar(entry).email
+  _print yellow(Pass:  ) _getvar(entry).pass
+  _print yellow(IP:    ) _getvar(entry).ip
+endfor

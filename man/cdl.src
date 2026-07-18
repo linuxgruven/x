@@ -1,0 +1,59 @@
+// Man page for cdl
+manCdl="CDL(1)                           X Shell Manual                           CDL(1)
+
+<b>NAME</b>
+    cdl - Change directory and list contents
+<b>SYNOPSIS</b>
+    <b>cdl</b>
+    <b>cdl</b> PATH
+    <b>cdl</b> ..
+    <b>cdl</b> back|-
+<b>DESCRIPTION</b>
+    Combined directory navigation and listing command. Changes to specified
+    directory and automatically lists contents in one operation. Saves time
+    during reconnaissance and system exploration. Supports standard cd
+    shortcuts for navigation convenience.
+<b>OPTIONS</b>
+    <b>cdl</b>
+    Return to home directory and list
+
+    <b>cdl PATH</b>
+    Move to directory and show contents
+
+    <b>cdl ..</b>
+    Move up one level and list
+
+    <b>cdl back</b> or <b>cdl -</b>
+    Return to previous directory and list
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Navigation</color>
+    <b>cdl /etc</b>
+    Go to /etc and list files
+
+    <b>cdl /var/log</b>
+    Navigate to logs and show
+
+    <b>cdl</b>
+    Return home and list
+
+    <color=#e4ff34># Quick Navigation</color>
+    <b>cdl ..</b>
+    Up one directory
+
+    <b>cdl back</b>
+    Return to last directory
+
+    <b>cdl -</b>
+    Alternate back syntax
+
+    <color=#e4ff34># Reconnaissance</color>
+    <b>cdl /root</b>
+    List root directory
+
+    <b>cdl /home</b>
+    List user directories
+
+    <b>cdl /root</b>
+    List root files
+<b>SEE ALSO</b>
+    <b>cd</b>, <b>ls</b>, <b>pwd</b>"

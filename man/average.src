@@ -1,0 +1,20 @@
+// Man page for average
+manAverage="AVERAGE(1)                       X Shell Manual                       AVERAGE(1)
+
+<b>NAME</b>
+    average - Calculate average of numbers
+<b>SYNOPSIS</b>
+    <b>average NUMBER</b> [NUMBER...]
+<b>DESCRIPTION</b>
+    Calculate the average (mean) value of a list of numbers.
+<b>EXAMPLE:</b>
+    <b>average 10 20 30</b>
+    Average of 3 numbers (result: 20)
+
+    <b>average 5 10 15 20 25</b>
+    Average of 5 numbers (result: 15)
+
+    <b>average 100 200</b>
+    Average of 2 numbers (result: 150)
+<b>SEE ALSO</b>
+    <b>median</b>, <b>percent</b>"

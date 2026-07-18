@@ -1,0 +1,479 @@
+// =============================================================================
+// BASH_LEXER
+// Token-based lexer for the bash engine. Loaded BEFORE bash_commands.src.
+// All methods are on the Bash object so they integrate with the existing engine.
+//
+// Token types: "S" string, "N" number, "I" identifier, "GV" _getvar(name),
+// "SV" _setvar, "(" ")" "[" "]" "," "." "|" ";" "&&" "**"
+// "+" "-" "*" "/" "%" "==" "!=" "<=" ">=" "<" ">" "!" "E" EOF
+// "W" word (unquoted text like <color> tags, paths, freeform bash args)
+// =============================================================================
+// --- Token constructor ---
+Bash._tok=function(t,v,p);return {"t":t,"v":v,"p":p};end function
+// =============================================================================
+// MAIN LEXER — character-by-character tokenization
+// Handles bash engine command lines: _setvar(x, len(_getvar(y)) + 5)
+// Also handles unquoted text: _print <color=#00ff00>hello</color> world
+// =============================================================================
+Bash._lex=function(input)
+  if typeof(input)!="string" or len(input)==0 then return [self._tok("E","",0)]
+  tokens=[]
+  pos=0
+  inputLen=len(input)
+  while pos<inputLen
+    //Skip whitespace
+    while pos<inputLen and (input[pos]==" " or input[pos]==char(9));pos+=1;end while
+    if pos>=inputLen then break
+    ch=input[pos]
+    //---STRING LITERAL--- (double-quoted, GreyScript "" escaping)
+    if ch=="""" then
+      strEnd=pos+1
+      while strEnd<inputLen
+        if input[strEnd]=="""" then
+          if strEnd+1<inputLen and input[strEnd+1]=="""" then
+            strEnd=strEnd+2
+            continue
+          end if
+          strEnd+=1
+          break
+        end if
+        strEnd+=1
+      end while
+      raw=input[pos:strEnd]
+      if len(raw)>=2 then
+        content=raw[1:len(raw)-1]
+        content=content.replace("""""","""")
+      else
+        content=""
+      end if
+      push(tokens,self._tok("S",content,pos))
+      pos=strEnd
+      continue
+    end if
+    //---COLOR/HTML TAGS--- <color=#hex>text</color> treated as word tokens
+    if ch=="<" then
+      tagEnd=pos+1
+      while tagEnd<inputLen and input[tagEnd]!=">";tagEnd+=1;end while
+      if tagEnd<inputLen then tagEnd+=1
+      push(tokens,self._tok("W",input[pos:tagEnd],pos))
+      pos=tagEnd
+      continue
+    end if
+    //---TWO-CHARACTER OPERATORS--- (check before single-char)
+    if pos+1<inputLen then
+      two=input[pos]+input[pos+1]
+      if two=="==" or two=="!=" or two=="<=" or two==">=" or two=="&&" or two=="**" then
+        push(tokens,self._tok(two,two,pos))
+        pos=pos+2
+        continue
+      end if
+    end if
+    //---SINGLE-CHARACTER OPERATORS---
+    if ch=="(" or ch==")" or ch=="[" or ch=="]" or ch=="," or ch=="|" or ch==";" or ch=="!" then
+      push(tokens,self._tok(ch,ch,pos))
+      pos+=1
+      continue
+    end if
+    if ch=="+" or ch=="-" or ch=="*" or ch=="/" or ch=="%" then
+      push(tokens,self._tok(ch,ch,pos))
+      pos+=1
+      continue
+    end if
+    if ch==">" or ch=="=" then
+      push(tokens,self._tok(ch,ch,pos))
+      pos+=1
+      continue
+    end if
+    if ch=="." then
+      push(tokens,self._tok(".",ch,pos))
+      pos+=1
+      continue
+    end if
+    //---NUMBER--- digits with optional decimal
+    if ch>="0" and ch<="9" then
+      numEnd=pos
+      hasDot=false
+      dotCount=0
+      //Peek ahead to detect IP addresses (4 dot-separated number groups)
+      scanEnd=pos
+      while scanEnd<inputLen and ((input[scanEnd]>="0" and input[scanEnd]<="9") or input[scanEnd]==".");if input[scanEnd]=="." then dotCount+=1;scanEnd+=1;end while
+      if dotCount==3 then
+        //IP address — emit as word token
+        push(tokens,self._tok("W",input[pos:scanEnd],pos))
+        pos=scanEnd
+        continue
+      end if
+      //Regular number
+      while numEnd<inputLen
+        nc=input[numEnd]
+        if nc>="0" and nc<="9" then
+          numEnd+=1
+        else if nc=="." and not hasDot then
+          if numEnd+1<inputLen and input[numEnd+1]>="0" and input[numEnd+1]<="9" then
+            hasDot=true
+            numEnd+=1
+          else
+            break
+          end if
+        else
+          break
+        end if
+      end while
+      numStr=input[pos:numEnd]
+      push(tokens,self._tok("N",val(numStr),pos))
+      pos=numEnd
+      continue
+    end if
+    //---IDENTIFIER--- starts with letter or _
+    if (ch>="a" and ch<="z") or (ch>="A" and ch<="Z") or ch=="_" then
+      idEnd=pos+1
+      while idEnd<inputLen;ic=input[idEnd];if (ic>="a" and ic<="z") or (ic>="A" and ic<="Z") or (ic>="0" and ic<="9") or ic=="_" then idEnd+=1 else break;end while
+      word=input[pos:idEnd]
+      //_getvar(name) → single GV token with name extracted
+      if word=="_getvar" and idEnd<inputLen and input[idEnd]=="(" then
+        depth=1
+        closeIdx=idEnd+1
+        while closeIdx<inputLen and depth>0;if input[closeIdx]=="(" then depth+=1;if input[closeIdx]==")" then depth-=1;if depth>0 then closeIdx+=1;end while
+        if depth==0 then
+          push(tokens,self._tok("GV",input[idEnd+1:closeIdx],pos))
+          pos=closeIdx+1
+          continue
+        end if
+      end if
+      //_setvar → SV token
+      if word=="_setvar" then
+        push(tokens,self._tok("SV",word,pos))
+        pos=idEnd
+        continue
+      end if
+      //Regular identifier
+      push(tokens,self._tok("I",word,pos))
+      pos=idEnd
+      continue
+    end if
+    //---UNKNOWN--- skip
+    pos+=1
+  end while
+  push(tokens,self._tok("E","",pos))
+  return tokens
+end function
+// =============================================================================
+// CHAIN/PIPE DETECTION — quote-aware operator detection for _exec
+// These are the primary integration point. They replace indexOf-based checks
+// that are fooled by operators inside quoted strings.
+// =============================================================================
+//Check if a command string contains a chain operator (; or &&) outside of quotes
+//Returns: false if no chains found, or {type:";" or "&&"} if found
+Bash._hasChain=function(s)
+  if typeof(s)!="string" then return false
+  //Fast pre-check: skip expensive lex if no ; or & present at all
+  if indexOf(s,";") == null and indexOf(s,"&") == null then return false
+  tokens=self._lex(s)
+  for tok in tokens;if tok.t==";" or tok.t=="&&" then return {"type":tok.t};end for
+  return false
+end function
+//Check if a command string contains a pipe operator outside of quotes
+Bash._hasPipe=function(s)
+  if typeof(s)!="string" then return false
+  //Fast pre-check: skip expensive lex if no | present at all
+  if indexOf(s,"|") == null then return false
+  tokens=self._lex(s)
+  for tok in tokens;if tok.t=="|" then return true;end for
+  return false
+end function
+//Split a command string by chain operators (; and &&), respecting quotes
+//Returns list of {cmd: "command string", op: ";" or "&&"}
+Bash._splitChain=function(s)
+  tokens=self._lex(s)
+  parts=[]
+  currentStart=null
+  currentEnd=null
+  prevOp=";"
+  for tok in tokens
+    if tok.t=="E" then break
+    if tok.t==";" or tok.t=="&&" then
+      if currentStart!=null then
+        cmd=trim(s[currentStart:currentEnd])
+        if cmd then push(parts,{"cmd":cmd,"op":tok.t})
+      end if
+      currentStart=null
+      currentEnd=null
+      prevOp=tok.t
+    else
+      if currentStart==null then currentStart=tok.p
+      //Track the end of the current segment
+      //For word/string tokens, end is position + length of original text
+      if tok.t=="S" then
+        //String literal includes quotes: find the closing quote
+        currentEnd=tok.p
+        scanE=tok.p+1
+        while scanE<len(s) and s[scanE]!="""";scanE+=1;end while
+        if scanE<len(s) then currentEnd=scanE+1 else currentEnd=scanE
+      else if tok.t=="GV" then
+        //raw text: _getvar(name) — find closing paren
+        currentEnd=tok.p+8+len(tok.v)+1
+      else if tok.t=="W" then
+        currentEnd=tok.p+len(tok.v)
+      else if tok.t=="N" then
+        currentEnd=tok.p+len(str(tok.v))
+      else if tok.t=="SV" then
+        currentEnd=tok.p+7
+      else
+        currentEnd=tok.p+len(str(tok.v))
+      end if
+    end if
+  end for
+  //Add final segment
+  if currentStart!=null then
+    cmd=trim(s[currentStart:])
+    if cmd then push(parts,{"cmd":cmd,"op":";"})
+  end if
+  return parts
+end function
+//Split a command string by pipe operator, respecting quotes
+//Returns list of command strings
+Bash._splitPipe=function(s)
+  tokens=self._lex(s)
+  segments=[]
+  currentStart=null
+  lastEnd=0
+  for tok in tokens
+    if tok.t=="E" then break
+    if tok.t=="|" then
+      if currentStart!=null then
+        cmd=trim(s[currentStart:tok.p])
+        if cmd then push(segments,cmd)
+      end if
+      currentStart=null
+      lastEnd=tok.p+1
+    else
+      if currentStart==null then currentStart=tok.p
+    end if
+  end for
+  //Add final segment
+  if currentStart!=null then
+    cmd=trim(s[currentStart:])
+    if cmd then push(segments,cmd)
+  else if lastEnd>0 then
+    cmd=trim(s[lastEnd:])
+    if cmd then push(segments,cmd)
+  end if
+  return segments
+end function
+// =============================================================================
+// TOKEN STREAM — cursor-based API for the expression evaluator
+// =============================================================================
+Bash._lexStream=function(tokens)
+  s={}
+  s.tokens=tokens
+  s.pos=0
+  s.peek=function;if self.pos>=len(self.tokens) then return Bash._tok("E","",0);return self.tokens[self.pos];end function
+  s.next=function
+tok=self.peek;self.pos=self.pos+1;return tok
+end function
+  s.expect=function(tokenType)
+    tok=self.peek
+    if tok.t==tokenType then
+      self.pos=self.pos+1
+      return tok
+    end if
+    return null
+  end function
+  return s
+end function
+// =============================================================================
+// EXPRESSION EVALUATOR — recursive descent, proper operator precedence
+// Replaces _evalArithmetic, _evalStringConcat, and parts of _getVal
+//
+// Grammar:
+//   expr       → comparison
+//   comparison → addition (("==" | "!=" | "<" | ">" | "<=" | ">=") addition)*
+//   addition   → multiply (("+" | "-") multiply)*
+//   multiply   → power (("*" | "/" | "%") power)*
+//   power      → unary ("**" unary)*
+//   unary      → ("-" | "!") unary | call
+//   call       → primary ( "(" arglist ")" | "." IDENT )*
+//   primary    → NUMBER | STRING | GETVAR | IDENT | "(" expr ")" | "[" listlit "]"
+// =============================================================================
+
+//Evaluate a string expression and return typed result
+//getVar: function(name) → value from gb.VARS
+//callFunc: function(name, args) → dispatch to builtin or user function
+Bash._lexEval=function(input,getVar,callFunc)
+tokens=self._lex(input);s=self._lexStream(tokens);return self._lexExpr(s,getVar,callFunc)
+end function
+Bash._lexExpr=function(s,gv,cf);return self._lexCmp(s,gv,cf);end function
+Bash._lexCmp=function(s,gv,cf)
+  left=self._lexAdd(s,gv,cf)
+  while s.peek.t=="==" or s.peek.t=="!=" or s.peek.t=="<=" or s.peek.t==">=" or s.peek.t=="<" or s.peek.t==">"
+    op=s.next
+    right=self._lexAdd(s,gv,cf)
+    if op.t=="==" then
+      left=(left==right)
+    else if op.t=="!=" then
+      left=(left!=right)
+    else if op.t=="<" then
+      left=(left<right)
+    else if op.t==">" then
+      left=(left>right)
+    else if op.t=="<=" then
+      left=(left<=right)
+    else if op.t==">=" then
+      left=(left>=right)
+    end if
+    if left==true then left=1
+    if left==false then left=0
+  end while
+  return left
+end function
+Bash._lexAdd=function(s,gv,cf)
+  left=self._lexMul(s,gv,cf)
+  while s.peek.t=="+" or s.peek.t=="-"
+    op=s.next
+    right=self._lexMul(s,gv,cf)
+    if op.t=="+" then
+      if typeof(left)=="string" or typeof(right)=="string" then left=str(left)+str(right) else left=left+right
+    else
+      left=left-right
+    end if
+  end while
+  return left
+end function
+Bash._lexMul=function(s,gv,cf)
+  left=self._lexPow(s,gv,cf)
+  while s.peek.t=="*" or s.peek.t=="/" or s.peek.t=="%"
+    op=s.next
+    right=self._lexPow(s,gv,cf)
+    if op.t=="*" then
+      left=left*right
+    else if op.t=="/" then
+      if right==0 then return 0
+      left=left/right
+    else
+      if right==0 then return 0
+      left=left%right
+    end if
+  end while
+  return left
+end function
+Bash._lexPow=function(s,gv,cf)
+  left=self._lexUnary(s,gv,cf)
+  while s.peek.t=="**";s.next;right=self._lexUnary(s,gv,cf);left=left^right;end while
+  return left
+end function
+Bash._lexUnary=function(s,gv,cf)
+  if s.peek.t=="-" then
+    s.next
+    return -self._lexUnary(s,gv,cf)
+  end if
+  if s.peek.t=="!" then
+    s.next
+    v=self._lexUnary(s,gv,cf)
+    if v then return 0 else return 1
+  end if
+  return self._lexCall(s,gv,cf)
+end function
+Bash._lexCall=function(s,gv,cf)
+  left=self._lexPrimary(s,gv,cf)
+  while true
+    if s.peek.t=="(" then
+      s.next
+      args=[]
+      if s.peek.t!=")" then
+        push(args,self._lexExpr(s,gv,cf))
+        while s.peek.t==",";s.next;push(args,self._lexExpr(s,gv,cf));end while
+      end if
+      s.expect(")")
+      if cf then left=cf(str(left),args)
+    else if s.peek.t=="." then
+      s.next
+      prop=s.next
+      if typeof(left)=="map" and hasIndex(left,prop.v) then
+        left=left[prop.v]
+      else if typeof(left)=="file" then
+        left=self._lexFileProp(left,prop.v)
+      else if typeof(left)=="computer" then
+        if prop.v=="local_ip" then
+          left=left.local_ip
+        else if prop.v=="public_ip" then
+          left=left.public_ip
+        else
+          left=null
+        end if
+      else if typeof(left)=="shell" then
+        if prop.v=="host_computer" then left=left.host_computer else left=null
+      else
+        left=null
+      end if
+    else
+      break
+    end if
+  end while
+  return left
+end function
+Bash._lexPrimary=function(s,gv,cf)
+  tok=s.peek
+  if tok.t=="N" then
+    s.next
+    return tok.v
+  end if
+  if tok.t=="S" then
+    s.next
+    return tok.v
+  end if
+  if tok.t=="GV" then
+    s.next
+    if gv then return gv(tok.v)
+    return null
+  end if
+  if tok.t=="I" then
+    s.next
+    if s.peek.t=="(" then return tok.v
+    if gv then
+      v=gv(tok.v)
+      if v!=null then return v
+    end if
+    return tok.v
+  end if
+  if tok.t=="W" then
+    s.next
+    return tok.v
+  end if
+  if tok.t=="(" then
+    s.next
+    v=self._lexExpr(s,gv,cf)
+    s.expect(")")
+    return v
+  end if
+  if tok.t=="[" then
+    s.next
+    items=[]
+    if s.peek.t!="]" then
+      push(items,self._lexExpr(s,gv,cf))
+      while s.peek.t==",";s.next;push(items,self._lexExpr(s,gv,cf));end while
+    end if
+    s.expect("]")
+    return items
+  end if
+  s.next
+  return null
+end function
+Bash._lexFileProp=function(f,prop)
+  if prop=="path" then return f.path
+  if prop=="name" then return f.name
+  if prop=="permissions" then return f.permissions
+  if prop=="owner" then return f.owner
+  if prop=="group" then return f.group
+  if prop=="size" then return f.size
+  if prop=="is_folder" then return f.is_folder
+  if prop=="is_binary" then return f.is_binary
+  if prop=="is_symlink" then return f.is_symlink
+  if prop=="parent" then return f.parent
+  return null
+end function
+// =============================================================================
+// REGEX UTILITIES — fast validation using GreyScript regex API
+// =============================================================================
+Bash._isIP=function(s);if typeof(s)!="string" then return false;return s.is_match("^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$")==1;end function
+Bash._isNumStr=function(s);if typeof(s)!="string" then return false;return s.is_match("^-?[0-9]+\.?[0-9]*$")==1;end function
+Bash._isIdentStr=function(s);if typeof(s)!="string" then return false;return s.is_match("^[a-zA-Z_][a-zA-Z0-9_]*$")==1;end function

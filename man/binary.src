@@ -1,0 +1,20 @@
+// Man page for binary
+manBinary="BINARY(1)                        X Shell Manual                        BINARY(1)
+
+<b>NAME</b>
+    bin - Binary to decimal converter
+<b>SYNOPSIS</b>
+    <b>bin BINARY</b>
+<b>DESCRIPTION</b>
+    Convert binary numbers to decimal format.
+<b>EXAMPLE:</b>
+    <b>bin 11111111</b>
+    Convert binary to decimal (255)
+
+    <b>bin 101010</b>
+    Convert binary to decimal (42)
+
+    <b>bin 1000</b>
+    Convert binary to decimal (8)
+<b>SEE ALSO</b>
+    <b>decimal</b>"

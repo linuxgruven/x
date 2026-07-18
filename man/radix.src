@@ -1,0 +1,36 @@
+// Man page for radix
+manRadix="RADIX(1)                        X Shell Manual                        RADIX(1)
+
+<b>NAME</b>
+    radix - convert numbers between any two bases
+<b>SYNOPSIS</b>
+    <b>radix FROM_BASE TO_BASE VALUE</b>
+    <b>command | radix FROM_BASE TO_BASE</b>
+<b>DESCRIPTION</b>
+    Convert a number from one base to another. Supports bases 2 through 36,
+    using digits 0-9 and letters a-z for values above 9.
+    When reading from a pipe, each line is treated as a value to convert.
+<b>ARGUMENTS</b>
+    <b>FROM_BASE</b>   The base of the input value (2-36)
+    <b>TO_BASE</b>     The base to convert to (2-36)
+    <b>VALUE</b>       The number to convert (use lowercase for bases above 10)
+<b>EXAMPLE:</b>
+    <b>radix 10 2 255</b>
+    Convert 255 (decimal) to binary: 11111111
+
+    <b>radix 2 10 11111111</b>
+    Convert 11111111 (binary) to decimal: 255
+
+    <b>radix 10 16 255</b>
+    Convert 255 (decimal) to hex: ff
+
+    <b>radix 16 10 ff</b>
+    Convert ff (hex) to decimal: 255
+
+    <b>radix 10 8 255</b>
+    Convert 255 (decimal) to octal: 377
+
+    <b>seq 1 10 | radix 10 16</b>
+    Convert 1-10 to hex: 1 2 3 4 5 6 7 8 9 a
+<b>SEE ALSO</b>
+    <b>binary</b>  <b>decimal</b>  <b>bit</b>"

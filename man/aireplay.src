@@ -1,0 +1,54 @@
+// Man page for aireplay
+manAireplay="AIREPLAY(8)                      X Shell Manual                      AIREPLAY(8)
+
+<b>NAME</b>
+    aireplay - is used to inject frames
+<b>SYNOPSIS</b>
+    <b>aireplay </b><b>BSSID </b><b>ESSID </b>(<b>ACKS</b>)
+<b>DESCRIPTION</b>
+    Inject frames on wireless interfaces to generate traffic for aircrack password cracking.
+    Capture packets from target network until minimum ACKs threshold reached. Strong networks
+    need 7,000 ACKs, weak networks may require 30,000 ACKs. Press ControlC to stop capture
+    and save output to PCAP file in current directory. Use captured file with aircrack to crack
+    router password. Monitor mode required before use.
+<b>OPTIONS</b>
+    <b>BSSID ESSID</b>
+    Start frame injection
+    Generate traffic for capture
+
+    <b>ACKS</b>
+    Optional ACK threshold
+    Stop automatically at count
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Capture</color>
+    <b>aireplay 14:C7:E5:46:D9:F5 corpdevice</b>
+    Capture from network
+
+    <b>aireplay AA:BB:CC:DD:EE:FF homenet</b>
+    Target home router
+
+    <color=#e4ff34># With ACK Threshold</color>
+    <b>aireplay 14:C7:E5:46:D9:F5 corpdevice 7000</b>
+    Stop at 7000 ACKs
+
+    <b>aireplay AA:BB:CC:DD:EE:FF weaknet 30000</b>
+    Weak network 30k ACKs
+
+    <color=#e4ff34># Common Networks</color>
+    <b>aireplay 00:11:22:33:44:55 office-wifi</b>
+    Office network
+
+    <b>aireplay FF:EE:DD:CC:BB:AA guest-net 10000</b>
+    Guest network
+
+    <color=#e4ff34># Usage Flow</color>
+    <b>airmon start wlan0</b>
+    Enable monitor mode
+
+    <b>aireplay BSSID ESSID 7000</b>
+    Capture packets
+
+    <b>aircrack capture.pcap</b>
+    Crack password
+<b>SEE ALSO</b>
+    <b>airmon</b>, <b>aircrack</b>, <b>iwconfig</b>"

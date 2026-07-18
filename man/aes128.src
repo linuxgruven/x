@@ -1,0 +1,35 @@
+// Man page for aes128
+manAes128="AES128(1)                        X Shell Manual                        AES128(1)
+
+<b>NAME</b>
+    aes128 - 128-bit encryption algorithm
+<b>SYNOPSIS</b>
+    <b>aes128 -e</b> KEY PASSWORD|STRING
+    <b>aes128 -d</b> KEY PASSWORD|STRING
+    <b>aes128 -k</b>
+<b>DESCRIPTION</b>
+    Advanced Encryption Standard (AES) 128-bit encryption and decryption.
+    Generate keys, encrypt, or decrypt strings and passwords.
+<b>OPTIONS</b>
+    <b>-e KEY STRING</b> - Encrypt
+      Encrypt password or string with AES 128-bit key.
+
+    <b>-d KEY STRING</b> - Decrypt
+      Decrypt password or string with AES 128-bit key.
+
+    <b>-k</b> - Generate Key
+      Generate new AES 128-bit encryption key.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Generate Key</color>
+    <b>aes128 -k</b>
+    Generate 128-bit key
+
+    <color=#e4ff34># Encrypt</color>
+    <b>aes128 -e a1b2c3d4 mypassword</b>
+    Encrypt password with key
+
+    <color=#e4ff34># Decrypt</color>
+    <b>aes128 -d a1b2c3d4 encrypted_string</b>
+    Decrypt with key
+<b>SEE ALSO</b>
+    <b>enc</b>, <b>dec</b>, <b>sha256</b>"

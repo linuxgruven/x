@@ -1,0 +1,58 @@
+// Man page for head
+manHead="HEAD(1)                          X Shell Manual                          HEAD(1)
+
+<b>NAME</b>
+    head - Display first lines of file
+<b>SYNOPSIS</b>
+    <b>head</b> FILE
+    <b>head -n</b> [LINES] [FILE]
+    <b>head -c</b> [BYTES] [FILE]
+    <b>head -p</b> [PAUSE] [FILE]
+<b>DESCRIPTION</b>
+    Display the first part of a file. By default, shows the first 10 lines.
+    Can specify number of lines to display and optionally watch files for
+    changes with periodic refresh interval.
+<b>OPTIONS</b>
+    <b>-n [LINES] [FILE]</b> - Display First N Lines
+      Display first LINES of file (default: 10).
+
+    <b>-c [BYTES] [FILE]</b> - Display First N Bytes
+      Display first BYTES of file instead of lines.
+      Mutually exclusive with -n.
+
+    <b>-p [PAUSE] [FILE]</b> - Periodic Refresh
+      Watch file with PAUSE seconds refresh interval.
+
+    <b>-q</b> - Quiet Mode
+      Suppress header information when displaying content.
+
+    <b>-v</b> - Verbose Mode
+      Always show header information (overrides -q).
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View First Lines</color>
+    <b>head file.txt</b>
+    Show first 10 lines (default)
+
+    <b>head -n 20 system.log</b>
+    Show first 20 lines
+
+    <color=#e4ff34># Byte Mode</color>
+    <b>head -c 100 binary.dat</b>
+    Show first 100 bytes
+
+    <color=#e4ff34># Periodic Refresh</color>
+    <b>head -p 2 server.log</b>
+    Watch first 10 lines, refresh every 2 seconds
+
+    <b>head -n 5 -p 1 file.txt</b>
+    Watch first 5 lines, refresh every second
+
+    <color=#e4ff34># Header Control</color>
+    <b>head -q -n 5 file.txt</b>
+    Show 5 lines without header
+
+    <color=#e4ff34># Pipe Usage</color>
+    <b>cat log.txt | head -n 5</b>
+    Show first 5 lines from pipe
+<b>SEE ALSO</b>
+    <b>tail</b>, <b>cat</b>, <b>more</b>"

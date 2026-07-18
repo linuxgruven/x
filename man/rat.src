@@ -1,0 +1,28 @@
+// Man page for rat
+manRat="RAT(1)                           X Shell Manual                           RAT(1)
+
+<b>NAME</b>
+    rat - x's dirty little rat server file editor
+<b>SYNOPSIS</b>
+    <b>rat</b> (<b>IP</b>) (<b>PORT</b>) (<b>PASSWORD</b>)
+<b>DESCRIPTION</b>
+    Used to make on the fly changes to your RAT file. Login
+    credentials are optional; if you omit them, you will be
+    prompted for them.
+<b>OPTIONS</b>
+    <b>IP PORT PASSWORD</b> - Connect to RAT
+      Manage your RAT file remotely. Credentials can be provided
+      on command line or entered interactively.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Connect with Credentials</color>
+    <b>rat 136.22.27.184 22 xxxx</b>
+    Connect to RAT server with password
+
+    <color=#e4ff34># Interactive Login</color>
+    <b>rat 136.22.27.184 22</b>
+    Prompt for password
+
+    <b>rat</b>
+    Prompt for all connection details
+<b>SEE ALSO</b>
+    <b>ssh</b>, <b>ftp</b>"

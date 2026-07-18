@@ -1,0 +1,1632 @@
+// =============================================================================
+// BASH_BUILTINS
+// Built-in function evaluation for the Bash scripting engine.
+// =============================================================================
+//Evaluate built-in function calls in expressions
+// =============================================================================
+// BUILTIN HANDLERS — one function per builtin, called via _builtinMap
+// =============================================================================
+_bf_upper=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg)
+  return upper(str(val))
+end function
+_bf_lower=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg)
+  return lower(str(val))
+end function
+_bf_substr=function(expr,Obj=null)
+  args=split(Bash.clean(expr),",")
+  if len(args)>=2 then
+    trimA0=trim(args[0])
+    if indexOf(trimA0,"(")!=null or indexOf(trimA0,"__GVPRES")!=null then str_val=Bash._getVal(trimA0,Obj) else str_val=trimA0
+    start_idx=Bash._getVal(trim(args[1]),Obj)
+    if len(args)>=3 then
+      end_idx=Bash._getVal(trim(args[2]),Obj)
+      full=str(str_val)
+      return full[start_idx:end_idx]
+    else
+      return str(str_val)[start_idx:]
+    end if
+  end if
+  return ""
+end function
+_bf_concat=function(expr,Obj=null)
+  argsStr=Bash.clean(expr)
+  if not argsStr or len(argsStr)==0 then return ""
+  args=[]
+  currentArg=""
+  depth=0
+  safetyCounter=0
+  maxIterations=200
+  _len=len(argsStr)
+  i=0
+  while i<_len
+    safetyCounter+=1
+    if safetyCounter>maxIterations then break
+    char=argsStr[i]
+    if char=="(" then
+      depth+=1
+      currentArg=currentArg+char
+    else if char==")" then
+      depth-=1
+      currentArg=currentArg+char
+    else if char=="," and depth==0 then
+      if currentArg!=null then push(args,currentArg)
+      currentArg=""
+    else
+      currentArg=currentArg+char
+    end if
+    i+=1
+  end while
+  if currentArg!=null then push(args,currentArg)
+  result=""
+  for arg in args
+    trimmedArg=trim(arg)
+    if trimmedArg=="" and len(arg)>0 then
+      result=result+arg
+    else
+      val=Bash._getVal(trimmedArg,Obj)
+      if val==null then val=trimmedArg
+      result=result+str(val)
+    end if
+  end for
+  return result
+end function
+_bf_contains=function(expr,Obj=null)
+  cRaw=Bash.clean(expr)
+  cHaystack=""
+  cNeedle=""
+  cSplitFound=false
+  cPD=0
+  cBD=0
+  _len=len(cRaw)
+  cI=0
+  while cI<_len
+    cCh=cRaw[cI]
+    if cCh=="(" then cPD+=1
+    if cCh==")" then cPD-=1
+    if cCh=="[" then cBD+=1
+    if cCh=="]" then cBD-=1
+    if cCh=="," and cPD==0 and cBD==0 and not cSplitFound then
+      cHaystack=cRaw[:cI]
+      cNeedle=cRaw[cI+1:]
+      cSplitFound=true
+      break
+    end if
+    cI+=1
+  end while
+  if cSplitFound then
+    haystack=str(Bash._getVal(trim(cHaystack)))
+    while len(cNeedle)>0 and cNeedle[0]==" ";cNeedle=cNeedle[1:];end while
+    needle=str(Bash._getVal(cNeedle))
+    return indexOf(haystack,needle)!=null
+  end if
+  return false
+end function
+_bf__in=function(expr,Obj=null)
+  ivRaw=Bash.clean(expr)
+  ivListArg=""
+  ivNeedle=""
+  ivSplitFound=false
+  ivPD=0
+  ivBD=0
+  _len=len(ivRaw)
+  ivI=0
+  while ivI<_len
+    ivCh=ivRaw[ivI]
+    if ivCh=="(" then ivPD+=1
+    if ivCh==")" then ivPD-=1
+    if ivCh=="[" then ivBD+=1
+    if ivCh=="]" then ivBD-=1
+    if ivCh=="," and ivPD==0 and ivBD==0 and not ivSplitFound then
+      ivListArg=ivRaw[:ivI]
+      ivNeedle=ivRaw[ivI+1:]
+      ivSplitFound=true
+      break
+    end if
+    ivI+=1
+  end while
+  if ivSplitFound then
+    varNameOrPlaceholder=trim(ivListArg)
+    while len(ivNeedle)>0 and ivNeedle[0]==" ";ivNeedle=ivNeedle[1:];end while
+    needle=str(Bash._getVal(ivNeedle))
+    varValue=Bash._getVal(varNameOrPlaceholder)
+    if typeof(varValue)=="list" then
+      for item in varValue;if str(item)==needle then return 1;end for
+      return 0
+    end if
+  end if
+  return 0
+end function
+_bf_random=function(expr,Obj=null)
+  args=split(Bash.clean(expr),",")
+  if len(args)==2 then
+    min_val=Bash._getVal(trim(args[0]),Obj)
+    max_val=Bash._getVal(trim(args[1]),Obj)
+    return floor(min_val+rnd*(max_val-min_val+1))
+  end if
+  return 0
+end function
+_bf_timestamp=function(expr,Obj=null);return Bash.unixTime;end function
+_bf_date=function(expr,Obj=null);return current_date;end function
+_bf_floor=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  argVal=Bash._getVal(arg)
+  if typeof(argVal)=="string" then argVal=val(argVal)
+  return floor(argVal)
+end function
+_bf_ceil=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  argVal=Bash._getVal(arg)
+  if typeof(argVal)=="string" then argVal=val(argVal)
+  return ceil(argVal)
+end function
+_bf_abs=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  argVal=Bash._getVal(arg)
+  if typeof(argVal)=="string" then argVal=val(argVal)
+  return abs(argVal)
+end function
+_bf_to_string=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  argVal=Bash._getVal(arg)
+  return str(argVal)
+end function
+_bf_to_int=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  argVal=Bash._getVal(arg)
+  if typeof(argVal)=="number" then return floor(argVal)
+  if typeof(argVal)=="string" then return to_int(argVal)
+  return 0
+end function
+_bf_to_float=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  argVal=Bash._getVal(arg)
+  if typeof(argVal)=="number" then return argVal
+  if typeof(argVal)=="string" then return val(argVal)
+  return 0.0
+end function
+_bf_typeof=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  argVal=Bash._getVal(arg)
+  return typeof(argVal)
+end function
+_bf__fs_glob=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  pattern=str(Bash._getVal(arg,Obj))
+  return Glob.expand(Obj,pattern)
+end function
+_bf__isValidIP=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  if typeof(val)!="string" then return 0
+  if is_valid_ip(val) then return 1
+  return 0
+end function
+_bf__isLanIP=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  if typeof(val)!="string" then return 0
+  if is_lan_ip(val) then return 1
+  return 0
+end function
+_bf__File=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  if typeof(val)!="string" or len(val)==0 then return null
+  fileObj=Io._getFile(Obj,val)
+  if fileObj isa Error or typeof(fileObj)!="file" then return null
+  return fileObj
+end function
+_bf__Files=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  if typeof(val)!="string" or len(val)==0 then return null
+  dirObj=Io._getFile(Obj,val)
+  if dirObj isa Error or not dirObj then return null
+  return get_files(dirObj)+get_folders(dirObj)
+end function
+_bf__read=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  if typeof(val)!="string" or len(val)==0 then return ""
+  fileObj=Io._getFile(Obj,val)
+  if fileObj isa Error or typeof(fileObj)!="file" then return ""
+  content=get_content(fileObj)
+  if content==null then return ""
+  return content
+end function
+_bf__write=function(expr,Obj=null)
+  rawArgs=Bash.clean(expr)
+  wPathArg=""
+  wContentArg=""
+  wSplitFound=false
+  wPD=0
+  wBD=0
+  _len=len(rawArgs)
+  wi=0
+  while wi<_len
+    wCh=rawArgs[wi]
+    if wCh=="(" then wPD+=1
+    if wCh==")" then wPD-=1
+    if wCh=="[" then wBD+=1
+    if wCh=="]" then wBD-=1
+    if wCh=="," and wPD==0 and wBD==0 and not wSplitFound then
+      wPathArg=rawArgs[:wi]
+      wContentArg=rawArgs[wi+1:]
+      wSplitFound=true
+      break
+    end if
+    wi+=1
+  end while
+  if not wSplitFound then return 0
+  filePath=str(Bash._getVal(trim(wPathArg),Obj))
+  content=str(Bash._getVal(trim(wContentArg),Obj))
+  if len(filePath)==0 then return 0
+  absPath=Io._getPath(Obj,filePath)
+  if absPath isa Error then return 0
+  fileObj=Io._getFile(Obj,filePath)
+  if fileObj isa Error or not fileObj then
+    if not hasIndex(Obj,"computer") then return 0
+    parts=absPath.split("/")
+    fileName=parts[-1]
+    parentDir=parts[:-1].join("/")
+    if not parentDir then parentDir="/"
+    touchResult=touch(Obj.computer,parentDir,fileName)
+    if touchResult isa string or touchResult!=1 then return 0
+    fileObj=Io._getFile(Obj,filePath)
+  end if
+  if not fileObj or fileObj isa Error then return 0
+  result=set_content(fileObj,content)
+  if result==1 then return 1
+  return 0
+end function
+_bf_file_exists=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  filePath=str(Bash._getVal(arg,Obj))
+  if len(filePath)==0 then return 0
+  if len(filePath)>=2 and filePath[0]==char(34) and filePath[-1]==char(34) then filePath=filePath[1:-1]
+  if not Obj then return 0
+  fileObj=Io._getFile(Obj,filePath)
+  if fileObj isa Error or not fileObj then return 0
+  return 1
+end function
+_bf_is_folder=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  if typeof(val)=="file" then
+    if is_folder(val) then return 1 else return 0
+  end if
+  pathStr=str(val)
+  if len(pathStr)>=2 and pathStr[0]==char(34) and pathStr[-1]==char(34) then pathStr=pathStr[1:-1]
+  if len(pathStr)==0 or not Obj then return 0
+  fileObj=Io._getFile(Obj,pathStr)
+  if fileObj isa Error or not fileObj then return 0
+  if is_folder(fileObj) then return 1 else return 0
+end function
+_bf_is_binary=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  if typeof(val)=="file" then
+    if is_binary(val) then return 1 else return 0
+  end if
+  pathStr=str(val)
+  if len(pathStr)>=2 and pathStr[0]==char(34) and pathStr[-1]==char(34) then pathStr=pathStr[1:-1]
+  if len(pathStr)==0 or not Obj then return 0
+  fileObj=Io._getFile(Obj,pathStr)
+  if fileObj isa Error or not fileObj then return 0
+  if is_binary(fileObj) then return 1 else return 0
+end function
+_bf_get_permissions=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  if typeof(val)=="file" then return str(permissions(val))
+  pathStr=str(val)
+  if len(pathStr)>=2 and pathStr[0]==char(34) and pathStr[-1]==char(34) then pathStr=pathStr[1:-1]
+  if len(pathStr)==0 or not Obj then return ""
+  fileObj=Io._getFile(Obj,pathStr)
+  if fileObj isa Error or not fileObj then return ""
+  return str(permissions(fileObj))
+end function
+_bf_file_ext=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=str(Bash._getVal(arg,Obj))
+  slashIdx=null
+  _len=len(val)
+  i=_len-1
+  while i>=0
+    if val[i]=="/" then slashIdx=i; break
+    i=i-1
+  end while
+  name=val
+  if slashIdx!=null then name=val[slashIdx+1:]
+  dotIdx=null
+  _len=len(name)
+  i=_len-1
+  while i>=0
+    if name[i]=="." then dotIdx=i; break
+    i=i-1
+  end while
+  if dotIdx==null or dotIdx==0 then return ""
+  return name[dotIdx:]
+end function
+_bf_get_cwd=function(expr,Obj=null)
+  gb=globals.G_bash
+  if Obj and hasIndex(Obj,"dir") and hasIndex(Obj.dir,"current") then
+    if typeof(Obj.dir.current)=="file" then return path(Obj.dir.current)
+  end if
+  if hasIndex(gb,"PWD") and gb.PWD then return gb.PWD
+  return current_path
+end function
+_bf_round=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  argVal=Bash._getVal(arg)
+  return round(argVal)
+end function
+_bf_min=function(expr,Obj=null)
+  args=split(Bash.clean(expr),",")
+  if len(args)>=2 then
+    val1=Bash._getVal(trim(args[0]),Obj)
+    val2=Bash._getVal(trim(args[1]),Obj)
+    if val1<val2 then return val1 else return val2
+  end if
+  return 0
+end function
+_bf_max=function(expr,Obj=null)
+  args=split(Bash.clean(expr),",")
+  if len(args)>=2 then
+    val1=Bash._getVal(trim(args[0]),Obj)
+    val2=Bash._getVal(trim(args[1]),Obj)
+    if val1>val2 then return val1 else return val2
+  end if
+  return 0
+end function
+_bf_clamp=function(expr,Obj=null)
+  args=split(Bash.clean(expr),",")
+  if len(args)>=3 then
+    v=Bash._getVal(trim(args[0]),Obj)
+    mn=Bash._getVal(trim(args[1]),Obj)
+    mx=Bash._getVal(trim(args[2]),Obj)
+    if typeof(v)=="string" then v=val(v)
+    if typeof(mn)=="string" then mn=val(mn)
+    if typeof(mx)=="string" then mx=val(mx)
+    if v<mn then return mn
+    if v>mx then return mx
+    return v
+  end if
+  return 0
+end function
+_bf_pow=function(expr,Obj=null)
+  args=split(Bash.clean(expr),",")
+  if len(args)>=2 then
+    b=Bash._getVal(trim(args[0]),Obj)
+    e=Bash._getVal(trim(args[1]),Obj)
+    if typeof(b)=="string" then b=val(b)
+    if typeof(e)=="string" then e=val(e)
+    if e==0 then return 1
+    neg=e<0
+    eAbs=floor(abs(e))
+    result=1
+    i=0
+    while i<eAbs
+      result=result*b
+      i+=1
+    end while
+    if neg then return 1/result
+    return result
+  end if
+  return 0
+end function
+_bf_replace=function(expr,Obj=null)
+  rawArgs=Bash.clean(expr)
+  rParts=[]
+  rCurrent=""
+  rParenD=0
+  rBracketD=0
+  _len=len(rawArgs)
+  ri=0
+  while ri<_len
+    rCh=rawArgs[ri]
+    if rCh=="(" then rParenD+=1
+    if rCh==")" then rParenD-=1
+    if rCh=="[" then rBracketD+=1
+    if rCh=="]" then rBracketD-=1
+    if rCh=="," and rParenD==0 and rBracketD==0 and len(rParts)<2 then
+      push(rParts,rCurrent)
+      rCurrent=""
+    else
+      rCurrent=rCurrent+rCh
+    end if
+    ri+=1
+  end while
+  push(rParts,rCurrent)
+  if len(rParts)>=3 then
+    str_val=str(Bash._getVal(trim(rParts[0]),Obj))
+    search_str=str(Bash._getVal(trim(rParts[1]),Obj))
+    replace_str=str(Bash._getVal(trim(rParts[2]),Obj))
+    return str_val.replace(search_str,replace_str)
+  end if
+  return ""
+end function
+_bf_split_str=function(expr,Obj=null)
+  rawArgs=Bash.clean(expr)
+  strArg=""
+  delimArg=""
+  splitFound=false
+  spParenD=0
+  spBracketD=0
+  _len=len(rawArgs)
+  spi=0
+  while spi<_len
+    spCh=rawArgs[spi]
+    if spCh=="(" then spParenD+=1
+    if spCh==")" then spParenD-=1
+    if spCh=="[" then spBracketD+=1
+    if spCh=="]" then spBracketD-=1
+    if spCh=="," and spParenD==0 and spBracketD==0 and not splitFound then
+      strArg=rawArgs[:spi]
+      delimArg=rawArgs[spi+1:]
+      splitFound=true
+      break
+    end if
+    spi+=1
+  end while
+  if not splitFound then strArg=rawArgs
+  strArg=trim(strArg)
+  while len(delimArg)>0 and delimArg[0]==" ";delimArg=delimArg[1:];end while
+  if splitFound then
+    str_val=str(Bash._getVal(strArg,Obj))
+    delim=delimArg
+    return str_val.split(delim)
+  end if
+  return []
+end function
+_bf_trim_str=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  return trim(str(val))
+end function
+_bf_starts_with=function(expr,Obj=null)
+  swRaw=Bash.clean(expr)
+  swStr=""
+  swPfx=""
+  swFound=false
+  swPD=0
+  swBD=0
+  _len=len(swRaw)
+  swI=0
+  while swI<_len
+    swCh=swRaw[swI]
+    if swCh=="(" then swPD+=1
+    if swCh==")" then swPD-=1
+    if swCh=="[" then swBD+=1
+    if swCh=="]" then swBD-=1
+    if swCh=="," and swPD==0 and swBD==0 and not swFound then
+      swStr=swRaw[:swI]
+      swPfx=swRaw[swI+1:]
+      swFound=true
+      break
+    end if
+    swI+=1
+  end while
+  if not swFound then return 0
+  s=str(Bash._getVal(trim(swStr),Obj))
+  p=str(Bash._getVal(trim(swPfx),Obj))
+  if len(p)==0 then return 1
+  if len(s)<len(p) then return 0
+  if s[:len(p)]==p then return 1
+  return 0
+end function
+_bf_ends_with=function(expr,Obj=null)
+  ewRaw=Bash.clean(expr)
+  ewStr=""
+  ewSfx=""
+  ewFound=false
+  ewPD=0
+  ewBD=0
+  _len=len(ewRaw)
+  ewI=0
+  while ewI<_len
+    ewCh=ewRaw[ewI]
+    if ewCh=="(" then ewPD+=1
+    if ewCh==")" then ewPD-=1
+    if ewCh=="[" then ewBD+=1
+    if ewCh=="]" then ewBD-=1
+    if ewCh=="," and ewPD==0 and ewBD==0 and not ewFound then
+      ewStr=ewRaw[:ewI]
+      ewSfx=ewRaw[ewI+1:]
+      ewFound=true
+      break
+    end if
+    ewI+=1
+  end while
+  if not ewFound then return 0
+  s=str(Bash._getVal(trim(ewStr),Obj))
+  sfx=str(Bash._getVal(trim(ewSfx),Obj))
+  if len(sfx)==0 then return 1
+  if len(s)<len(sfx) then return 0
+  if s[len(s)-len(sfx):]==sfx then return 1
+  return 0
+end function
+_bf_str_count=function(expr,Obj=null)
+  scRaw=Bash.clean(expr)
+  scStr=""
+  scSub=""
+  scFound=false
+  scPD=0
+  scBD=0
+  _len=len(scRaw)
+  scI=0
+  while scI<_len
+    scCh=scRaw[scI]
+    if scCh=="(" then scPD+=1
+    if scCh==")" then scPD-=1
+    if scCh=="[" then scBD+=1
+    if scCh=="]" then scBD-=1
+    if scCh=="," and scPD==0 and scBD==0 and not scFound then
+      scStr=scRaw[:scI]
+      scSub=scRaw[scI+1:]
+      scFound=true
+      break
+    end if
+    scI+=1
+  end while
+  if not scFound then return 0
+  s=str(Bash._getVal(trim(scStr),Obj))
+  sub=str(Bash._getVal(trim(scSub),Obj))
+  if len(sub)==0 then return 0
+  count=0
+  pos=0
+  _lenS=len(s)
+  _lenSub=len(sub)
+  while pos<=_lenS-_lenSub
+    if s[pos:pos+_lenSub]==sub then
+      count+=1
+      pos=pos+_lenSub
+    else
+      pos+=1
+    end if
+  end while
+  return count
+end function
+_bf_join=function(expr,Obj=null)
+  gb=globals.G_bash
+  rawArgs=Bash.clean(expr)
+  listArg=""
+  delimiterArg=""
+  splitFound=false
+  parenD=0
+  bracketD=0
+  _len=len(rawArgs)
+  ci=0
+  while ci<_len
+    ch=rawArgs[ci]
+    if ch=="(" then parenD+=1
+    if ch==")" then parenD-=1
+    if ch=="[" then bracketD+=1
+    if ch=="]" then bracketD-=1
+    if ch=="," and parenD==0 and bracketD==0 and not splitFound then
+      listArg=rawArgs[:ci]
+      delimiterArg=rawArgs[ci+1:]
+      splitFound=true
+      break
+    end if
+    ci+=1
+  end while
+  if not splitFound then listArg=rawArgs
+  listArg=trim(listArg)
+  while len(delimiterArg)>0 and delimiterArg[0]==" ";delimiterArg=delimiterArg[1:];end while
+  if gb.DEBUG then
+    print cyan("[DEBUG] join called")
+    print cyan("  listArg: ")+white(listArg)
+    print cyan("  delimiterArg: ")+white(delimiterArg)
+  end if
+  if splitFound then
+    list_val=Bash._getVal(listArg,Obj)
+    if indexOf(delimiterArg,"_getvar(")==null and indexOf(delimiterArg,"__GVPRES")==null then delimiter=delimiterArg else delimiter=str(Bash._getVal(delimiterArg,Obj))
+    if gb.DEBUG then
+      print cyan("  list_val type: ")+yellow(typeof(list_val))
+      print cyan("  list_val: ")+yellow(list_val)
+      print cyan("  delimiter: ")+yellow(delimiter)
+    end if
+    if typeof(list_val)=="list" then
+      _len=len(list_val)
+      if _len==0 then return ""
+      if gb.DEBUG then print green("  Processing list with "+_len+" items")
+      result=""
+      i=0;while i<_len;if i>0 then result=result+delimiter;result=result+str(list_val[i]);i+=1;end while
+      if gb.DEBUG then print green("  join result: ")+yellow(result)
+      return result
+    else
+      if gb.DEBUG then print red("  list_val is not a list, returning empty")
+    end if
+  else
+    if gb.DEBUG then print red("  Not enough arguments, returning empty")
+  end if
+  return ""
+end function
+_bf_typeof_val=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg)
+  return typeof(val)
+end function
+_bf__fs_canwrite=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  args=arg.split(",")
+  val=Bash._getVal(trim(args[0]),Obj)
+  returnFile=false
+  if len(args)>1 then
+    secondArg=trim(args[1])
+    if len(secondArg)>=2 then
+      if secondArg[0]==char(34) and secondArg[-1]==char(34) then secondArg=secondArg[1:-1]
+      if secondArg[0]==char(39) and secondArg[-1]==char(39) then secondArg=secondArg[1:-1]
+    end if
+    if secondArg=="file" then returnFile=true
+  end if
+  fileObj=null
+  if typeof(val)=="file" then
+    fileObj=val
+  else if typeof(val)=="string" and len(val)>0 and Obj then
+    fileObj=Io._getFile(Obj,val)
+    if fileObj isa Error then fileObj=null
+  end if
+  if not fileObj then
+    if returnFile then return null
+    return 0
+  end if
+  if not has_permission(fileObj,"w") then
+    if returnFile then return null
+    return 0
+  end if
+  if returnFile then return fileObj
+  return 1
+end function
+_bf__fs_canexec=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  args=arg.split(",")
+  val=Bash._getVal(trim(args[0]),Obj)
+  returnFile=false
+  if len(args)>1 then
+    secondArg=trim(args[1])
+    if len(secondArg)>=2 then
+      if secondArg[0]==char(34) and secondArg[-1]==char(34) then secondArg=secondArg[1:-1]
+      if secondArg[0]==char(39) and secondArg[-1]==char(39) then secondArg=secondArg[1:-1]
+    end if
+    if secondArg=="file" then returnFile=true
+  end if
+  fileObj=null
+  if typeof(val)=="file" then
+    fileObj=val
+  else if typeof(val)=="string" and len(val)>0 and Obj then
+    fileObj=Io._getFile(Obj,val)
+    if fileObj isa Error then fileObj=null
+  end if
+  if not fileObj then
+    if returnFile then return null
+    return 0
+  end if
+  if not has_permission(fileObj,"x") then
+    if returnFile then return null
+    return 0
+  end if
+  if returnFile then return fileObj
+  return 1
+end function
+_bf_get_user=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  if typeof(arg)=="string" then arg=arg.trim
+  if typeof(arg)=="string" and len(arg)>=2 then
+    if arg[0]==char(34) and arg[-1]==char(34) then arg=arg[1:-1]
+    if arg[0]==char(39) and arg[-1]==char(39) then arg=arg[1:-1]
+  end if
+  returnObject=(arg=="object" or lower(arg)=="object")
+  if gb.DEBUG then
+    print cyan("[DEBUG] get_user called")
+    print cyan("  arg: ")+white(arg)+" (returnObject: "+str(returnObject)+")"
+  end if
+  if Obj and hasIndex(Obj,"user") and Obj.user then
+    if returnObject then
+      if gb.DEBUG then print green("  Returning full user object")
+      return Obj.user
+    end if
+    if gb.DEBUG then print green("  Returning user name: ")+yellow(Obj.user.name)
+    return Obj.user.name
+  end if
+  if gb.DEBUG then print red("  No user found, returning empty string or null")
+  if returnObject then return null
+  return ""
+end function
+_bf_get_home=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  if typeof(arg)=="string" then arg=arg.trim
+  if typeof(arg)=="string" and len(arg)>=2 then
+    if arg[0]==char(34) and arg[-1]==char(34) then arg=arg[1:-1]
+    if arg[0]==char(39) and arg[-1]==char(39) then arg=arg[1:-1]
+  end if
+  returnFile=(arg=="file" or lower(arg)=="file")
+  if gb.DEBUG then
+    print cyan("[DEBUG] get_home called")
+    print cyan("  arg: ")+white(arg)+" (returnFile: "+str(returnFile)+")"
+  end if
+  if Obj and hasIndex(Obj,"user") and Obj.user then
+    home=Obj.user.home
+    if typeof(home)=="file" then
+      if returnFile then
+        if gb.DEBUG then print green("  Returning home file object")
+        return home
+      end if
+      if gb.DEBUG then print green("  Returning home path from file: ")+yellow(home.path)
+      return home.path
+    end if
+    if gb.DEBUG then print green("  Returning home: ")+yellow(home)
+    return home
+  end if
+  if gb.DEBUG then print red("  No user/home found, returning empty string")
+  return ""
+end function
+_bf_get_shell_type=function(expr,Obj=null)
+  gb=globals.G_bash
+  if gb.DEBUG then print cyan("[DEBUG] get_shell_type called")
+  if Obj and hasIndex(Obj,"type") then
+    if gb.DEBUG then print green("  Returning type: ")+yellow(Obj.type)
+    return Obj.type
+  end if
+  if gb.DEBUG then print red("  No type found, returning empty string")
+  return ""
+end function
+_bf_get_computer_lan_ip=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  if typeof(arg)=="string" then arg=arg.trim
+  if typeof(arg)=="string" and len(arg)>=2 then
+    if arg[0]==char(34) and arg[-1]==char(34) then arg=arg[1:-1]
+    if arg[0]==char(39) and arg[-1]==char(39) then arg=arg[1:-1]
+  end if
+  returnObject=(arg=="object" or lower(arg)=="object")
+  if gb.DEBUG then
+    print cyan("[DEBUG] get_computer_lan_ip called")
+    print cyan("  arg: ")+white(arg)+" (returnObject: "+str(returnObject)+")"
+  end if
+  if Obj and hasIndex(Obj,"computer") and Obj.computer then
+    if returnObject then
+      if gb.DEBUG then print green("  Returning computer object")
+      return Obj.computer
+    end if
+    if gb.DEBUG then print green("  Returning from Obj.computer.local_ip: ")+yellow(Obj.computer.local_ip)
+    return Obj.computer.local_ip
+  end if
+  if Obj and hasIndex(Obj,"meta") and Obj.meta then
+    if returnObject then
+      if gb.DEBUG then print green("  Returning meta object as fallback")
+      return Obj.meta
+    end if
+    if gb.DEBUG then print green("  Falling back to Obj.meta.local_ip: ")+yellow(Obj.meta.local_ip)
+    return Obj.meta.local_ip
+  end if
+  if gb.DEBUG then print red("  No computer or meta found, returning empty string or null")
+  if returnObject then return null
+  return ""
+end function
+_bf_get_computer_public_ip=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  if typeof(arg)=="string" then arg=arg.trim
+  if typeof(arg)=="string" and len(arg)>=2 then
+    if arg[0]==char(34) and arg[-1]==char(34) then arg=arg[1:-1]
+    if arg[0]==char(39) and arg[-1]==char(39) then arg=arg[1:-1]
+  end if
+  returnObject=(arg=="object" or lower(arg)=="object")
+  if gb.DEBUG then
+    print cyan("[DEBUG] get_computer_public_ip called")
+    print cyan("  arg: ")+white(arg)+" (returnObject: "+str(returnObject)+")"
+  end if
+  if Obj and hasIndex(Obj,"computer") and Obj.computer then
+    if returnObject then
+      if gb.DEBUG then print green("  Returning computer object")
+      return Obj.computer
+    end if
+    if gb.DEBUG then print green("  Returning from Obj.computer.public_ip: ")+yellow(Obj.computer.public_ip)
+    return Obj.computer.public_ip
+  end if
+  if Obj and hasIndex(Obj,"meta") and Obj.meta then
+    if returnObject then
+      if gb.DEBUG then print green("  Returning meta object as fallback")
+      return Obj.meta
+    end if
+    if gb.DEBUG then print green("  Falling back to Obj.meta.public_ip: ")+yellow(Obj.meta.public_ip)
+    return Obj.meta.public_ip
+  end if
+  if gb.DEBUG then print red("  No computer or meta found, returning empty string or null")
+  if returnObject then return null
+  return ""
+end function
+_bf_get_type=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  if gb.DEBUG then
+    print cyan("[DEBUG] get_type called")
+    print cyan("  arg: ")+white(arg)
+    print cyan("  val type: ")+yellow(typeof(val))
+  end if
+  if val and typeof(val)=="map" and hasIndex(val,"type") then
+    if gb.DEBUG then print green("  Object has .type property, returning: ")+yellow(val.type)
+    return val.type
+  end if
+  if gb.DEBUG then print green("  Returning typeof: ")+yellow(typeof(val))
+  return typeof(val)
+end function
+_bf_get_layer=function(expr,Obj=null)
+  gb=globals.G_bash
+  if gb.DEBUG then print cyan("[DEBUG] get_layer called")
+  if Obj and hasIndex(Obj,"layer") then
+    if gb.DEBUG then print green("  Returning layer: ")+yellow(Obj.layer)
+    return Obj.layer
+  end if
+  if gb.DEBUG then print red("  No layer found, returning empty string")
+  return ""
+end function
+_bf_to_yesno=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  if gb.DEBUG then
+    print cyan("[DEBUG] to_yesno called")
+    print cyan("  arg: ")+white(arg)
+    print cyan("  val: ")+white(val)+" (type: "+str(typeof(val))+")"
+  end if
+  if val==1 or val==true or lower(str(val))=="true" then
+    if gb.DEBUG then print green("  Returning: yes")
+    return "yes"
+  end if
+  if gb.DEBUG then print yellow("  Returning: no")
+  return "no"
+end function
+_bf_to_truefalse=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  if gb.DEBUG then
+    print cyan("[DEBUG] to_truefalse called")
+    print cyan("  arg: ")+white(arg)
+    print cyan("  val: ")+white(val)+" (type: "+str(typeof(val))+")"
+  end if
+  if val==1 or val==true or lower(str(val))=="true" then
+    if gb.DEBUG then print green("  Returning: true")
+    return "true"
+  end if
+  if gb.DEBUG then print yellow("  Returning: false")
+  return "false"
+end function
+_bf_get_root=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  if typeof(arg)=="string" then arg=arg.trim
+  if typeof(arg)=="string" and len(arg)>=2 then
+    if arg[0]==char(34) and arg[-1]==char(34) then arg=arg[1:-1]
+    if arg[0]==char(39) and arg[-1]==char(39) then arg=arg[1:-1]
+  end if
+  returnFile=(arg=="file" or lower(arg)=="file")
+  if gb.DEBUG then
+    print cyan("[DEBUG] get_root called")
+    print cyan("  arg: ")+white(arg)+" (returnFile: "+str(returnFile)+")"
+  end if
+  if Obj and hasIndex(Obj,"root") and Obj.root then
+    root=Obj.root
+    if typeof(root)=="file" then
+      if returnFile then
+        if gb.DEBUG then print green("  Returning root file object")
+        return root
+      end if
+      if gb.DEBUG then print green("  Returning root path from file: ")+yellow(path(root))
+      return path(root)
+    end if
+    if gb.DEBUG then print green("  Returning root: ")+yellow(root)
+    return root
+  end if
+  if gb.DEBUG then print red("  No root found, returning null")
+  return null
+end function
+_bf_get_lanIP=function(expr,Obj=null)
+  gb=globals.G_bash
+  if gb.DEBUG then print cyan("[DEBUG] get_lanIP called")
+  if Obj and hasIndex(Obj,"computer") and Obj.computer then
+    if gb.DEBUG then print green("  Returning computer local_ip: ")+yellow(Obj.computer.local_ip)
+    return Obj.computer.local_ip
+  end if
+  if Obj and hasIndex(Obj,"meta") and Obj.meta then
+    if gb.DEBUG then print green("  Returning meta local_ip: ")+yellow(Obj.meta.local_ip)
+    return Obj.meta.local_ip
+  end if
+  if gb.DEBUG then print red("  No computer or meta found, returning empty string")
+  return ""
+end function
+_bf_get_publicIP=function(expr,Obj=null)
+  gb=globals.G_bash
+  if gb.DEBUG then print cyan("[DEBUG] get_publicIP called")
+  if Obj and hasIndex(Obj,"computer") and Obj.computer then
+    if gb.DEBUG then print green("  Returning computer public_ip: ")+yellow(Obj.computer.public_ip)
+    return Obj.computer.public_ip
+  end if
+  if Obj and hasIndex(Obj,"meta") and Obj.meta then
+    if gb.DEBUG then print green("  Returning meta public_ip: ")+yellow(Obj.meta.public_ip)
+    return Obj.meta.public_ip
+  end if
+  if gb.DEBUG then print red("  No computer or meta found, returning empty string")
+  return ""
+end function
+// =============================================================================
+// MAP / JSON BUILTIN HANDLERS
+// =============================================================================
+_bf_map=function(expr,Obj=null)
+  gb=globals.G_bash
+  argsStr=Bash.clean(expr)
+  m={}
+  if not argsStr or len(argsStr)==0 then return m
+  args=[]
+  currentArg=""
+  depth=0
+  inStr=false
+  strChar=""
+  _len=len(argsStr)
+  i=0
+  while i<_len
+    c=argsStr[i]
+    if not inStr and (c=="""" or c=="'") then
+      inStr=true
+      strChar=c
+      currentArg=currentArg+c
+    else if inStr and c==strChar then
+      inStr=false
+      currentArg=currentArg+c
+    else if not inStr and c=="(" then
+      depth+=1
+      currentArg=currentArg+c
+    else if not inStr and c==")" then
+      depth-=1
+      currentArg=currentArg+c
+    else if not inStr and c=="," and depth==0 then
+      push(args,trim(currentArg))
+      currentArg=""
+    else
+      currentArg=currentArg+c
+    end if
+    i+=1
+  end while
+  if len(trim(currentArg))>0 then push(args,trim(currentArg))
+  _len=len(args)
+  if _len%2!=0 then
+    if gb.DEBUG then print red("[map] Odd number of arguments - need key,value pairs")
+    return m
+  end if
+  _len-=1
+  i=0
+  while i<_len
+    k=Bash._getVal(args[i],Obj)
+    v=Bash._getVal(args[i+1],Obj)
+    m[str(k)]=v
+    i=i+2
+  end while
+  if gb.DEBUG then print green("[map] Created map with ")+yellow(str(len(m)))+green(" entries")
+  return m
+end function
+_bf_map_set=function(expr,Obj=null)
+  gb=globals.G_bash
+  argsStr=Bash.clean(expr)
+  args=[]
+  currentArg=""
+  depth=0
+  inStr=false
+  strChar=""
+  _len=len(argsStr)
+  i=0
+  while i<_len
+    c=argsStr[i]
+    if not inStr and (c=="""" or c=="'") then
+      inStr=true
+      strChar=c
+      currentArg=currentArg+c
+    else if inStr and c==strChar then
+      inStr=false
+      currentArg=currentArg+c
+    else if not inStr and c=="(" then
+      depth+=1
+      currentArg=currentArg+c
+    else if not inStr and c==")" then
+      depth-=1
+      currentArg=currentArg+c
+    else if not inStr and c=="," and depth==0 then
+      push(args,trim(currentArg))
+      currentArg=""
+    else
+      currentArg=currentArg+c
+    end if
+    i+=1
+  end while
+  if len(trim(currentArg))>0 then push(args,trim(currentArg))
+  if len(args)<3 then
+    if gb.DEBUG then print red("[map_set] Need 3 args: map, key, value")
+    return null
+  end if
+  m=Bash._getVal(args[0],Obj)
+  if typeof(m)!="map" then
+    if gb.DEBUG then print red("[map_set] First arg is not a map: ")+typeof(m)
+    return null
+  end if
+  k=Bash._getVal(args[1],Obj)
+  v=Bash._getVal(args[2],Obj)
+  m[str(k)]=v
+  if gb.DEBUG then print green("[map_set] Set ")+yellow(str(k))+green(" in map")
+  return m
+end function
+_bf_map_get=function(expr,Obj=null)
+  gb=globals.G_bash
+  argsStr=Bash.clean(expr)
+  args=[]
+  currentArg=""
+  depth=0
+  inStr=false
+  strChar=""
+  _len=len(argsStr)
+  i=0
+  while i<_len
+    c=argsStr[i]
+    if not inStr and (c=="""" or c=="'") then
+      inStr=true
+      strChar=c
+      currentArg=currentArg+c
+    else if inStr and c==strChar then
+      inStr=false
+      currentArg=currentArg+c
+    else if not inStr and c=="(" then
+      depth+=1
+      currentArg=currentArg+c
+    else if not inStr and c==")" then
+      depth-=1
+      currentArg=currentArg+c
+    else if not inStr and c=="," and depth==0 then
+      push(args,trim(currentArg))
+      currentArg=""
+    else
+      currentArg=currentArg+c
+    end if
+    i+=1
+  end while
+  if len(trim(currentArg))>0 then push(args,trim(currentArg))
+  if len(args)<2 then
+    if gb.DEBUG then print red("[map_get] Need 2 args: map, key")
+    return null
+  end if
+  m=Bash._getVal(args[0],Obj)
+  if typeof(m)!="map" then
+    if gb.DEBUG then print red("[map_get] First arg is not a map: ")+typeof(m)
+    return null
+  end if
+  k=Bash._getVal(args[1],Obj)
+  if hasIndex(m,str(k)) then return m[str(k)]
+  if gb.DEBUG then print yellow("[map_get] Key not found: ")+str(k)
+  return null
+end function
+_bf_map_del=function(expr,Obj=null)
+  gb=globals.G_bash
+  argsStr=Bash.clean(expr)
+  args=[]
+  currentArg=""
+  depth=0
+  inStr=false
+  strChar=""
+  _len=len(argsStr)
+  i=0
+  while i<_len
+    c=argsStr[i]
+    if not inStr and (c=="""" or c=="'") then
+      inStr=true
+      strChar=c
+      currentArg=currentArg+c
+    else if inStr and c==strChar then
+      inStr=false
+      currentArg=currentArg+c
+    else if not inStr and c=="(" then
+      depth+=1
+      currentArg=currentArg+c
+    else if not inStr and c==")" then
+      depth-=1
+      currentArg=currentArg+c
+    else if not inStr and c=="," and depth==0 then
+      push(args,trim(currentArg))
+      currentArg=""
+    else
+      currentArg=currentArg+c
+    end if
+    i+=1
+  end while
+  if len(trim(currentArg))>0 then push(args,trim(currentArg))
+  if len(args)<2 then
+    if gb.DEBUG then print red("[map_del] Need 2 args: map, key")
+    return null
+  end if
+  m=Bash._getVal(args[0],Obj)
+  if typeof(m)!="map" then
+    if gb.DEBUG then print red("[map_del] First arg is not a map: ")+typeof(m)
+    return null
+  end if
+  k=str(Bash._getVal(args[1],Obj))
+  if hasIndex(m,k) then remove(m,k)
+  if gb.DEBUG then print green("[map_del] Removed ")+yellow(k)+green(" from map")
+  return m
+end function
+_bf_map_keys=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  m=Bash._getVal(arg,Obj)
+  if typeof(m)!="map" then
+    if gb.DEBUG then print red("[map_keys] Arg is not a map: ")+typeof(m)
+    return []
+  end if
+  r=[]
+  for k in indexes(m);push(r,k);end for
+  return r
+end function
+_bf_map_values=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  m=Bash._getVal(arg,Obj)
+  if typeof(m)!="map" then
+    if gb.DEBUG then print red("[map_values] Arg is not a map: ")+typeof(m)
+    return []
+  end if
+  r=[]
+  for k in m;push(r,@k.value);end for
+  return r
+end function
+_bf_map_has=function(expr,Obj=null)
+  gb=globals.G_bash
+  argsStr=Bash.clean(expr)
+  args=[]
+  currentArg=""
+  depth=0
+  inStr=false
+  strChar=""
+  _len=len(argsStr)
+  i=0
+  while i<_len
+    c=argsStr[i]
+    if not inStr and (c=="""" or c=="'") then
+      inStr=true
+      strChar=c
+      currentArg=currentArg+c
+    else if inStr and c==strChar then
+      inStr=false
+      currentArg=currentArg+c
+    else if not inStr and c=="(" then
+      depth+=1
+      currentArg=currentArg+c
+    else if not inStr and c==")" then
+      depth-=1
+      currentArg=currentArg+c
+    else if not inStr and c=="," and depth==0 then
+      push(args,trim(currentArg))
+      currentArg=""
+    else
+      currentArg=currentArg+c
+    end if
+    i+=1
+  end while
+  if len(trim(currentArg))>0 then push(args,trim(currentArg))
+  if len(args)<2 then
+    if gb.DEBUG then print red("[map_has] Need 2 args: map, key")
+    return 0
+  end if
+  m=Bash._getVal(args[0],Obj)
+  if typeof(m)!="map" then return 0
+  k=str(Bash._getVal(args[1],Obj))
+  if hasIndex(m,k) then return 1
+  return 0
+end function
+_bf_map_len=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  m=Bash._getVal(arg,Obj)
+  if typeof(m)!="map" then
+    if gb.DEBUG then print red("[map_len] Arg is not a map: ")+typeof(m)
+    return 0
+  end if
+  return len(m)
+end function
+_bf_json=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  v=Bash._getVal(arg,Obj)
+  return System.toJSON(v,1)
+end function
+_bf_json_parse=function(expr,Obj=null)
+  gb=globals.G_bash
+  arg=Bash.clean(expr)
+  s=Bash._getVal(arg,Obj)
+  if typeof(s)!="string" then
+    if gb.DEBUG then print red("[json_parse] Arg is not a string: ")+typeof(s)
+    return null
+  end if
+  return System.parse(s)
+end function
+_bf_map_save=function(expr,Obj=null)
+  argsStr=Bash.clean(expr)
+  args=[]
+  currentArg=""
+  depth=0
+  _len=len(argsStr)
+  i=0
+  while i<_len
+    c=argsStr[i]
+    if c=="(" then depth+=1
+    if c==")" then depth-=1
+    if c=="," and depth==0 then
+      push(args,trim(currentArg))
+      currentArg=""
+    else
+      currentArg=currentArg+c
+    end if
+    i+=1
+  end while
+  if len(trim(currentArg))>0 then push(args,trim(currentArg))
+  if len(args)<2 then return 0
+  m=Bash._getVal(args[0],Obj)
+  if typeof(m)!="map" then return 0
+  filePath=str(Bash._getVal(args[1],Obj))
+  if len(filePath)==0 then return 0
+  jsonStr=System.toJSON(m,1)
+  if not jsonStr then return 0
+  if not Obj then return 0
+  absPath=Io._getPath(Obj,filePath)
+  if absPath isa Error then return 0
+  fileObj=Io._getFile(Obj,filePath)
+  if fileObj isa Error or not fileObj then
+    if not hasIndex(Obj,"computer") or not Obj.computer then return 0
+    parts=absPath.split("/")
+    fileName=parts[-1]
+    parentDir=parts[:-1].join("/")
+    if not parentDir then parentDir="/"
+    touchResult=touch(Obj.computer,parentDir,fileName)
+    if touchResult isa string or touchResult!=1 then return 0
+    fileObj=Io._getFile(Obj,filePath)
+  end if
+  if not fileObj or fileObj isa Error then return 0
+  writeResult=set_content(fileObj,jsonStr)
+  if writeResult!=1 then return 0
+  return 1
+end function
+_bf_map_load=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  filePath=str(Bash._getVal(arg,Obj))
+  if len(filePath)==0 then return ""
+  if not Obj then return ""
+  fileObj=Io._getFile(Obj,filePath)
+  if fileObj isa Error or not fileObj then return ""
+  content=get_content(fileObj)
+  if content==null or len(content)==0 then return ""
+  return System.parse(content)
+end function
+_bf__fs_read=function(expr,Obj=null)
+  if not expr then return ""
+  arg=Bash.clean(expr)
+  filePath=Bash._getVal(arg,Obj)
+  if typeof(filePath)!="string" or len(filePath)==0 then return ""
+  if not Obj then return ""
+  fileObj=Io._getFile(Obj,filePath)
+  if fileObj isa Error or not fileObj then return ""
+  if is_binary(fileObj) or is_folder(fileObj) then return ""
+  content=get_content(fileObj)
+  if content==null then return ""
+  return content
+end function
+_bf_menu=function(expr,Obj=null)
+  rawArgs=Bash.clean(expr)
+  parts=[]
+  currentArg=""
+  parenD=0
+  bracketD=0
+  _len=len(rawArgs)
+  mi=0
+  while mi<_len
+    ch=rawArgs[mi]
+    if ch=="(" then parenD+=1
+    if ch==")" then parenD-=1
+    if ch=="[" then bracketD+=1
+    if ch=="]" then bracketD-=1
+    if ch=="," and parenD==0 and bracketD==0 then
+      push(parts,currentArg)
+      currentArg=""
+    else
+      currentArg=currentArg+ch
+    end if
+    mi+=1
+  end while
+  push(parts,currentArg)
+  itemsArg=""
+  styleArg="numbers"
+  colorArg="cyan"
+  caseModeArg="insensitive"
+  if len(parts)>0 then itemsArg=trim(parts[0])
+  if len(parts)>1 then styleArg=trim(parts[1])
+  if len(parts)>2 then colorArg=trim(parts[2])
+  if len(parts)>3 then caseModeArg=trim(parts[3])
+  if len(styleArg)>1 and (styleArg[0]==char(34) or styleArg[0]==char(39)) then
+    if styleArg[-1]==styleArg[0] then styleArg=styleArg[1:-1]
+  end if
+  if len(colorArg)>1 and (colorArg[0]==char(34) or colorArg[0]==char(39)) then
+    if colorArg[-1]==colorArg[0] then colorArg=colorArg[1:-1]
+  end if
+  if len(caseModeArg)>1 and (caseModeArg[0]==char(34) or caseModeArg[0]==char(39)) then
+    if caseModeArg[-1]==caseModeArg[0] then caseModeArg=caseModeArg[1:-1]
+  end if
+  items=Bash._getVal(itemsArg,Obj)
+  if typeof(items)!="list" then return -1
+  itemCount=len(items)
+  if itemCount==0 then return -1
+  if styleArg!="letters" and styleArg!="numbers" then styleArg="numbers"
+  if caseModeArg!="insensitive" and caseModeArg!="strict" then caseModeArg="insensitive"
+  i=0
+  while i<itemCount
+    if styleArg=="letters" then label=char(65+i) else label=str(i+1)
+    itemStr=label+") "+str(items[i])
+    isHexColor=false
+    hexCode=colorArg
+    if len(colorArg)>0 then
+      if colorArg[0]=="#" then
+        isHexColor=true
+        hexCode=colorArg[1:]
+      else if len(colorArg)==6 then
+        allHex=true
+        _len2=len(colorArg)
+        ci=0
+        while ci<_len2
+          ch=colorArg[ci]
+          if not ((ch>="0" and ch<="9") or (ch>="a" and ch<="f") or (ch>="A" and ch<="F")) then
+            allHex=false
+            break
+          end if
+          ci+=1
+        end while
+        if allHex then
+          isHexColor=true
+          hexCode=colorArg
+        end if
+      end if
+    end if
+    if isHexColor then
+      print "<color=#"+hexCode+">"+itemStr+"</color>"
+    else if colorArg=="green" then
+      print green(itemStr)
+    else if colorArg=="red" then
+      print red(itemStr)
+    else if colorArg=="yellow" then
+      print yellow(itemStr)
+    else if colorArg=="magenta" then
+      print magenta(itemStr)
+    else if colorArg=="orange" then
+      print orange(itemStr)
+    else if colorArg=="blue" then
+      print blue(itemStr)
+    else if colorArg=="lime" then
+      print lime(itemStr)
+    else if colorArg=="white" then
+      print white(itemStr)
+    else
+      print cyan(itemStr)
+    end if
+    i+=1
+  end while
+  selectedIdx=-1
+  valid=false
+  while not valid
+    if styleArg=="letters" then
+      choice=trim(user_input(green("Select option: ")))
+      if caseModeArg=="insensitive" then choice=upper(choice)
+      if len(choice)>0 then
+        selectedIdx=indexOf("ABCDEFGHIJKLMNOPQRSTUVWXYZ",choice[0])
+        if selectedIdx>=0 and selectedIdx<itemCount then valid=true else selectedIdx=-1
+      end if
+    else
+      choiceStr=user_input(green("Select option (1-"+str(itemCount)+"): "))
+      choiceNum=to_int(choiceStr)
+      if choiceNum>=1 and choiceNum<=itemCount then
+        selectedIdx=choiceNum-1
+        valid=true
+      end if
+    end if
+    if not valid then print red("Invalid selection. Please try again.")
+  end while
+  return selectedIdx
+end function
+_bf__format_columns=function(expr,Obj=null)
+  arg=Bash.clean(expr)
+  val=Bash._getVal(arg,Obj)
+  return format_columns(str(val))
+end function
+Bash._evalFunc=function(expr,Obj=null)
+  gb=globals.G_bash
+  expr=trim(expr)
+  // =============================================================================
+  // MAIN DISPATCH — len() handled specially; all others via _builtinMap
+  // =============================================================================
+  _builtinMap={
+    "_in":@_bf__in,
+    "file_read":@_bf__fs_read,
+    "file_exists":@_bf_file_exists,
+    "is_folder":@_bf_is_folder,
+    "is_binary":@_bf_is_binary,
+    "get_permissions":@_bf_get_permissions,
+    "upper":@_bf_upper,
+    "lower":@_bf_lower,
+    "substr":@_bf_substr,
+    "concat":@_bf_concat,
+    "contains":@_bf_contains,
+    "random":@_bf_random,
+    "timestamp":@_bf_timestamp,
+    "date":@_bf_date,
+    "floor":@_bf_floor,
+    "ceil":@_bf_ceil,
+    "abs":@_bf_abs,
+    "to_string":@_bf_to_string,
+    "to_int":@_bf_to_int,
+    "to_float":@_bf_to_float,
+    "typeof":@_bf_typeof,
+    "_fs_glob":@_bf__fs_glob,
+    "_isValidIP":@_bf__isValidIP,
+    "_isLanIP":@_bf__isLanIP,
+    "_File":@_bf__File,
+    "_Files":@_bf__Files,
+    "_read":@_bf__read,
+    "_write":@_bf__write,
+    "file_ext":@_bf_file_ext,
+    "get_cwd":@_bf_get_cwd,
+    "round":@_bf_round,
+    "min":@_bf_min,
+    "max":@_bf_max,
+    "clamp":@_bf_clamp,
+    "pow":@_bf_pow,
+    "replace":@_bf_replace,
+    "split_str":@_bf_split_str,
+    "trim_str":@_bf_trim_str,
+    "starts_with":@_bf_starts_with,
+    "ends_with":@_bf_ends_with,
+    "str_count":@_bf_str_count,
+    "join":@_bf_join,
+    "typeof_val":@_bf_typeof_val,
+    "_fs_canwrite":@_bf__fs_canwrite,
+    "_fs_canexec":@_bf__fs_canexec,
+    "get_user":@_bf_get_user,
+    "get_home":@_bf_get_home,
+    "get_shell_type":@_bf_get_shell_type,
+    "get_computer_lan_ip":@_bf_get_computer_lan_ip,
+    "get_computer_public_ip":@_bf_get_computer_public_ip,
+    "get_type":@_bf_get_type,
+    "get_layer":@_bf_get_layer,
+    "to_yesno":@_bf_to_yesno,
+    "to_truefalse":@_bf_to_truefalse,
+    "get_root":@_bf_get_root,
+    "get_lanIP":@_bf_get_lanIP,
+    "get_publicIP":@_bf_get_publicIP,
+    "map":@_bf_map,
+    "map_set":@_bf_map_set,
+    "map_get":@_bf_map_get,
+    "map_del":@_bf_map_del,
+    "map_keys":@_bf_map_keys,
+    "map_values":@_bf_map_values,
+    "map_has":@_bf_map_has,
+    "map_len":@_bf_map_len,
+    "json":@_bf_json,
+    "json_parse":@_bf_json_parse,
+    "map_save":@_bf_map_save,
+    "map_load":@_bf_map_load,
+    "_fs_read":@_bf__fs_read,
+    "menu":@_bf_menu,
+    "_format_columns":@_bf__format_columns
+  }
+  //String functions
+  if indexOf(expr,"len(")==0 then
+    //Find matching closing paren to handle trailing expressions like len(x) - 1
+    lenStart=indexOf(expr,"(")
+    lenDepth=0
+    lenEnd=null
+    _len=len(expr)
+    lenI=lenStart
+    while lenI<_len
+      if expr[lenI]=="(" then lenDepth+=1
+      if expr[lenI]==")" then
+        lenDepth-=1
+        if lenDepth==0 then lenEnd=lenI; break
+      end if
+      lenI+=1
+    end while
+    arg=expr[lenStart+1:lenEnd]
+    val=Bash._getVal(arg)
+    lenResult=0
+    if typeof(val)=="number" then lenResult=len(str(val))
+    if typeof(val)=="string" or typeof(val)=="list" then lenResult=len(val)
+    //If there's remaining expression after len(...), return as string for arithmetic evaluation
+    if lenEnd!=null and lenEnd+1<len(expr) then return str(lenResult)+expr[lenEnd+1:]
+    return lenResult
+  end if
+  //O(1) map dispatch for all other builtins
+  parenIdx=indexOf(expr,"(")
+  if parenIdx==null then return expr
+  funcName=expr[:parenIdx]
+  if hasIndex(_builtinMap,funcName) then
+    _bfn=_builtinMap[funcName]
+    return _bfn(expr,Obj)
+  end if
+  return expr
+end function
+// Evaluate GreyScript function calls
+Bash._evalGreyscriptCall=function(expr,Obj)
+  gb=globals.G_bash
+  if gb.DEBUG then print yellow("[_evalGreyscriptCall] Called with: "+str(expr))
+  if typeof(expr)!="string" then return expr
+  expr=trim(expr)
+  //Extract function name and arguments
+  openParenPos=indexOf(expr,"(")
+  if openParenPos==-1 then return expr
+  funcName=expr[:openParenPos]
+  argsStr=expr[openParenPos+1:]
+  if argsStr[-1]!=")" then return expr
+  argsStr=argsStr[:-1]
+  //Try to call through Obj.commands if available
+  if gb.DEBUG then print yellow("[_evalGreyscriptCall] funcName: "+funcName+" argsStr: "+argsStr)
+  if not Obj then
+    if gb.DEBUG then print red("[_evalGreyscriptCall] No Obj provided for: "+expr)
+    return expr
+  end if
+  if gb.DEBUG then print yellow("[_evalGreyscriptCall] Obj exists")
+  if not Obj.hasIndex("commands") then
+    if gb.DEBUG then print red("[_evalGreyscriptCall] Obj has no commands for: "+expr)
+    return expr
+  end if
+  if gb.DEBUG then print yellow("[_evalGreyscriptCall] Obj.commands exists, checking for: "+funcName)
+  if not Obj.commands.hasIndex(funcName) then
+    if gb.DEBUG then print red("[_evalGreyscriptCall] Function not found: "+funcName)
+    if gb.DEBUG then print red("[_evalGreyscriptCall] Available: "+Obj.commands.indexes)
+    return expr
+  end if
+  if gb.DEBUG then print green("[_evalGreyscriptCall] Function found! Calling: "+funcName)
+  args=[]
+  if len(argsStr)>0 then
+    //Handle true/false/null literals
+    if argsStr=="true" then
+      args.push(true)
+    else if argsStr=="false" then
+      args.push(false)
+    else if argsStr=="null" then
+      args.push(null)
+    else
+      //For now, treat as string or number
+      if argsStr[0]==char(34) or argsStr[0]=="'" then
+        args.push(argsStr[1:-1])
+      else
+        numVal=argsStr.to_int
+        if str(numVal)==argsStr then args.push(numVal) else args.push(argsStr)
+      end if
+    end if
+  end if
+  //Call the command function
+  cmd=Obj.commands[funcName]
+  result=null
+  if len(args)==0 then
+    result=cmd
+  else if len(args)==1 then
+    result=cmd(args[0])
+  else if len(args)==2 then
+    result=cmd(args[0],args[1])
+  else if len(args)==3 then
+    result=cmd(args[0],args[1],args[2])
+  end if
+  if gb.DEBUG then print green("[_evalGreyscriptCall] Result: "+str(result)+" (type: "+typeof(result)+")")
+  if result==null then
+    if gb.DEBUG then print yellow("[_evalGreyscriptCall] Result was null (command probably printed output), returning empty string")
+    return ""
+  end if
+  return result
+end function

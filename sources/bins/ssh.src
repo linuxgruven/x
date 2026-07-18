@@ -1,0 +1,12 @@
+binSsh="if len(params)<2 or len(params)>3 then exit(command_info(""ssh_usage""))
+credentials=params[0].split(""@"")
+user=credentials[0]
+password=credentials[1]
+port=22
+if len(params)==3 then port=to_int(params[2])
+if typeof(port)!=""number"" then exit(""Invalid port: ""+port)
+print(""Connecting..."")
+shell=connect_service(get_shell,params[1],port,user,password,""ssh"")
+if typeof(shell)==""string"" then exit(shell)
+if not shell then exit(""connection failed"")
+start_terminal(shell)"

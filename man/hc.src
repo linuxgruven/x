@@ -1,0 +1,60 @@
+// Man page for hashcat
+manHashcat="HASHCAT(1)                       X Shell Manual                       HASHCAT(1)
+
+<b>NAME</b>
+    hc - MD5 hash cracking utility
+
+<b>SYNOPSIS</b>
+    <b>hc -d MD5</b>
+    <b>hc -h MD5</b>
+    <b>hc -w WORD</b>
+    <b>hc -f</b> -d|-b (-o) FILE
+
+<b>DESCRIPTION</b>
+    MD5 hash cracking tool supporting both dictionary attacks and decipher
+    methods. Can process individual hashes or entire files. File mode writes
+    cracked results back to source when write permissions exist and -o flag
+    is specified.
+
+<b>OPTIONS</b>
+    <b>-d MD5</b>
+        Decipher MD5 hash
+        Computational crack
+
+    <b>-h MD5</b>
+        Dictionary attack on hash
+        Use rainbow tables
+
+    <b>-w WORD</b>
+        Generate MD5 hash
+        Return hash from word
+
+    <b>-f -d|-b FILE</b>
+        Crack hashes in file
+        Use -d (decipher) or -b (dictionary)
+        Add -o to overwrite file with results
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Single Hash</color>
+    <b>hc -d 5f4dcc3b5aa765d61d8327deb882cf99</b>
+        Decipher hash
+
+    <b>hc -h 5f4dcc3b5aa765d61d8327deb882cf99</b>
+        Dictionary attack
+
+    <color=#e4ff34># Generate Hash</color>
+    <b>hc -w password</b>
+        Get MD5 of word
+
+    <color=#e4ff34># File Operations</color>
+    <b>hc -f /etc/passwd -b</b>
+        Dictionary attack on file
+
+    <b>hc -f /etc/passwd -d -o</b>
+        Decipher and overwrite
+
+    <b>hc -f hashes.txt -b -o</b>
+        Crack file, save results
+
+<b>SEE ALSO</b>
+    <b>decipher</b>, <b>rainbow</b>, <b>hf</b>"

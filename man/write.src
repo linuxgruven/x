@@ -1,0 +1,52 @@
+// Man page for write
+manWrite="WRITE(1)                         X Shell Manual                         WRITE(1)
+
+<b>NAME</b>
+    write - use to write text to a file
+<b>SYNOPSIS</b>
+    <b>write </b><b>TEXT </b><b>FILE</b>
+    <b>write </b><b>-o </b><b>TEXT </b><b>FILE</b>
+    <b>write </b><b>-l </b><b>LINE </b><b>TEXT </b><b>FILE</b>
+    <b>echo TEXT | write FILE</b>
+<b>DESCRIPTION</b>
+    Write text content to a file. If the file does not exist, a new file will be
+    created and the text inserted. By default, text is appended to the end of the file.
+    With the -o flag, the file contents are replaced (overwritten). With the -l flag,
+    text can be inserted at a specific line number.
+    Accepts piped input as text content when only a filename is provided.
+<b>OPTIONS</b>
+    <b>write TEXT FILE</b>
+    Append text to a file
+    Create file if it does not exist
+
+    <b>-o TEXT FILE</b>
+    Overwrite file with text
+    Replaces existing contents entirely
+
+    <b>-l LINE TEXT FILE</b>
+    Insert text at specific line number
+    Specify line position for text insertion
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Append (default)</color>
+    write Hello World test.txt
+    Append text to file
+
+    <color=#e4ff34># Overwrite</color>
+    write -o New content log.txt
+    Replace entire file contents
+
+    <color=#e4ff34># Line Insertion</color>
+    write -l 1 Header file.txt
+    Insert at line 1
+
+    write -l 5 Comment code.src
+    Insert at line 5
+
+    <color=#e4ff34># Pipe Input</color>
+    <b>echo Hello World | write file.txt</b>
+    Append piped text to file
+
+    <b>cat source.txt | write dest.txt</b>
+    Copy file contents via pipe
+<b>SEE ALSO</b>
+    <b>zap</b>, <b>cat</b>, <b>touch</b>, <b>vi</b>"

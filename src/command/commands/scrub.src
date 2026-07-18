@@ -1,0 +1,40 @@
+// =============================================================================
+// SCRUB
+// Remove config files; preserves Theme.conf; prompts for Map/Browser files.
+// =============================================================================
+Command.scrub=function(Obj)
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    for _line in globals.G_pipe.stdin.split(char(10))
+      _line=trim(_line)
+      if not _line then continue
+      _f=Io._getFile(Obj,_line)
+      if _f isa Error then Error.set(_f.message);continue
+      if not has_permission(_f,"w") then Error.set(Info.message.NOW);continue
+      if set_content(_f,"") then Info.info("Scrubbed: "+name(_f)) else Error.set("Failed to scrub "+name(_f))
+    end for
+    globals.G_pipe.stdin=null
+    return
+  end if
+  configDir=Io.getFileObj(Obj,"/home/"+Obj.user.name+"/Config")
+  if configDir isa Error then return Info.info("Nothing to scrub")
+  fileList=get_files(configDir)
+  if not len(fileList)>0 then return Info.info("Nothing to scrub")
+  for file in fileList
+    fileName=name(file)
+    // Always preserve Theme.conf
+    if fileName=="Theme.conf" then continue
+    // Prompt before removing saved server list
+    if fileName=="Map.conf" then
+      if Gui.yesNo("Remove Map.conf (Saved Servers)?",false) then delete(file)
+      continue
+    end if
+    // Prompt before removing browser bookmarks
+    if fileName=="Browser.txt" then
+      if Gui.yesNo("Remove Browser.txt (Browser Bookmarks)?",false) then delete(file)
+      continue
+    end if
+    Info.warning("Removing [ "+yellow(fileName,"-")+" ]")
+    delete(file)
+  end for
+  Info.info("Scrub complete")
+end function

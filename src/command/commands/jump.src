@@ -1,0 +1,19 @@
+// =============================================================================
+// JUMP
+// Connect via Ethernet (IP+gateway) or WiFi (ESSID+BSSID+password).
+// =============================================================================
+Command.jump=function(Obj,argv)
+  if Obj.net.active_net_card=="ETHERNET" then
+    if not argv or len(argv)<2 then return Man.help(["jump"])
+    ipAddress=argv[0]
+    gateway=argv[1]
+    if not is_valid_ip(gateway) then return Error.set("Invalid gateway")
+    result=connect_ethernet(Obj.computer,"eth0",ipAddress,gateway)
+    // Empty result string = success; non-empty = error message
+    if len(result)>0 then return Error.set(result)
+    return true
+  else if active_net_card(Obj.computer)=="WIFI" then
+    if len(argv)==3 then return Net.wifiConnect(argv) else return Man.help(["jump"])
+  end if
+  Info.error("No active network card")
+end function

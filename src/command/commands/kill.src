@@ -1,0 +1,89 @@
+// =============================================================================
+// KILL
+// Terminate processes by PID or name; -a kills all (x shell protected).
+// =============================================================================
+Command.kill=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+  if not argv and not hasPipeInput then return Man.help(["kill"])
+  killAll=function
+    exceptions=["x","kernel_task","Xorg"]
+    if hasIndex(Obj,"dir") and hasIndex(Obj.dir,"data") then
+      killFile=File(Obj.computer,path(Obj.dir.data)+"/kill")
+      if killFile then exceptions+=split(trim(get_content(killFile)),char(10))
+    end if
+    procList=show_procs(Obj.computer)
+    if argv.rest then
+      targetName=argv.rest[0]
+      for line in split(procList,char(10))[1:]
+        fields=split(line," ")
+        if targetName==fields[-1] then
+          result=close_program(Obj.computer,to_int(fields[1]))
+          if result==1 then
+            Info.info("Process "+targetName+" killed")
+          else if result==0 then
+            Info.warning("Process "+targetName+" cannot be found")
+          else
+            Info.error(result)
+          end if
+        end if
+      end for
+    else
+      for line in split(procList,char(10))[1:]
+        fields=split(line," ")
+        if indexOf(exceptions,fields[-1])!=null then continue
+        pid=val(fields[1])
+        result=close_program(Obj.computer,pid)
+        if result==1 then
+          print yellow("Process "+pid+" killed")
+        else if result==0 then
+          print red("Process "+pid+" cannot be found")
+        else
+          Info.error(result)
+        end if
+      end for
+    end if
+  end function
+  _p=ArgumentParser.init
+  _p.addArgument("a",false,"flag")     // Short form kill all
+  _p.addArgument("all",true,"flag")    // Long form kill all
+  argv=_p.parseArgs("kill",argv)
+  if argv isa Error then return
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin and not globals.G_pipe.XARGS_MODE then
+    if not argv.rest then argv.rest=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(argv.rest,line);end for
+  end if
+  if argv.a or argv.all then return killAll
+  while argv.rest
+    target=to_int(pull(argv.rest))
+    // Check if target is process name (to_int returns string for non-numeric)
+    if not target isa number then
+      found=null
+      for line in split(show_procs(Obj.computer),char(10))[1:]
+        fields=split(line," ")
+        if target==fields[-1] then
+          found=1
+          result=close_program(Obj.computer,to_int(fields[1]))
+          // Handle termination result: 1=success, 0=not found, string=error
+          if result==1 then
+            Info.info("Process "+target+" killed")
+          else if result==0 then
+            Info.warning("Process "+target+" cannot be found")
+          else
+            Info.error(result)
+          end if
+        end if
+      end for
+      if not found then Info.error("Process "+target+" cannot be found")
+    else
+      result=close_program(Obj.computer,target)
+      // Handle termination result: 1=success, 0=not found, string=error
+      if result==1 then
+        print yellow("Process "+target+" killed")
+      else if result==0 then
+        print red("Process "+target+" cannot be found")
+      else
+        Info.error(result)
+      end if
+    end if
+  end while
+end function

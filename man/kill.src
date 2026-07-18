@@ -1,0 +1,58 @@
+// Man page for kill
+manKill="KILL(8)                          X Shell Manual                          KILL(8)
+
+<b>NAME</b>
+    kill - close running applications
+<b>SYNOPSIS</b>
+    <b>kill </b><b>PID, PID, PID ...</b>
+    <b>kill </b><b>NAME, NAME, NAME ...</b>
+    <b>kill </b><b>-a</b>|<b>--all</b> [<b>NAME</b>]
+<b>DESCRIPTION</b>
+    Terminate running applications by PID or name. Use -a to close all processes.
+    Specify name with -a to close all matching processes. The shell process x is
+    always protected from -a. To permanently spare additional processes, add their
+    names one per line to ~/payload/data/kill — they will be skipped whenever -a is used.
+<b>OPTIONS</b>
+    <b>PID</b>
+    Terminate by process ID
+    Comma-separated list
+
+    <b>NAME</b>
+    Terminate by name
+    Process names
+
+    <b>-a, --all</b>
+    Terminate all processes
+    Optional name filter
+
+    <b>EXCEPTION FILE</b>
+    ~/payload/data/kill
+    One process name per line. Processes listed in this file will be spared
+    when using -a or --all. The shell process x is always protected.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># By PID</color>
+    <b>kill 8542</b>
+    Kill single process
+
+    <b>kill 8542 8543 8544</b>
+    Kill multiple PIDs
+
+    <color=#e4ff34># By Name</color>
+    <b>kill CodeEditor 8542 Notepad</b>
+    Mixed PID and names
+
+    <b>kill Browser</b>
+    Kill by name
+
+    <color=#e4ff34># Kill All</color>
+    <b>kill -a</b>
+    Kill all processes
+
+    <b>kill --all Terminal</b>
+    Kill all Terminal processes
+
+    <color=#e4ff34># Exception file — spare these processes from kill -a</color>
+    <b>echo Terminal >> ~/payload/data/kill</b>
+    Add Terminal to the exception list
+<b>SEE ALSO</b>
+    <b>ps</b>, <b>lsof</b>"

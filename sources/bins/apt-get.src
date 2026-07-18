@@ -1,0 +1,95 @@
+binAptGet="aptclient=include_lib(""/lib/aptclient.so"")
+if not aptclient then aptclient=include_lib(current_path+""/aptclient.so"")
+if not aptclient then exit(""Error: Missing aptclient.so library in the /lib path or the current folder"")
+PendingUpdating=function(folderPath)
+	pendingUpdate=[]
+	targetFolder=File(host_computer(get_shell),folderPath)
+	if targetFolder!=null then
+		files=get_files(targetFolder)
+		for itemFile in files
+			output=check_upgrade(aptclient,path(itemFile))
+			if output==true then pendingUpdate.push(name(itemFile))
+		end for
+	end if
+	return pendingUpdate
+end function
+if len(params)==0 or len(params)>3 then exit(command_info(""apt-get_usage""))
+action=params[0]
+if action==""update"" then
+	print(""Updating package lists..."")
+	output=update(aptclient)
+	if output then print(output)
+else if action==""install"" then
+	print(""Reading package lists..."")
+	if len(params)<2 then exit(command_info(""apt-get_usage""))
+	print(""Downloading ""+params[1])
+	customPath=""""
+	if len(params)==3 then customPath=params[2]
+	output=install(aptclient,params[1],customPath)
+	if output==true then exit(params[1]+"" installed"")
+	print(output)
+else if action==""search"" then
+	if len(params)!=2 then exit(command_info(""apt-get_usage""))
+	print(search(aptclient,params[1]))
+else if action==""show"" then
+	if len(params)!=2 then exit(command_info(""apt-get_usage""))
+	print(show(aptclient,params[1]))
+else if action==""addrepo"" then
+	if len(params)<2 or len(params)>3 then exit(command_info(""apt-get_usage""))
+	port=1542
+	if len(params)==3 then port=params[2]
+	output=add_repo(aptclient,params[1],port)
+	if output then exit(output)
+	print(""Repository ""+params[1]+"" added succesfully.""+char(10)+""Launch apt with the update option to apply the changes"")
+else if action==""delrepo"" then
+	if len(params)!=2 then exit(command_info(""apt-get_usage""))
+	output=del_repo(aptclient,params[1])
+	if output then exit(output)
+	print(""Repository ""+params[1]+"" removed succesfully.""+char(10)+""Launch apt with the update option to apply the changes"")
+else if action==""upgrade"" then
+	print(""Reading package lists..."")
+	if len(params)==1 then
+		pendingPackages=PendingUpdating(""/lib"")+PendingUpdating(""/bin"")
+		if len(pendingPackages)==0 then exit(""No updates needed"")
+		print(""The following packages will be updated:"")
+		pkgs=""""
+		for itemPackage in pendingPackages
+			pkgs=pkgs+"" ""+itemPackage
+		end for
+		print(pkgs)
+		option=user_input(char(10)+""Do you want to continue?(y/n): "")
+		if option==""y"" or option==""yes"" then
+			counter=0
+			for itemPackage in pendingPackages
+				output=install(aptclient,itemPackage)
+				if output==true then
+					counter=counter+1
+				else if output then
+					print(output)
+				end if
+			end for
+			print(counter+"" packages updated"")
+		else
+			exit(""aborted"")
+		end if
+	else if len(params)==2 then
+		output=check_upgrade(aptclient,""/lib/""+params[1])
+		if typeof(output)==""string"" then output=check_upgrade(aptclient,""/bin/""+params[1])
+		if not output then exit(""No updates needed"")
+		if output==true then
+			print(""The following package will be updated:""+char(10)+params[1])
+			option=user_input(char(10)+""Do you want to continue?(y/n): "")
+			if option==""y"" or option==""yes"" then
+				output=install(aptclient,params[1])
+				if output==true then exit(params[1]+"" installed."")
+				print(output)
+			else
+				exit(""aborted"")
+			end if
+		else
+			print(output)
+		end if
+	end if
+else
+	print(command_info(""apt-get_usage""))
+end if"

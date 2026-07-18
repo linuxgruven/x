@@ -1,0 +1,244 @@
+webStore="<!doctype html>
+<style type='text/css'>
+  html {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: linear-gradient(180deg, #d9e1e8 0%, #bcc9d6 52%, #8ba0b2 100%);
+  }
+  body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: #23303b;
+    font: 13px ""Trebuchet MS"", ""Segoe UI"", Arial, sans-serif;
+  }
+  .scroll-root {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    padding: 20px 0;
+  }
+  .page {
+    width: 860px;
+    max-width: 95%;
+    margin: 0 auto 18px auto;
+    border: 1px solid #7f93a4;
+    background: #f4f7fa;
+    box-shadow: 0 10px 20px rgba(27, 42, 53, 0.22);
+  }
+  .shell {
+    margin: 10px;
+    border: 1px solid #c4d0d9;
+    background: #ffffff;
+  }
+  .topbar {
+    padding: 9px 12px;
+    border-bottom: 1px solid #c4d0d9;
+    background: linear-gradient(90deg, #2c3e50 0%, #38546b 55%, #4b6d88 100%);
+    color: #e4edf3;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+  }
+  .btn-group {
+    margin: 12px;
+    text-align: center;
+  }
+  .btn {
+    background-color: #e8eef3;
+    border: 1px solid #93a5b4;
+    color: #324656;
+    padding: 5px 6px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 11px;
+    width: 108px;
+    margin: 3px;
+  }
+  .btn-sel {
+    background-color: #d4e0e8;
+    border-color: #627989;
+    color: #223340;
+  }
+  .btn-group button:hover {
+    background-color: #d4e0e8;
+  }
+  .hero {
+    margin: 0 12px 12px 12px;
+    padding: 16px;
+    border: 1px solid #cbd6de;
+    background: linear-gradient(180deg, #f8fbfd 0%, #edf3f7 100%);
+    text-align: center;
+  }
+  .eyebrow {
+    margin: 0;
+    color: #5c7485;
+    font-size: 13px;
+    letter-spacing: 1px;
+    font-weight: bold;
+  }
+  .hero-title {
+    margin: 0;
+    color: #233544;
+    font-size: 22px;
+    letter-spacing: 0.6px;
+  }
+  .hero-copy {
+    margin: 0 auto;
+    color: #4f6473;
+    font-size: 12px;
+    line-height: 1.4;
+    width: 620px;
+    max-width: 95%;
+  }
+  .image-frame {
+    width: 300px;
+    max-width: 95%;
+    margin: 10px auto 0 auto;
+    border: 1px solid #c3d0da;
+    background: #ffffff;
+    padding: 8px;
+  }
+  .hero img {
+    display: block;
+    margin: 0 auto;
+  }
+  .section-title {
+    margin: 0 12px 8px 12px;
+    color: #47657c;
+    font-size: 12px;
+    letter-spacing: 0.8px;
+  }
+  .cards {
+    margin: 0 12px 12px 12px;
+    text-align: center;
+  }
+  .card {
+    display: inline-block;
+    vertical-align: top;
+    width: 31%;
+    min-width: 180px;
+    margin: 0 4px 8px 4px;
+    border: 1px solid #d2dce4;
+    border-top-width: 3px;
+    background: #f9fbfc;
+    padding: 10px 8px;
+    box-sizing: border-box;
+  }
+  .card-1 {
+    border-top-color: #5f89ab;
+  }
+  .card-2 {
+    border-top-color: #6ea185;
+  }
+  .card-3 {
+    border-top-color: #cf9253;
+  }
+  .card-tag {
+    margin: 0 0 6px 0;
+    font-size: 9px;
+    letter-spacing: 0.8px;
+    font-weight: bold;
+    color: #667785;
+  }
+  .card-name {
+    margin: 0;
+    color: #2e4352;
+    font-size: 14px;
+  }
+  .card-info {
+    margin: 6px 0 0 0;
+    color: #627583;
+    font-size: 12px;
+  }
+  .card-price {
+    margin: 7px 0 0 0;
+    color: #385a71;
+    font-size: 12px;
+    font-weight: bold;
+  }
+  .info-panel {
+    margin: 0 12px 12px 12px;
+    border: 1px solid #d0dbe3;
+    background: #f5f8fa;
+    padding: 10px 12px;
+  }
+  .line {
+    margin: 0 0 7px 0;
+    color: #566a79;
+    font-size: 12px;
+  }
+  .line:last-child {
+    margin-bottom: 0;
+  }
+  .footer {
+    margin: 0 12px 12px 12px;
+    border-top: 1px solid #d0dbe3;
+    padding-top: 8px;
+    color: #748694;
+    font-size: 10px;
+    text-align: center;
+  }
+  @media (max-width: 640px) {
+    .btn {
+      width: 94%;
+      max-width: 260px;
+    }
+    .card {
+      display: block;
+      width: auto;
+      margin: 0 0 8px 0;
+    }
+  }
+</style>
+<div class=""scroll-root"">
+  <div class=""page"">
+    <div class=""shell"">
+      <div class=""topbar"">TECH RETAIL NETWORK SYSTEMS, COMPONENTS AND PERIPHERALS</div>
+      <div class=""btn-group"">
+        <button type=""button"" class=""btn btn-primary btn-sel"" id=""Home"">Main</button>
+        <button type=""button"" class=""btn btn-primary"" id=""InformaticaShop"">Shop</button>
+      </div>
+      <div class=""hero"">
+        <p class=""eyebrow"">Welcome to X</p>       
+        <p class=""hero-copy"">Desktop systems, spare parts, storage upgrades and daily office hardware in one place.<br>Enter and check our stock!</p>
+        <div class=""image-frame"">
+          <img src=""shop_alter.jpg"" width=""250"" height=""145"" align=""center"">
+        </div>
+      </div>
+      <p class=""section-title"">POPULAR CATEGORIES</p>
+      <div class=""cards"">
+        <div class=""card card-1"">
+          <p class=""card-tag"">COMPONENTS</p>
+          <p class=""card-name"">Core Parts</p>
+          <p class=""card-info"">Processors, memory kits and board replacements for custom builds.</p>
+          <p class=""card-price"">Weekly stock refresh</p>
+        </div>
+        <div class=""card card-2"">
+          <p class=""card-tag"">WORKSTATIONS</p>
+          <p class=""card-name"">Office Ready PCs</p>
+          <p class=""card-info"">Balanced desktop setups coding and light production tasks.</p>
+          <p class=""card-price"">Setup service available</p>
+        </div>
+        <div class=""card card-3"">
+          <p class=""card-tag"">PERIPHERALS</p>
+          <p class=""card-name"">Desk Essentials</p>
+          <p class=""card-info"">CPUs, GPUs, Motherboards and more for daily operations.</p>
+          <p class=""card-price"">Best prices</p>
+        </div>
+      </div>
+      <p class=""section-title"">STORE NOTES</p>
+      <div class=""info-panel"">
+        <p class=""line"">- Browse the Shop section to review the current catalog and available stock.</p>
+        <p class=""line"">- Hardware availability may vary depending on supplier shipments and city demand.</p>
+        <p class=""line"">- Suitable for consumer upgrades, office deployments and maintenance replacements.</p>
+      </div>
+      <div class=""footer"">Retail hardware portal Local support and replacement stock</div>
+    </div>
+  </div>
+</div>"

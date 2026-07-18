@@ -1,0 +1,23 @@
+// Man page for close
+manClose="CLOSE(1)                         X Shell Manual                         CLOSE(1)
+
+<b>NAME</b>
+    close - close the current object and step back
+<b>SYNOPSIS</b>
+    <b>close</b>
+<b>DESCRIPTION</b>
+    Closes the current object (shell|computer|file) and steps back
+    to the previous context. If you are inside a menu (e.g. scan or
+    exploit selection), close will drop you back into that menu
+    rather than exiting entirely. If you have sessions you want to
+    keep active, use <b>close</b> instead of x|exit which will
+    terminate the active session.
+    Alias: c
+<b>EXAMPLE:</b>
+    <b>close</b>
+    Step back to previous context
+
+    <b>c</b>
+    Same as close (alias)
+<b>SEE ALSO</b>
+    <b>home</b>, <b>exit</b>"

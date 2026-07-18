@@ -1,0 +1,22 @@
+// Man page for netcat
+manNetcat="NETCAT(1)                        X Shell Manual                        NETCAT(1)
+
+<b>NAME</b>
+    netcat - LAN network information viewer
+<b>SYNOPSIS</b>
+    <b>netcat</b>
+<b>DESCRIPTION</b>
+    Display comprehensive LAN network information including subnet details.
+    Useful when there are no router bounces or when recon/map commands
+    produce undesired results. Provides extensive subnet information for
+    network reconnaissance.
+
+    <color=#e4ff34>*** Can only be used with shell objects (main, shell, pivot and proxy) ***</color>
+<b>OPTIONS</b>
+    <b>netcat</b> - Display Network Info
+      Show extensive subnet and network information.
+<b>EXAMPLE:</b>
+    <b>netcat</b>
+    Display LAN network information
+<b>SEE ALSO</b>
+    <b>nmap</b>, <b>ifconfig</b>, <b>iwconfig</b>"

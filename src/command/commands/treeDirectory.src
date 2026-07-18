@@ -1,0 +1,49 @@
+// =============================================================================
+// TREEDIRECTORY
+// Display directory tree showing folders only (no files), Linux tree -d style.
+// =============================================================================
+Command.treeDirectory=function(Obj,startDir,_p=null,argv=null)
+  counts={"dirs":0}
+  output=[]
+  rootName=path(startDir)
+  push(output,rootName)
+  if not _p or not _p.write then print blue(rootName)
+  walkDirs=function(dir,prefix)
+    items=get_folders(dir)
+    clean=[]
+    for it in items;if it then push(clean,it);end for
+    total=len(clean)
+    if total==0 then return
+    i=0
+    while i<total
+      item=clean[i]
+      isLast=(i==total-1)
+      if isLast then
+        connector="+<cspace=-0.3em>---</cspace> "
+        plainConnector="+--- "
+        childPrefix=prefix+"     "
+      else
+        connector="|<cspace=-0.3em>---</cspace> "
+        plainConnector="|--- "
+        childPrefix=prefix+"|    "
+      end if
+      counts.dirs=counts.dirs+1
+      push(output,prefix+plainConnector+name(item))
+      if not _p or not _p.write then print prefix+connector+blue(name(item))
+      walkDirs(item,childPrefix)
+    i+=1
+    end while
+  end function
+  walkDirs(startDir,"")
+  dc=counts.dirs
+  if dc==1 then ds="directory" else ds="directories"
+  summary=str(dc)+" "+ds
+  push(output,"")
+  push(output,summary)
+  if _p and _p.write then
+    argv["data"]=output
+    return _p.out(Obj,argv)
+  end if
+  print ""
+  print summary
+end function

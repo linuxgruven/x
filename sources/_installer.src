@@ -1,0 +1,393 @@
+// Sources Installer
+// Installs bin, tool, and web source files to payload/src/
+print "<color=#20ff98>Installing X's source files...</color>"
+// Import bins
+import_code("./bins/aircrack.src")
+import_code("./bins/aireplay.src")
+import_code("./bins/airmon.src")
+import_code("./bins/apt-get.src")
+import_code("./bins/bash.src")
+import_code("./bins/build.src")
+import_code("./bins/cat.src")
+import_code("./bins/cd.src")
+import_code("./bins/chat-server.src")
+import_code("./bins/chgrp.src")
+import_code("./bins/chmod.src")
+import_code("./bins/chown.src")
+import_code("./bins/cp.src")
+import_code("./bins/decipher.src")
+import_code("./bins/ftp-server.src")
+import_code("./bins/ftp.src")
+import_code("./bins/groupadd.src")
+import_code("./bins/groupdel.src")
+import_code("./bins/groups.src")
+import_code("./bins/http-server.src")
+import_code("./bins/ifconfig.src")
+import_code("./bins/iwconfig.src")
+import_code("./bins/iwlist.src")
+import_code("./bins/kill.src")
+import_code("./bins/ln.src")
+import_code("./bins/ls.src")
+import_code("./bins/mkdir.src")
+import_code("./bins/mv.src")
+import_code("./bins/nmap.src")
+import_code("./bins/nslookup.src")
+import_code("./bins/passwd.src")
+import_code("./bins/ping.src")
+import_code("./bins/ps.src")
+import_code("./bins/pwd.src")
+import_code("./bins/reboot.src")
+import_code("./bins/repository-server.src")
+import_code("./bins/rm.src")
+import_code("./bins/rmdir.src")
+import_code("./bins/rshell-interface.src")
+import_code("./bins/rshell-server.src")
+import_code("./bins/scanlib.src")
+import_code("./bins/scanrouter.src")
+import_code("./bins/scp.src")
+import_code("./bins/smtp-user-list.src")
+import_code("./bins/sniffer.src")
+import_code("./bins/ssh-server.src")
+import_code("./bins/ssh.src")
+import_code("./bins/sudo.src")
+import_code("./bins/touch.src")
+import_code("./bins/useradd.src")
+import_code("./bins/userdel.src")
+import_code("./bins/whoami.src")
+import_code("./bins/whois.src")
+// Import tools
+import_code("./tools/gmon.src")
+import_code("./tools/hopper.src")
+import_code("./tools/htop.src")
+import_code("./tools/lbounce.src")
+import_code("./tools/lfbounce.src")
+import_code("./tools/lock.src")
+import_code("./tools/logmon.src")
+import_code("./tools/netcat.src")
+import_code("./tools/recover.src")
+import_code("./tools/rsync.src")
+import_code("./tools/scanlan.src")
+import_code("./tools/sniffer.src")
+import_code("./tools/unlock.src")
+import_code("./tools/watchdog.src")
+import_code("./tools/wbounce.src")
+import_code("./tools/wipe.src")
+import_code("./tools/xchat.src")
+import_code("./tools/xserver.src")
+import_code("./tools/xviewer.src")
+// Import web pages
+import_code("./web/nightly/bank.src")
+import_code("./web/nightly/crypto.src")
+import_code("./web/nightly/email.src")
+import_code("./web/nightly/isp.src")
+import_code("./web/nightly/manuals.src")
+import_code("./web/nightly/police.src")
+import_code("./web/nightly/store.src")
+import_code("./web/nightly/website.src")
+import_code("./web/nightly/repo.src")
+// Setup directories
+c=host_computer(get_shell)
+home=File(c,home_dir)
+if not home then exit("<color=red>Unable to access home directory</color>")
+_findAll=function(dir,fName,results)
+  for sub in get_folders(dir)
+    if name(sub)==fName then push(results,sub)
+    _findAll(sub,fName,results)
+  end for
+end function
+payloadDir=File(c,home_dir+"/payload")
+if not payloadDir then
+  print "<color=#ffff00>Locating payload...</color>"
+  _found=[]
+  _findAll(File(c,"/"),"payload",_found)
+  if not _found then exit("<color=red>payload folder not found. Please run X at least once to set up X's file structure.</color>")
+  if len(_found)==1 then
+    payloadDir=_found[0]
+    print "<color=#20ff98>Found payload at: "+path(payloadDir)+"</color>"
+  else
+    print "<color=#ffff00>Multiple payload folders found:</color>"
+    _i=0
+    _len=len(_found)
+    while _i<_len
+      print "<color=#ffffff>  ["+(_i+1)+"] "+path(_found[_i])+"</color>"
+      _i=_i+1
+    end while
+    print "<color=#ffffff>  [0] Cancel</color>"
+    _choice=to_int(user_input("<color=#87ceeb>Select payload (0 to cancel, 1-"+_len+"): </color>"))
+    if _choice==0 then exit("<color=#ffff00>Cancelled.</color>")
+    if _choice<1 or _choice>_len then exit("<color=red>Invalid selection.</color>")
+    payloadDir=_found[_choice-1]
+    print "<color=#20ff98>Using payload at: "+path(payloadDir)+"</color>"
+  end if
+end if
+payload=path(payloadDir)
+if not File(c,payload+"/src") then create_folder(c,payload,"src")
+// Remove existing source directories
+if File(c,payload+"/src/bin") then File(c,payload+"/src/bin").delete
+if File(c,payload+"/src/tools") then File(c,payload+"/src/tools").delete
+if File(c,payload+"/src/web") then File(c,payload+"/src/web").delete
+// Create source directories
+create_folder(c,payload+"/src","bin")
+create_folder(c,payload+"/src","tools")
+create_folder(c,payload+"/src","web")
+binDir=File(c,payload+"/src/bin")
+toolDir=File(c,payload+"/src/tools")
+webDir=File(c,payload+"/src/web")
+if not binDir then exit("<color=red>Failed to create /payload/src/bin directory</color>")
+if not toolDir then exit("<color=red>Failed to create /payload/src/tools directory</color>")
+if not webDir then exit("<color=red>Failed to create /payload/src/web directory</color>")
+// Install bins
+print "<color=#20ff98>Installing bin sources...</color>"
+touch(c,path(binDir),"aircrack")
+set_content(File(c,path(binDir)+"/aircrack"),binAircrack)
+print "<color=#aaaaaa>  Installed aircrack</color>"
+touch(c,path(binDir),"aireplay")
+set_content(File(c,path(binDir)+"/aireplay"),binAireplay)
+print "<color=#aaaaaa>  Installed aireplay</color>"
+touch(c,path(binDir),"airmon")
+set_content(File(c,path(binDir)+"/airmon"),binAirmon)
+print "<color=#aaaaaa>  Installed airmon</color>"
+touch(c,path(binDir),"apt-get")
+set_content(File(c,path(binDir)+"/apt-get"),binAptGet)
+print "<color=#aaaaaa>  Installed apt-get</color>"
+touch(c,path(binDir),"bash")
+set_content(File(c,path(binDir)+"/bash"),binBash)
+print "<color=#aaaaaa>  Installed bash</color>"
+touch(c,path(binDir),"build")
+set_content(File(c,path(binDir)+"/build"),binBuild)
+print "<color=#aaaaaa>  Installed build</color>"
+touch(c,path(binDir),"cat")
+set_content(File(c,path(binDir)+"/cat"),binCat)
+print "<color=#aaaaaa>  Installed cat</color>"
+touch(c,path(binDir),"cd")
+set_content(File(c,path(binDir)+"/cd"),binCd)
+print "<color=#aaaaaa>  Installed cd</color>"
+touch(c,path(binDir),"chat-server")
+set_content(File(c,path(binDir)+"/chat-server"),binChatServer)
+print "<color=#aaaaaa>  Installed chat-server</color>"
+touch(c,path(binDir),"chgrp")
+set_content(File(c,path(binDir)+"/chgrp"),binChgrp)
+print "<color=#aaaaaa>  Installed chgrp</color>"
+touch(c,path(binDir),"chmod")
+set_content(File(c,path(binDir)+"/chmod"),binChmod)
+print "<color=#aaaaaa>  Installed chmod</color>"
+touch(c,path(binDir),"chown")
+set_content(File(c,path(binDir)+"/chown"),binChown)
+print "<color=#aaaaaa>  Installed chown</color>"
+touch(c,path(binDir),"cp")
+set_content(File(c,path(binDir)+"/cp"),binCp)
+print "<color=#aaaaaa>  Installed cp</color>"
+touch(c,path(binDir),"decipher")
+set_content(File(c,path(binDir)+"/decipher"),binDecipher)
+print "<color=#aaaaaa>  Installed decipher</color>"
+touch(c,path(binDir),"ftp-server")
+set_content(File(c,path(binDir)+"/ftp-server"),binFtpServer)
+print "<color=#aaaaaa>  Installed ftp-server</color>"
+touch(c,path(binDir),"ftp")
+set_content(File(c,path(binDir)+"/ftp"),binFtp)
+print "<color=#aaaaaa>  Installed ftp</color>"
+touch(c,path(binDir),"groupadd")
+set_content(File(c,path(binDir)+"/groupadd"),binGroupadd)
+print "<color=#aaaaaa>  Installed groupadd</color>"
+touch(c,path(binDir),"groupdel")
+set_content(File(c,path(binDir)+"/groupdel"),binGroupdel)
+print "<color=#aaaaaa>  Installed groupdel</color>"
+touch(c,path(binDir),"groups")
+set_content(File(c,path(binDir)+"/groups"),binGroups)
+print "<color=#aaaaaa>  Installed groups</color>"
+touch(c,path(binDir),"http-server")
+set_content(File(c,path(binDir)+"/http-server"),binHttpServer)
+print "<color=#aaaaaa>  Installed http-server</color>"
+touch(c,path(binDir),"ifconfig")
+set_content(File(c,path(binDir)+"/ifconfig"),binIfconfig)
+print "<color=#aaaaaa>  Installed ifconfig</color>"
+touch(c,path(binDir),"iwconfig")
+set_content(File(c,path(binDir)+"/iwconfig"),binIwconfig)
+print "<color=#aaaaaa>  Installed iwconfig</color>"
+touch(c,path(binDir),"iwlist")
+set_content(File(c,path(binDir)+"/iwlist"),binIwlist)
+print "<color=#aaaaaa>  Installed iwlist</color>"
+touch(c,path(binDir),"kill")
+set_content(File(c,path(binDir)+"/kill"),binKill)
+print "<color=#aaaaaa>  Installed kill</color>"
+touch(c,path(binDir),"ln")
+set_content(File(c,path(binDir)+"/ln"),binLn)
+print "<color=#aaaaaa>  Installed ln</color>"
+touch(c,path(binDir),"ls")
+set_content(File(c,path(binDir)+"/ls"),binLs)
+print "<color=#aaaaaa>  Installed ls</color>"
+touch(c,path(binDir),"mkdir")
+set_content(File(c,path(binDir)+"/mkdir"),binMkdir)
+print "<color=#aaaaaa>  Installed mkdir</color>"
+touch(c,path(binDir),"mv")
+set_content(File(c,path(binDir)+"/mv"),binMv)
+print "<color=#aaaaaa>  Installed mv</color>"
+touch(c,path(binDir),"nmap")
+set_content(File(c,path(binDir)+"/nmap"),binNmap)
+print "<color=#aaaaaa>  Installed nmap</color>"
+touch(c,path(binDir),"nslookup")
+set_content(File(c,path(binDir)+"/nslookup"),binNslookup)
+print "<color=#aaaaaa>  Installed nslookup</color>"
+touch(c,path(binDir),"passwd")
+set_content(File(c,path(binDir)+"/passwd"),binPasswd)
+print "<color=#aaaaaa>  Installed passwd</color>"
+touch(c,path(binDir),"ping")
+set_content(File(c,path(binDir)+"/ping"),binPing)
+print "<color=#aaaaaa>  Installed ping</color>"
+touch(c,path(binDir),"ps")
+set_content(File(c,path(binDir)+"/ps"),binPs)
+print "<color=#aaaaaa>  Installed ps</color>"
+touch(c,path(binDir),"pwd")
+set_content(File(c,path(binDir)+"/pwd"),binPwd)
+print "<color=#aaaaaa>  Installed pwd</color>"
+touch(c,path(binDir),"reboot")
+set_content(File(c,path(binDir)+"/reboot"),binReboot)
+print "<color=#aaaaaa>  Installed reboot</color>"
+touch(c,path(binDir),"repository-server")
+set_content(File(c,path(binDir)+"/repository-server"),binRepositoryServer)
+print "<color=#aaaaaa>  Installed repository-server</color>"
+touch(c,path(binDir),"rm")
+set_content(File(c,path(binDir)+"/rm"),binRm)
+print "<color=#aaaaaa>  Installed rm</color>"
+touch(c,path(binDir),"rmdir")
+set_content(File(c,path(binDir)+"/rmdir"),binRmdir)
+print "<color=#aaaaaa>  Installed rmdir</color>"
+touch(c,path(binDir),"rshell-interface")
+set_content(File(c,path(binDir)+"/rshell-interface"),binRshellInterface)
+print "<color=#aaaaaa>  Installed rshell-interface</color>"
+touch(c,path(binDir),"rshell-server")
+set_content(File(c,path(binDir)+"/rshell-server"),binRshellServer)
+print "<color=#aaaaaa>  Installed rshell-server</color>"
+touch(c,path(binDir),"scanlib")
+set_content(File(c,path(binDir)+"/scanlib"),binScanlib)
+print "<color=#aaaaaa>  Installed scanlib</color>"
+touch(c,path(binDir),"scanrouter")
+set_content(File(c,path(binDir)+"/scanrouter"),binScanrouter)
+print "<color=#aaaaaa>  Installed scanrouter</color>"
+touch(c,path(binDir),"scp")
+set_content(File(c,path(binDir)+"/scp"),binScp)
+print "<color=#aaaaaa>  Installed scp</color>"
+touch(c,path(binDir),"smtp-user-list")
+set_content(File(c,path(binDir)+"/smtp-user-list"),binSmtpUserList)
+print "<color=#aaaaaa>  Installed smtp-user-list</color>"
+touch(c,path(binDir),"sniffer")
+set_content(File(c,path(binDir)+"/sniffer"),binSniffer)
+print "<color=#aaaaaa>  Installed sniffer</color>"
+touch(c,path(binDir),"ssh-server")
+set_content(File(c,path(binDir)+"/ssh-server"),binSshServer)
+print "<color=#aaaaaa>  Installed ssh-server</color>"
+touch(c,path(binDir),"ssh")
+set_content(File(c,path(binDir)+"/ssh"),binSsh)
+print "<color=#aaaaaa>  Installed ssh</color>"
+touch(c,path(binDir),"sudo")
+set_content(File(c,path(binDir)+"/sudo"),binSudo)
+print "<color=#aaaaaa>  Installed sudo</color>"
+touch(c,path(binDir),"touch")
+set_content(File(c,path(binDir)+"/touch"),binTouch)
+print "<color=#aaaaaa>  Installed touch</color>"
+touch(c,path(binDir),"useradd")
+set_content(File(c,path(binDir)+"/useradd"),binUseradd)
+print "<color=#aaaaaa>  Installed useradd</color>"
+touch(c,path(binDir),"userdel")
+set_content(File(c,path(binDir)+"/userdel"),binUserdel)
+print "<color=#aaaaaa>  Installed userdel</color>"
+touch(c,path(binDir),"whoami")
+set_content(File(c,path(binDir)+"/whoami"),binWhoami)
+print "<color=#aaaaaa>  Installed whoami</color>"
+touch(c,path(binDir),"whois")
+set_content(File(c,path(binDir)+"/whois"),binWhois)
+print "<color=#aaaaaa>  Installed whois</color>"
+// Install tools
+print "<color=#20ff98>Installing tool sources...</color>"
+touch(c,path(toolDir),"gmon")
+set_content(File(c,path(toolDir)+"/gmon"),toolGmon)
+print "<color=#aaaaaa>  Installed gmon</color>"
+touch(c,path(toolDir),"hopper")
+set_content(File(c,path(toolDir)+"/hopper"),toolHopper)
+print "<color=#aaaaaa>  Installed hopper</color>"
+touch(c,path(toolDir),"htop")
+set_content(File(c,path(toolDir)+"/htop"),toolHtop)
+print "<color=#aaaaaa>  Installed htop</color>"
+touch(c,path(toolDir),"lbounce")
+set_content(File(c,path(toolDir)+"/lbounce"),toolLbounce)
+print "<color=#aaaaaa>  Installed lbounce</color>"
+touch(c,path(toolDir),"lfbounce")
+set_content(File(c,path(toolDir)+"/lfbounce"),toolLfbounce)
+print "<color=#aaaaaa>  Installed lfbounce</color>"
+touch(c,path(toolDir),"lock")
+set_content(File(c,path(toolDir)+"/lock"),toolLock)
+print "<color=#aaaaaa>  Installed lock</color>"
+touch(c,path(toolDir),"logmon")
+set_content(File(c,path(toolDir)+"/logmon"),toolLogmon)
+print "<color=#aaaaaa>  Installed logmon</color>"
+touch(c,path(toolDir),"netcat")
+set_content(File(c,path(toolDir)+"/netcat"),toolNetcat)
+print "<color=#aaaaaa>  Installed netcat</color>"
+touch(c,path(toolDir),"recover")
+set_content(File(c,path(toolDir)+"/recover"),toolRecover)
+print "<color=#aaaaaa>  Installed recover</color>"
+touch(c,path(toolDir),"rsync")
+set_content(File(c,path(toolDir)+"/rsync"),toolRsync)
+print "<color=#aaaaaa>  Installed rsync</color>"
+touch(c,path(toolDir),"scanlan")
+set_content(File(c,path(toolDir)+"/scanlan"),toolScanlan)
+print "<color=#aaaaaa>  Installed scanlan</color>"
+touch(c,path(toolDir),"sniffer")
+set_content(File(c,path(toolDir)+"/sniffer"),toolSniffer)
+print "<color=#aaaaaa>  Installed sniffer</color>"
+touch(c,path(toolDir),"unlock")
+set_content(File(c,path(toolDir)+"/unlock"),toolUnlock)
+print "<color=#aaaaaa>  Installed unlock</color>"
+touch(c,path(toolDir),"watchdog")
+set_content(File(c,path(toolDir)+"/watchdog"),toolWatchdog)
+print "<color=#aaaaaa>  Installed watchdog</color>"
+touch(c,path(toolDir),"wbounce")
+set_content(File(c,path(toolDir)+"/wbounce"),toolWbounce)
+print "<color=#aaaaaa>  Installed wbounce</color>"
+touch(c,path(toolDir),"wipe")
+set_content(File(c,path(toolDir)+"/wipe"),toolWipe)
+print "<color=#aaaaaa>  Installed wipe</color>"
+touch(c,path(toolDir),"xchat")
+set_content(File(c,path(toolDir)+"/xchat"),toolXchat)
+print "<color=#aaaaaa>  Installed xchat</color>"
+touch(c,path(toolDir),"xserver")
+set_content(File(c,path(toolDir)+"/xserver"),toolXserver)
+print "<color=#aaaaaa>  Installed xserver</color>"
+touch(c,path(toolDir),"xviewer")
+set_content(File(c,path(toolDir)+"/xviewer"),toolXviewer)
+print "<color=#aaaaaa>  Installed xviewer</color>"
+// Install web pages
+print "<color=#20ff98>Installing web page sources...</color>"
+touch(c,path(webDir),"bank")
+set_content(File(c,path(webDir)+"/bank"),webBank)
+print "<color=#aaaaaa>  Installed bank</color>"
+touch(c,path(webDir),"crypto")
+set_content(File(c,path(webDir)+"/crypto"),webCrypto)
+print "<color=#aaaaaa>  Installed crypto</color>"
+touch(c,path(webDir),"email")
+set_content(File(c,path(webDir)+"/email"),webEmail)
+print "<color=#aaaaaa>  Installed email</color>"
+touch(c,path(webDir),"isp")
+set_content(File(c,path(webDir)+"/isp"),webIsp)
+print "<color=#aaaaaa>  Installed isp</color>"
+touch(c,path(webDir),"manuals")
+set_content(File(c,path(webDir)+"/manuals"),webManuals)
+print "<color=#aaaaaa>  Installed manuals</color>"
+touch(c,path(webDir),"police")
+set_content(File(c,path(webDir)+"/police"),webPolice)
+print "<color=#aaaaaa>  Installed police</color>"
+touch(c,path(webDir),"repo")
+set_content(File(c,path(webDir)+"/repo"),webRepo)
+print "<color=#aaaaaa>  Installed repo</color>"
+touch(c,path(webDir),"store")
+set_content(File(c,path(webDir)+"/store"),webStore)
+print "<color=#aaaaaa>  Installed store</color>"
+touch(c,path(webDir),"website")
+set_content(File(c,path(webDir)+"/website"),webWebsite)
+print "<color=#aaaaaa>  Installed website</color>"
+print "<color=#20ff98>Source installation complete: 53 bins, 18 tools, 9 web pages</color>"
+if params.indexOf("--delete") != null then
+  f=File(c,program_path)
+  if f then delete(f)
+  print "<color=#20ff98>Installer deleted.</color>"
+end if

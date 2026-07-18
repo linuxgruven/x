@@ -1,0 +1,79 @@
+// Man page for libs
+manLibs="LIBS(1)                          X Shell Manual                          LIBS(1)
+
+<b>NAME</b>
+    libs - Library storage framework
+<b>SYNOPSIS</b>
+    <b>libs -l</b>
+    <b>libs -r</b><b> ID</b> [ID...]
+    <b>libs -x</b>
+    <b>libs -i</b> [-p PATH] LIBRARY
+    <b>libs -a</b> [-p PATH] FILE [FILE...]
+    <b>libs -g</b> [-p PATH] ID|NAME [ID|NAME...]
+<b>DESCRIPTION</b>
+    The libs framework manages the saveLib directory for storing and sharing
+    favored libraries across all objects. Libraries can be added, retrieved,
+    removed, installed, and transferred between objects or to local machines.
+    The saveLib directory provides centralized library management.
+
+    When using -p flag, only the filename is required (not full path).
+<b>OPTIONS</b>
+    <b>-l</b> - List Libraries
+      Display all library files stored in saveLib directory.
+
+    <b>-i</b> [-p PATH] LIBRARY - Install Library
+      Install library (.so file) to system.
+      Default path: /lib (if -p not specified)
+
+    <b>-a</b> [-p PATH] FILE [FILE...] - Add to SaveLib
+      Add one or more libraries to saveLib directory.
+      Default path: current directory (if -p not specified)
+
+    <b>-g</b> [-p PATH] ID|NAME [ID|NAME...] - Get Library
+      Retrieve library file(s) by ID or partial name.
+      Default path: current directory for names, /lib for IDs
+      Use -p flag to override default location.
+
+    <b>-r ID</b> [ID...] - Remove Libraries
+      Remove one or more library files by ID from saveLib.
+
+    <b>-x</b> - Clear SaveLib
+      Remove all libraries from saveLib directory.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># List and View</color>
+    <b>libs -l</b>
+    List all libraries in saveLib
+
+    <color=#e4ff34># Add Libraries</color>
+    <b>libs -a net.so</b>
+    Add net.so from current directory
+
+    <b>libs -a -p /lib net.so libssh.so</b>
+    Add multiple libraries from /lib
+
+    <color=#e4ff34># Install Libraries</color>
+    <b>libs -i libssh.so</b>
+    Install library to /lib (default)
+
+    <b>libs -i -p /usr/lib crypto.so</b>
+    Install to custom path
+
+    <color=#e4ff34># Retrieve Libraries</color>
+    <b>libs -g 1</b>
+    Get library ID 1 to /lib
+
+    <b>libs -g net</b>
+    Get library matching net to current dir
+
+    <b>libs -g -p /lib 1 2 3</b>
+    Get multiple libraries to /lib
+
+    <color=#e4ff34># Remove Libraries</color>
+    <b>libs -r 1</b>
+    Remove library ID 1
+
+    <b>libs -r 1 2 3</b>
+    Remove multiple libraries
+
+    <b>libs -x</b>
+    Clear all libraries from saveLib"

@@ -1,0 +1,13 @@
+binLn="if len(params)>0 and params[0]==""-s"" then params=params[1:]
+if len(params)!=2 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""ln_usage""))
+targetPath=get_abs_path(params[0])
+linkPath=get_abs_path(params[1])
+linkDir=parent_path(linkPath)
+if linkDir==linkPath then linkDir=current_path
+file=File(host_computer(get_shell),targetPath)
+if file==null then exit(""ln: file not found: ""+targetPath)
+if not has_permission(file,""w"") then exit(""ln: permission denied"")
+parts=split(linkPath,""/"")
+linkName=parts[len(parts)-1]
+result=symlink(file,linkDir,linkName)
+if result and result!=1 then print(result)"

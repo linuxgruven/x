@@ -1,0 +1,501 @@
+// =============================================================================
+// OPEN
+// Launch GUI applications; supports 21 apps with local or remote targeting.
+// XFIX1.0: stubs for News.exe, ConfigCompany.exe, HiringManager.exe (rg XFIX1.0)
+// =============================================================================
+Command.open=function(Obj,argv)
+  if not argv then return Man.help(["open"])
+  appName=lower(pull(argv))
+  _p=ArgumentParser.init
+  _p.addArgument("l",true,"flag") // Local execution mode
+  _p.addArgument("f",false,"storeNumber") // Browser favorite number
+  _p.addArgument("login",true,"flag") // Email login mode
+  _p.addArgument("code",true,"store") // Code injection for editor
+  _p.addArgument("deploy",true,"flag") // Deploy app to target via SCP
+  argv=_p.parseArgs("open",argv)
+  if argv isa Error then return
+  if (Obj.type=="computer" or Obj.type=="file") then argv.l=true
+  isRunning=function(targetObj,exeName)
+    if not hasIndex(targetObj,"computer") then return false
+    procs=show_procs(targetObj.computer)
+    if not procs then return false
+    procs=split(procs,char(10))[1:]
+    for proc in procs;parsedItem=split(proc," ");if indexOf(parsedItem[4],exeName)!=null then return true;end for
+    return false
+  end function
+  terminal=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    exeFile=File(targetObj.computer,"/usr/bin/Terminal.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile),join(args.rest," "))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"Terminal.exe")
+    if exeFile isa Error then
+      Builder.launchApp(targetObj,"Terminal.exe",args.rest)
+    else
+      launch(targetObj.shell,path(exeFile),join(args.rest," "))
+      System.tryWait(2)
+    end if
+  end function
+  browser=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    if args.f isa number then
+      favoritesFile=File(targetObj.computer,path(targetObj.user.home)+"/Config/Browser.txt")
+      if favoritesFile then
+        favorites=split(get_content(favoritesFile),char(10))
+        if hasIndex(favorites,args.f) then push(args.rest,favorites[args.f])
+      end if
+    end if
+    url=null
+    if args.rest then
+      url=args.rest[0]
+      if url then url=Net.lookup(url)
+    end if
+    exeFile=File(targetObj.computer,"/usr/bin/Browser.exe")
+    if exeFile then
+      if url then launch(targetObj.shell,path(exeFile),url) else launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"Browser.exe")
+    if exeFile isa Error then return Error.set("Browser not found")
+    if url then launch(targetObj.shell,path(exeFile),url) else launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  email=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    if args.login then insert(args.rest,0,"-login")
+    exeFile=File(targetObj.computer,"/usr/bin/Mail.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile),join(args.rest," "))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"Mail.exe")
+    if exeFile isa Error then return Error.set("Mail not found")
+    launch(targetObj.shell,path(exeFile),join(args.rest," "))
+    System.tryWait(2)
+  end function
+  settings=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    exeFile=File(targetObj.computer,"/usr/bin/Settings.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile),join(args.rest," "))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"Settings.exe")
+    if exeFile isa Error then return Error.set("Settings not found")
+    launch(targetObj.shell,path(exeFile),join(args.rest," "))
+    System.tryWait(2)
+  end function
+  fileexplorer=function(args)
+    if args isa Error then return
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    if args.rest then
+      if args.rest[0][0]!="/" then args.rest[0]=Io._getPath(targetObj,args.rest[0])
+    end if
+    exeFile=File(targetObj.computer,"/usr/bin/FileExplorer.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile),join(args.rest," "))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"FileExplorer.exe")
+    if exeFile isa Error then return Error.set("File Explorer not found")
+    launch(targetObj.shell,path(exeFile),join(args.rest," "))
+    System.tryWait(2)
+  end function
+  codeeditor=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    if args.rest then
+      if args.rest[0][0]!="/" then args.rest[0]=Io._getPath(targetObj,args.rest[0])
+    end if
+    // Inject code via --code flag if specified
+    if args["code"] then
+      insert(args.rest,0,"-code")
+      insert(args.rest,1,args["code"])
+    end if
+    exeFile=File(targetObj.computer,"/usr/bin/CodeEditor.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile),join(args.rest," "))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"CodeEditor.exe")
+    if exeFile isa Error then return Error.set("Code Editor not found")
+    launch(targetObj.shell,path(exeFile),join(args.rest," "))
+    System.tryWait(2)
+  end function
+  notepad=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    if args.rest then
+      if args.rest[0][0]!="/" then args.rest[0]=Io._getPath(targetObj,args.rest[0])
+    end if
+    exeFile=File(targetObj.computer,"/usr/bin/Notepad.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile),join(args.rest," "))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"Notepad.exe")
+    if exeFile isa Error then return Error.set("Notepad not found")
+    launch(targetObj.shell,path(exeFile),join(args.rest," "))
+    System.tryWait(2)
+  end function
+  logviewer=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    if args.rest then
+      if args.rest[0][0]!="/" then args.rest[0]=Io._getPath(targetObj,args.rest[0])
+    end if
+    exeFile=File(targetObj.computer,"/usr/bin/LogViewer.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile),join(args.rest," "))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"LogViewer.exe")
+    if exeFile isa Error then return Error.set("Log Viewer not found")
+    launch(targetObj.shell,path(exeFile),join(args.rest," "))
+    System.tryWait(2)
+  end function
+  scanlan=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    exeFile=File(targetObj.computer,"/usr/bin/ScanLan.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"ScanLan.exe")
+    if exeFile isa Error then return Error.set("Scan Lan not found")
+    launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  configlan=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    exeFile=File(targetObj.computer,"/usr/bin/ConfigLan.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"ConfigLan.exe")
+    if exeFile isa Error then return Error.set("Config Lan not found")
+    launch(targetObj.shell,path(exeFile))
+    return System.tryWait(2)
+  end function
+  mapviewer=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    exeFile=File(targetObj.computer,"/usr/bin/Map.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"Map.exe")
+    if exeFile isa Error then return Error.set("Map not found")
+    launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  pdf=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    if args.rest then
+      if args.rest[0][0]!="/" then args.rest[0]=Io._getPath(targetObj,args.rest[0])
+    end if
+    exeFile=File(targetObj.computer,"/usr/bin/PDFReader.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile),join(args.rest," "))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"PDFReader.exe")
+    if exeFile isa Error then return Error.set("PDF Reader not found")
+    launch(targetObj.shell,path(exeFile),join(args.rest," "))
+    System.tryWait(2)
+  end function
+  image=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    if args.rest then
+      if args.rest[0][0]!="/" then args.rest[0]=Io._getPath(targetObj,args.rest[0])
+    end if
+    exeFile=File(targetObj.computer,"/usr/bin/ImageViewer.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile),join(args.rest," "))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"ImageViewer.exe")
+    if exeFile isa Error then return Error.set("Image Viewer not found")
+    launch(targetObj.shell,path(exeFile),join(args.rest," "))
+    System.tryWait(2)
+  end function
+  admin=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    exeFile=File(targetObj.computer,"/usr/bin/AdminMonitor.exe")
+    if isRunning(targetObj,"AdminMonitor") then return
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"AdminMonitor.exe")
+    if exeFile isa Error then return Error.set("Admin Monitor not found")
+    launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  stocks=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    exeFile=File(targetObj.computer,"/usr/bin/Stocks.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"Stocks.exe")
+    if exeFile isa Error then return Error.set("Stocks not found")
+    launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  exploit=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    exeFile=File(targetObj.computer,"/usr/bin/ExploitReport.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"ExploitReport.exe")
+    if exeFile isa Error then return Error.set("Exploit Report not found")
+    launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  employee=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    // Try current directory first (typical location for organization data apps)
+    exeFile=File(targetObj.computer,path(targetObj.dir.current)+"/EmployeesViewer.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"EmployeesViewer.exe")
+    if exeFile isa Error then return Error.set("Employees Viewer not found")
+    launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  traffic=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    // Try current directory first (typical location for organization data apps)
+    exeFile=File(targetObj.computer,path(targetObj.dir.current)+"/traffic_network")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"traffic_network")
+    if exeFile isa Error then return Error.set("Traffic Network not found")
+    launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  police=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    // Try current directory first (typical location for organization data apps)
+    exeFile=File(targetObj.computer,path(targetObj.dir.current)+"/PoliceRecord.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"PoliceRecord.exe")
+    if exeFile isa Error then return Error.set("Police Record not found")
+    launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  student=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    // Try current directory first (typical location for organization data apps)
+    exeFile=File(targetObj.computer,path(targetObj.dir.current)+"/StudentsViewer.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"StudentsViewer.exe")
+    if exeFile isa Error then return Error.set("Students Viewer not found")
+    launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  hire=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    // Try current directory first (typical location for organization data apps)
+    // XFIX1.0: HireViewer.exe renamed to HiringManager.exe
+    //exeFile=File(targetObj.computer,path(targetObj.dir.current)+"/HiringManager.exe")
+    //if exeFile then
+    //  launch(targetObj.shell,path(exeFile))
+    //  return System.tryWait(2)
+    //end if
+    //exeFile=Io.getExe(targetObj.root,"HiringManager.exe")
+    //if exeFile isa Error then return Error.set("Hiring Manager not found")
+    //launch(targetObj.shell,path(exeFile))
+    //return System.tryWait(2)
+    exeFile=File(targetObj.computer,path(targetObj.dir.current)+"/HireViewer.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"HireViewer.exe")
+    if exeFile isa Error then return Error.set("Hire Viewer not found")
+    launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  // XFIX1.0: News.exe (new in Grey Hack 1.0)
+  //news=function(args)
+  //  targetObj=null
+  //  if args.l then targetObj=globals.G_main else targetObj=Obj
+  //  exeFile=File(targetObj.computer,"/usr/bin/News.exe")
+  //  if exeFile then
+  //    launch(targetObj.shell,path(exeFile),join(args.rest," "))
+  //    return System.tryWait(2)
+  //  end if
+  //  exeFile=Io.getExe(targetObj.root,"News.exe")
+  //  if exeFile isa Error then return Error.set("News not found")
+  //  launch(targetObj.shell,path(exeFile),join(args.rest," "))
+  //  System.tryWait(2)
+  //end function
+  // XFIX1.0: ConfigCompany.exe (new in Grey Hack 1.0)
+  //configcompany=function(args)
+  //  targetObj=null
+  //  if args.l then targetObj=globals.G_main else targetObj=Obj
+  //  exeFile=File(targetObj.computer,"/usr/bin/ConfigCompany.exe")
+  //  if exeFile then
+  //    launch(targetObj.shell,path(exeFile),join(args.rest," "))
+  //    return System.tryWait(2)
+  //  end if
+  //  exeFile=Io.getExe(targetObj.root,"ConfigCompany.exe")
+  //  if exeFile isa Error then return Error.set("Config Company not found")
+  //  launch(targetObj.shell,path(exeFile),join(args.rest," "))
+  //  System.tryWait(2)
+  //end function
+  chat=function(args)
+    targetObj=null
+    if args.l then targetObj=globals.G_main else targetObj=Obj
+    exeFile=File(targetObj.computer,"/usr/bin/Chat.exe")
+    if exeFile then
+      launch(targetObj.shell,path(exeFile))
+      return System.tryWait(2)
+    end if
+    exeFile=Io.getExe(targetObj.root,"Chat.exe")
+    if exeFile isa Error then return Error.set("Chat client not found")
+    launch(targetObj.shell,path(exeFile))
+    System.tryWait(2)
+  end function
+  // Application launcher dispatch map (flag/name → function reference)
+  launchers={
+    "-a":@admin,
+    "admin":@admin,
+    "-t":@terminal,
+    "term":@terminal,
+    "-b":@browser,
+    "web":@browser,
+    "-e":@email,
+    "email":@email,
+    "-s":@settings,
+    "set":@settings,
+    "-f":@fileexplorer,
+    "file":@fileexplorer,
+    "-c":@codeeditor,
+    "code":@codeeditor,
+    "-n":@notepad,
+    "note":@notepad,
+    "-l":@logviewer,
+    "log":@logviewer,
+    "-w":@scanlan,
+    "scan":@scanlan,
+    "-g":@configlan,
+    "config":@configlan,
+    "-m":@mapviewer,
+    "map":@mapviewer,
+    "-d":@pdf,
+    "pdf":@pdf,
+    "-i":@image,
+    "image":@image,
+    "-k":@stocks,
+    "stocks":@stocks,
+    "-x":@exploit,
+    "exploit":@exploit,
+    "-y":@employee,
+    "employee":@employee,
+    "-r":@traffic,
+    "traffic":@traffic,
+    "-p":@police,
+    "police":@police,
+    "-u":@student,
+    "student":@student,
+    "-h":@hire,
+    "hire":@hire,
+    "-j":@chat,
+    "chat":@chat
+    // XFIX1.0: "-o":@news, "news":@news,
+    // XFIX1.0: "-z":@configcompany, "company":@configcompany, "cfgco":@configcompany
+  }
+  if not hasIndex(launchers,appName) then return Error.set(Text.msg.flag+appName+" ]")
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE then
+    _pipeFiles=[]
+    for _line in globals.G_pipe.stdin.split(char(10))
+      _line=trim(_line)
+      if _line!="" then push(_pipeFiles,_line)
+    end for
+    if len(_pipeFiles)>0 then
+      for _pipeFile in _pipeFiles
+        argv.rest=[_pipeFile]
+        gco=get_custom_object
+        _gcoSaved={}
+        _gcoKeys=[]
+        for k in gco;push(_gcoKeys,k.key);end for
+        for k in _gcoKeys;_gcoSaved[k]=gco[k];remove(gco,k);end for
+        launchers[appName](argv)
+        gco=get_custom_object
+        for k in _gcoSaved;gco[k.key]=k.value;end for
+      end for
+      return
+    end if
+  end if
+  if argv.deploy then
+    exeNames={
+      "-a":"AdminMonitor.exe","admin":"AdminMonitor.exe",
+      "-t":"Terminal.exe","term":"Terminal.exe",
+      "-b":"Browser.exe","web":"Browser.exe",
+      "-e":"Mail.exe","email":"Mail.exe",
+      "-s":"Settings.exe","set":"Settings.exe",
+      "-f":"FileExplorer.exe","file":"FileExplorer.exe",
+      "-c":"CodeEditor.exe","code":"CodeEditor.exe",
+      "-n":"Notepad.exe","note":"Notepad.exe",
+      "-l":"LogViewer.exe","log":"LogViewer.exe",
+      "-w":"ScanLan.exe","scan":"ScanLan.exe",
+      "-g":"ConfigLan.exe","config":"ConfigLan.exe",
+      "-m":"Map.exe","map":"Map.exe",
+      "-d":"PDFReader.exe","pdf":"PDFReader.exe",
+      "-i":"ImageViewer.exe","image":"ImageViewer.exe",
+      "-k":"Stocks.exe","stocks":"Stocks.exe",
+      "-x":"ExploitReport.exe","exploit":"ExploitReport.exe",
+      "-j":"Chat.exe","chat":"Chat.exe"
+      // XFIX1.0: "-o":"News.exe","news":"News.exe",
+      // XFIX1.0: "-z":"ConfigCompany.exe","company":"ConfigCompany.exe","cfgco":"ConfigCompany.exe",
+      // XFIX1.0: "-h":"HiringManager.exe","hire":"HiringManager.exe"
+    }
+    if hasIndex(exeNames,appName) then return Builder.launchApp(Obj,exeNames[appName],argv.rest)
+    return Error.set("Cannot deploy "+appName)
+  end if
+  gco=get_custom_object
+  _gcoSaved={}
+  _gcoKeys=[]
+  for k in gco;push(_gcoKeys,k.key);end for
+  for k in _gcoKeys;_gcoSaved[k]=gco[k];remove(gco,k);end for
+  launchers[appName](argv)
+  gco=get_custom_object
+  for k in _gcoSaved;gco[k.key]=k.value;end for
+end function

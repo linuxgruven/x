@@ -1,0 +1,195 @@
+// Man page for system
+manSystem="SYSTEM(1)                        X Shell Manual                        SYSTEM(1)
+
+<b>NAME</b>
+    sys - System management framework
+
+<b>SYNOPSIS</b>
+    <b>sys -e</b>
+    <b>sys -z</b>
+    <b>sys -t</b> [[PATH]]
+    <b>sys restore</b> [--all] (--boot) (--system) (--perms) (--etc)
+    <b>sys -c</b>
+    <b>sys -s</b>
+    <b>sys list -n -c</b>
+    <b>sys list -n -x</b>
+    <b>sys list -n -l</b>
+    <b>sys list -p -c</b>
+    <b>sys list -p -x</b>
+    <b>sys list -p -l</b>
+    <b>sys -r</b>
+    <b>sys -l</b>
+    <b>sys -b</b>
+    <b>sys -d</b>
+    <b>sys -ld</b>
+    <b>sys -a</b>
+    <b>sys check</b>
+
+<b>DESCRIPTION</b>
+    Comprehensive system management framework for filesystem encryption, security
+    hardening, database administration, and binary auditing. Manages master name
+    and password lists, system restoration, and /bin directory cleanup. Includes
+    soft and hard security modes with filesystem permission management.
+
+<b>OPTIONS</b>
+    <b>-e</b>
+        Encrypt filesystem
+        Default target is root /
+
+    <b>-z</b>
+        Decrypt filesystem
+        Default target is root /
+
+    <b>-t [PATH]</b>
+        Brick system or directory
+        Uses current directory if no path
+        <color=#ff4b4b>WARNING: DO NOT RUN ON HOME SYSTEM</color>
+        <color=#ff4b4b>THIS WILL BRICK YOUR SYSTEM</color>
+
+    <b>restore (--all) (--boot) (--system) (--perms) (--etc)</b>
+        Restore system components
+        Shell objects can rebuild /bin
+
+    <b>-c</b>
+        Soft secure system
+        Chmod root and delete passwd
+
+    <b>-s</b>
+        Hard secure system
+        Enhanced soft secure
+        <color=#ff4b4b>WARNING: DO NOT RUN IF /home MODIFIED</color>
+
+    <b>list -n -c</b>
+        Check name file duplicates
+        Compare to master name list
+
+    <b>list -n -x</b>
+        Clear master name list
+        Remove from memory
+
+    <b>list -n -l</b>
+        Load master name list
+        Read into memory
+
+    <b>list -p -c</b>
+        Check password duplicates
+        Compare to master password list
+
+    <b>list -p -x</b>
+        Clear master password list
+        Remove rainbow table from memory
+
+    <b>list -p -l</b>
+        Load master password list
+        Read rainbow table
+
+    <b>-r</b>
+        Resecure hard-secured system
+        Reapply security settings
+
+    <b>-l</b>
+        Create x system link
+        Add to /bin directory
+
+    <b>-b</b>
+        Remove all /bin files
+        Clear binary directory
+
+    <b>-d</b>
+        Manage database server
+        Database administration
+
+    <b>-ld</b>
+        Manage library database
+        LMS server management
+
+    <b>-a</b>
+        Audit /bin binaries
+        Check binary integrity
+
+    <b>check</b>
+        Check that crypto.so and metaxploit.so are in data folder
+        Check that aptclient.so and librshell.so are in savedLibs
+        If not found, will install and add them
+        Can only be run from main session
+        Requires internet connection
+        Automatically adds a repository if needed
+        Removes librshell.so from /lib after saving (security)
+
+<b>SHELL AND COMPUTER OBJECT FLAGS</b>
+    <b>restore</b>
+    <b>-e</b>
+    <b>-z</b>
+    <b>-t [PATH]</b>
+
+<b>FILE OBJECT FLAGS</b>
+    <b>-e</b>
+    <b>-z</b>
+    <b>-t [PATH]</b>
+    <b>-p</b>
+        File objects can only restore permissions
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Encryption</color>
+    <b>sys -e</b>
+        Encrypt root filesystem
+
+    <b>sys -z</b>
+        Decrypt root filesystem
+
+    <color=#e4ff34># Security</color>
+    <b>sys -c</b>
+        Soft secure system
+
+    <b>sys -s</b>
+        Hard secure system
+
+    <b>sys -r</b>
+        Resecure system
+
+    <color=#e4ff34># System Restoration</color>
+    <b>sys restore --all</b>
+        Restore everything
+
+    <b>sys restore --boot</b>
+        Restore boot only
+
+    <b>sys restore --perms</b>
+        Restore permissions
+
+    <color=#e4ff34># List Management</color>
+    <b>sys list -n -l</b>
+        Load master name list
+
+    <b>sys list -n -c</b>
+        Check name duplicates
+
+    <b>sys list -p -l</b>
+        Load password list
+
+    <b>sys list -p -c</b>
+        Check password duplicates
+
+    <color=#e4ff34># Database Management</color>
+    <b>sys -d</b>
+        Manage main database
+
+    <b>sys -ld</b>
+        Manage library database
+
+    <color=#e4ff34># Binary Management</color>
+    <b>sys -l</b>
+        Create x link in /bin
+
+    <b>sys -a</b>
+        Audit /bin binaries
+
+    <b>sys -b</b>
+        Clear /bin directory
+
+    <color=#e4ff34># Library Management</color>
+    <b>sys check</b>
+        Verify and install required libraries
+
+<b>SEE ALSO</b>
+    <b>rec</b>"

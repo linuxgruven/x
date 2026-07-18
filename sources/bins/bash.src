@@ -1,0 +1,41 @@
+binBash="Bash=function
+	hostname=get_name(host_computer(get_shell))
+	prompt=hostname+current_path+""$""
+	if (active_user==""root"") then
+		prompt=hostname+"":""+current_path+""#""
+	else if (home_dir==current_path) then
+		prompt=hostname+"":~$""
+	end if
+	input=user_input(active_user+""@""+prompt+"" "",false,false,true)
+	if(len(input)==0) then return
+	tokens=split(trim(input),"" "")
+	command=tokens[0]
+	args=""""
+	if(len(tokens)>1) then
+		tokens.remove(0)
+		args=join(tokens)
+	end if
+	if(command==""exit"") then exit
+	if(command==""clear"") then
+		clear_screen
+	else
+		finalPath=GetFinalPath(command)
+		input=launch(get_shell,finalPath,args)
+		if input and input!=1 then print(input)
+	end if
+end function
+GetFinalPath=function(command)
+	searchPaths=[current_path,""/bin"",""/usr/bin""]
+	_len=len(searchPaths)
+	i=0
+	while i<_len
+		if i==0 then fullPath=get_abs_path(command) else fullPath=searchPaths[i]+""/""+command
+		file=File(host_computer(get_shell),fullPath)
+		if (file!=null) then return fullPath
+		i=i+1
+	end while
+	return command
+end function
+while(1)
+Bash
+end while"

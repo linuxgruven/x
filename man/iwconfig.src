@@ -1,0 +1,32 @@
+// Man page for iwconfig
+manIwconfig="IWCONFIG(8)                      X Shell Manual                      IWCONFIG(8)
+
+<b>NAME</b>
+    iwconfig - view wifi information
+<b>SYNOPSIS</b>
+    <b>iwconfig</b>
+    <b>iwconfig </b><b>DEVICE </b><b>BSSID </b><b>ESSID </b><b>PASSWORD</b>
+<b>DESCRIPTION</b>
+    View and configure wireless network device. Display current WiFi information
+    or connect to different WiFi networks using BSSID, ESSID, and password.
+<b>OPTIONS</b>
+    <b>iwconfig</b>
+    Display WiFi info
+    Current device status
+
+    <b>DEVICE BSSID ESSID PASSWORD</b>
+    Connect to WiFi
+    Configure wireless device
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View Info</color>
+    <b>iwconfig</b>
+    Display WiFi status
+
+    <color=#e4ff34># Connect to Network</color>
+    <b>iwconfig wlan0 5C:78:31:39:D5:43 tux_wifi tux</b>
+    Connect wlan0 device
+
+    <b>iwconfig wlan1 AA:BB:CC:DD:EE:FF mynetwork password123</b>
+    Switch WiFi network
+<b>SEE ALSO</b>
+    <b>ifconfig</b>, <b>aircrack</b>, <b>aireplay</b>"

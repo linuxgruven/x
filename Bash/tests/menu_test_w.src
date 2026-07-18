@@ -1,0 +1,236 @@
+testMenuTest="// Bash Menu Builtin Test
+// Tests the menu() function with various styles, colors, and edge cases
+
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>[PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>[FAIL]</color> _getvar(label) <color=#ffff00> expected:</color>_getvar(expected) <color=#ffff00> got:</color>_getvar(actual)
+  endif
+endfunc
+
+_print
+_print <color=#ffa500>============================================</color>
+_print <color=#ffa500>        BASH MENU BUILTIN TESTS</color>
+_print <color=#ffa500>============================================</color>
+_print
+
+// ===================================================================
+// SECTION 1 - BASIC MENU VALIDATION
+// ===================================================================
+_print <color=#00bfff>--- Section 1: Basic Menu Operations ---</color>
+
+// Test 1: Menu returns valid index range
+_setvar(simple, [Option A, Option B, Option C])
+_print Selecting Option A from 3 items:
+_setvar(idx, menu(_getvar(simple), numbers, cyan))
+_print <color=#00ff00>[INFO]</color> Selected index: _getvar(idx)
+
+// Test 2: Verify single item menu works
+_setvar(single, [Only Option])
+_print Selecting from single item:
+_setvar(result, menu(_getvar(single), numbers))
+assert(single item menu returns 0, _getvar(result), 0)
+
+// Test 3: Larger menu
+_setvar(large_menu, [First, Second, Third, Fourth, Fifth, Sixth, Seventh, Eighth])
+_print Selecting from 8-item menu with letters:
+_setvar(choice, menu(_getvar(large_menu), letters, green))
+_print <color=#00ff00>[INFO]</color> Selected item index: _getvar(choice)
+
+_print
+
+// ===================================================================
+// SECTION 2 - NAMED COLORS
+// ===================================================================
+_print <color=#00bfff>--- Section 2: Named Colors ---</color>
+
+_setvar(colors, [Green, Red, Yellow, Magenta, Orange, Blue, Lime, White])
+
+_print Testing GREEN with letters:
+_setvar(g, menu(_getvar(colors), letters, green))
+
+_print Testing RED with numbers:
+_setvar(r, menu(_getvar(colors), numbers, red))
+
+_print Testing YELLOW:
+_setvar(y, menu(_getvar(colors), numbers, yellow))
+
+_print Testing MAGENTA:
+_setvar(m, menu(_getvar(colors), letters, magenta))
+
+_print Testing ORANGE:
+_setvar(o, menu(_getvar(colors), numbers, orange))
+
+_print Testing BLUE:
+_setvar(b, menu(_getvar(colors), letters, blue))
+
+_print Testing LIME:
+_setvar(l, menu(_getvar(colors), numbers, lime))
+
+_print Testing DEFAULT (cyan):
+_setvar(d, menu(_getvar(colors), letters))
+
+_print
+
+// ===================================================================
+// SECTION 3 - HEX COLORS
+// ===================================================================
+_print <color=#00bfff>--- Section 3: Hex Color Codes ---</color>
+
+_setvar(hex_colors, [Light Blue, Red, Yellow, Purple, Orange, Sky Blue, Lime, Pink])
+
+_print Testing light blue (00bfff) with numbers:
+_setvar(h1, menu(_getvar(hex_colors), numbers, 00bfff))
+
+_print Testing red (ff0000) with letters:
+_setvar(h2, menu(_getvar(hex_colors), letters, ff0000))
+
+_print Testing orange (ffa500):
+_setvar(h3, menu(_getvar(hex_colors), numbers, ffa500))
+
+_print Testing purple (#9370db):
+_setvar(h4, menu(_getvar(hex_colors), letters, #9370db))
+
+_print Testing sky blue (87ceeb):
+_setvar(h5, menu(_getvar(hex_colors), numbers, 87ceeb))
+
+_print Testing hot pink (#ff69b4):
+_setvar(h6, menu(_getvar(hex_colors), letters, #ff69b4))
+
+_print Testing dark green (006400):
+_setvar(h7, menu(_getvar(hex_colors), numbers, 006400))
+
+_print Testing gold (#ffd700):
+_setvar(h8, menu(_getvar(hex_colors), letters, #ffd700))
+
+
+// ===================================================================
+// SECTION 4 - NAMED COLORS WITH SPECIAL CHARACTERS
+// ===================================================================
+_print <color=#00bfff>--- Section 4: Special Characters (Named Colors) ---</color>
+
+_setvar(special, [Item-with-dash, Item_with_underscore, Item.with.dot, Item@symbol])
+
+_print Testing special chars (green):
+_setvar(s1, menu(_getvar(special), numbers, green))
+
+_print Testing special chars (red):
+_setvar(s2, menu(_getvar(special), letters, red))
+
+_print Testing special chars (orange):
+_setvar(s3, menu(_getvar(special), numbers, orange))
+
+_print Testing special chars (magenta):
+_setvar(s4, menu(_getvar(special), letters, magenta))
+
+_print
+
+// ===================================================================
+// SECTION 5 - HEX COLORS WITH SPECIAL CHARACTERS
+// ===================================================================
+_print <color=#00bfff>--- Section 5: Special Characters (Hex Colors) ---</color>
+
+_print Testing special chars (hex: 00bfff):
+_setvar(s5, menu(_getvar(special), numbers, 00bfff))
+
+_print Testing special chars (hex: #ff69b4):
+_setvar(s6, menu(_getvar(special), letters, #ff69b4))
+
+_print Testing special chars (hex: 9370db):
+_setvar(s7, menu(_getvar(special), numbers, 9370db))
+
+_print Testing special chars (hex: #ffa500):
+_setvar(s8, menu(_getvar(special), letters, #ffa500))
+
+_print
+
+// ===================================================================
+// SECTION 6 - CONDITIONAL LOGIC (MIXED NAMED & HEX)
+// ===================================================================
+_print <color=#00bfff>--- Section 6: Logic with Mixed Colors ---</color>
+
+_setvar(actions, [Start Service, Stop Service, Restart Service, View Logs, Exit])
+_print Selecting action (named: orange):
+_setvar(action, menu(_getvar(actions), numbers, orange))
+
+if _getvar(action) == 0
+  _print <color=#00ff00>[ACTION]</color> Starting service...
+endif
+
+if _getvar(action) == 1
+  _print <color=#ffaa00>[ACTION]</color> Stopping service...
+endif
+
+if _getvar(action) == 2
+  _print <color=#ffaa00>[ACTION]</color> Restarting service...
+endif
+
+if _getvar(action) == 3
+  _print <color=#00aaff>[ACTION]</color> Viewing logs...
+endif
+
+if _getvar(action) == 4
+  _print <color=#ff0000>[ACTION]</color> Exiting...
+endif
+
+_print
+
+// ===================================================================
+// SECTION 7 - SEQUENTIAL MENUS (MIXED COLORS)
+// ===================================================================
+_print <color=#00bfff>--- Section 7: Sequential Menus (Named & Hex) ---</color>
+
+_setvar(env, [Development, Testing, Production])
+_print Select environment (hex: 00bfff):
+_setvar(env_choice, menu(_getvar(env), letters, 00bfff))
+
+if _getvar(env_choice) == 0
+  _print Environment: Development
+  _setvar(actions_dev, [Debug, Run Tests, Deploy to Dev])
+  _print Select action (named: green):
+  _setvar(dev_action, menu(_getvar(actions_dev), numbers, green))
+endif
+
+if _getvar(env_choice) == 1
+  _print Environment: Testing
+  _setvar(actions_test, [Run Tests, Deploy to Staging])
+  _print Select action (hex: #ffd700):
+  _setvar(test_action, menu(_getvar(actions_test), numbers, #ffd700))
+endif
+
+if _getvar(env_choice) == 2
+  _print Environment: Production
+  _setvar(actions_prod, [Verify Health, Deploy, Rollback])
+  _print Select action (named: red):
+  _setvar(prod_action, menu(_getvar(actions_prod), numbers, red))
+endif
+
+_print
+
+// ===================================================================
+// SECTION 8 - LETTER CASE MODES
+// ===================================================================
+_print <color=#00bfff>--- Section 8: Letters Case Mode (default, insensitive, strict) ---</color>
+
+_setvar(case_items, [Alpha, Beta, Gamma, Delta, Echo, Foxtrot, Golf, Hotel])
+
+_print Default letters mode (insensitive by default):
+_setvar(c1, menu(_getvar(case_items), letters, cyan))
+
+_print Explicit insensitive mode (accept lowercase or uppercase):
+_setvar(c2, menu(_getvar(case_items), letters, cyan, insensitive))
+
+_print Strict mode (uppercase labels only):
+_setvar(c3, menu(_getvar(case_items), letters, cyan, strict))
+
+_print
+
+// ===================================================================
+// SUMMARY
+// ===================================================================
+_print <color=#ffa500>============================================</color>
+_print <color=#00ff00>        MENU TESTS COMPLETED</color>
+_print <color=#ffa500>============================================</color>
+_print Both named colors and hex codes work!
+"

@@ -1,0 +1,59 @@
+// Man page for grab
+manGrab="GRAB(1)                          X Shell Manual                          GRAB(1)
+
+<b>NAME</b>
+    grab - download remote log files
+<b>SYNOPSIS</b>
+    <b>grab</b>
+    <b>grab -p</b> PORT
+    <b>grab -w</b>
+    <b>grab -p</b> PORT <b>-w</b>
+<b>DESCRIPTION</b>
+    <b>grab</b> is used to download remote log files from services. If no port
+    is provided then the default port that will be used is port 0 (router). If
+    no shell can be found <b>grab</b> will return an error. Downloaded logs
+    are saved to your local system for analysis.
+<b>OPTIONS</b>
+    <b>grab</b>
+      Download the router log (port 0).
+
+    <b>-p PORT</b>
+      Download log from specified port.
+
+    <b>-w</b>
+      Wipe the log file after retrieving it.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Log Retrieval</color>
+    <b>grab</b>
+    Download router log (port 0)
+
+    <b>grab -p 22</b>
+    Download SSH service log
+
+    <b>grab -p 80</b>
+    Download HTTP service log
+
+    <color=#e4ff34># Wipe After Download</color>
+    <b>grab -w</b>
+    Download and wipe router log
+
+    <b>grab -p 21 -w</b>
+    Download FTP log and wipe it
+
+    <b>grab -p 25 -w</b>
+    Download SMTP log and cover tracks
+
+    <color=#e4ff34># Service Logs</color>
+    <b>grab -p 3306</b>
+    Download SQL database log
+
+    <b>grab -p 1433</b>
+    Download database service log
+
+    <b>grab -p 8080</b>
+    Download web proxy log
+
+    <b>grab -p 4040 -w</b>
+    Download rshell log and wipe
+<b>SEE ALSO</b>
+    <b>wipe</b>, <b>dig</b>, <b>nmap</b>"

@@ -1,0 +1,102 @@
+// cut_pipe_test.src
+// Tests piping with cut for IP extraction and other field operations
+
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>  CUT & IP PIPE TESTS</color>
+_print <color=#00ff00>========================================</color>
+_print
+
+// Test 1: cut first octet from IP
+_print <color=#00bfff>[Test 1]</color> Extract first octet from IP
+echo 192.168.1.100 | cut -d. -f1
+_print
+
+// Test 2: cut last octet
+_print <color=#00bfff>[Test 2]</color> Extract last octet from IP
+echo 192.168.1.100 | cut -d. -f4
+_print
+
+// Test 3: cut subnet (first 3 octets)
+_print <color=#00bfff>[Test 3]</color> Extract subnet (octets 1-3)
+echo 192.168.1.100 | cut -d. -f1-3
+_print
+
+// Test 4: build IP from parts using cut
+_print <color=#00bfff>[Test 4]</color> Strip last octet and append new host
+_setvar(subnet, 10.0.0.255)
+_print Subnet base:
+echo _getvar(subnet) | cut -d. -f1-3
+_print
+
+// Test 5: cut field from colon-delimited string
+_print <color=#00bfff>[Test 5]</color> Cut field from colon string
+echo root:x:0:0:root:/root:/bin/bash | cut -d: -f1
+_print
+
+// Test 6: cut multiple fields from colon string
+_print <color=#00bfff>[Test 6]</color> Cut username and home dir
+echo tux:x:1000:1000::/home/tux:/bin/bash | cut -d: -f1,6
+_print
+
+// Test 7: cut with pipe from grep
+_print <color=#00bfff>[Test 7]</color> grep then cut username from passwd
+cat /etc/passwd | grep root | cut -d: -f1
+_print
+
+// Test 8: cut port number from ip:port string
+_print <color=#00bfff>[Test 8]</color> Extract port from ip:port
+echo 192.168.1.1:8080 | cut -d: -f2
+_print
+
+// Test 9: cut IP from ip:port string
+_print <color=#00bfff>[Test 9]</color> Extract IP from ip:port
+echo 10.0.0.5:22 | cut -d: -f1
+_print
+
+// Test 10: pipe through multiple cuts
+_print <color=#00bfff>[Test 10]</color> Extract second octet via chained pipe
+echo 172.16.254.1 | cut -d. -f2
+_print
+
+// Test 11: cut chars by position
+_print <color=#00bfff>[Test 11]</color> Cut first 3 chars of string
+echo HelloWorld | cut -c1-3
+_print
+
+// Test 12: cut from variable
+_print <color=#00bfff>[Test 12]</color> Cut from variable value
+_setvar(ip, 203.0.113.42)
+_print Third octet:
+echo _getvar(ip) | cut -d. -f3
+_print
+
+// Test 13: net_random IP then extract subnet
+_print <color=#00bfff>[Test 13]</color> Random IP - extract first two octets
+_setvar(rip, _net_random)
+_print Full IP: _getvar(rip)
+_print Top 2 octets:
+echo _getvar(rip) | cut -d. -f1-2
+_print
+
+// Test 14: cut from net_random IP
+_print <color=#00bfff>[Test 14]</color> Extract last octet from random IP
+_setvar(rip2, _net_random)
+_print Random IP: _getvar(rip2)
+_print Last octet:
+echo _getvar(rip2) | cut -d. -f4
+_print
+
+// Test 15: awk comparison - same result different tool
+_print <color=#00bfff>[Test 15a]</color> awk field 2 with dot delimiter (expect: 20)
+echo 10.20.30.40 | awk -F. '{print $2}'
+_print
+_print <color=#00bfff>[Test 15b]</color> awk last field $NF (expect: 40)
+echo 10.20.30.40 | awk -F. '{print $NF}'
+_print
+_print <color=#00bfff>[Test 15c]</color> awk whole line passthrough
+echo 10.20.30.40 | awk '{print $0}'
+_print
+
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>  ALL TESTS COMPLETE</color>
+_print <color=#00ff00>========================================</color>

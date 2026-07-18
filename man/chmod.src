@@ -1,0 +1,57 @@
+// Man page for chmod
+// XFIX1.0: -r uses engine recurse (fast). Per-node denial reporting is on chown/chgrp/chog.
+manChmod="CHMOD(8)                         X Shell Manual                         CHMOD(8)
+
+<b>NAME</b>
+    chmod - change the access permissions of a file|directory
+<b>SYNOPSIS</b>
+    <b>chmod </b> [<b>-r|-R</b>] <b>[u|g|o][|-][wrx] </b><b>FILE</b> [FILE...]
+    <b>chmod </b> [<b>-r|-R</b>] <b>000-777 </b><b>FILE</b> [FILE...]
+    <b>find</b> PATTERN | <b>chmod</b> <b>MODE</b>
+<b>DESCRIPTION</b>
+    Modify file and folder permissions for read, write, and execute access.
+    Permissions apply to owner, group, and others. Use symbolic (urwx) or octal (777).
+    Recursive -r applies to all subdirectories. Octal: 4=read, 2=write, 1=execute.
+    Supports glob patterns for multiple files: <b>*.sh</b>, <b>bin/*</b>, <b>src/**/*.src</b>
+    Accepts filenames from stdin via pipe — mode is passed as the argument.
+<b>OPTIONS</b>
+    <b>-r, -R</b>
+    Recursive mode
+    Apply to directory tree
+
+    <b>[u|g|o][|-][rwx]</b>
+    Symbolic permissions
+    Add or remove flags
+
+    <b>000-777</b>
+    Octal permissions
+    Three-digit mode
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Symbolic Mode</color>
+    <b>chmod ow file.txt</b>
+    Add write for others
+
+    <b>chmod g-r file.txt</b>
+    Remove group read
+
+    <b>chmod u-rx document.txt</b>
+    Remove user readexec
+
+    <color=#e4ff34># Octal Mode</color>
+    <b>chmod 645 document.txt</b>
+    Owner:rw, Group:r, Other:rx
+
+    <b>chmod 755 script.sh</b>
+    Standard executable
+
+    <b>chmod 600 secret.txt</b>
+    Owner readwrite only
+
+    <color=#e4ff34># Pipe Support</color>
+    <b>find *.src | chmod 755</b>
+    Make all matched files executable
+
+    <b>find /home/user/scripts *.sh | chmod u+x</b>
+    Add execute for owner on all scripts
+<b>SEE ALSO</b>
+    <b>chown</b>, <b>chgrp</b>, <b>chog</b>"

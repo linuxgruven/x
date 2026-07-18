@@ -1,0 +1,49 @@
+// dig_email_list.src
+// Tests --list mode: returns values(rawMap) — ordered list of all section values
+// Section indices: U=0, E=1, B=2, R=3, G=4, F=5, S=6, PIP=7, type=8
+// NOTE: Bracket index [N] is not supported by the engine — use a counter loop instead
+// Usage: @dig_email_list
+
+_setvar(sections, _dig -e --list --quiet)
+
+if _len(_getvar(sections)) == 0
+  _print red(No data returned)
+  return
+endif
+
+_print green(=== dig --list output ===)
+_setvar(nsec, _len sections)
+_print cyan(Total sections: ) _getvar(nsec)
+_print white(-----------------------------)
+
+// Walk sections by index to extract named fields
+_setvar(emails, [])
+_setvar(pip, )
+_setvar(digtype, )
+_setvar(idx, 0)
+for section in _getvar(sections)
+  if _getvar(idx) == 1
+    _setvar(emails, section)
+  endif
+  if _getvar(idx) == 7
+    _setvar(pip, section)
+  endif
+  if _getvar(idx) == 8
+    _setvar(digtype, section)
+  endif
+  _setvar(idx, _getvar(idx) + 1)
+endfor
+
+_print yellow(PIP:  ) _getvar(pip)
+_print yellow(type: ) _getvar(digtype)
+_setvar(nemails, _len emails)
+_print cyan(Email section count: ) _getvar(nemails)
+_print white(-----------------------------)
+
+for entry in _getvar(emails)
+  _print white(-----------------------------)
+  _print yellow(Name:  ) _getvar(entry).name
+  _print yellow(Email: ) _getvar(entry).email
+  _print yellow(Pass:  ) _getvar(entry).pass
+  _print yellow(IP:    ) _getvar(entry).ip
+endfor

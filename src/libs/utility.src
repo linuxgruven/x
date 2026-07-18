@@ -1,0 +1,438 @@
+// =============================================================================
+// UTILITY
+// Utility library; system operations, user identification, and machine classification.
+// =============================================================================
+Utility={}
+// Function: prioritizeByUserLevel
+// Purpose: Sort exploit/access array by user privilege level (root > user > guest)
+// Args:
+//   q - Array of objects with .u property ("r", "u", "g")
+// Returns: Sorted array with root first, then user, then guest
+Utility.prioritizeByUserLevel=function(q)
+  qRoot=[]
+  qUser=[]
+  qGuest=[]
+  for e in q
+    if not len(e) then continue
+    if e.u=="r" then
+      push(qRoot,e)
+    else if e.u=="u" then
+      push(qUser,e)
+    else if e.u=="g" then
+      push(qGuest,e)
+    else
+      push(qGuest,e)
+    end if
+  end for
+  return qRoot+qUser+qGuest
+end function
+// Function: getRepos
+// Purpose: Extract repository IP addresses from apt sources configuration
+// Args:
+//   Obj - Session object with .computer property
+// Returns: Array of IP address strings (empty if no repos or file missing)
+Utility.getRepos=function(Obj)
+  //Initialize empty repository list
+  r=[]
+	//Get the apt sources.txt file from /etc directory
+	f=File(Obj.computer,"/etc/apt/sources.txt")
+	//Return empty list if file doesn't exist
+	if not f then return r
+	//Split content into lines
+	lines=split(get_content(f),char(10))
+	//Return empty if no content
+	if not len(lines) then return r
+	//Handle one-liner JSON format
+	if len(lines)==1 then
+		line=lines[0]
+		searchPos=0
+		_len=len(line)
+		while searchPos<_len
+			//Find next occurrence of port 1542
+			pos1542=indexOf(line,"1542",searchPos)
+			if pos1542==null then break
+			//Search backwards to find opening quote
+			quoteEnd=pos1542-1
+			while quoteEnd>=0 and line[quoteEnd]!=char(34);quoteEnd-=1;end while
+			quoteStart=quoteEnd-1
+			while quoteStart>=0 and line[quoteStart]!=char(34);quoteStart-=1;end while
+			//Extract IP if valid quotes found
+			if quoteStart>=0 and quoteEnd>quoteStart then
+				ip=line[quoteStart+1:quoteEnd]
+				if indexOf(ip,".")!=null then push(r,ip)
+			end if
+			searchPos=pos1542+4
+		end while
+	else
+		//Handle multi-line format
+		for line in lines
+			//Check if line contains port 1542
+			if indexOf(line,"1542")==null then continue
+			//Extract IP from between quotes
+			quoteStart=indexOf(line,char(34))
+			if quoteStart==null then continue
+			quoteEnd=indexOf(line,char(34),quoteStart+1)
+			if quoteEnd==null then continue
+			ip=line[quoteStart+1:quoteEnd]
+			if indexOf(ip,".")!=null then push(r,ip)
+		end for
+	end if
+	//Return list of repository IP addresses
+	return r
+end function
+// Function: hasPasswd
+// Purpose: Check if /etc/passwd file exists and is readable
+// Args:
+//   c - Computer object to check
+// Returns: Boolean (true if passwd exists with content and read permission)
+Utility.hasPasswd=function(c)
+  //Get the passwd file from /etc directory
+  f=File(c,"/etc/passwd")
+  //Return false if file doesn't exist
+  if not f then return false
+  //Require readable content
+  if has_permission(f,"r") then
+    if len(get_content(f)) then return true
+  end if
+  return false
+end function
+// Function: getUserX
+// Purpose: Get current user information on local computer
+// Args: None (uses get_shell and active_user)
+// Returns: Map with "name", "user" (colored), "home" (File object)
+Utility.getUserX=function
+  //Get the computer from current shell
+  computer=host_computer(get_shell)
+  //Get the currently active username
+  user=active_user
+  //Get root directory for structure validation
+  rootDir=File(computer,"/")
+  //Check if file structure is unstable (<=3 folders in root)
+  if len(get_folders(rootDir))<=3 then return {
+    "name":"Unstable|file structure",
+    "raw":"unstable",
+    "user":red("UNSTABLE"),
+    "home":rootDir
+  }
+  //Check if user is root (highest privilege)
+  if user=="root" then return {
+    "name":"root",
+    "raw":"root",
+    "user":green("ROOT"),
+    "home":File(computer,"/root")
+  }
+  //Check if user is guest (lowest privilege)
+  if user=="guest" then
+    //Try to get guest home directory
+    home=File(computer,"/home/guest")
+    //Return guest with proper home if exists
+    if home then return {
+      "name":"guest",
+      "raw":"guest",
+      "user":red("GUEST"),
+      "home":home
+    //Otherwise use root directory as home
+    } else return {
+      "name":"guest",
+      "raw":"guest",
+      "user":red("GUEST"),
+      "home":rootDir
+    }
+  end if
+  //Try to get regular user's home directory
+  home=File(computer,"/home/"+user)
+  //Return user with proper home if exists
+  if home then return {
+    "name":user,
+    "raw":"user",
+    "user":blue("USER"),
+    "home":home
+  //Otherwise use root directory as home
+  } else return {
+    "name":user,
+    "raw":"user",
+    "user":blue("USER"),
+    "home":rootDir
+  }
+end function
+// Function: getUserEX
+// Purpose: Get user information from any object type (computer/shell/file)
+// Args:
+//   x - Computer, shell, or file object
+// Returns: Map with "name", "user", "home" keys (uncolored strings)
+Utility.getUserEX=function(x)
+  //Helper function to convert different object types to File object
+  getFile=function(x,z)
+		//Determine the type of object passed
+		obj=typeof(x)
+    //If computer object, create File directly
+    if obj=="computer" then return File(x,z)
+    //If shell object, get host computer first
+    if indexOf(obj,"shell")!=null then return File(host_computer(x),z)
+    //If file object, get root using FileHelper
+    if obj=="file" then return FileHelper.toRootEx(x)
+  end function
+  //Resolve root once and guard against invalid objects
+  root=getFile(x,"/")
+  if not root then return {
+    "name":"guest",
+    "raw":"guest",
+    "user":"guest",
+    "home":null
+  }
+  //Store guest directory if found (fallback option)
+  g=null
+  //Iterate through root directory folders
+  for f in get_folders(root)
+    //Check if root directory exists with full rwx permissions
+    if name(f)=="root" and Utility.hasRWX(f) then return {
+      "name":"root",
+      "raw":"root",
+      "user":"root",
+      "home":f
+    }
+    //Check if home directory exists
+    if name(f)=="home" then
+			//Iterate through user home directories
+			for h in get_folders(f)
+				//Skip guest directory but save it as fallback
+				if name(h)=="guest" then
+					g=h
+					continue
+				end if
+				//Check if user directory has full rwx permissions
+				if Utility.hasRWX(h) then return {
+          "name":name(h),
+          "raw":"user",
+          "user":"user",
+          "home":h
+        }
+			end for
+			//Exit outer loop after processing all users in /home
+			break
+		end if
+  end for
+	//Return guest if found during iteration
+	if g then return {
+    "name":"guest",
+    "raw":"guest",
+    "user":"guest",
+    "home":g
+    }
+	//Default fallback: guest with root directory as home
+	return {
+    "name":"guest",
+    "raw":"guest",
+    "user":"guest",
+    "home":root
+    }
+end function
+// Function: hasRWX
+// Purpose: Check if a file/folder has read, write, and execute permissions
+// Args:
+//   f - File object to check
+// Returns: Boolean (true if all three permissions present)
+Utility.hasRWX=function(f);return has_permission(f,"w") and has_permission(f,"r") and has_permission(f,"x");end function
+// Function: getUser
+// Purpose: Get user information from Obj.root with permission validation
+// Args:
+//   Obj - Session object with .root property (File object)
+// Returns: Map with "name", "user" (colored), "home" (File object)
+Utility.getUser=function(Obj)
+	//Store guest directory if found (fallback option)
+	g=null
+	//Check if file structure is unstable (<=3 folders in root)
+	if len(get_folders(Obj.root))<=3 then return {
+    "name":"Unstable|file structure",
+    "raw":"root",
+    "user":red("UNSTABLE"),
+    "home":Obj.root
+  }
+	//Iterate through root directory folders
+	for f in get_folders(Obj.root)
+		//Check if root directory exists
+		if name(f)=="root" then
+			//Check if root has full rwx permissions (highest privilege)
+			if Utility.hasRWX(f) then return {
+        "name":"root",
+        "raw":"root",
+        "user":green("ROOT"),
+        "home":f
+      }
+			//Skip to next folder if no permissions
+			continue
+		end if
+		//Check if home directory exists
+		if name(f)=="home" then
+			//Iterate through user home directories
+			for h in get_folders(f)
+				//Skip guest directory but save it as fallback
+				if name(h)=="guest" then
+					g=h
+					continue
+				end if
+				//Check if user directory has full rwx permissions
+				if Utility.hasRWX(h) then return {
+          "name":name(h),
+          "raw":"user",
+          "user":blue("USER"),
+          "home":h
+        }
+			end for
+			//Exit outer loop after processing all users in /home
+			break
+		end if
+	end for
+	//Return guest if found during iteration
+	if g then return {
+		"name":"guest",
+    "raw":"guest",
+		"user":red("GUEST"),
+		"home":g
+	}
+	//No valid home found, user is hobo (uses root directory)
+	return {
+    "name":"hobo",
+    "raw":"hobo",
+    "user":red("HOBO"),
+    "home":Obj.root
+  }
+end function
+// Function: machine
+// Purpose: Identify machine type from IP address and optional router
+// Args:
+//   i - IP address string
+//   r - Optional router object for port scanning
+// Returns: Colored device type string ("Router at", "Switch at", etc.)
+Utility.machine=function(i,r=null)
+  //Check if local workstation (0.0.0.0)
+  if i=="0.0.0.0" then return red("Workstation at")
+	//Check if router (has router object but no switch)
+	if get_switch(i)==null and get_router(i)!=null then return white("Router at")
+	//Check if switch (has both router and switch objects)
+	if get_switch(i)!=null and get_router(i)!=null then return white("Switch at")
+	//If router provided, scan ports to identify device type
+	if r then
+		//Iterate through all ports on device
+		for p in device_ports(r,i)
+			//Skip invalid port objects
+			if not p or p isa string then continue
+      //Check for smart appliance port (MQTT)
+      if port_number(p)==1883 then return orange("Appliance at")
+			//Check for router web interface port
+			if port_number(p)==8080 then return white("Router at")
+			//Check for camera port (surveillance devices)
+			if port_number(p)==37777 then return orange("Camera at")
+			//Check for player port (Grey Hack game port)
+			if port_number(p)==1222 then return purple("Player at")
+			//Check for IRC port (also indicates player)
+			if port_number(p)==6667 then return purple("Player at")
+		end for
+	end if
+  //Check if IP ends with .1 (common router pattern)
+  if split(i,"\.")[-1]=="1" then return white("Router at")
+	//Default fallback: assume remote workstation
+	return blue("Workstation at")
+end function
+// Function: toggleLog
+// Purpose: Swap /var/system.log with /var/old.log (rotate log files)
+// Args:
+//   Obj - Session object for file operations
+// Returns: null (performs action, shows error if no write permission)
+Utility.toggleLog=function(Obj)
+	//Try to get old.log file
+	f=Io.getFileObj(Obj,"/var/old.log")
+	//If old.log exists, rename it to system.log
+	if not f isa Error then
+		//Check write permission before moving
+		if has_permission(f,"w") then move(f,"/var","system.log") else Info.error(Info.message.NOW)
+	//Otherwise try to get system.log
+	else
+		f=Io.getFileObj(Obj,"/var/system.log")
+		//If system.log exists, rename it to old.log
+		if not f isa Error then
+			//Check write permission before moving
+			if has_permission(f,"w") then move(f,"/var","old.log") else Info.error(Info.message.NOW)
+		end if
+	end if
+end function
+// Function: checkValid
+// Purpose: Validate if session layer type is valid for operations
+// Args:
+//   Obj - Session object with .layer property
+//   s - Optional boolean to allow shell layer (default false)
+// Returns: Boolean (true if layer is main/proxy/pivot, or shell if s=true)
+Utility.checkValid=function(Obj,s=false)
+	//Check if main layer (local workstation)
+	if Obj.layer=="main" then return true
+	//Check if proxy layer (through proxy server)
+	if Obj.layer=="proxy" then return true
+	//Check if pivot layer (through compromised machine)
+	if Obj.layer=="pivot" then return true
+  //Optionally allow shell layer if s parameter is true
+  if s then
+    if Obj.layer=="shell" then return true
+  end if
+  return false
+end function
+// Function: mark
+// Purpose: Start/stop timer for measuring operation performance
+// Args: None (uses globals.G_attributes for state)
+// Returns: null (prints elapsed time on second call)
+Utility.mark=function
+  //Check if timer is not running (start timer)
+  if not globals.G_attributes.start then
+    //Record start time
+    globals.G_attributes.start=time
+  //Timer is running, stop and calculate elapsed time
+  else
+    //Record stop time
+    globals.G_attributes.stop=time
+    //Calculate and display elapsed time rounded to 2 decimals
+    print yellow("Proccess took: "+round(globals.G_attributes.stop-globals.G_attributes.start,2)+ " seconds")
+    //Reset start time for next measurement
+    globals.G_attributes.start=0
+  end if
+end function
+// Function: pressQ
+// Purpose: Print the standard "Press 'q' to stop" hint before a poll_input loop
+// Args: None
+// Returns: null
+Utility.pressQ=function;Info.info("Press 'q' to stop (may not be instant)");end function
+// Function: unixTime
+// Purpose: Convert current date/time to Unix timestamp (seconds since epoch)
+// Args: None (uses current_date global)
+// Returns: Integer - seconds since January 1, 1970 00:00:00 UTC
+Utility.unixTime=function
+  //Month name array for date parsing
+  _month=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+  //Split current_date string into components
+  dt=current_date.split(" ")
+  //Extract date and time components
+  dates=dt[0].split("/");times=dt[2].split(":")
+  //Parse day, month (convert name to number), and year
+  d=dates[0].to_int;m=_month.indexOf(dates[1])+1;y=dates[2].to_int
+  //Adjust year for civil calendar calculation (Jan/Feb treated as previous year)
+  y=y-(m <= 2)
+  //Calculate 400-year era for leap year handling
+  era=y;if y<0 then era=y-399;era=floor(era/400)
+  //Year within current era (0-399)
+  yoe=floor(y-era*400)
+  //Adjust month to March-based calendar (March=0, Feb=11)
+  if m>2 then t=m-3 else t=m+9
+  //Calculate day of year using civil calendar formula
+  doy=floor((153*t+2)/5+d-1)
+  //Calculate day of era (days since start of 400-year cycle)
+  doe=floor(yoe*365+yoe/4-yoe/100+doy)
+  //Calculate total days since Unix epoch (Jan 1, 1970)
+  epochDays=era*146097+doe-719468+1
+  //Convert days to seconds, add hours and minutes
+  result=(epochDays*24+times[0].to_int)*3600+times[1].to_int*60
+  return result
+end function
+// Function: getEpoch
+// Purpose: Convert current date/time to Y2K epoch (seconds since year 2000)
+// Args: None (delegates to unixTime)
+// Returns: Integer - seconds since January 1, 2000 00:00:00 UTC
+// Note: Subtracts 946684800 from Unix timestamp (Jan 1 2000 offset)
+Utility.getEpoch=function;return self.unixTime-946684800;end function

@@ -1,0 +1,14 @@
+// Man page for check
+manCheck="CHECK(1)                         X Shell Manual                         CHECK(1)
+
+<b>NAME</b>
+    check - Verify user assignment
+<b>SYNOPSIS</b>
+    <b>check</b>
+<b>DESCRIPTION</b>
+    Verify the current user assignment when permissions are corrupted
+    or you suspect X made an incorrect choice. If check finds a
+    discrepancy, it will automatically reset the user.
+<b>EXAMPLE:</b>
+    <b>check</b>
+    Verify and fix user assignment"

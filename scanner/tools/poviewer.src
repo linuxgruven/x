@@ -1,0 +1,202 @@
+GN=function(t);return "<color=#0ceb86>"+t+"</color>";end function
+RD=function(t);return "<color=#f00>"+t+"</color>";end function
+YL=function(t);return "<color=#ff0>"+t+"</color>";end function
+WH=function(t);return "<color=#fff>"+t+"</color>";end function
+OR=function(t);return "<color=#ffa500>"+t+"</color>";end function
+GY=function(t);return "<color=#888>"+t+"</color>";end function
+BL=function(t);return "<color=#00f>"+t+"</color>";end function
+_p=@print
+_s=@str
+_ui=@user_input
+_HC=@host_computer
+_gc=@get_content
+_uig=function(x);return _ui(GN(x));end function
+_MKW=7
+_miLab=function(l)
+  lab=l
+  while lab.len and lab[0]==" ";lab=lab[1:];end while
+  return lab
+end function
+_miKey=function(k)
+  token="["+k+"]"
+  pad=""
+  if token.len<_MKW then pad=" "*(_MKW-token.len)
+  return GN(token)+pad
+end function
+_mi=function(k,l);return _miKey(k)+GY(_miLab(l));end function
+_pe=function(m);_p RD("[!] ")+WH(m);end function
+_ps=function(m);_p GN("[+] ")+WH(m);end function
+prt=function(m);_p GY("[i] ")+WH(m);end function
+_lj=function(text,width);if text.len>=width then return text;return text+(" "*(width-text.len));end function
+_hd=function(u);if u=="root" then return "/root";return "/home/"+u;end function
+_gu=function(s);return active_user;end function
+_parse=function(line)
+  e={}
+  sp=line.indexOf(" v")
+  if sp==null then return null
+  e.lib=line[:sp]
+  rest=line[sp+2:]
+  sp2=rest.indexOf(" @ ")
+  if sp2==null then return null
+  e.ver=rest[:sp2]
+  rest2=rest[sp2+3:]
+  sp3=rest2.indexOf(" ")
+  if sp3==null then return null
+  e.addr=rest2[:sp3]
+  e.val=rest2[sp3+1:]
+  return e
+end function
+_load=function
+  comp=_HC(get_shell)
+  u=_gu(get_shell)
+  home=_hd(u)
+  f=comp.File(home+"/0day_exploits")
+  if not f then return []
+  content=_gc(f)
+  if not content then return []
+  lines=content.split(char(10))
+  entries=[]
+  for l in lines
+    if not l or not l.trim.len then continue
+    e=_parse(l.trim)
+    if e then
+      e.raw=l.trim
+      e.i=entries.len+1
+      entries.push(e)
+    end if
+  end for
+  return entries
+end function
+_libs=function(entries)
+  libs={}
+  for e in entries
+    k=e.lib+" v"+e.ver
+    if libs.hasIndex(k) then libs[k]=libs[k]+1 else libs[k]=1
+  end for
+  keys=libs.indexes
+  _p ""
+  _p GY("  --- Libraries ---")
+  for k in keys;_p GY("  "+_lj(_s(__k_idx+1),4))+YL(_lj(k,30))+GY(_s(libs[k])+" exploits");end for
+  _p ""
+  return keys
+end function
+_show=function(entries,filter="")
+  _p ""
+  _p OR("═"*60)
+  _p OR("  0day Exploits")+GY(" ("+_s(entries.len)+" total)")
+  _p OR("═"*60)
+  if filter then _p GY("  Filter: ")+YL(filter)
+  _p ""
+  _p GY(_lj("#",5))+GY(_lj("LIBRARY",24))+GY(_lj("VERSION",10))+GY(_lj("ADDRESS",14))+GY("VALUE")
+  _p GY("-"*60)
+  shown=0
+  for e in entries
+    if filter then
+      match=(e.lib+" v"+e.ver).lower.indexOf(filter.lower)
+      if match==null then
+        match=e.addr.lower.indexOf(filter.lower)
+        if match==null then continue
+      end if
+    end if
+    _p WH(_lj(_s(e.i),5))+YL(_lj(e.lib,24))+BL(_lj(e.ver,10))+OR(_lj(e.addr,14))+GY(e.val)
+    shown=shown+1
+  end for
+  if shown==0 then _p GY("  No entries found")
+  _p ""
+end function
+entries=_load
+filter=""
+while true
+  clear_screen
+  _show(entries,filter)
+  _p _mi("r"," Refresh")
+  _p _mi("l"," Libs (browse by lib:version)")
+  if filter then fv=filter else fv="none"
+  _p _mi("f"," Filter (current: "+fv+")")
+  _p _mi("c"," Clear filter")
+  _p _mi("d"," Delete entry")
+  _p _mi("w"," Wipe all")
+  _p _mi("x"," Exit")
+  c=_uig("[0day] > ")
+  if not c or not c.trim.len then continue
+  if c.trim.lower=="x" then break
+  ch=c.trim.lower
+  if ch=="r" then
+    entries=_load
+    filter=""
+    _ps("Reloaded "+_s(entries.len)+" entries")
+    continue
+  end if
+  if ch=="l" then
+    keys=_libs(entries)
+    if not keys.len then
+      prt("No entries")
+      continue
+    end if
+    sel=_uig("[Lib # or 'b' back] > ")
+    if not sel or sel.trim.lower=="b" then continue
+    si=sel.trim.to_int
+    if not si isa number or si<1 or si>keys.len then
+      _pe("Invalid selection")
+      continue
+    end if
+    filter=keys[si-1]
+    continue
+  end if
+  if ch=="f" then
+    ft=_uig("[Filter by lib/ver/addr] > ")
+    if ft and ft.trim.len then filter=ft.trim else filter=""
+    continue
+  end if
+  if ch=="c" then
+    filter=""
+    continue
+  end if
+  if ch=="d" then
+    sel=_uig("[Entry # to delete] > ")
+    if not sel then continue
+    si=sel.trim.to_int
+    if not si isa number or si<1 or si>entries.len then
+      _pe("Invalid selection")
+      continue
+    end if
+    entry=entries[si-1]
+    _p GY("  Delete: ")+YL(entry.raw)
+    confirm=_uig("[y/n] > ")
+    if not confirm or confirm.trim.lower!="y" then continue
+    comp=_HC(get_shell)
+    u=_gu(get_shell)
+    home=_hd(u)
+    f=comp.File(home+"/0day_exploits")
+    if not f then
+      _pe("File not found")
+      continue
+    end if
+    content=_gc(f)
+    if not content then continue
+    lines=content.split(char(10))
+    newLines=[]
+    for l in lines;if l.trim!=entry.raw then newLines.push(l);end for
+    f.set_content(newLines.join(char(10)))
+    entries=_load
+    _ps("Deleted entry #"+_s(si))
+    continue
+  end if
+  if ch=="w" then
+    if not entries.len then
+      prt("No entries to wipe")
+      continue
+    end if
+    confirm=_uig("[Wipe all "+_s(entries.len)+" entries? y/n] > ")
+    if not confirm or confirm.trim.lower!="y" then continue
+    comp=_HC(get_shell)
+    u=_gu(get_shell)
+    home=_hd(u)
+    f=comp.File(home+"/0day_exploits")
+    if f then f.set_content("")
+    entries=[]
+    filter=""
+    _ps("All entries wiped")
+    continue
+  end if
+end while

@@ -1,0 +1,87 @@
+// =============================================================================
+// TEE
+// Read stdin and write to both file(s) and stdout simultaneously.
+// =============================================================================
+Command.tee=function(Obj,argv)
+  argv=ArgumentParser.check(argv)
+  appendMode=false
+  cleanArgs=[]
+  for arg in argv;if arg=="-a" or arg=="--append" then appendMode=true else push(cleanArgs,arg);end for
+  argv=cleanArgs
+  usePipedInput=false
+  stdinContent=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinContent=globals.G_pipe.stdin
+    usePipedInput=true
+  end if
+  if not usePipedInput then return Error.set("tee requires piped input")
+  if typeof(stdinContent)=="string" then
+    content=stdinContent
+  else if stdinContent isa list then
+    content=join(stdinContent,char(10))
+  else
+    content=str(stdinContent)
+  end if
+  // If no files specified, just pass through (print to screen and pipe)
+  if not argv or len(argv)==0 then
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+      // Split by newlines if content has them
+      if indexOf(content,char(10))!=null then
+        lines=split(content,char(10))
+        for line in lines;push(globals.G_pipe.stdout,line);end for
+      else
+        push(globals.G_pipe.stdout,content)
+      end if
+      return
+    end if
+    print content
+    return
+  end if
+  for fileArg in argv
+    filePath=fileArg
+    if filePath[0]=="~" then filePath=path(Obj.user.home)+filePath[1:]
+    if filePath[0]!="/" then filePath=path(Obj.dir.current)+"/"+filePath
+    fileObj=Obj.shell.host_computer.File(filePath)
+    if not fileObj then
+      pathParts=split(filePath,"/")
+      fileName=pathParts[-1]
+      dirPath=filePath[:len(filePath)-len(fileName)-1]
+      if not dirPath then dirPath="/"
+      if dirPath!="/" then
+        dirObj=Obj.shell.host_computer.File(dirPath)
+        if not dirObj then Bash._mkdir(Obj,dirPath)
+      end if
+      result=touch(Obj.computer,dirPath,fileName)
+      if result isa string then
+        Error.set("Failed to create file: "+result)
+        continue
+      end if
+      fileObj=Obj.shell.host_computer.File(filePath)
+      if not fileObj then
+        Error.set("Failed to create file: "+filePath)
+        continue
+      end if
+    end if
+    if not has_permission(fileObj,"w") then
+      Error.set("Permission denied: "+path(fileObj))
+      continue
+    end if
+    if appendMode then
+      existing=get_content(fileObj)
+      if existing then set_content(fileObj,existing+char(10)+content) else set_content(fileObj,content)
+    else
+      set_content(fileObj,content)
+    end if
+  end for
+  if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+    // Split by newlines if content has them
+    if indexOf(content,char(10))!=null then
+      lines=split(content,char(10))
+      for line in lines;push(globals.G_pipe.stdout,line);end for
+    else
+      push(globals.G_pipe.stdout,content)
+    end if
+    return
+  end if
+  print content
+end function

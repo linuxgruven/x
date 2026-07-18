@@ -1,0 +1,28 @@
+// Man page for editor
+manEditor="EDITOR(1)                        X Shell Manual                        EDITOR(1)
+
+<b>NAME</b>
+    edit - Simple GUI text editor
+<b>SYNOPSIS</b>
+    <b>edit </b><b>FILE</b>
+    <b>edit -n </b><b>NAME </b>[TEXT]
+<b>DESCRIPTION</b>
+    Small graphical text editor for x. Provides simple file editing
+    capabilities with optional initial text for new files.
+<b>OPTIONS</b>
+    <b>FILE</b> - Edit Existing File
+    Open existing file for editing.
+
+    <b>-n NAME</b> [TEXT] - Create New File
+    Create and open new file with optional initial text.
+<b>EXAMPLE:</b>
+    <b>edit /home/tux/config.src</b>
+    Edit existing file
+
+    <b>edit -n /home/tux/notes.txt</b>
+    Create new empty file
+
+    <b>edit -n /home/tux/readme.txt Welcome to my project</b>
+    Create file with initial text
+<b>SEE ALSO</b>
+    <b>cat</b>, <b>post</b>, <b>vi</b>"

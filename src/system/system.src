@@ -1,0 +1,2648 @@
+// =============================================================================
+// SYSTEM
+// Core system administration; configuration, permissions, database management, and service operations.
+// =============================================================================
+System={}
+System._R1_HASH="R1=function(p);S=[[]];i=0;while i<len(p);S[-1]=S[-1]+[0];e=6;while e>0 and hasIndex(p,i);e=e-1;S[-1][-1]=S[-1][-1]+code(p[i])*256^e;i=i+1;end while;if len(S[-1])==10 then S=S+[[]];end while;while len(S[-1])!=9;S[-1]=S[-1]+[0];end while;S[-1]=S[-1]+[len(p)];H=[116590752822204,206053984011466,66447228468884,181762835242781,89121955491302,170447531158334,34651153103681,224006659490053];H=H+[108414255117948,159811460804720];C=(sqrt(5)-1)/2;XOR=function(a,b);return bitXor(floor(a/16777216),floor(b/16777216))*16777216+bitXor(a%16777216,b%16777216);end function;ROTR=function(n,r);r=2^r;return (n%r)*(281474976710656/r)+floor(n/r);end function;MIX=function(k);return floor(281474976710656*((k*C)%1));end function;for B in S;W=range(109);for i in indexes(H);W[i]=XOR(B[i],H[i]);end for;for i in range(10,109);W[i]=(XOR(W[i-10],ROTR(W[i-8],23))+MIX(W[i-1]))%281474976710656;end for;for i in indexes(H);H[i]=W[109-i];end for;end for;b=[];for i in range(0,4);b=b+[XOR(H[i],H[9-i])];end for;h=""0123456789abcdef"";z="""";for n in b;for i in range(11);z=z+h[floor(n/16^i)%16];end for;end for;return z;end function;"
+System._buildTerminalSrc=function(ip,port,user,password,isR1)
+	conn="r=connect_service(get_shell,"""+ip+""","+port+","""+user+""""
+	if isR1 then return self._R1_HASH+conn+",R1("""+password+"""+current_date));start_terminal(r)"
+	return conn+","""+password+""");start_terminal(r)"
+end function
+// Read encrypted server credentials from a dat file
+// Args: datName (".drc" or ".ldrc")
+// Returns: {type, ip, port, user, password} or null
+System._readCredentials=function(datName)
+	s=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/"+datName)
+	if not s or not get_content(s) then return
+	i=split(Encryption.encrypt(get_content(s),Kernel.key,false),"::")
+	if len(i)!=5 then return
+	return {"type":i[4],"ip":i[3],"port":to_int(i[2]),"user":i[1],"password":i[0]}
+end function
+// Transfer a list of files with progress bars and logging
+// files: [[srcPath,destPath],...], srcComp/srcShell/destShell: transfer endpoints
+// z: log array, verb: "downloaded"/"uploaded", deleteAfter: whether to delete source after transfer
+System._transferFiles=function(files,srcComp,srcShell,destShell,z,verb,deleteAfter)
+	total=len(files)
+	idx=0
+	while idx<total
+		entry=files[idx]
+		b1=4+idx*4
+		b2=b1+2
+		p1=5+idx*10
+		p2=p1+5
+		f=File(srcComp,entry[0])
+		if f then
+			print(Gui.bar(b1,40,p1),true)
+			push(z,"MARK   : "+verb+" "+path(f))
+			if deleteAfter then
+				if has_permission(f,"r") then
+					scp(srcShell,path(f),entry[1],destShell)
+					print(Gui.bar(b2,40,p2),true)
+					push(z,"MARK   : Removed "+path(f))
+					delete(f)
+				else
+					print(Gui.bar(b2,40,p2),true)
+				end if
+			else
+				print(Gui.bar(b2,40,p2),true)
+				scp(srcShell,path(f),entry[1],destShell)
+			end if
+		else
+			print(Gui.bar(b1,40,p1),true)
+			print(Gui.bar(b2,40,p2),true)
+		end if
+		idx+=1
+	end while
+end function
+System._changeRootPassword=function(c,m,z)
+	Info.info("Setting root password")
+	if Gui.yesNo("Would you like X to reset the server password?") then
+		p=Crypt.genPassword(15)
+		r=change_password(c,"root",p)
+		if r isa number then
+			m.password=p
+			push(z,"MARK   : Root password changed to: "+p)
+			Info.info("Root password changed to: "+p)
+			user_input(yellow("Press Enter after you have copied the new root password"))
+		else
+			Info.error("Unable to change the root password")
+		end if
+	else
+		if Gui.yesNo("Do you have a password that you would like to use?") then
+			p=Gui.inputPassNS("Enter the new root password")
+			r=change_password(c,"root",p)
+			if r isa number then
+				m.password=p
+				push(z,"MARK   : Root password changed to: "+p)
+				Info.info("Root password changed to: "+p)
+			else
+				Info.error("Unable to change the root password")
+			end if
+		else
+			push(z,"MARK   : Root password unchanged: "+m.password)
+			Info.info("Root password unchanged: "+m.password)
+		end if
+	end if
+end function
+System._encryptedConnect=function(shell,m,retry)
+	while true
+		CHB=[blue("Select an encryption")]
+		push(CHB,yellow("Use S1"))
+		push(CHB,yellow("Use R1"))
+		push(CHB,iyellow("Forget it"))
+		userChoiceb=Gui.choiceHybrid(CHB,{},1,false,true)
+		if userChoiceb==len(CHB)-1 then return [null,"NONE"]
+		if userChoiceb==1 then
+			s=connect_service(shell,m.ip,m.port,m.user,m.password,"ssh")
+			T="S1"
+		else if userChoiceb==2 then
+			s=connect_service(shell,m.ip,m.port,m.user,Crypt.R1(m.password+current_date),"ssh")
+			T="R1"
+		else
+			continue
+		end if
+		if not retry then return [s,T]
+		if s isa string then
+			Info.error(s)
+			continue
+		end if
+		if not s then
+			Info.error("Unable to connect to the server:"+m.ip)
+			continue
+		end if
+		return [s,T]
+	end while
+end function
+System._compileBinary=function(t,srcName,buildDir,sourceCode,outputName)
+	f=Command.touch(globals.G_main,[path(t)+"/"+srcName])
+	if f isa Error then return null
+	set_content(f,sourceCode)
+	i=build(globals.G_main.shell,path(t)+"/"+srcName,path(buildDir))
+	self.deleteTemp
+	if not i=="" then return i
+	a=File(globals.G_main.computer,path(buildDir)+"/"+outputName)
+	set_owner(a,globals.G_main.user.name)
+	set_group(a,globals.G_main.user.name)
+	chmod(a,"u+x")
+	return a
+end function
+System._setupEncryption=function(srv,s,m)
+	while true
+		CHB=[blue("Select an encryption to use")]
+		push(CHB,yellow("Use S1"))
+		push(CHB,yellow("Use R1"))
+		push(CHB,iyellow("Forget it"))
+		userChoiceb=Gui.choiceHybrid(CHB,{},len(CHB)-3,false,true)
+		if userChoiceb==len(CHB)-1 then break
+		if userChoiceb==1 then
+			if srv.setupS1(s,m) then break else return "An error accured setting up S1 encryption"
+		else if userChoiceb==2 then
+			if srv.setupR1(s,m) then break else return "An error accured setting up R1 encryption"
+		end if
+	end while
+	return null
+end function
+System._changeEncryption=function(srv,srvGlobal,m,datFn)
+	if srvGlobal.encryption=="NONE" then
+		while true
+			CHB=[blue("Select an encryption to use")]
+			push(CHB,yellow("Use S1"))
+			push(CHB,yellow("Use R1"))
+			push(CHB,iyellow("Forget it"))
+			userChoiceb=Gui.choiceHybrid(CHB,{},len(CHB)-1,false,true)
+			if userChoiceb==len(CHB)-1 then break
+			if userChoiceb==1 then
+				if srv.setupS1(srvGlobal.shell,m) then
+					srvGlobal.encryption="S1"
+					fn=self[datFn]
+					if fn(m) isa Error then return true
+				end if
+				Info.info("Using S1 encryption")
+				break
+			else if userChoiceb==2 then
+				if srv.setupR1(srvGlobal.shell,m) then
+					srvGlobal.encryption="R1"
+					fn=self[datFn]
+					if fn(m) isa Error then return true
+				end if
+				Info.info("Using R1 encryption")
+				break
+			end if
+		end while
+	else
+		while true
+			CHB=[blue("Use what encryption")]
+			push(CHB,yellow("Use S1"))
+			push(CHB,yellow("Use R1"))
+			push(CHB,yellow("Use None"))
+			push(CHB,iyellow("Forget it"))
+			userChoiceb=Gui.choiceHybrid(CHB,{},len(CHB)-1,false,true)
+			if userChoiceb==len(CHB)-1 then break
+			if userChoiceb==1 then
+				if srv.setupS1(srvGlobal.shell,m) then
+					srvGlobal.encryption="S1"
+					fn=self[datFn]
+					if fn(m) isa Error then return true
+				end if
+				Info.info("Switched to S1")
+				break
+			else if userChoiceb==2 then
+				if srv.setupR1(srvGlobal.shell,m) then
+					srvGlobal.encryption="R1"
+					fn=self[datFn]
+					if fn(m) isa Error then return true
+				end if
+				Info.info("Switched to R1")
+				break
+			else if userChoiceb==3 then
+				srv.removeEncryption
+				srvGlobal.encryption="NONE"
+				m.type="NONE"
+				fn=self[datFn]
+				if fn(m) isa Error then return true
+				Info.info("Disabled encryption")
+				break
+			end if
+		end while
+	end if
+	return false
+end function
+System._promptCredentials=function(label)
+	m={}
+	m.ip=Gui.inputIP({"text":"Enter the "+label+" ip|domain"})
+	if m.ip==null then return null
+	m.port=Gui.inputInt({"text":"Enter the service port","default":22})
+	if not m.port isa number then return null
+	m.user=Gui.input({"text":"Enter login user name","default":"root"})
+	if m.user==null then return null
+	m.password=Gui.inputPassNS("Enter Server password")
+	if not len(m.password) then return null
+	m.type="NONE"
+	return m
+end function
+//Count number of Terminal processes running
+System.termCount=function(Obj)
+  //Get process list
+  c=show_procs(Obj.computer)
+  r=0
+  //Iterate through processes (skip header)
+  for p in split(c,char(10))[1:];if not p then continue;if p[-1]=="Terminal" then r+=1;end for
+  //Return count
+  return r
+//End termCount
+end function
+//Wait wrapper function with error handling
+System.tryWait=function(i)
+  //Wait for specified duration
+  wait i
+//End tryWait
+end function
+//Generate single random hex digit (module-level helper for System.GUID)
+_GUID_D=function;return "0123456789abcdef"[floor(rnd*16)];end function
+//Build random hex string of length l (module-level helper for System.GUID)
+_GUID_B=function(l)
+s="";i=0;while i<l;s+=_GUID_D;i+=1;end while;return s
+end function
+//Generate RFC 4122 compliant UUID/GUID
+System.GUID=function
+  //Generate first 8 hex digits
+  a=_GUID_B(8)
+  //Generate 4 hex digits
+  b=_GUID_B(4)
+  //Version 4 UUID (4xxx)
+  c="4"+_GUID_B(3)
+  //Variant bits (8, 9, a, or b)
+  d="89ab"[floor(rnd*4)]+_GUID_B(3)
+  //Generate final 12 hex digits
+  e=_GUID_B(12)
+  //Return formatted UUID
+  return a+"-"+b+"-"+c+"-"+d+"-"+e
+  //End GUID
+end function
+//Check APT repository list for port 1542 entries
+System.checkAptList=function(Obj)
+  //Get APT sources file
+  f=File(Obj.computer,"/etc/apt/sources.txt")
+  //File missing, add repositories
+  if not f then return Command.pacman(Obj,["-Sr"])
+  //Initialize result array
+  r=[]
+  //Iterate through lines
+  for i in split(get_content(f),char(10))
+    //Line contains port 1542
+    if indexOf(i,"1542")!=null then
+      //Parse and store IP
+      push(r,i.replace(char(34),"").replace(" ","").replace(":","").replace("1542",""))
+		end if
+	end for
+  //Return success or add repos
+  if len(r)>0 then return 1 else return Command.pacman(Obj,["-Sr"])
+//End checkAptList
+end function
+//Restore all system file permissions and ownership
+System.restorePerms=function(Obj)
+  //Root required
+  if not Obj.user.name=="root" then return Error.set("You need root permissions to run this command")
+  //Get all filesystem entries
+  s=Io.getAll(Obj.root)
+  //Failed to read filesystem
+  if s isa Error then return
+  //Root username
+  usr="root"
+  //User full permissions
+  u="u+wrx"
+  //User write+read
+  uwr="u+wr"
+  //User read only
+  ur="u+r"
+  //Group full permissions
+  g="g+wrx"
+  //Other full permissions
+  o="o+wrx"
+  //Group read only
+  gr="g+r"
+  //Other read only
+  oz="o+r"
+  //Other read+execute
+  orx="o+rx"
+  //Group read+execute
+  grx="g+rx"
+  //Home user (first non-guest user)
+  husr="root"
+  //Clear all user permissions recursively
+  chmod(Obj.root,"u-wrx",1)
+  //Clear all group permissions recursively
+  chmod(Obj.root,"g-wrx",1)
+  //Clear all other permissions recursively
+  chmod(Obj.root,"o-wrx",1)
+  //Set user permissions recursively
+  chmod(Obj.root,u,1)
+  //Set group read recursively
+  chmod(Obj.root,gr,1)
+  //Set other read recursively
+  chmod(Obj.root,oz,1)
+  Info.info("Setting ownerships...")
+  //Set root owner recursively
+  set_owner(Obj.root,usr,1)
+  //Set root group recursively
+  set_group(Obj.root,usr,1)
+  //Get /home directory
+  r=Io.getFileObj(Obj,"/home")
+  if not r isa Error then
+    Info.info("Setting /home file permissions...")
+    wait .2
+      chmod(r,u)
+      chmod(r,grx)
+      chmod(r,orx)
+      for h in get_folders(r)
+        x=name(h)
+        set_owner(h,x,1)
+        set_group(h,x,1)
+        if x=="guest" then
+          for f in get_files(h)+get_folders(h)
+            if name(f)==".Trash" then
+              chmod(f,u)
+              continue
+            end if
+            if is_folder(f) then
+              chmod(f,u,1)
+              chmod(f,g,1)
+              chmod(f,o,1)
+            else
+              chmod(f,u)
+              chmod(f,g)
+              chmod(f,o)
+            end if
+          end for
+          continue
+        end if
+        if not husr then husr=x
+        for f in get_files(h)+get_folders(h)
+          if name(f)==".Trash" then
+            chmod(f,u)
+            for j in get_files(f)+get_folders(f)
+              if is_folder(j) then
+                chmod(j,u,1)
+                chmod(j,grx,1)
+                chmod(j,orx,1)
+              else
+                chmod(j,u)
+                chmod(j,grx)
+                chmod(j,orx)
+              end if
+            end for
+          else if name(f)=="Config" then
+            chmod(f,u)
+            chmod(f,g)
+            for j in get_files(f);chmod(j,u);chmod(j,grx);chmod(j,orx);end for
+          else if name(f)=="Desktop" then
+            chmod(f,u)
+            chmod(f,g)
+            for j in get_files(f)+get_folders(f)
+              if is_folder(j) then
+                chmod(j,u,1)
+                chmod(j,grx,1)
+                chmod(j,orx,1)
+              else
+                chmod(j,u)
+                chmod(j,grx)
+                chmod(j,orx)
+              end if
+            end for
+          else if name(f)=="Downloads" then
+            chmod(f,u)
+            chmod(f,g)
+            for j in get_files(f)+get_folders(f)
+              if is_folder(j) then
+                chmod(j,u,1)
+                chmod(j,grx,1)
+                chmod(j,orx,1)
+              else
+                chmod(j,u)
+                chmod(j,grx)
+                chmod(j,orx)
+              end if
+            end for
+          else
+            for j in get_files(f)+get_folders(f)
+              if is_folder(j) then
+                chmod(j,u,1)
+                chmod(j,grx,1)
+                chmod(j,orx,1)
+              else
+                chmod(j,u)
+                chmod(j,grx)
+                chmod(j,orx)
+              end if
+            end for
+          end if
+        end for
+      end for
+  end if
+  r=Io.getFileObj(Obj,"/bin")
+  if not r isa Error then
+    Info.info("Setting /bin file permissions...")
+    wait .2
+    chmod(r,u)
+    chmod(r,g)
+    chmod(r,orx)
+    for f in get_files(r)
+      if name(f)=="aircrack" then
+        set_owner(f,husr)
+        set_group(f,husr)
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="aireplay" then
+        set_owner(f,husr)
+        set_group(f,husr)
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="airmon" then
+        set_owner(f,husr)
+        set_group(f,husr)
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="apt-get" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="build" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,oz)
+      else if name(f)=="cat" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="cd" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="chgrp" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,oz)
+      else if name(f)=="chmod" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="chown" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,oz)
+      else if name(f)=="cp" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="ftp" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="groupadd" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,oz)
+      else if name(f)=="groupdel" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,oz)
+      else if name(f)=="groups" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="ifconfig" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="iwconfig" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="iwlist" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="kill" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="ls" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="man" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="mkdir" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="mv" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="nslookup" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,oz)
+      else if name(f)=="passwd" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,oz)
+      else if name(f)=="ping" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="ps" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="pwd" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="reboot" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="rm" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="rmdir" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="ssh" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="sudo" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="touch" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,oz)
+      else if name(f)=="useradd" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,oz)
+      else if name(f)=="userdel" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,oz)
+      else if name(f)=="whoami" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else if name(f)=="whois" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      else
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      end if
+    end for
+  end if
+  r=Io.getFileObj(Obj,"/boot")
+  if not r isa Error then
+    Info.info("Setting /boot file permissions...")
+    wait .2
+    chmod(r,u)
+    chmod(r,grx)
+    chmod(r,orx)
+    for f in get_files(r)
+      if name(f)=="initrd.img" then
+        chmod(f,ur)
+      else if name(f)=="kernel.img" then
+        chmod(f,ur)
+      else if name(f)=="System.map" then
+        chmod(f,uwr)
+      end if
+    end for
+  end if
+  r=Io.getFileObj(Obj,"/etc")
+  if not r isa Error then
+    Info.info("Setting /etc file permissions...")
+    wait .2
+    chmod(r,u)
+    chmod(r,grx)
+    for f in get_files(r)+get_folders(r)
+      if name(f)=="apt" then
+        chmod(f,u)
+        chmod(f,grx)
+        for j in get_files(f)
+          if name(j)=="aptcache.bin" then
+            chmod(j,u)
+            chmod(j,grx)
+            chmod(j,orx)
+          else if name(j)=="sources.txt" then
+            chmod(j,uwr)
+            chmod(j,gr)
+          end if
+        end for
+      else if name(f)=="init.d" then
+        chmod(f,u)
+        chmod(f,g)
+        for j in get_files(f)
+          set_owner(j,husr)
+          set_group(j,husr)
+          chmod(j,u)
+          chmod(j,grx)
+          chmod(j,orx)
+        end for
+      else if name(f)=="fstab" then
+        chmod(f,uwr)
+        chmod(f,gr)
+      else if name(f)=="passwd" then
+        chmod(f,uwr)
+        chmod(f,gr)
+      else if name(f)=="xorg.conf" then
+        chmod(f,uwr)
+        chmod(f,gr)
+      end if
+    end for
+  end if
+  r=Io.getFileObj(Obj,"/lib")
+  if not r isa Error then
+    Info.info("Setting /lib file permissions...")
+    wait .2
+    chmod(r,u)
+    chmod(r,g)
+    for f in get_files(r)
+      if name(f)=="init.so" then
+        chmod(f,uwr)
+        chmod(f,gr)
+      else if name(f)=="kernel_module.so" then
+        chmod(f,uwr)
+        chmod(f,gr)
+      else if name(f)=="net.so" then
+        chmod(f,uwr)
+        chmod(f,gr)
+      else if name(f)=="aptclient.so" then
+        chmod(f,uwr)
+        chmod(f,gr)
+      else
+        set_owner(f,husr,1)
+        set_group(f,husr,1)
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      end if
+    end for
+  end if
+  r=Io.getFileObj(Obj,"/Public")
+  if not r isa Error then
+    Info.info("Setting /Public file permissions...")
+    wait .2
+    chmod(r,u)
+    chmod(r,grx)
+    chmod(r,orx)
+    r=Io.getFileObj(Obj,"/Public/htdocs/website.html")
+    if not r isa Error then
+      chmod(r,u)
+      chmod(r,grx)
+      chmod(r,orx)
+    end if
+    r=Io.getFileObj(Obj,"/Public/htdocs/downloads")
+    if not r isa Error then
+      chmod(r,u)
+      chmod(r,grx)
+      chmod(r,orx)
+    end if
+  end if
+  r=Io.getFileObj(Obj,"/root")
+  if not r isa Error then
+    Info.info("Setting /root file permissions...")
+    wait .2
+    chmod(r,u)
+    chmod(r,gr)
+    for f in get_files(r)+get_folders(r)
+      if is_folder(f) then
+        chmod(f,u,1)
+        chmod(f,g,1)
+      else
+        chmod(f,u)
+        chmod(f,g)
+      end if
+    end for
+  end if
+  r=Io.getFileObj(Obj,"/server")
+  if not r isa Error then
+    Info.info("Setting /server file permissions...")
+    wait .2
+    chmod(r,u)
+    chmod(r,grx)
+    chmod(r,orx)
+    for f in get_files(r)+get_folders(r)
+      if name(f)=="conf" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+        r=Io.getFileObj(Obj,"/server/conf/httpd.conf")
+        if r then
+          chmod(f,u)
+          chmod(f,grx)
+          chmod(f,orx)
+        end if
+      else if name(f)=="httpd" then
+        chmod(f,u)
+        chmod(f,grx)
+        chmod(f,orx)
+      end if
+    end for
+  end if
+  r=Io.getFileObj(Obj,"/sys")
+  if not r isa Error then
+    Info.info("Setting /sys file permissions...")
+    wait .2
+    chmod(r,u)
+    chmod(r,grx)
+    chmod(r,orx)
+    for f in get_files(r)
+      if name(f)=="config.sys" then
+        chmod(r,uwr)
+      else if name(f)=="network.cfg" then
+        chmod(r,uwr)
+      else if name(f)=="xorg.sys" then
+        chmod(r,"u+rx")
+      else
+        chmod(r,uwr)
+      end if
+    end for
+  end if
+  r=Io.getFileObj(Obj,"/usr")
+  if not r isa Error then
+    Info.info("Setting /usr file permissions...")
+    wait .2
+    chmod(r,u)
+    chmod(r,g)
+    chmod(r,orx)
+    r=Io.getFileObj(Obj,"/usr/bin")
+    if not r isa Error then
+      for f in get_files(r);chmod(f,u);chmod(f,g);chmod(f,orx);end for
+    end if
+  end if
+  r=Io.getFileObj(Obj,"/var")
+  if not r isa Error then
+    Info.info("Setting /var file permissions...")
+    wait .2
+    chmod(r,u)
+    chmod(r,"g+wx")
+    chmod(r,orx)
+    r=Io.getFileObj(Obj,"/var/system.log")
+    if r then
+    chmod(r,u)
+    chmod(r,grx)
+    chmod(r,orx)
+    end if
+  end if
+  Obj.user=Utility.getUser(Obj)
+  Info.info("Permissions restored")
+end function
+//Restore /boot directory and files
+System.restoreBoot=function(c)
+  Info.info("Restoring /boot...")
+  //Initialize template file
+  z=null
+  //Get system.log as template
+  if File(c,"/var/system.log") then z=File(c,"/var/system.log")
+  //system.log not found
+  if not z then
+    //Create temporary file to trigger system.log creation
+    touch(c,"/","x")
+    //Delete temporary file
+    delete(File(c,"/x"))
+    //Try getting system.log again
+    if File(c,"/var/system.log") then z=File(c,"/var/system.log")
+  end if
+  //Failed to get template
+  if not z then return Error.set("Unable to continue, aborting boot restore")
+  //Boot directory exists
+  if File(c,"/boot") then
+    //Skip creation
+    Info.info("/boot already exists, skipping creation")
+  //Boot directory missing
+  else
+    //Create boot directory
+    r=create_folder(c,"/","boot")
+    //Failed to create
+    if r isa string then return Error.set("Failed to create /boot:"+r)
+  end if
+  //Copy initrd.img from template
+  if File(c,"/boot/initrd.img") then Info.info("/boot/initrd.img already exists, skipping creation") else copy(z,"/boot","initrd.img")
+  //Copy kernel.img from template
+  if File(c,"/boot/kernel.img") then Info.info("/boot/kernel.img already exists, skipping creation") else copy(z,"/boot","kernel.img")
+  //Copy System.map from template
+  if File(c,"/boot/System.map") then Info.info("/boot/System.map already exists, skipping creation") else copy(z,"/boot","System.map")
+  //Display completion
+  Info.info("Restored /boot successfully")
+//End restoreBoot
+end function
+System.restoreEtc=function(Obj)
+  Info.info("Restoring /etc...")
+  c=Obj.computer
+  if File(c,"/etc") then
+    Info.info("/etc already exists, skipping creation")
+  else
+    r=create_folder(c,"/","etc")
+    if r isa string then return Error.set("Failed to create /etc:"+r)
+  end if
+  if not File(c,"/etc/apt") then
+    if self.genAptConfig(Obj) isa Error then return Error.set("Failed to create apt config")
+  else
+    if not File(c,"/etc/apt/sources.txt") then
+      if self.genAptConfig(Obj) isa Error then return Error.set("Failed to create apt config")
+    else
+      Info.info("/etc/apt/sources.txt already exists, skipping creation")
+    end if
+    Info.info("/etc/apt already exists, skipping creation")
+  end if
+  if not File(c,"/etc/init.d") then
+    r=create_folder(c,"/etc","init.d")
+    if r isa string then return Error.set("Failed to create /etc/init.d:"+r)
+  else
+    Info.info("/etc/init.d already exists, skipping creation")
+  end if
+  if not File(c,"/etc/fstab") then touch(c,"/etc","fstab") else Info.info("/etc/fstab already exists, skipping creation")
+  if not File(c,"/etc/xorg.conf") then touch(c,"/etc","xorg.conf") else Info.info("/etc/xorg.conf already exists, skipping creation")
+  Info.info("Restored /etc successfully")
+end function
+System.restoreSystem=function(c)
+  Info.info("Restoring system folders...")
+  r=File(c,"/etc")
+  if not r then r=create_folder(c,"/","etc")
+  if r isa string then return Error.set(r)
+  r=File(c,"/etc/apt")
+  if not r then create_folder(c,"/etc","apt")
+  r=File(c,"/etc/init.d")
+  if not r then create_folder(c,"/etc","init.d")
+  r=File(c,"/lib")
+  if not r then create_folder(c,"/","lib")
+  r=File(c,"/sys")
+  if not r then create_folder(c,"/","sys")
+  r=File(c,"/root")
+  if not r then create_folder(c,"/","root")
+  r=File(c,"/root/Desktop")
+  if not r then create_folder(c,"/root","Desktop")
+  r=File(c,"/root/Downloads")
+  if not r then create_folder(c,"/root","Downloads")
+  r=File(c,"/root/Config")
+  if not r then create_folder(c,"/root","Config")
+  r=File(c,"/home")
+  if not r then create_folder(c,"/","home")
+  u=Gui.input({"text":"Enter the name of the main user account:"})
+  if u!=null then
+    r=File(c,"/home/"+u)
+    if not r then create_folder(c,"/home",u)
+    r=File(c,"/home/"+u+"/Desktop")
+    if not r then create_folder(c,"/home/"+u,"Desktop")
+    r=File(c,"/home/"+u+"/Downloads")
+    if not r then create_folder(c,"/home/"+u,"Downloads")
+    r=File(c,"/home/"+u+"/Config")
+    if not r then create_folder(c,"/home/"+u,"Config")
+  end if
+  r=File(c,"/home/guest")
+  if not r then create_folder(c,"/home","guest")
+  r=File(c,"/home/guest/Desktop")
+  if not r then create_folder(c,"/home/guest","Desktop")
+  r=File(c,"/home/guest/Downloads")
+  if not r then create_folder(c,"/home/guest","Downloads")
+  r=File(c,"/home/guest/Config")
+  if not r then create_folder(c,"/home/guest","Config")
+  r=File(c,"/var")
+  if not r then create_folder(c,"/","var")
+  r=File(c,"/bin")
+  if not r then create_folder(c,"/","bin")
+  r=File(c,"/usr")
+  if not r then create_folder(c,"/","usr")
+  r=File(c,"/usr/bin")
+  if not r then create_folder(c,"/usr","bin")
+  r=File(c,"/boot")
+  if not r then create_folder(c,"/","boot")
+  r=File(c,"/server")
+  if not r then create_folder(c,"/","server")
+  r=File(c,"/server/conf")
+  if not r then create_folder(c,"/server","conf")
+  r=File(c,"/Public")
+  if not r then create_folder(c,"/","Public")
+  r=File(c,"/Public/htdocs")
+  if not r then create_folder(c,"/Public","htdocs")
+  r=File(c,"/Public/htdocs/downloads")
+  if not r then create_folder(c,"/Public/htdocs","downloads")
+  Info.info("System folders restored successfully")
+end function
+System.restore=function(Obj,argv)
+  if not Obj.user.name=="root" then return Error.set("You need root permissions to run this command")
+	_p=ArgumentParser.init
+  _p.addArgument("boot",true,"flag")
+  _p.addArgument("system",true,"flag")
+  _p.addArgument("perms",true,"flag")
+  _p.addArgument("etc",true,"flag")
+  _p.addArgument("all",true,"flag")
+	argv=_p.parseArgs("sys",argv)
+	if argv isa Error then return argv
+  if argv.all then
+    Info.info("Restoring entire system...")
+    self.restoreSystem(Obj.computer)
+    self.restoreBoot(Obj.computer)
+    self.restoreEtc(Obj)
+    self.restorePerms(Obj)
+    if Obj.type=="shell" then
+      if Gui.yesNo("Do we need to build all /bin binarys?",true) then Command.make(Obj,["-a","-y"])
+    end if
+    return Info.info("System restore complete")
+  end if
+  if argv.system then self.restoreSystem(Obj.computer)
+  if argv.boot then self.restoreBoot(Obj.computer)
+  if argv.etc then self.restoreEtc(Obj)
+  if argv.perms then self.restorePerms(Obj)
+end function
+System.genAptConfig=function(Obj)
+  n="/etc/apt/sources.txt"
+  p="/etc/apt"
+  f=Io.getFileObj(Obj,n)
+  if f isa Error then
+    if Command.mkdir(Obj,[p]) isa Error then return
+    f=Command.touch(Obj,[n])
+    if f isa Error then return
+  end if
+  set_content(f,join(Text.aptConf,char(10)))
+end function
+System.loadNames=function
+  if not globals.G_names then
+		c=globals.G_main.computer
+    if Gui.yesNo("Use a single names file?",false) then
+      Info.info("Enter the full path to your names file")
+      h=Gui.input({"text":"File:"})
+      if h and hasIndex(h,"/")!=null then h=Io.getFileObj(globals.G_main,h) else h=Io.file(globals.G_main,globals.G_main.user.home,"Select your names file:")
+      if h isa Error then return Info.error("File not found:"+h)
+      if h isa Warning then return h
+      Info.info("Depending on the size of your names file, this may take a while...")
+      for l in split(get_content(h),char(10));globals.G_names[l]=l;end for
+    else
+      Info.info("Enter the full path to the directory holding your name list files")
+      h=Gui.input({"text":"Directory:"})
+      if h and hasIndex(h,"/")!=null then h=Io.getFileObj(globals.G_main,h) else h=Io.folder(globals.G_main,globals.G_main.user.home,"Select the directory holding your name list files:")
+      if h isa Error then return Info.error("File not found:"+h)
+      if h isa Warning then return h
+      Info.info("Depending on the size of your name lists, this may take a while...")
+      for f in get_files(h);for l in split(get_content(f),char(10));globals.G_names[l]=l;end for;end for
+    end if
+    if not globals.G_names then return Error.set("No names loaded, aborting...")
+  end if
+  if len(globals.G_names)==0 then return
+  print green(yellow("Names loaded : ")+len(globals.G_names))
+end function
+System.getSpecs=function(Obj)
+  cpu={
+    "cpuCount":0,
+    "cpuPower":0,
+    "ramCount":0,
+    "hdPower":0,
+    "nicPower":0,
+    "gfxHashPower":0
+  }
+  getWattage=function;m=5*cpu.cpuCount+5*cpu.ramCount;return (cpu.nicPower+m+cpu.gfxHashPower+cpu.cpuPower+cpu.hdPower);end function
+  while true
+    CH=[green("Hardware Configuration")]
+		push(CH,yellow("Add CPU"))
+		push(CH,yellow("Set RAM"))
+		push(CH,yellow("Set Network Card"))
+		push(CH,yellow("Set GFXCard"))
+		push(CH,yellow("Set HDD"))
+		push(CH,yellow("Calculate Min PSU Health"))
+    push(CH,yellow("Reset"))
+		push(CH,iyellow("Forget it"))
+    print("")
+    print(bold(white("─── Current Build ───")))
+    if cpu.cpuCount>0 then print(yellow("  CPU:  ")+white(cpu.cpuCount+" unit(s), "+round(cpu.cpuPower,1)+"W total")) else print(yellow("  CPU:  ")+"<color=#aaaaaa>none</color>")
+    if cpu.ramCount>0 then print(yellow("  RAM:  ")+white(cpu.ramCount+" slot(s), "+round(5*cpu.ramCount,1)+"W")) else print(yellow("  RAM:  ")+"<color=#aaaaaa>none</color>")
+    if cpu.nicPower>0 then print(yellow("  NIC:  ")+white(round(cpu.nicPower,1)+"W")) else print(yellow("  NIC:  ")+"<color=#aaaaaa>none</color>")
+    if cpu.gfxHashPower>0 then print(yellow("  GFX:  ")+white(round(cpu.gfxHashPower,1)+"W")) else print(yellow("  GFX:  ")+"<color=#aaaaaa>none</color>")
+    if cpu.hdPower>0 then print(yellow("  HDD:  ")+white(round(cpu.hdPower,1)+"W")) else print(yellow("  HDD:  ")+"<color=#aaaaaa>none</color>")
+    print(bold(yellow("  TOTAL: "+round(getWattage,1)+"W")))
+    print(bold(white("─────────────────────")))
+		UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+		if UCH==len(CH)-1 then break
+		if UCH==1 then
+      s=Gui.inputInt({"text":"Enter CPU speed (e.g. 47 for 4.7GHz)"})
+      if not s isa number then continue
+      c=Gui.inputInt({"text":"Enter the number of cores"})
+      if not c isa number then continue
+      t=Gui.inputInt({"text":"How many of these CPUs?"})
+      if not t isa number then continue
+      if c==1 then r=s else r=s*c*0.3
+      cpu.cpuPower=cpu.cpuPower+r*t
+      cpu.cpuCount=cpu.cpuCount+t
+      print(green("  + "+t+" CPU(s) added: "+round(r*t,1)+"W"))
+		else if UCH==2 then
+      c=Gui.inputInt({"text":"How many RAM slots are being used?"})
+      if not c isa number then continue
+      cpu.ramCount=c
+      print(green("  RAM set: "+c+" slot(s), "+round(5*c,1)+"W"))
+    else if UCH==3 then
+      c=Gui.inputInt({"text":"NIC card quality?"})
+      if not c isa number then continue
+      cpu.nicPower=50/c
+      print(green("  NIC set: "+round(50/c,1)+"W"))
+    else if UCH==4 then
+      c=Gui.inputInt({"text":"GFX card hashrate?"})
+      if not c isa number then continue
+      cpu.gfxHashPower=c*320/114
+      print(green("  GFX set: "+round(c*320/114,1)+"W"))
+    else if UCH==5 then
+      c=Gui.inputInt({"text":"HDD speed?"})
+      if not c isa number then continue
+      cpu.hdPower=c*0.00225
+      print(green("  HDD set: "+round(c*0.00225,1)+"W"))
+    else if UCH==6 then
+      w=Gui.inputInt({"text":"Enter PSU Wattage"})
+      if not w isa number then continue
+      q=Gui.inputInt({"text":"Enter PSU Quality"})
+      if not q isa number then continue
+      m=getWattage
+      if m>w then
+        print(red("PSU is already underpowered — system draws "+round(m,1)+"W but PSU only provides "+w+"W"))
+      else
+        load=round((m/w)*100,1)
+        healthThreshold=round(100-load,1)
+        print(yellow("System draws "+load+"% of PSU capacity ("+round(m,1)+"W / "+w+"W)"))
+        print(yellow("PSU fails below "+healthThreshold+"% health"))
+      end if
+    else if UCH==7 then
+      cpu.cpuCount=0
+      cpu.cpuPower=0
+      cpu.ramCount=0
+      cpu.hdPower=0
+      cpu.nicPower=0
+      cpu.gfxHashPower=0
+    end if
+  end while
+end function
+System.checkDB=function;if not globals.G_server then return Error.set(Info.message.noDatabase) else return true;end function
+System.checkLibs=function;if not globals.G_libServer then return Error.set(Info.message.noLibDatabase) else return true;end function
+System.ips=function
+	a=[]
+	s=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.hrc")
+	if not s then return a
+	_ct=get_content(s);if not _ct then return a
+	for i in split(_ct,char(10))
+		if not len(i) then continue
+		i=split(Encryption.encrypt(i,Kernel.key,false),"::")
+    if len(i)!=2 then continue
+		push(a,{
+			"ip":i[0],
+			"nick":i[1]
+		})
+	end for
+	return a
+end function
+System.save=function(m,a=null)
+	p=path(globals.G_main.dir.data)+"/"
+	n=".hrc"
+	f=File(globals.G_main.computer,p+n)
+	if not f then f=Command.touch(globals.G_main,[p[:len(p)-1]+"/"+n])
+  if f isa Error then return
+  if a then set_content(f,"")
+	for s in m;_ct=get_content(f);if not _ct then set_content(f,Encryption.encrypt(s.ip+"::"+s.nick,Kernel.key)) else set_content(f,_ct+char(10)+Encryption.encrypt(s.ip+"::"+s.nick,Kernel.key));end for
+end function
+System.view=function(argv)
+	while true
+		m=self.ips
+		if m then
+			CH=[green("Here is a list of your trusted ips:")]
+			for r in m;if r.ip==public_ip_pc(globals.G_main.computer) then push(CH,yellow(green(ljust("IP:"+r.ip,16))+white(" - ")+blue("Nick:")+orange(r.nick))) else push(CH,yellow("IP:"+orange(ljust(r.ip,16))+white(" - ")+blue("Nick:")+orange(r.nick)));end for
+		else
+			CH=[green("You have no trusted ips")]
+		end if
+		push(CH,yellow("Add a new favorite ip"))
+		push(CH,iyellow("Nothing to do here"))
+		UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+		if UCH==len(CH)-1 then break
+		if UCH==len(CH)-2 then
+			i=Gui.inputIP({"text":"Enter a public ip"})
+			if i==null then break
+			n=Gui.input({"text":"Enter a nickname"})
+			if n==null then break
+			p={
+        "ip":i,
+        "nick":n
+      }
+			push(m,p)
+			self.save(m,true)
+			if p.ip==globals.G_main.meta.public_ip then Config.create
+			continue
+		else
+			while true
+				CHB=[blue("what are we doing with this ip?")]
+				push(CHB,yellow("Edit"))
+				push(CHB,yellow("Remove"))
+				push(CHB,iyellow("Forget it"))
+				userChoiceb=Gui.choiceHybrid(CHB,{},len(CHB)-1,false,true)
+				if userChoiceb==len(CHB)-1 then break
+				if userChoiceb==1 then
+					i=Gui.inputIP({"text":"Set a new public ip"})
+					if i!=null then m[UCH-1].ip=i
+					n=Gui.input({"text":"Set a new nickname"})
+					if n!=null then m[UCH-1].nick=n
+					self.save(m,1)
+				else if userChoiceb==2 then
+					remove(m,UCH-1)
+					self.save(m,1)
+					break
+				end if
+			end while
+		end if
+	end while
+end function
+System.createDBDat=function(m)
+	p=path(globals.G_main.dir.data)
+	n=".drc"
+	f=File(globals.G_main.computer,p+"/"+n)
+	if not f then f=Command.touch(globals.G_main,[p+"/"+n])
+  if f isa Error then return f
+	set_content(f,Encryption.encrypt(m.password+"::"+m.user+"::"+m.port+"::"+m.ip+"::"+m.type,Kernel.key))
+	return true
+end function
+System.createLDBDat=function(m)
+	p=path(globals.G_main.dir.data)
+	n=".ldrc"
+	f=File(globals.G_main.computer,p+"/"+n)
+	if not f then f=Command.touch(globals.G_main,[p+"/"+n])
+  if f isa Error then return f
+	set_content(f,Encryption.encrypt(m.password+"::"+m.user+"::"+m.port+"::"+m.ip+"::"+m.type,Kernel.key))
+	return true
+end function
+//Setup server encryption (R1 or S1) on a connected shell
+//Usage: System.setupEncryption(shell, ["-u", "USER", "-P", "PASSWORD", "-p", "PORT"])
+//Parameters:
+//  Obj - Shell object for target server (already connected via SSH)
+//  argv - List of arguments: -u USER, -P PASSWORD, -p PORT (will prompt if missing)
+//Returns: 1 on success, Error on failure
+System.setupEncryption=function(Obj,argv)
+	//Get server computer
+	z=Obj.computer
+	//Parse arguments first to check for --remove flag
+	removeFlag=false
+	if argv and len(argv)>0 then
+		_p=ArgumentParser.init
+		_p.addArgument("u",false,"store")
+		_p.addArgument("P",false,"store")
+		_p.addArgument("p",false,"storeNumber")
+		_p.addArgument("remove",true,"flag")
+		argv=_p.parseArgs("enc",argv)
+		if argv isa Error then return
+	end if
+	//Handle --remove flag
+	if argv["remove"] then
+		r=File(z,"/server/conf/sshd.conf")
+		if not r then return Error.set("Could not access /server/conf/sshd.conf")
+		content=get_content(r)
+		if content.indexOf("""encryption_enabled"":true")!=null then
+			set_content(r,"{""encryption_enabled"":false,""message_encrypted_conn"":false,""path_enc"":""/server/encode.src"",""path_dec"":""/server/decode.bin""}")
+			Info.info("Encryption disabled successfully")
+			return true
+		else
+			Info.info("Encryption is already disabled")
+			return true
+		end if
+	end if
+	//Build metadata map
+	m={}
+	//Check if argv provided
+	if not argv or len(argv)==0 then
+		//Prompt for all info
+		m.ip=user_input("Enter server IP address (default: "+Obj.computer.local_ip+"):",false,true)
+		if m.ip=="" then m.ip=Obj.computer.local_ip
+		m.port=user_input("Enter SSH port (default 22):",false,true)
+		if m.port=="" then m.port=22 else m.port=to_int(m.port)
+		m.user=user_input("Enter SSH username:",false,true)
+		m.password=user_input("Enter SSH password:",true,true)
+	else
+		//Credentials from parsed arguments
+		m.ip=Obj.computer.local_ip
+		if argv.p then m.port=argv.p else m.port=22
+		if argv.u then m.user=argv.u else m.user=""
+		if argv.P then m.password=argv.P else m.password=""
+		//Prompt for missing credentials
+		if not m.port then
+			p=user_input("Enter SSH port (default 22):",false,true)
+			if p=="" then m.port=22 else m.port=to_int(p)
+		end if
+		if m.user=="" then m.user=user_input("Enter SSH username:",false,true)
+		if m.password=="" then m.password=user_input("Enter SSH password:",true,true)
+	end if
+	//Choose encryption type
+	CH=[green("Choose Encryption Type")]
+	push(CH,yellow("Use S1 (simple password validation)"))
+	push(CH,yellow("Use R1 (hash-based with date salt)"))
+	push(CH,iyellow("Cancel"))
+	UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+	if UCH==len(CH)-1 then return Error.set("Encryption setup cancelled")
+	if UCH==1 then
+		//S1 Encryption Setup
+		//Encode function: validates password with get_shell, returns "1" or "0"
+		e="Encode=function(p);if get_shell(""root"",p) then return ""1"";return ""0"";end function"
+		//Decode function: returns password if "1", else "BadPassword"
+		d="Decode=function(p);if p==""1"" then return """+m.password+""";return ""BadPassword"";end function"
+		//SSH daemon configuration (encryption enabled, no connection message)
+		c="{""encryption_enabled"":true,""message_encrypted_conn"":false,""path_enc"":""/server/encode.src"",""path_dec"":""/server/decode.bin""}"
+		//Ask if encryption message should be shown
+		if Gui.yesNo("Show that the server is using encryption during connection?",false) then c="{""encryption_enabled"":true,""message_encrypted_conn"":true,""path_enc"":""/server/encode.src"",""path_dec"":""/server/decode.bin""}"
+		//Write SSH configuration
+		r=File(z,"/server/conf/sshd.conf")
+		if r then set_content(r,c)
+		//Write encode script
+		r=File(z,"/server/encode.src")
+		if r then set_content(r,e)
+		//Remove old decode binary
+		r=File(z,"/server/decode.bin")
+		if r then delete(r)
+		//Create decode source file
+		touch(z,"/server/","decode.bin.src")
+		set_content(File(z,"/server/decode.bin.src"),d)
+		//Build decode binary
+		x=build(Obj.shell,"/server/decode.bin.src","/server",0)
+		if x=="" then
+			//Clean up source file
+			delete(File(z,"/server/decode.bin.src"))
+			Info.info("S1 encryption enabled successfully")
+			return 1
+		else
+			//Build failed
+			return Error.set(x)
+		end if
+	else if UCH==2 then
+		//R1 Encryption Setup
+		//Encode function: passthrough (no encoding needed)
+		e="Encode=function(p);return p;end function"
+		//Decode function: validates hash with date salt
+		d="Decode=function(p);if Crypt.R1("""+m.password+"""+current_date)==p then return """+m.password+""";return ""BadPassword"";end function"
+		//SSH daemon configuration (encryption enabled, no connection message)
+		c="{""encryption_enabled"":true,""message_encrypted_conn"":false,""path_enc"":""/server/encode.src"",""path_dec"":""/server/decode.bin""}"
+		//Ask if encryption message should be shown
+		if Gui.yesNo("Show that the server is using encryption during connection?",false) then c="{""encryption_enabled"":true,""message_encrypted_conn"":true,""path_enc"":""/server/encode.src"",""path_dec"":""/server/decode.bin""}"
+		//Write SSH configuration
+		r=File(z,"/server/conf/sshd.conf")
+		if r then set_content(r,c)
+		//Write encode script
+		r=File(z,"/server/encode.src")
+		if r then set_content(r,e)
+		//Remove old decode binary
+		r=File(z,"/server/decode.bin")
+		if r then delete(r)
+		//Create decode source file
+		touch(z,"/server/","decode.bin.src")
+		set_content(File(z,"/server/decode.bin.src"),d)
+		//Build decode binary
+		x=build(Obj.shell,"/server/decode.bin.src","/server",0)
+		if x=="" then
+			//Clean up source file
+			delete(File(z,"/server/decode.bin.src"))
+			Info.info("R1 encryption enabled successfully")
+			return 1
+		else
+			//Build failed
+			return Error.set(x)
+		end if
+	end if
+end function
+System.db=function
+	while true
+		CH=[green("Database Options")]
+		push(CH,yellow("View database server connection"))
+		push(CH,yellow("View database server processes"))
+		push(CH,yellow("View database server file/storage/database stats"))
+		push(CH,yellow("Browse database server files"))
+		push(CH,yellow("Secure database server"))
+		push(CH,yellow("Launch a database server terminal"))
+		push(CH,yellow("Open a database server shell"))
+		push(CH,yellow("Download a backup database server copy"))
+		push(CH,yellow("Upload a backed up database server copy"))
+		push(CH,yellow("Reset server (resort back to a local database)"))
+		push(CH,yellow("Export (exploit data) to an offline file(s)"))
+		push(CH,yellow("Import (exploit data) from an offline file(s)"))
+		push(CH,yellow("Reconnect to a previous database server (clears current)"))
+		push(CH,yellow("Enter new database server (clears current)"))
+    push(CH,yellow("Change encryption"))
+		push(CH,yellow("Build a database server link in /bin"))
+		push(CH,yellow("Build a terminal frontend to a server"))
+    push(CH,yellow("Purge PObjects from the database"))
+		push(CH,iyellow("Forget it"))
+		UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+		if UCH==len(CH)-1 then break
+		if UCH==1 then
+			if not self.checkDB then continue
+			s=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.drc")
+			_ct=get_content(s);if not s or not _ct then continue
+			i=split(Encryption.encrypt(split(_ct,char(10))[-1],Kernel.key,false),"::")
+			if len(i)!=5 then continue
+			print white("Encryption:"+i[4])+purple(" - "+yellow("IP:"+i[3])+" - "+blue("Port:"+str(i[2]))+" - "+green("User:"+i[1])+" - ")+password("Password:"+i[0])
+		else if UCH==2 then
+			if self.checkDB isa Error then continue
+			globals.G_server.task(["-p"])
+		else if UCH==3 then
+			if self.checkDB isa Error then continue
+			Io.count(File(globals.G_server.computer,"/"))
+		else if UCH==4 then
+			if self.checkDB isa Error then continue
+			Server.task(["-b"])
+		else if UCH==5 then
+			if self.checkDB isa Error then continue
+			Server.lockFilesystem
+		else if UCH==6 then
+			if self.checkDB isa Error then continue
+			start_terminal(globals.G_server.object)
+		else if UCH==7 then
+			if self.checkDB isa Error then continue
+      globals.G_gui=Gui.cp
+      Exploit.getShell(globals.G_server.shell)
+      Gui.cp=globals.G_gui
+      if globals.G_attributes.back then return
+		else if UCH==8 then
+			if self.checkDB isa Error then continue
+			Info.info("Downloading...")
+			j=File(globals.G_main.computer,path(globals.G_main.user.home)+"/ServerBackups")
+			if not j then
+				create_folder(globals.G_main.computer,path(globals.G_main.user.home),"ServerBackups")
+				j=File(globals.G_main.computer,path(globals.G_main.user.home)+"/ServerBackups")
+			end if
+			r=current_date.replace(" ","").replace(":",".").replace("/",".").replace("-",".")
+			create_folder(globals.G_main.computer,path(j),r)
+			p=File(globals.G_main.computer,path(j)+"/"+r)
+			if p then
+				c=globals.G_server.computer
+				f=File(c,"/root/payload")
+				if f then
+					Info.info("Setting permissions on "+name(f)+"...")
+					globals.G_server.unlockPayload
+					Info.info("Downloading "+name(f)+"...")
+					r=scp(globals.G_server.object,path(f),path(p),globals.G_main.shell)
+					if r isa number then Info.info("Server file's were backed up successfully") else Info.error(r)
+				end if
+			end if
+			globals.G_server.lockPayload
+		else if UCH==9 then
+			if self.checkDB isa Error then continue
+			f=Io.folder(globals.G_main,globals.G_main.user.home,"Select the backed up server folder:")
+      if f isa Warning then continue
+			Info.info("Uploading...","+")
+			if f then
+				if has_permission(f,"r") then
+					z=File(globals.G_server.computer,"/root/payload")
+					if z then delete(z)
+					scp(globals.G_main.shell,path(f)+"/payload","/root",globals.G_server.object)
+				else
+					Info.error("You don't have read permissions to: "+name(f))
+					continue
+				end if
+			end if
+			Info.info("Payload was uploaded successfully")
+			globals.G_server.lockPayload
+      Info.info("Need to restart to re-initalize the new X settings...")
+      G_main.commands["x"](["-y"])
+		else if UCH==10 then
+			if self.checkDB isa Error then continue
+			h=File(globals.G_main.computer,path(globals.G_main.user.home)+"/server_transfer.log")
+			if not h then h=Command.touch(globals.G_main,[path(globals.G_main.user.home)+"/server_transfer.log"])
+      if h isa Error then h=null
+			z=[]
+			push(z,"{[----------------------------------------------------------------------]}")
+			push(z,"LOG STARTED [RESET TO LOCAL] ]---[## "+current_date+" ##]")
+			if globals.G_server.encryption!="NONE" then
+				Server.removeEncryption
+				push(z,"MARK   : Disabling server ssh encryption")
+			end if
+			d=Gui.yesNo("Remove all files from the server?")
+			print(Gui.bar(4,40,10),true)
+			if d then push(z,"QUEUED : Removing files from the server") else push(z,"ANSWERED : Leaving files on the server")
+			print(Gui.bar(6,40,15),true)
+			_au=globals.G_main.user.name
+			globals.G_server.unlockPayload(_au)
+			push(z,"MARK   : Setting permissions on payload")
+			push(z,"PERMS  : Setting OWNER TO:"+_au)
+			push(z,"PERMS  : Setting GROUP TO:"+_au)
+			push(z,"PERMS  : Setting PERMS TO:o+WRX")
+      //need to chomd the payload folder here
+			files=[]
+			pd=path(globals.G_main.dir.payload)
+			dd=path(globals.G_main.dir.data)
+			sd=path(globals.G_server.dir.data)
+			push(files,[path(globals.G_server.dir.exploits),pd])
+			push(files,[path(globals.G_server.dir.share),pd])
+			push(files,[path(globals.G_server.dir.savedLibs),pd])
+			push(files,[path(globals.G_server.dir.password),pd])
+			push(files,[path(globals.G_server.dir.man),pd])
+			if hasIndex(globals.G_server.dir,"src") and globals.G_server.dir.src then push(files,[path(globals.G_server.dir.src),pd])
+			push(files,[sd+"/shadow.dat",dd])
+			push(files,[sd+"/cache.dat",dd])
+			push(files,[sd+"/dirty.dat",dd])
+			push(files,[sd+"/notes",dd])
+			self._transferFiles(files,globals.G_server.computer,globals.G_server.object,globals.G_main.shell,z,"downloaded",false)
+			if d then
+				print(Gui.bar(38,40,95),true)
+				push(z,"MARK   : Removed server files ####")
+				push(z,"MARK   : Removed payload")
+				f=File(globals.G_server.computer,"/root/payload")
+				if f then delete(f)
+      else
+        print(Gui.bar(38,40,95),true)
+			end if
+      Log.shellLog(globals.G_server.shell)
+			f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.drc")
+			if f then delete(f)
+			print(Gui.bar(40,40,100),true)
+			push(z,"LOG FINISHED ]---[## "+current_date+" ##]")
+      if h then
+        _ct=get_content(h);if _ct then set_content(h,_ct+char(10)+join(z,char(10))) else set_content(h,join(z,char(10)))
+      end if
+      globals.G_server=null
+			Info.info("Need to restart to re-initalize the new X settings...")
+      G_main.commands["x"](["-y"])
+		else if UCH==11 then
+      if not len(globals.G_main.dir.exploits) then
+        Info.info("You have no database files to backup")
+        continue
+      end if
+			self.offlineBackup
+		else if UCH==12 then
+			self.offlineRestore
+		else if UCH==13 then
+      if not globals.G_main.net.hasInternet then return Warning.set(Text.nonet)
+      s=null
+			m=self._promptCredentials("database")
+			if not m then break
+			if Gui.yesNo("Was this server using encryption?") then s=self._encryptedConnect(globals.G_main.shell,m,true)[0] else s=connect_service(globals.G_main.shell,m.ip,m.port,m.user,m.password,"ssh")
+      if s isa string then
+        Info.error(s)
+        continue
+      end if
+      if not s then
+        Info.error("Unable to connect to the server:"+m.ip)
+        continue
+      end if
+      if self.createDBDat(m) isa Error then
+        Info.error("There was a problem saving the database")
+        continue
+      end if
+			Info.info("Cleaning payload folder...")
+			f=File(globals.G_main.computer,path(globals.G_main.dir.exploits))
+			if f then delete(f)
+			f=File(globals.G_main.computer,path(globals.G_main.dir.share))
+			if f then delete(f)
+			f=File(globals.G_main.computer,path(globals.G_main.dir.savedLibs))
+			if f then delete(f)
+			f=File(globals.G_main.computer,path(globals.G_main.dir.password))
+			if f then delete(f)
+			f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/cache.dat")
+			if f then delete(f)
+			f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/shadow.dat")
+			if f then delete(f)
+			f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/dirty.dat")
+			if f then delete(f)
+			f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/notes")
+			if f then delete(f)
+			if hasIndex(globals.G_main.dir,"src") and globals.G_main.dir.src then
+				f=File(globals.G_main.computer,path(globals.G_main.dir.src))
+				if f then delete(f)
+			end if
+			Info.info("Finished")
+			Info.info("Need to restart to re-initalize the new X settings...")
+      G_main.commands["x"](["-y"])
+		else if UCH==14 then
+      if not globals.G_main.net.hasInternet then return Warning.set(Text.nonet)
+			m=self._promptCredentials("database")
+			if not m then break
+			s=connect_service(globals.G_main.shell,m.ip,m.port,m.user,m.password,"ssh")
+      if s isa string then
+        Info.error(s)
+        continue
+      end if
+      if not s then
+        Info.error("Unable to connect to the server:"+m.ip)
+        continue
+      end if
+			z=[]
+			push(z,"{[----------------------------------------------------------------------]}")
+			push(z,"LOG STARTED [NEW SERVER] ]---[## "+current_date+" ##]")
+      c=host_computer(s)
+      self._changeRootPassword(c,m,z)
+      if Gui.yesNo("Use encryption?") then
+        err=self._setupEncryption(Server,s,m)
+        if err then return Error.set(err)
+      end if
+			h=File(globals.G_main.computer,path(globals.G_main.user.home)+"/server_transfer.log")
+			if not h then h=Command.touch(globals.G_main,[path(globals.G_main.user.home)+"/server_transfer.log"])
+			h=File(c,"/root/payload")
+			if not h then
+				print(Gui.bar(2,40,5),true)
+				push(z,"MARK   : Building server file structure")
+				create_folder(c,"/root","payload")
+				push(z,"MARK   : Created /root/payload")
+				create_folder(c,"/root/payload","data")
+				push(z,"MARK   : Created /root/payload/data")
+				create_folder(c,"/root/payload","src")
+				push(z,"MARK   : Created /root/payload/src")
+				create_folder(c,"/root/payload/src","bin")
+				push(z,"MARK   : Created /root/payload/src/bin")
+				create_folder(c,"/root/payload/src","tools")
+				push(z,"MARK   : Created /root/payload/src/tools")
+				create_folder(c,"/root/payload/src","web")
+				push(z,"MARK   : Created /root/payload/src/web")
+        print(Gui.bar(4,40,10),true)
+      else
+        print(Gui.bar(2,40,5),true)
+			end if
+			files=[]
+			pd="/root/payload"
+			dd="/root/payload/data"
+			sd=path(globals.G_main.dir.data)
+			push(files,[path(globals.G_main.dir.exploits),pd])
+			push(files,[path(globals.G_main.dir.share),pd])
+			push(files,[path(globals.G_main.dir.savedLibs),pd])
+			push(files,[path(globals.G_main.dir.password),pd])
+			push(files,[path(globals.G_main.dir.man),pd])
+			if hasIndex(globals.G_main.dir,"src") and globals.G_main.dir.src then push(files,[path(globals.G_main.dir.src),pd])
+			push(files,[sd+"/cache.dat",dd])
+			push(files,[sd+"/shadow.dat",dd])
+			push(files,[sd+"/dirty.dat",dd])
+			push(files,[sd+"/notes",dd])
+			self._transferFiles(files,globals.G_main.computer,globals.G_main.shell,s,z,"uploaded",true)
+			if not self.createDBDat(m) isa Error then
+				push(z,"LOG FINISHED ]---[## "+current_date+" ##]")
+				h=File(globals.G_main.computer,path(globals.G_main.user.home)+"/server_transfer.log")
+        if not h then
+          Info.error("Failed to get server_transfer.log")
+        else
+          _ct=get_content(h);if _ct then set_content(h,_ct+char(10)+join(z,char(10))) else set_content(h,join(z,char(10)))
+        end if
+				c=host_computer(s)
+				chmod(File(c,"/"),"o-wrx",1)
+				chmod(File(c,"/"),"u-wrx",1)
+				chmod(File(c,"/"),"g-wrx",1)
+				set_owner(File(c,"/"),"root",1)
+				set_group(File(c,"/"),"root",1)
+        Info.info("Need to restart to re-initalize the new X settings...")
+        G_main.commands["x"](["-y"])
+			else
+				Info.error("There was a problem saving the database")
+			end if
+    else if UCH==15 then
+      if self.checkDB isa Error then continue
+      m=self._readCredentials(".drc")
+      if self._changeEncryption(Server,globals.G_server,m,"createDBDat") then return
+		else if UCH==16 then
+      if self.checkDB isa Error then continue
+			_d=self._readCredentials(".drc")
+			if not Gui.yesNo("This will create a server link in /bin (/bin/server). Continue?") then continue
+			p=null
+			if Gui.yesNo("Would you like to password protect /bin/server?") then
+				z=Gui.inputPass("Enter the password you would like to use")
+				if z then p=z
+			end if
+			b=File(globals.G_main.computer,"/bin")
+			if not b then
+				Info.error("Some thing went wrong")
+				continue
+			end if
+			if not has_permission(b,"r") then
+				Info.error(Info.message.NOR)
+				continue
+			end if
+			if not has_permission(b,"w") then
+				Info.error(Info.message.NOW)
+				continue
+			end if
+      t=self.createTemp
+      if not t then continue
+			d=_d
+      x=self._buildTerminalSrc(d.ip,d.port,d.user,d.password,d.type=="R1")
+			if p then c="if user_input(""Password: "",1)=="""+p+""" then;clear_screen;"+x+";end if" else c=x
+			a=self._compileBinary(t,"server.src",b,c,"server")
+			if not a isa File then
+				Info.error("Some thing went wrong")
+				continue
+			end if
+			Info.info("Complete")
+		else if UCH==17 then
+      T="NONE"
+			m=self._promptCredentials("Server")
+			if not m then break
+			s=connect_service(globals.G_main.shell,m.ip,m.port,m.user,m.password,"ssh")
+      if s isa string or not s then
+        if Gui.yesNo("Does this server use encryption?") then
+          r=self._encryptedConnect(globals.G_main.shell,m,false)
+          s=r[0]
+          T=r[1]
+        end if
+      end if
+			if s isa string or not s then
+        Info.error(s)
+        continue
+      end if
+			p=null
+			if Gui.yesNo("Would you like to password protect this terminal emulator binary?") then
+				z=Gui.inputPass("Enter the password you would like to use")
+				if z then p=z
+			end if
+			b=File(globals.G_main.computer,path(globals.G_main.user.home))
+			if not b then
+				Info.error("Some thing went wrong")
+				continue
+			end if
+			if not has_permission(b,"r") then
+				Info.error(Info.message.NOR)
+				continue
+			end if
+			if not has_permission(b,"w") then
+				Info.error(Info.message.NOW)
+				continue
+			end if
+      t=self.createTemp
+      if not t then continue
+			y=Gui.input({"text":"Enter a name","default":m.user+"."+m.ip})
+			x=self._buildTerminalSrc(m.ip,m.port,m.user,m.password,T=="R1")
+			if p then c="if user_input(""Password: "",1)=="""+p+""" then;clear_screen;"+x+";end if" else c=x
+			a=self._compileBinary(t,y+".src",b,c,m.user+"."+m.ip)
+			if not a isa File then
+				Info.error(a)
+				continue
+			end if
+			Info.info("Terminal emulator compiled and stored to: "+path(a))
+			if p then Info.info("Binary Password: "+p)
+			print blue("*** Login Credentials - Keep in a safe place *** ")
+			print yellow("IP:       ")+white(m.ip)
+			print yellow("Port:     ")+white(str(m.port))
+			print yellow("User:     ")+white(m.user)
+			print yellow("Password: ")+white(m.password)
+			print blue("*** End Credentials ***")
+			Info.info("Complete")
+    else if UCH==18 then
+      Exploit.purgePObjects
+		end if
+	end while
+end function
+System.ldb=function
+	while true
+		CH=[green("Library Database Options")]
+		push(CH,yellow("View database server connection"))
+		push(CH,yellow("View database server processes"))
+		push(CH,yellow("View database server file/storage/database stats"))
+		push(CH,yellow("Browse database server files"))
+		push(CH,yellow("Secure database server"))
+		push(CH,yellow("Launch a database server terminal"))
+		push(CH,yellow("Open a database server shell"))
+		push(CH,yellow("Upload a library folder"))
+		push(CH,yellow("Reconnect to a previous database server (clears current)"))
+		push(CH,yellow("Enter new database server (clears current)"))
+    push(CH,yellow("Change encryption"))
+		push(CH,yellow("Build a database server link in /bin"))
+		push(CH,yellow("Build a terminal frontend to a server"))
+    push(CH,yellow("Import folder|file from another database server"))
+    push(CH,yellow("Export folder|file to another database server"))
+		push(CH,iyellow("Forget it"))
+		UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+		if UCH==len(CH)-1 then break
+		if UCH==1 then
+      if self.checkLibs isa Error then continue
+			s=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.ldrc")
+			_ct=get_content(s);if not s or not _ct then continue
+			i=split(Encryption.encrypt(split(_ct,char(10))[-1],Kernel.key,false),"::")
+			if len(i)!=5 then continue
+			print white("Encryption:"+i[4])+purple(" - "+yellow("IP:"+i[3])+" - "+blue("Port:"+str(i[2]))+" - "+green("User:"+i[1])+" - ")+password("Password:"+i[0])
+		else if UCH==2 then
+			if self.checkLibs isa Error then continue
+			globals.G_libServer.task(["-p"])
+		else if UCH==3 then
+			if self.checkLibs isa Error then continue
+			Io.count(File(globals.G_libServer.computer,"/"),false)
+		else if UCH==4 then
+			if self.checkLibs isa Error then continue
+			LibServer.task(["-b"])
+		else if UCH==5 then
+			if self.checkLibs isa Error then continue
+			LibServer.lockFilesystem
+		else if UCH==6 then
+			if self.checkLibs isa Error then continue
+			start_terminal(globals.G_libServer.object)
+		else if UCH==7 then
+			if self.checkLibs isa Error then continue
+      globals.G_gui=Gui.cp
+      Exploit.getShell(globals.G_libServer.shell)
+      Gui.cp=globals.G_gui
+      if globals.G_attributes.back then return
+		else if UCH==8 then
+			if self.checkLibs isa Error then continue
+			f=Io.folder(globals.G_main,globals.G_main.user.home,"Select a library folder to upload:")
+      if f isa Warning then continue
+			Info.info("Uploading...","+")
+      for z in get_files(f)
+        if not has_permission(z,"r") then continue
+        libPath=path(z)
+        metalib=load(Library.metaxploit,libPath)
+        if not metalib then continue
+        if metalib isa string then
+          Info.error(metalib)
+          continue
+        end if
+        r=LibServer.saveLib(metalib,z,libPath,globals.G_main.shell)
+        if r isa string then Info.info(r)
+      end for
+		else if UCH==9 then
+      if not globals.G_main.net.hasInternet then return Warning.set(Text.nonet)
+      s=null
+			m=self._promptCredentials("database")
+			if not m then break
+			if Gui.yesNo("Was this server using encryption?") then s=self._encryptedConnect(globals.G_main.shell,m,true)[0] else s=connect_service(globals.G_main.shell,m.ip,m.port,m.user,m.password,"ssh")
+      if s isa string then
+        Info.error(s)
+        continue
+      end if
+      if not s then
+        Info.error("Unable to connect to the server:"+m.ip)
+        continue
+      end if
+      if self.createLDBDat(m) isa Error then
+        Info.error("There was a problem saving the database")
+        continue
+      end if
+      Info.info("Need to restart to re-initalize the new X settings...")
+      G_main.commands["x"](["-y"])
+		else if UCH==10 then
+      if not globals.G_main.net.hasInternet then return Warning.set(Text.nonet)
+			m=self._promptCredentials("database")
+			if not m then break
+			s=connect_service(globals.G_main.shell,m.ip,m.port,m.user,m.password,"ssh")
+      if s isa string then
+        Info.error(s)
+        continue
+      end if
+      if not s then
+        Info.error("Unable to connect to the server:"+m.ip)
+        continue
+      end if
+			z=[]
+			push(z,"{[----------------------------------------------------------------------]}")
+			push(z,"LOG STARTED [NEW LIB SERVER] ]---[## "+current_date+" ##]")
+      c=host_computer(s)
+      self._changeRootPassword(c,m,z)
+      if Gui.yesNo("Use encryption?") then
+        err=self._setupEncryption(LibServer,s,m)
+        if err then return Error.set(err)
+      end if
+			h=File(globals.G_main.computer,path(globals.G_main.user.home)+"/lib_server.log")
+			if not h then h=Command.touch(globals.G_main,[path(globals.G_main.user.home)+"/lib_server.log"])
+			h=File(c,"/root/libs")
+			if not h then
+				push(z,"MARK   : Building server file structure")
+				create_folder(c,"/root","libs")
+				push(z,"MARK   : Created /root/libs")
+			end if
+			if not self.createLDBDat(m) isa Error then
+				push(z,"LOG FINISHED ]---[## "+current_date+" ##]")
+				h=File(globals.G_main.computer,path(globals.G_main.user.home)+"/lib_server.log")
+        if not h then
+          Info.error("Failed to get lib_server.log")
+        else
+          _ct=get_content(h);if _ct then set_content(h,_ct+char(10)+join(z,char(10))) else set_content(h,join(z,char(10)))
+        end if
+				c=host_computer(s)
+				chmod(File(c,"/"),"o-wrx",1)
+				chmod(File(c,"/"),"u-wrx",1)
+				chmod(File(c,"/"),"g-wrx",1)
+				set_owner(File(c,"/"),"root",1)
+				set_group(File(c,"/"),"root",1)
+        Info.info("Need to restart to re-initalize the new X settings...")
+        G_main.commands["x"](["-y"])
+			else
+				Info.error("There was a problem saving the database")
+			end if
+    else if UCH==11 then
+      if self.checkLibs isa Error then continue
+      m=self._readCredentials(".ldrc")
+      if self._changeEncryption(LibServer,globals.G_libServer,m,"createLDBDat") then return
+		else if UCH==12 then
+      if self.checkLibs isa Error then continue
+			_d=self._readCredentials(".ldrc")
+			if not Gui.yesNo("This will create a server link in /bin (/bin/libserver). Continue?") then continue
+			p=null
+			if Gui.yesNo("Would you like to password protect /bin/libserver?") then
+				z=Gui.inputPass("Enter the password you would like to use")
+				if z then p=z
+			end if
+			b=File(globals.G_main.computer,"/bin")
+			if not b then
+				Info.error("Some thing went wrong")
+				continue
+			end if
+			if not has_permission(b,"r") then
+				Info.error(Info.message.NOR)
+				continue
+			end if
+			if not has_permission(b,"w") then
+				Info.error(Info.message.NOW)
+				continue
+			end if
+      t=self.createTemp
+      if not t then continue
+			d=_d
+      x=self._buildTerminalSrc(d.ip,d.port,d.user,d.password,d.type=="R1")
+			if p then c="if user_input(""Password: "",1)=="""+p+""" then;clear_screen;"+x+";end if" else c=x
+			a=self._compileBinary(t,"libserver.src",b,c,"libserver")
+			if not a isa File then
+				Info.error("Some thing went wrong")
+				continue
+			end if
+			Info.info("Complete")
+		else if UCH==13 then
+      T="NONE"
+			m=self._promptCredentials("Server")
+			if not m then break
+			s=connect_service(globals.G_main.shell,m.ip,m.port,m.user,m.password,"ssh")
+      if s isa string or not s then
+        if Gui.yesNo("Does this server use encryption?") then
+          r=self._encryptedConnect(globals.G_main.shell,m,false)
+          s=r[0]
+          T=r[1]
+        end if
+      end if
+			if s isa string or not s then
+        Info.error(s)
+        continue
+      end if
+			p=null
+			if Gui.yesNo("Would you like to password protect this terminal emulator binary?") then
+				z=Gui.inputPass("Enter the password you would like to use")
+				if z then p=z
+			end if
+			b=File(globals.G_main.computer,path(globals.G_main.user.home))
+			if not b then
+				Info.error("Some thing went wrong")
+				continue
+			end if
+			if not has_permission(b,"r") then
+				Info.error(Info.message.NOR)
+				continue
+			end if
+			if not has_permission(b,"w") then
+				Info.error(Info.message.NOW)
+				continue
+			end if
+      t=self.createTemp
+      if not t then continue
+			y=Gui.input({"text":"Enter a name","default":m.user+"."+m.ip})
+			x=self._buildTerminalSrc(m.ip,m.port,m.user,m.password,T=="R1")
+			if p then c="if user_input(""Password: "",1)=="""+p+""" then;clear_screen;"+x+";end if" else c=x
+			a=self._compileBinary(t,y+".src",b,c,m.user+"."+m.ip)
+			if not a isa File then
+				Info.error(a)
+				continue
+			end if
+			Info.info("Terminal emulator compiled and stored to: "+path(a))
+			if p then Info.info("Binary Password: "+p)
+			print blue("*** Login Credentials - Keep in a safe place *** ")
+			print yellow("IP:       ")+white(m.ip)
+			print yellow("Port:     ")+white(str(m.port))
+			print yellow("User:     ")+white(m.user)
+			print yellow("Password: ")+white(m.password)
+			print blue("*** End Credentials ***")
+			Info.info("Complete")
+		else if UCH==14 then
+      if not globals.G_main.net.hasInternet then return Warning.set(Text.nonet)
+      s=null
+			m=self._promptCredentials("database")
+			if not m then break
+			if Gui.yesNo("Is this server using X encryption?") then s=self._encryptedConnect(globals.G_libServer.shell,m,true)[0] else s=connect_service(globals.G_libServer.shell,m.ip,m.port,m.user,m.password,"ssh")
+      s=Exploit.getShell(s,false,[],true)
+      if Gui.yesNo("Are importing a file?") then f=Io.file(s,s.user.home,"Select the library file to import:") else f=Io.folder(s,s.user.home,"Select the library folder to import from:")
+      if typeof(f)!="file" then
+        Info.warning("You must select a file to import")
+        continue
+      end if
+      F=Io.folder(globals.G_libServer,globals.G_libServer.dir.current,"Select a folder to import to:")
+      if typeof(F)!="file" then
+        Info.warning("You must select a folder to import to")
+        continue
+      end if
+      r=scp(s.shell,path(f),path(F),globals.G_libServer.shell)
+      if r isa string then
+        Info.error(r)
+        continue
+      end if
+      if not r then
+        Info.error("There was a problem importing the files")
+        continue
+      end if
+      Info.info("Import complete")
+      continue
+    else if UCH==15 then
+      if not globals.G_main.net.hasInternet then return Warning.set(Text.nonet)
+      s=null
+			m=self._promptCredentials("database")
+			if not m then break
+			if Gui.yesNo("Is this server using X encryption?") then s=self._encryptedConnect(globals.G_libServer.shell,m,true)[0] else s=connect_service(globals.G_libServer.shell,m.ip,m.port,m.user,m.password,"ssh")
+      s=Exploit.getShell(s,false,[],true)
+      if Gui.yesNo("Are exporting a file?") then f=Io.file(globals.G_libServer,globals.G_libServer.dir.current,"Select the library file to export:") else f=Io.folder(globals.G_libServer,globals.G_libServer.dir.current,"Select the library folder to export to:")
+      if typeof(f)!="file" then
+        Info.warning("You must select a file to export")
+        continue
+      end if
+      F=Io.folder(s,s.dir.current,"Select a folder to export to:")
+      if typeof(F)!="file" then
+        Info.warning("You must select a folder to export to")
+        continue
+      end if
+      r=scp(globals.G_libServer.shell,path(f),path(F),s.shell)
+      if r isa string then
+        Info.error(r)
+        continue
+      end if
+      if not r then
+        Info.error("There was a problem exporting the files")
+        continue
+      end if
+      Info.info("Export complete")
+      continue
+    end if
+	end while
+end function
+System.createTemp=function
+  f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/temp")
+  if f then return f
+	r=create_folder(globals.G_main.computer,path(globals.G_main.dir.data),"temp")
+	if r isa number then return File(globals.G_main.computer,path(globals.G_main.dir.data)+"/temp")
+  if r isa string then return Error.set(r)
+end function
+System.deleteTemp=function
+  f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/temp")
+  if not f then return
+  Command.qrm(globals.G_main,[f])
+end function
+System.offlineBackup=function
+	r=[]
+	t=0
+  create_folder(globals.G_main.computer,path(globals.G_main.dir.current),"OfflineBackup")
+  w=path(File(globals.G_main.computer,path(globals.G_main.dir.current)+"/OfflineBackup"))
+	for d in get_folders(globals.G_main.dir.exploits)
+    push(r,"###"+name(d))
+    for f in get_files(d)
+      push(r,"##"+name(f))
+      _ct=get_content(f);if not _ct then continue
+      for a in split(_ct,char(10))
+        if a then
+          push(r,"#"+a)
+          t+=1
+        end if
+      end for
+    end for
+	end for
+  p=split160k(join(r,char(10)))
+  c=1
+  for r in p;z=Command.touch(globals.G_main,[w+"/db"+c+".bck"]);if z isa Error then return;set_content(z,r);end for
+	print green("Database backup complete")
+	print green("Total records backed up: "+white(str(t)))
+end function
+System.offlineRestore=function
+  sys=System.getSystem
+	s=globals.G_main
+	if globals.G_server then s=globals.G_server
+	c=s.computer
+	r=[]
+	if Gui.yesNo("Are we importing more than one file?") then
+		f=Io.folder(globals.G_main,globals.G_main.user.home,"Select the restore from folder:")
+    if f isa Warning then return f
+		for a in get_files(f);r+=split(get_content(a),char(10));end for
+	else
+		f=Io.file(globals.G_main,globals.G_main.user.home,"Select the restore file:")
+    if f isa Warning then return f
+		r=split(get_content(f),char(10))
+	end if
+	Info.info("Restoring database...")
+	t=0
+	p=path(globals.G_main.dir.exploits)
+	m=get_folders(globals.G_main.dir.exploits)
+	for u in m;delete(u);end for
+	z=null
+	y=null
+	w=[]
+	saveBackup=function(f,a);set_content(f,join(a,char(10)));outer.w=[];end function
+	for l in r
+		if indexOf(l,"###")!=null then
+			if len(w) then saveBackup(y,w)
+			a=l.replace("###","")
+      create_folder(c,p,a)
+      z=p+"/"+a
+		else if indexOf(l,"##")!=null then
+      if len(w) then saveBackup(y,w)
+			a=l.replace("##","")
+			y=Command.touch(s,[z+"/"+a])
+      if y isa Error then return
+    else if indexOf(l,"#")!=null then
+			push(w,l.replace("#",""))
+			t+=1
+		end if
+	end for
+	if len(w) then saveBackup(y,w)
+  if globals.G_exploitCache then globals.G_exploitCache={}
+  Exploit.loadCache
+	print green("Database has been restored")
+	print green("Total records restored: "+white(str(t)))
+end function
+System.favs=function(argv)
+	_p=ArgumentParser.init
+  _p.addArgument("i",false,"flag")
+  _p.addArgument("e",false,"flag")
+  _p.addArgument("r",false,"storeNumber")
+	argv=_p.parseArgs("clear",argv)
+  if argv isa Error then return argv
+  if argv.e then return self.view
+  if argv.i then
+    if argv.rest and len(argv.rest)==2 then
+      if not is_valid_ip(argv.rest[0]) then return Error.set("Invalid ip address")
+      if not argv.rest[1] then return Error.set("Invalid nickname")
+      self.save([{"ip":argv.rest[0],"nick":argv.rest[1]}])
+      if argv.rest[0]==globals.G_main.meta.public_ip then Config.create
+      return Info.info("You have added "+argv.rest[0]+":"+argv.rest[1]+" to your favorite|trusted ip list")
+    else
+      return Error.set("Invalid arguments for -i flag")
+    end if
+  end if
+  if argv.r!=null then
+    m=self.ips
+    if not m or not hasIndex(m,argv.r) then return Error.set("Invalid index to remove")
+    n=m[argv.r].ip+":"+m[argv.r].nick
+    remove(m,argv.r)
+    self.save(m,true)
+    return Info.info("Removed "+n)
+  end if
+	newFav=function
+		while true
+			i=Gui.inputIP({"text":"Enter a public ip"})
+			if i==null then break
+			n=Gui.input({"text":"Enter a nickname"})
+			if n==null then break
+			p={
+				"ip":i,
+				"nick":n
+			}
+			m=[]
+			push(m,p)
+			System.save(m)
+      if i==globals.G_main.meta.public_ip then Config.create
+			break
+		end while
+	end function
+	i=self.ips
+  if not len(i) then
+    if not Gui.yesNo("You do not have any favorite ip's saved yet, would you like to add one?") then return
+    newFav
+    i=self.ips
+  end if
+	for h in i
+    print green("   Index: "+__h_idx)
+    print yellow("      IP: "+h.ip)
+    print yellow("Nickname: "+h.nick)
+		if not __h_idx==len(i)-1 then print green("=")*25
+	end for
+end function
+System.rshell=function
+  s=[]
+	for r in self.ips;if lower(indexOf(r.nick,"rshell")!=null) then push(s,r);end for
+  if not s then return
+  if len(s)==1 then return s[0].ip
+  while true
+    CH=[green("Select a rshell server ip to use")]
+    for r in s;push(CH,yellow(ljust(r.ip,15)+" - "+r.nick));end for
+    push(CH,yellow("Custom rshell server"))
+    push(CH,iyellow("Forget it"))
+    UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true)
+    if UCH==len(CH)-1 then break
+    if UCH==len(CH)-2 then return Gui.input({"text":"Enter server ip would you like to use?"})
+    return s[UCH-1].ip
+  end while
+end function
+System.users=function(Obj)
+	e=Obj.computer
+	CH=[green("What would you like to do?")]
+	push(CH,yellow("Add a user"))
+	push(CH,yellow("Delete a user"))
+	push(CH,iyellow("Forget it"))
+	UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true)
+  if UCH==3 then return
+	r=null
+	if UCH==1 then
+		n=Gui.input({"text":"New user name"})
+    if n==null then return Error.set("Missing user name")
+		p=Gui.input({"text":"Password"})
+    if p==null then return Error.set("Missing user password")
+		r=create_user(e,n,p)
+		if r==1 then return Info.info("SUCCESS!") else return Error.set(r)
+	else if UCH==2 then
+		n=Gui.input({"text":"User to delete?"})
+    if n==null then return Error.set("Missing user name")
+		d=Gui.yesNo("Delete home directory?",false)
+		r=delete_user(e,n,d)
+		if r==1 then return Info.info("SUCCESS!") else return Error.set(r)
+	end if
+end function
+System.testBins=function(Obj,t)
+	g=null
+	r=[]
+	for b in get_files(File(Obj.computer,"/bin"))
+		if hasIndex(t,name(b))==0 then
+			Info.warning(name(b)+" has been added")
+			push(r,current_date+" "+name(b)+" has been added")
+			g=1
+			continue
+		end if
+		z=t[name(b)]
+		if z==str(size(b)) then
+			remove(t,name(b))
+			continue
+		end if
+		Info.warning(name(b)+" has been modified")
+		push(r,current_date+" Old size of "+name(b)+" was "+z+" new size is "+size(b))
+		remove(t,name(b))
+		g=1
+	end for
+	if len(t) then
+		for b in t;Info.warning(b.key+" has been removed");push(r,current_date+" "+b.key+" has been removed");g=1;end for
+	end if
+	if not g then return Warning.set("System /bin has not been modified")
+	if Gui.yesNo("System /bin has been modified. Write out the listings?") then
+		j=File(c,path(Obj.user.home)+"/modifiedBins")
+		if j then
+			_ct=get_content(j);if _ct then return set_content(j,_ct+join(r,char(10)))
+		end if
+		j=Command.touch(Obj,[path(Obj.user.home),"modifiedBins"])
+    if j isa Error then return
+		set_content(j,join(r,char(10)))
+	end if
+end function
+System.testSystem=function(Obj,t)
+	g=null
+	r=[]
+	c=Obj.computer
+  y=Obj.root
+  p=path(Obj.user.home)
+  for f in Io.getAll(Obj.root)
+		if hasIndex(t,path(f))==0 then
+			Info.warning(path(f)+" has been added")
+			push(r,current_date+" "+path(f)+" *** has been added")
+			g=1
+			continue
+		end if
+		z=t[path(f)]
+		if z==str(size(f)) then
+			remove(t,path(f))
+			continue
+		end if
+		Info.warning(path(f)+" has been modified")
+		push(r,current_date+" Old size of "+path(f)+" was "+z+" new size is "+size(f))
+		remove(t,path(f))
+		g=1
+	end for
+	if len(t) then
+		for b in t;Info.warning(b.key+" has been removed");push(r,current_date+" "+b.key+" *** has been removed");g=1;end for
+	end if
+	if not g then return Info.info("The system has not been modified")
+	if Gui.yesNo("System has been modified. Write out the listings?") then
+		j=File(c,p+"/modifiedSystem")
+		if j then
+			_ct=get_content(j);if _ct then return set_content(j,_ct+join(r,char(10)))
+		end if
+		j=Command.touch(Obj,[p+"/modifiedSystem"])
+    if j isa Error then return
+		set_content(j,join(r,char(10)))
+	end if
+end function
+System.createBinAudit=function(Obj)
+	c=Obj.computer
+  p=path(Obj.user.home)
+	f=Command.touch(Obj,[p+"/bin_audit.set_owner"+Crypt.genPass(5)])
+  if f isa Error then return
+	s=[]
+	for b in get_files(File(c,"/bin"));push(s,name(b)+":"+size(b));end for
+	set_content(f,join(s,char(10)))
+end function
+System.createSystemAudit=function(Obj)
+	c=Obj.computer
+  y=Obj.root
+  p=path(Obj.user.home)
+	s=[]
+  for f in Io.getAll(y);push(s,path(f)+":"+size(f));end for
+	f=Command.touch(Obj,[p+"/system_audit.set_owner"+Crypt.genPass(5)])
+  if f isa Error then return
+	set_content(f,join(s,char(10)))
+end function
+System.fetchCrypto=function(Obj)
+  scp(globals.G_main.shell,path(globals.G_main.dir.data)+"/crypto.so",path(Obj.dir.data),Obj.shell)
+  f=File(Obj.computer,path(Obj.dir.data)+"/crypto.so")
+  if f then Library.crypto=include_lib(path(f))
+end function
+System.probe=function(Obj)
+  f=Io.getAll(Obj.root)
+  if f isa Error then return
+  for r in f;if name(r)=="Chat.exe" then return Info.info("Player System ;)");end for
+  if Obj.type=="file" then return Info.info("NPC System :(")
+  if len(split(show_procs(Obj.computer),"kernel_task"))>1 then return Info.info("Player System ;)")
+  Info.info("NPC System :(")
+end function
+System.probeEX=function(e)
+  c=null
+  if typeof(e)=="computer" then
+    c=e
+    f=Io.getAll(File(e,"/"))
+  else if typeof(e)=="shell" then
+    c=host_computer(e)
+    f=Io.getAll(File(host_computer(e),"/"))
+  else
+    f=FileHelper.toRoot(e)
+  end if
+  if f isa Error then return 0
+  for r in f;if name(r)=="Chat.exe" then return 1;end for
+  if not c then return 0
+  if len(split(show_procs(c),"kernel_task"))>1 then return 1
+  return 0
+end function
+System.anonPass=function(i);if not globals.G_attributes.anon then return i else return ("** anon **");end function
+System.hackRN=function(Obj,argv)
+  P=null
+  L=null
+  if len(argv)==1 then
+    P=argv[0]
+  else if len(argv)==2 then
+    P=argv[0]
+    L=to_int(argv[1])
+  end if
+  if not P then P=path(Obj.dir.current)
+  if not L isa number then L=Gui.inputInt({"text":"Length to rename to","default":20})
+  f=Io._getFile(Obj,P)
+	if f isa Error then return
+  if not has_permission(f,"w") then return Error.set(Info.message.NOW)
+	F=get_folders(f)+get_files(f)
+	for i in F;rename(i,Crypt.genPass(L));end for
+  Info.info("Finished ;)")
+end function
+System.loadServices=function(Obj)
+	testFor=function(n)
+    f=File(Obj.computer,"/lib/"+n)
+    if f then
+      if not globals.G_hasPivoted then l=include_lib(path(f)) else l=Builder.packLibrary(Obj,path(f))
+      if typeof(l)=="service" then return l
+    end if
+    f=File(Obj.computer,"/server/"+n)
+    if f then
+      if not globals.G_hasPivoted then l=include_lib(path(f)) else l=Builder.packLibrary(Obj,path(f))
+      if typeof(l)=="service" then return l
+    end if
+	end function
+	for s in Obj.services;l=testFor(values(values(s)[1].lib)[0]);if l then values(s)[1].bin=l;end for
+end function
+System.getMachine=function(Obj,i)
+  sw=null
+  rt=null
+  if i then
+    if not Obj.net.hasInternet then return red("Not Connected")
+    sw=get_switch(i)!=null
+    rt=get_router(i)!=null
+  end if
+  if Obj.type=="computer" or Obj.type=="shell" then
+    c=Obj.computer
+    kRouter=File(c,"/lib/kernel_router.so")!=null
+    kModule=File(c,"/lib/kernel_module.so")!=null
+    cam=File(c,"/lib/libcam.so")!=null
+    server=File(c,"/server")!=null
+    publicFolder=File(c,"/Public")!=null
+    libDir=File(c,"/lib")
+    hasNet=Obj.net.hasInternet
+    if kRouter then
+      if kModule then
+        if server and publicFolder then
+          if cam then return orange("Camera|Router") else return white("Router")
+        else
+          return blue("Workstation")
+        end if
+      else
+        if cam then return orange("Camera|Router")
+        return white("Router")
+      end if
+      if cam then return orange("Camera|Router")
+      if hasNet then
+        if sw and rt then return white("Switch")
+      end if
+      return white("Router")
+    else
+      if kModule then return blue("Workstation")
+    end if
+    if hasNet then
+      if sw!=null and rt!=null then
+        if not sw and rt then return white("Router")
+        if sw and rt then return white("Switch")
+      end if
+    end if
+    if libDir and len(libDir)>=2 then return blue("Workstation") else return red("Corrupted")
+    return blue("Workstation")
+  else if Obj.type=="file" then
+    r=get_folders(Obj.root)
+    l={}
+    for d in r
+      if name(d)=="lib" then
+        for f in get_files(d);l[name(f)]=name(f);end for
+        break
+      end if
+    end for
+    if not l or len(l)<=2 then return red("Corrupted")
+    if hasIndex(l,"kernel_router.so") then
+      if hasIndex(l,"kernel_module.so") then return blue("Workstation")
+      if hasIndex(l,"libcam.so") then return orange("Camera|Router")
+      if Obj.net.hasInternet then
+        if sw and rt then return white("Switch")
+      end if
+      return white("Router")
+    else
+      if hasIndex(l,"libcam.so") then return orange("Camera")
+      if hasIndex(l,"kernel_module.so") then return blue("Workstation")
+    end if
+    if Obj.net.hasInternet then
+      if not sw and rt then return white("Router")
+      if sw and rt then return white("Switch")
+    end if
+    return blue("Workstation")
+  else
+    return blue("Workstation")
+  end if
+end function
+//Get current system object (server or main)
+System.getSystem=function
+  //Initialize system object
+  system={}
+  //Server object exists
+  if globals.G_server then
+    //Set server object
+    system["obj"]=globals.G_server
+    //Set server shell
+    system["shell"]=globals.G_server.shell
+    //Set server computer
+    system["computer"]=globals.G_server.computer
+    //Set server directories
+    system["dir"]=globals.G_server.dir
+    //No server, use main
+  else
+    //Main not initialized
+    if not globals.G_main then return Error.set("Fatal Error: globals.G_main is not set")
+    //Set main object
+    system["obj"]=globals.G_main
+    //Set main shell
+    system["shell"]=globals.G_main.shell
+    //Set main computer
+    system["computer"]=globals.G_main.computer
+    //Set main directories
+    system["dir"]=globals.G_main.dir
+	end if
+  //Return system object
+  return system
+//End getSystem
+end function
+System.fobj=function(Obj,argv)
+	if not argv then return Man.help(["sys"])
+	encrypt=function(arg);Encryption.encryptSystem(Obj);end function
+	decrypt=function(arg);Encryption.decryptSystem(Obj);end function
+  bork=function(arg);Command.bork(Obj,arg);end function
+  restore=function(arg);System.restorePerms(Obj,["--perms"]);end function
+	cmds={
+    "-e":@encrypt,
+    "-z":@decrypt,
+    "-t":@bork,
+    "-p":@restore
+	}
+	if not hasIndex(cmds,argv[0]) then return Error.set(Text.msg.flag+argv[0]+" ]")
+	cmds[argv[0]](argv[1:])
+end function
+System.scobj=function(Obj,argv)
+	if not argv then return Man.help(["sys"])
+	encrypt=function(arg);Encryption.encryptSystem(Obj);end function
+	decrypt=function(arg);Encryption.decryptSystem(Obj);end function
+  bork=function(arg);Command.bork(Obj,arg);end function
+  restore=function(arg);System.restore(Obj,arg);end function
+	cmds={
+    "restore":@restore,
+    "-e":@encrypt,
+    "-z":@decrypt,
+    "-t":@bork,
+	}
+	if not hasIndex(cmds,argv[0]) then return Error.set(Text.msg.flag+argv[0]+" ]")
+	cmds[argv[0]](argv[1:])
+end function
+System.compare=function(argv)
+  if not argv then return Man.help(["sys"])
+  _compare=function(mode,arg)
+    if not arg then return Man.help(["sys"])
+    if mode=="p" then gbl="G_rainbow" else gbl="G_names"
+    if mode=="p" then label="password" else label="name"
+    runTest=function
+      if mode=="p" then
+        if not globals[gbl] then Crack.load(true)
+      else
+        if not globals[gbl] then
+          Info.info("Need to populate your master name list")
+          System.loadNames
+          if not globals[gbl] then return Info.info("User Aborted")
+        end if
+      end if
+      Info.info("Enter the full path to your test "+label+" file")
+      h=Gui.input({"text":"File:"})
+      if h and hasIndex(h,"/")!=null then f=Io.getFileObj(globals.G_main,h) else f=Io.file(globals.G_main,globals.G_main.user.home,"Select your "+label+" file:")
+      if h isa Error then return Info.error("File not found:"+h)
+      if h isa Warning then return h
+      Info.info("Depending on the size of your "+label+" file, this may take a while...")
+      g=[]
+      d=[]
+      for l in split(get_content(f),char(10));if not l then continue;if hasIndex(globals[gbl],l) then push(d,l) else push(g,l);end for
+      if not g then
+        Info.warning("All "+label+"s in "+name(f)+" are duplicates")
+        set_content(f,"")
+      else
+        if not d then
+          Info.info("No duplicates found, all "+label+"s can be added to your "+label+" list")
+        else
+          if len(d)==1 then Info.warning("Found "+red("1")+" duplicate") else Info.warning("Found "+red(str(len(d)))+" duplicates")
+          set_content(f,join(g,char(10)))
+        end if
+      end if
+    end function
+    clear=function;globals[gbl]={};end function
+    loadFn=function;if mode=="p" then Crack.load(true) else System.loadNames;end function
+    cmds={
+      "-c":@runTest,
+      "-x":@clear,
+      "-l":@loadFn
+    }
+    if not hasIndex(cmds,arg[0]) then return Error.set(Text.msg.flag+arg[0]+" ]")
+    cmds[arg[0]]
+  end function
+  passwords=function(arg);_compare("p",arg);end function
+  names=function(arg);_compare("n",arg);end function
+	cmds={
+    "-p":@passwords,
+    "-n":@names
+  }
+	if not hasIndex(cmds,argv[0]) then return Error.set(Text.msg.flag+argv[0]+" ]")
+	cmds[argv[0]](argv[1:])
+end function
+//Check for dsession process and return IPC warning
+System.dsession=function(Obj)
+  //Iterate through processes
+  for l in split(show_procs(Obj.computer),char(10))[1:];l=split(l," ");if l[0]=="root" and l[4]=="dsession" then return Warning.set("","",true);end for
+//End dsession
+end function
+//Create folder and return File object
+System.createRawFolder=function(c,p,f)
+  //Create folder
+  create_folder(c,p,f)
+  //Return File object for created folder
+  return File(c,p+"/"+f)
+//End createRawFolder
+end function
+//Convert value to JSON string
+System.toJSON=function(v,c=0,i=0)
+  //Function reference to string
+  if @v isa funcRef then return ""+@v+""
+  //Null to JSON null
+  if v==null then return "null"
+  //Number to string (including 0 and 1 as numbers, not booleans)
+  //In GreyScript, true==1 and false==0, so we cannot reliably distinguish
+  //between boolean intent and numeric intent. Output all numbers as JSON numbers.
+  if v isa number then return str(v)
+  //String with escaping - CRITICAL: escape in correct order
+  //1. Escape backslash first (\ -> \\)
+  //2. Then escape quote (" -> \")
+  //3. Then escape control characters
+  if v isa string then
+    if len(v)==0 then return """"""
+    s=v
+    //Step 1: Escape backslashes (\ becomes \\)
+    s=s.replace("\\","\\\\")
+    //Step 2: Escape quotes (" becomes \")
+    s=s.replace("""","\""")
+    //Step 3: Escape newlines, returns, tabs
+    s=s.replace(char(10),"\n")
+    s=s.replace(char(13),"\r")
+    s=s.replace(char(9),"\t")
+    return """"+s+""""
+  end if
+  //List to JSON array
+  if v isa list then return Parser.listToJSON(v,c,i)
+  //Map to JSON object
+  if v isa map then return Parser.mapToJSON(v,c,i)
+//End toJSON
+end function
+//Parse JSON string to value
+System.parse=function(s)
+  //Create parser instance
+  p=new Parser
+  //Parse and return result
+  return p.parse(s)
+//End parse
+end function
+//Manage Interweb/HTTP service with web page selection
+System.interWeb=function(Obj)
+  //Load HTTP library
+  h=include_lib("/lib/libhttp.so")
+  //Library not loaded
+  if not h then
+    //Install HTTP library
+    self.apt(Obj,["install","-a","libhttp.so","-p","/lib"])
+    //Try loading again
+    h=include_lib("/lib/libhttp.so")
+    //Failed to load
+    if not h then return Error.set("Unable to load the HTTP library")
+    //Install service if /Public missing
+    if not File(Obj.computer,"/Public") then install_service(h)
+	end if
+  //Start HTTP service
+  r=start_service(h)
+  //Service failed to start
+  if r isa string then return Error.set(r)
+  c=Obj.computer
+  _sys=System.getSystem
+  _webDir=_sys.dir.srcWeb
+  _webFiles=get_files(_webDir)
+  if not _webFiles then return Error.set("No web pages installed")
+  //Service menu loop
+  while true
+    //Menu header
+    CH=[green("Choose which Interweb service to use:")]
+    //Iterate through available pages
+    for m in _webFiles;if name(m)=="website" then continue;push(CH,white(name(m)));end for
+  //Add exit option
+  push(CH,iyellow("--- Done using Interweb ---"))
+  //Get user choice
+  UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+  //Exit selected
+  if UCH==len(CH)-1 then
+    //Stop HTTP service
+    z=h.stop_service
+    if z isa string then return Error.set(z) else return Info.info("Interweb session closed")
+	end if
+  //Find selected file
+  _idx=0
+  for m in _webFiles;if name(m)=="website" then continue;if _idx==UCH-1 then break;_idx=_idx+1;end for
+  //Get website file
+  w=File(c,"/Public/htdocs/website.html")
+  //Update website content
+  if w then set_content(w,get_content(m))
+  //Display service info
+  Info.info("Interweb "+name(m)+" is running on "+c.local_ip)
+  //Display access instructions
+  Info.info("In a terminal type ' open -b "+c.local_ip+" ' to view the website")
+	end while
+//End interWeb
+end function
+//Standalone pipe command for variable management and debug control
+System.pipe=function(Obj,argv)
+  //No arguments - show man page
+  if not argv then return Man.help(["pipe"])
+  //Get subcommand
+  subcmd=argv[0]
+  //Handle env command
+  if subcmd=="env" then
+    //Get remaining args
+    subargs=[]
+    if len(argv)>1 then subargs=argv[1:]
+    //Call Pipe.env directly and print results
+    result=Pipe.env(Obj,subargs)
+    if result and typeof(result)=="list" and len(result)>0 then
+      for line in result;print(line);end for
+    end if
+    return
+  end if
+  //Handle unset command
+  if subcmd=="unset" then
+    //Require variable name
+    if len(argv)<2 then return Error.set("Usage: pipe unset VAR")
+    //Call Pipe.unset with variable name
+    result=Pipe.unset(Obj,[argv[1]])
+    if result and typeof(result)=="list" and len(result)>0 then
+      for line in result;print(line);end for
+    end if
+    return
+  end if
+  //Handle set command
+  if subcmd=="set" then
+    //Require variable name
+    if len(argv)<2 then return Error.set("Usage: pipe set VAR")
+    //Call Pipe.set with variable name (requires stdin from pipe)
+    result=Pipe.set(Obj,[argv[1]])
+    if result isa Error then return result
+    if result and typeof(result)=="list" and len(result)>0 then
+      for line in result;print(line);end for
+    end if
+    return
+  end if
+  //Handle debug command
+  if subcmd=="debug" then
+    //Get debug arg if present
+    debugArgs=[]
+    if len(argv)>1 then debugArgs=argv[1:]
+    //Call Pipe.debug and print result
+    result=Pipe.debug(Obj,debugArgs)
+    if result and typeof(result)=="list" and len(result)>0 then
+      for line in result;print(line);end for
+    end if
+    return
+  end if
+  //Unknown subcommand
+  return Error.set("Unknown pipe subcommand: "+subcmd)
+//End pipe
+end function

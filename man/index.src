@@ -1,0 +1,30 @@
+// Man page for index
+manIndex="INDEX(1)                         X Shell Manual                         INDEX(1)
+
+<b>NAME</b>
+    index - X interface legend
+<b>SYNOPSIS</b>
+    <b>index</b>
+<b>DESCRIPTION</b>
+    Display the X interface legend explaining prompt indicators.
+    The prompt uses color-coded brackets to show session type,
+    access levels, and system state.
+
+    <b>First Set - Session Type:</b>
+    [<color=#36abe8>MAIN</color>] -------- :Local Host Object.
+    [PIVOT[<color=#ffffff>n</color>]] ---- :Main after a pivot [launched|pivot count].
+    [PROXY[<color=#ffffff>n</color>]] ---- :Main after a proxy acquisition.
+    [<color=#20ff98>SHELL</color>] ------- :Captured Shell Object.
+    [SHELL[<color=#ffffff>n</color>]] ---- :Shell object obtained from a [pivot|pivot count].
+    [<color=#e4ff34>COMPUTER</color>] ---- :Captured Computer Object.
+    [COMPUTER[<color=#ffffff>n</color>]] - :Computer object obtained from a [pivot|pivot count].
+    [<color=#ff4b4b>FILE</color>] -------- :Captured File Object.
+    [FILE[<color=#ffffff>n</color>]] ----- :File object obtained from a [pivot|pivot count].
+
+    <b>Second Set - Password Access:</b>
+    [<color=#20ff98>P</color>] ----------- :Have Read Access To PASSWD.
+    [<color=#ff4b4b>P</color>] ----------- :Don't Have Read Access To PASSWD.
+    [<color=#ff4b4b>X</color>] ----------- :PASSWD is missing.
+
+    <b>Third Set - Root Access:</b>
+    [<color=#20ff98>R</color>] ----------- :Have Root Password For This System|Network."

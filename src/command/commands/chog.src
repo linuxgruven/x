@@ -1,0 +1,82 @@
+// =============================================================================
+// CHOG
+// Change owner and group simultaneously with full permissions; -R recurses.
+// =============================================================================
+Command.chog=function(Obj,argv)
+	if not argv or len(argv)==0 then return Man.help(["chog"])
+	argv=ArgumentParser.check(argv)
+	_p=ArgumentParser.init
+	_p.addArgument("R",false,"flag")  // Recursive mode
+	_p.addArgument("r",false,"flag")  // Recursive mode alias
+	argv=_p.parseArgs("chog",argv)
+	if argv isa Error then return
+	if argv.r then argv.R=true
+	argv=_p.parsePath(Obj,argv)
+	if argv isa Error then return
+	hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+	if hasPipeInput then
+		if not argv.rest then argv.rest=[]
+		for _line in globals.G_pipe.stdin.split(char(10));_line=trim(_line);if _line!="" then push(argv.rest,_line);end for
+	end if
+	if hasIndex(argv,"useAI") then
+		recursive=false
+		target=null
+		if Gui.yesNo("Are we changing ownership & group of a file?") then
+			target=Io.file(Obj,Obj.dir.current,"Select a file to change the ownership & group of:")
+			if target isa Warning then return target
+		else
+			target=Io.folder(Obj,Obj.dir.current,"Select a directory to change the ownership & group of:")
+			if target isa Warning then return target
+			recursive=Gui.yesNo("Recursive?")
+		end if
+		username=Gui.input({"text":"User|group we are giving ownership & group of "+name(target)+" to"})
+		if username==null then return Error.set("No user|group specified")
+		if recursive then
+			Io.walkApply(target,"chog",username,false)
+		else
+			result=chmod(target,"u+rwx",0)
+			if result then return Error.set(result)
+			result=chmod(target,"g+rwx",0)
+			if result then return Error.set(result)
+			result=set_owner(target,username,0)
+			if result then return Error.set(result)
+			result=set_group(target,username,0)
+			if result then return Error.set(result)
+		end if
+		return
+	end if
+	if not argv.rest or len(argv.rest)<2 then return Man.help(["chog"])
+	username=argv.rest[0]
+	username=clean(username)
+	targets=[]
+	if argv.hasIndex("files") and argv.files and len(argv.files)>0 then
+		_len=len(argv.files);i=1;while i<_len;push(targets,argv.files[i]);i+=1;end while
+	else
+		_len=len(argv.rest);i=1;while i<_len;targetFile=Io._getFile(Obj,argv.rest[i]);if targetFile isa Error then return targetFile;targets.push(targetFile);i+=1;end while
+	end if
+	if not targets or len(targets)==0 then return Error.set("No target files specified")
+	for target in targets
+		if not target or target isa Error then continue
+		if argv.R then
+			Io.walkApply(target,"chog",username,false)
+			continue
+		end if
+		result=chmod(target,"u+rwx",0)
+		if result then
+			Error.set(result)
+			continue
+		end if
+		result=chmod(target,"g+rwx",0)
+		if result then
+			Error.set(result)
+			continue
+		end if
+		result=set_owner(target,username,0)
+		if result then
+			Error.set(result)
+			continue
+		end if
+		result=set_group(target,username,0)
+		if result then Error.set(result)
+	end for
+end function

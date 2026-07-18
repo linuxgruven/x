@@ -1,0 +1,147 @@
+toolCron="if params and len(params)>=1 then cronFile=params[0] else cronFile=null
+if cronFile==""-h"" or cronFile==""--help"" then
+	print(""<color=#20ff98>cron - schedule binaries to run on a clock</color>"")
+	print("""")
+	print(""<color=#fbfbfb>Usage:</color>"")
+	print(""  cron                  # use default ~/Config/crontab"")
+	print(""  cron <path>           # use a custom crontab file"")
+	print(""  cron -h | --help      # show this help"")
+	print("""")
+	print(""<color=#fbfbfb>Crontab format (5 fields + command):</color>"")
+	print(""  m  h  dom  mon  dow  command [args...]"")
+	print(""  0-59 0-23 1-31 1-12 0-6"")
+	print("""")
+	print(""<color=#fbfbfb>Wildcards:</color>"")
+	print(""  *           any value"")
+	print(""  */N         every N units"")
+	print(""  a,b,c       list of values"")
+	print(""  a-b         range"")
+	print("""")
+	print(""<color=#fbfbfb>Examples:</color>"")
+	print(""  0 * * * *   /bin/rm /home/tux/Config/Bank.txt   # every hour at :00"")
+	print(""  */5 * * * * /bin/wipe                            # every 5 minutes"")
+	print(""  30 * * * *  /bin/rm /tmp/cache.log               # every hour at :30"")
+	print(""  0 3 * * *   /bin/clean                           # daily at 3:00 AM"")
+	print(""  * * * * *   /bin/echo tick                       # every minute"")
+	print("""")
+	print(""<color=#9d9d9d>Notes: lines starting with # are comments. Cron polls every 30s and"")
+	print(""auto-reloads when the crontab file changes.</color>"")
+	exit
+end if
+shell=get_shell
+me=host_computer(shell)
+if not cronFile then
+	home=""/home/""+active_user
+	if File(me,home) then cronFile=home+""/Config/crontab"" else cronFile=""/root/Config/crontab""
+end if
+file=File(me,cronFile)
+if not file then
+	parts=split(cronFile,""/"")
+	fname=parts[-1]
+	parent=join(parts[:-1],""/"")
+	if parent=="""" then parent=""/""
+	pf=File(me,parent)
+	if not pf then
+		gp=split(parent,""/"")
+		gfname=gp[-1]
+		gparent=join(gp[:-1],""/"")
+		if gparent=="""" then gparent=""/""
+		gpf=File(me,gparent)
+		if gpf and has_permission(gpf,""w"") then create_folder(me,gparent,gfname)
+		pf=File(me,parent)
+	end if
+	if not pf or not has_permission(pf,""w"") then exit(""<color=red>cron: no write permission on ""+parent+""; specify a writable path: cron /home/<user>/.crontab</color>"")
+	r=touch(me,parent,fname)
+	if r isa string then exit(""<color=red>cron: cannot create ""+cronFile+"": ""+r)
+	file=File(me,cronFile)
+	if file then set_content(file,""# m h dom mon dow command args""+char(10))
+end if
+if not file then exit(""<color=red>cron: missing ""+cronFile)
+if is_folder(file) then exit(""<color=red>cron: ""+cronFile+"" is a folder"")
+match=function(field,value)
+	if field==""*"" then return 1
+	if indexOf(field,""/"")!=null then
+		parts=split(field,""/"")
+		step=to_int(parts[1])
+		if step>0 and (to_int(value) % step)==0 then return 1
+		return 0
+	end if
+	if indexOf(field,"","")!=null then
+		for v in split(field,"","")
+			if trim(v)==value then return 1
+		end for
+		return 0
+	end if
+	if indexOf(field,""-"")!=null then
+		parts=split(field,""-"")
+		lo=to_int(parts[0])
+		hi=to_int(parts[1])
+		v=to_int(value)
+		if v>=lo and v<=hi then return 1
+		return 0
+	end if
+	if field==value then return 1
+	if to_int(field)==to_int(value) then return 1
+	return 0
+end function
+parseJobs=function(content)
+	out=[]
+	for line in split(content,char(10))
+		line=trim(line)
+		if not line or line[0]==""#"" then continue
+		parts=split(line,"" "")
+		clean=[]
+		for p in parts;if p!="""" then push(clean,p);end for
+		if len(clean)<6 then continue
+		push(out,{""m"":clean[0],""h"":clean[1],""d"":clean[2],""mo"":clean[3],""dw"":clean[4],""cmd"":clean[5:].join("" ""),""last"":""""})
+	end for
+	return out
+end function
+content=get_content(file)
+mtime=content
+jobs=parseJobs(content)
+print(""<color=#20ff98>[cron] started with ""+len(jobs)+"" job(s) from ""+cronFile+"" (press 'q' to stop, 'r' to reload)</color>"")
+nextCheck=0
+while 1
+	k=poll_input
+	if k==""q"" then exit(""<color=#20ff98>[cron] stopped</color>"")
+	if k==""r"" then nextCheck=0
+	t=time
+	if t<nextCheck then
+		wait(0.25)
+		continue
+	end if
+	nextCheck=t+2
+	cur=File(me,cronFile)
+	if cur then
+		fresh=get_content(cur)
+		if fresh!=mtime then
+			mtime=fresh
+			jobs=parseJobs(fresh)
+			print(""<color=#9d9d9d>[cron] reloaded; ""+len(jobs)+"" job(s)</color>"")
+		end if
+	end if
+	dt=split(current_date,"" "")
+	dpart=split(dt[0],""/"")
+	tpart=split(dt[2],"":"")
+	now={""m"":tpart[1],""h"":tpart[0],""d"":dpart[0],""mo"":dpart[1],""key"":dt[0]+"" ""+tpart[0]+"":""+tpart[1]}
+	for j in jobs
+		if j.last==now.key then continue
+		if not match(j.m,now.m) then continue
+		if not match(j.h,now.h) then continue
+		if not match(j.d,now.d) then continue
+		if not match(j.mo,now.mo) then continue
+		j.last=now.key
+		bin=split(j.cmd,"" "")[0]
+		argstr=join(split(j.cmd,"" "")[1:],"" "")
+		bf=File(me,bin)
+		if not bf and bin[0]!=""/"" then bf=File(me,""/bin/""+bin)
+		if not bf and bin[0]!=""/"" then bf=File(me,""/usr/bin/""+bin)
+		if bf and is_binary(bf) then
+			print(""<color=#9d9d9d>[cron] ""+current_date+"" => ""+j.cmd+""</color>"")
+			launch(shell,path(bf),argstr)
+		else
+			print(""<color=red>[cron] not a binary: ""+bin+""</color>"")
+		end if
+	end for
+end while"

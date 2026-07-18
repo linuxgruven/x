@@ -1,0 +1,36 @@
+// Man page for join
+manJoin="JOIN(1)                          X Shell Manual                          JOIN(1)
+
+<b>NAME</b>
+    join - Combine multiple files into one
+<b>SYNOPSIS</b>
+    <b>join</b> FILE FILE...
+    <b>join -n</b> NAME FILE FILE...
+<b>DESCRIPTION</b>
+    Combine two or more files into a single file. By default, the output
+    file is named 'joined' and placed in the current directory. Use the -n
+    flag to specify a custom name for the output file.
+    Supports glob patterns: <b>join *.txt</b>, <b>join logs/*.log</b>
+<b>OPTIONS</b>
+    <b>join FILE FILE...</b> - Join Files
+      Combine multiple files into one file named 'joined'.
+
+    <b>-n NAME FILE FILE...</b> - Join with Custom Name
+      Combine files with custom output filename.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man join</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>join</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Join Files</color>
+    <b>join Afile.txt Bfile.txt Cfile.txt</b>
+    Create 'joined' file from three files
+
+    <b>join -n SomeName Afile.txt Bfile.txt Cfile.txt</b>
+    Create 'SomeName' file from three files
+<b>SEE ALSO</b>
+    <b>cat</b>, <b>split</b>"

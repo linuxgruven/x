@@ -1,0 +1,5 @@
+binGroupadd="if len(params)!=2 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""groupadd_usage""))
+output=create_group(host_computer(get_shell),params[0],params[1])
+if output==true then exit(""Group ""+params[1]+"" added to user ""+params[0])
+if output then exit(output)
+print(""Error: the group could not be created."")"

@@ -1,0 +1,79 @@
+testFindPipeTest="// Find Command Pipe Test
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>  FIND COMMAND PIPE TESTS</color>
+_print <color=#00ff00>========================================</color>
+_print
+
+// Test 1: Find then count with wc
+_print <color=#00bfff>[Test 1]</color> Find and count files
+find -n "".conf"" | wc -l
+_print
+
+// Test 2: Find then grep for specific pattern
+_print <color=#00bfff>[Test 2]</color> Find config files and filter
+find -n "".conf"" | grep ssh
+_print
+
+// Test 3: Find with head to limit results
+_print <color=#00bfff>[Test 3]</color> Find first 5 config files
+find -n "".conf"" | head -n 5
+_print
+
+// Test 4: Find then sort
+_print <color=#00bfff>[Test 4]</color> Find and sort results
+find -n "".conf"" | sort
+_print
+
+// Test 5: Find with conditional chain
+_print <color=#00bfff>[Test 5]</color> Find and execute on success
+find -n passwd && echo Found passwd file
+_print
+
+// Test 6: Find piped to cut for basename
+_print <color=#00bfff>[Test 6]</color> Find and extract filenames
+find -n "".conf"" | cut -d: -f1 | head -n 3
+_print
+
+// Test 7: Find with grep inverse match
+_print <color=#00bfff>[Test 7]</color> Find excluding pattern
+find -n "".txt"" | grep -v payload
+_print
+
+// Test 8: Find then count specific type
+_print <color=#00bfff>[Test 8]</color> Find and count .txt files
+find -n "".txt"" | wc -l
+_print
+
+// Test 9: Complex pipe chain with find
+_print <color=#00bfff>[Test 9]</color> Find, sort, and filter
+find -n "".conf"" | sort | grep -i etc | head -n 3
+_print
+
+// Test 10: Find with variable and chain
+_print <color=#00bfff>[Test 10]</color> Store find result and use
+_setvar(FOUND, 1) && find -n passwd && echo Variable is: _getvar(FOUND)
+_print
+
+// Test 11: Find content search with pipe
+_print <color=#00bfff>[Test 11]</color> Content search piped to wc
+find -n tux -c | wc -l
+_print
+
+// Test 12: Find content search with grep
+_print <color=#00bfff>[Test 12]</color> Content search piped to grep
+find -n tux -c | grep passwd
+_print
+
+// Test 13: Find content search with head
+_print <color=#00bfff>[Test 13]</color> First 5 content matches
+find -n tux -c | head -n 5
+_print
+
+// Test 14: Find content search basename extraction
+_print <color=#00bfff>[Test 14]</color> Extract just filenames from content search
+find -n tux -c | cut -d: -f1 | head -n 3
+_print
+
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>  ALL FIND TESTS COMPLETE</color>
+_print <color=#00ff00>========================================</color>"

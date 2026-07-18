@@ -1,0 +1,39 @@
+_printnow <color=#eb0cc6>========================================</color>
+_printnow <color=#eb0cc6>  AUTOMATED PROXY DEPLOYMENT</color>
+_printnow <color=#eb0cc6>========================================</color>
+_printnow
+
+_setvar(use_decoy, get_yesno(Use a decoy? (default: no)))
+_setvar(install_rshell, get_yesno(Install rshell server? (default: no)))
+
+_printnow
+_printnow <color=#00ff00>Configuration:</color>
+_printnow <color=#ffffff>  Install decoy: <color=#ffff00>to_yesno(_getvar(use_decoy))</color>
+_printnow <color=#ffffff>  Install rshell: <color=#ffff00>to_yesno(_getvar(install_rshell))</color>
+_printnow
+
+if _getvar(use_decoy) == 1
+  _print <color=#00bfff>[1/4]</color> Deploying proxy with decoy...
+  proxy -d
+else
+  _print <color=#ffff00>[1/4] Skipping decoy deployment...</color>
+endif
+
+_print <color=#00bfff>[2/4]</color> Querying proxy status...
+proxy -q
+
+_print <color=#00bfff>[3/4]</color> Wiping system logs...
+wipe -l
+
+if _getvar(install_rshell) == 1
+  _print <color=#00bfff>[4/4]</color> Installing rshell library...
+  libs -i rshell
+  _print <color=#00ff00> rshell library installed</color>
+else
+  _print <color=#ffff00>[4/4] Skipping rshell installation...</color>
+endif
+
+_print
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>   PROXY DEPLOYMENT COMPLETE</color>
+_print <color=#00ff00>========================================</color>

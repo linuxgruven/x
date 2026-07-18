@@ -1,0 +1,43 @@
+// Man page for mkdir
+manMkdir="MKDIR(1)                         X Shell Manual                         MKDIR(1)
+
+<b>NAME</b>
+    mkdir - used to create folders
+<b>SYNOPSIS</b>
+    <b>mkdir</b> [<b>-y</b>] <b>NAME</b>
+    <b>mkdir </b><b>-l</b> [<b>-p</b> [<b>FULL_PATH</b>]] <b>NAME NAME NAME...</b>
+<b>DESCRIPTION</b>
+    Create directories on remote systems. Use -y to overwrite existing.
+    Use -l for multiple directories with optional path specification.
+<b>OPTIONS</b>
+    <b>-y</b>
+    Overwrite if exists
+    Force directory creation
+
+    <b>-l</b>
+    Create multiple directories
+    Space-separated names
+
+    <b>-p PATH</b>
+    Target directory
+    Use with -l flag
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Single Directory</color>
+    <b>mkdir NewFolder</b>
+    Create in cwd
+
+    <b>mkdir /home/tux/NewFolder</b>
+    Create at path
+
+    <color=#e4ff34># Multiple Directories</color>
+    <b>mkdir NewFolder1 NewFolder2 NewFolder3</b>
+    Create multiple
+
+    <b>mkdir -l -p /home/tux dir1 dir2 dir3</b>
+    Create in /home/tux
+
+    <color=#e4ff34># Overwrite Mode</color>
+    <b>mkdir -y existing</b>
+    Force overwrite
+<b>SEE ALSO</b>
+    <b>mkcd</b>, <b>touch</b>"

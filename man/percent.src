@@ -1,0 +1,20 @@
+// Man page for percent
+manPercent="PERCENT(1)                       X Shell Manual                       PERCENT(1)
+
+<b>NAME</b>
+    percent - Calculate percentage
+<b>SYNOPSIS</b>
+    <b>percent NUMBER1 NUMBER2</b>
+<b>DESCRIPTION</b>
+    Calculate the percentage relationship between two numbers.
+<b>EXAMPLE:</b>
+    <b>percent 25 100</b>
+    Calculate 25% of 100
+
+    <b>percent 50 200</b>
+    Calculate 50% of 200
+
+    <b>percent 75 300</b>
+    Calculate 75% of 300
+<b>SEE ALSO</b>
+    <b>average</b>, <b>median</b>"

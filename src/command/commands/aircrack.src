@@ -1,0 +1,23 @@
+// =============================================================================
+// AIRCRACK
+// Crack WiFi passwords from packet capture files using crypto.so.
+// =============================================================================
+Command.aircrack=function(Obj,argv)
+  argv=ArgumentParser.check(argv)
+  if not argv then return Man.help(["aircrack"])
+  if not Library.haveCrypto then return Error.set("crypto.so library not loaded")
+  if not Library.crypto then return Error.set("Failed to access crypto library")
+  if not argv[0] then return Error.set("Missing required argument: <capture_file>")
+  captureFile=Io._getFile(Obj,argv[0])
+  if captureFile isa Error then return captureFile
+  if not is_binary(captureFile) then return Error.set("Invalid file format - not a valid capture file")
+  if not has_permission(captureFile,"r") then return Error.set("Permission denied - cannot read "+name(captureFile))
+  Info.info("Cracking WiFi password from: "+name(captureFile))
+  key=aircrack(Library.crypto,path(captureFile))
+  if key then
+    print blue("KEY FOUND! ["+green(key)+"]")
+    Info.info("Password successfully cracked")
+  else
+    Info.warning("Unable to crack the key - capture file may be incomplete or invalid")
+  end if
+end function

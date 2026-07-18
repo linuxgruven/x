@@ -1,0 +1,267 @@
+webBank="<!doctype html>
+<style type='text/css'>
+  html {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: #e8edf1;
+  }
+  body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: #364a57;
+    font: 14px ""Trebuchet MS"", ""Segoe UI"", Arial, sans-serif;
+  }
+  .scroll-root {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    padding: 18px 0;
+  }
+  .page {
+    width: 860px;
+    max-width: 95%;
+    margin: 0 auto 16px auto;
+    border: 1px solid #9fb3c1;
+    background: #f9fcff;
+    box-shadow: 0 8px 16px rgba(58, 79, 95, 0.18);
+  }
+  .shell {
+    margin: 10px;
+    border: 1px solid #c8d5de;
+    background: #ffffff;
+  }
+  .top {
+    padding: 9px 12px;
+    border-bottom: 1px solid #c8d5de;
+    background: #4a6470;
+    color: #eff7fb;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+  }
+  .brand {
+    float: right;
+    font-size: 12px;
+    letter-spacing: 0.4px;
+  }
+  .btn-group {
+    margin: 12px;
+    text-align: center;
+  }
+  .btn {
+    background-color: #0b3f56;
+    border: 1px solid #86a7b8;
+    color: #f3f9fc;
+    padding: 5px 6px;
+    font-size: 11px;
+    width: 108px;
+    margin: 3px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn-sel {
+    background-color: #1a6d92;
+    border-color: #9cc4d9;
+  }
+  .btn-group button:hover {
+    background-color: #137aac;
+  }
+  .hero {
+    margin: 0 12px 12px 12px;
+    border: 1px solid #cfdae2;
+    background: #f5fafc;
+    padding: 14px;
+  }
+  .kicker {
+    margin: 0 0 6px 0;
+    color: #507185;
+    font-size: 10px;
+    letter-spacing: 1px;
+    font-weight: bold;
+  }
+  .hero-copy {
+    margin: 0;
+    color: #2f5467;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .sub {
+    margin: 8px 0 0 0;
+    color: #667f8f;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .status-card {
+    margin: 12px auto 0 auto;
+    max-width: 420px;
+    border: 1px solid #cfdae2;
+    background: #ffffff;
+    padding: 8px 10px;
+    box-sizing: border-box;
+    text-align: left;
+  }
+  .status-layout {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .status-layout td {
+    vertical-align: top;
+  }
+  .status-title {
+    color: #3d6579;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+  .status-line {
+    color: #5a7281;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+  .status-line + .status-line {
+    margin-top: 3px;
+  }
+  .status-copy {
+    width: auto;
+  }
+  .status-icon {
+    width: 70px;
+    text-align: right;
+    padding-left: 12px;
+    white-space: nowrap;
+  }
+  .status-icon img {
+    width: 58px;
+    height: 58px;
+  }
+  img {
+    display: block;
+    margin: 0 auto;
+  }
+  .section-title {
+    margin: 0 12px 8px 12px;
+    color: #3d6579;
+    font-size: 12px;
+    letter-spacing: 0.7px;
+  }
+  .features-grid {
+    margin: 0 12px 12px 12px;
+    text-align: center;
+  }
+  .feature {
+    display: inline-block;
+    vertical-align: top;
+    width: 31%;
+    min-width: 180px;
+    margin: 0 4px 8px 4px;
+    border: 1px solid #cfdae2;
+    border-top-width: 3px;
+    background: #f8fcff;
+    padding: 10px 8px;
+    box-sizing: border-box;
+  }
+  .feature-1 {
+    border-top-color: #3f7ea0;
+  }
+  .feature-2 {
+    border-top-color: #4a8d7b;
+  }
+  .feature-3 {
+    border-top-color: #8a6d45;
+  }
+  .feature-name {
+    margin: 0;
+    color: #3d6579;
+    font-size: 14px;
+  }
+  .feature-info {
+    margin: 6px 0 0 0;
+    color: #5a7281;
+    font-size: 12px;
+  }
+  .footer {
+    margin: 0 12px 12px 12px;
+    border-top: 1px solid #cfdae2;
+    padding-top: 8px;
+    color: #7b929f;
+    font-size: 11px;
+    text-align: center;
+  }
+  @media (max-width: 700px) {
+    .brand {
+      float: none;
+      display: block;
+      margin-top: 4px;
+      text-align: left;
+      font-size: 15px;
+    }
+    .btn {
+      width: 94%;
+      max-width: 260px;
+    }
+    .feature {
+      display: block;
+      width: auto;
+      margin: 0 0 8px 0;
+    }
+  }
+</style>
+<div class=""scroll-root"">
+  <div class=""page"">
+    <div class=""shell"">
+      <div class=""top"">
+        BANKING ACCESS PORTAL
+        <span class=""brand"">X</span>
+      </div>
+      <div class=""btn-group"">
+        <button type=""button"" class=""btn btn-primary btn-sel"" id=""Main"">Main</button>
+        <button type=""button"" class=""btn btn-primary"" id=""RegisterBank"">Register</button>
+        <button type=""button"" class=""btn btn-primary"" id=""LoginBank"">Login</button>
+      </div>
+      <div class=""hero"">
+        <p class=""kicker"">PERSONAL & BUSINESS BANKING</p>
+        <p class=""hero-copy"">At X we know how important it is to know that your savings are in safe hands. Open an account now and you will have access to one of the safest banking services in the world.</p>
+        <div class=""status-card"">
+          <table class=""status-layout"" cellspacing=""0"" cellpadding=""0"">
+            <tr>
+              <td class=""status-copy"">
+                <div class=""status-title"">Service Status</div>
+                <div class=""status-line"">Registration channel active.</div>
+                <div class=""status-line"">Login and transactions available.</div>
+                <div class=""status-line"">Encrypted customer sessions enabled.</div>
+              </td>
+              <td class=""status-icon"">
+                <img src=""bank.png"" width=""58"" height=""58"" align=""center"">
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+      <p class=""section-title"">CLIENT OPERATIONS</p>
+      <div class=""features-grid"">
+        <div class=""feature feature-1"">
+          <p class=""feature-name"">Account Access</p>
+          <p class=""feature-info"">Register and log in to your banking profile from this portal.</p>
+        </div>
+        <div class=""feature feature-2"">
+          <p class=""feature-name"">Balance Control</p>
+          <p class=""feature-info"">Review funds and track transaction-related movements.</p>
+        </div>
+        <div class=""feature feature-3"">
+          <p class=""feature-name"">Payment Services</p>
+          <p class=""feature-info"">Use integrated tools for secure payment management.</p>
+        </div>
+      </div>
+      <div class=""footer"">X's banking services Trusted digital finance platform</div>
+    </div>
+  </div>
+</div>"

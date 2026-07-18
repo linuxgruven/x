@@ -1,0 +1,15 @@
+// TEST 4: TRY/CATCH with pivot
+// Expected: Commands after pivot inside try should run in proxy context
+// If error occurs, catch should handle it
+
+_printnow <color=#ff0>== TRY/CATCH PIVOT TEST ==</color>
+
+try
+  _printnow <color=#0f0>[TRY]</color> Before pivot
+  proxy -q
+  _printnow <color=#0f0>[TRY]</color> After pivot
+catch err
+  _printnow <color=#f00>[CATCH]</color> Error: _getvar(err)
+endtry
+
+_printnow <color=#ff0>== TRY/CATCH COMPLETE ==</color>

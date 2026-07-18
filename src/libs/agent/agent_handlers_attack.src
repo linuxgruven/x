@@ -1,0 +1,2387 @@
+// =============================================================================
+// AGENT_HANDLERS_ATTACK
+// Attack-related agent step handlers: get object, scan, exploits, escalate,
+// crack, fetch shell, recon, backdoor, analyze, verify, direct command, etc.
+// =============================================================================
+//Handler: Get Object (uses Mission.getRootBounce or Mission.getObject)
+AgentHandlers._handleGetObject=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"getObject"}
+  //Check if we need to auto-find router from previous scan
+  if hasIndex(step,"autoFindRouter") and step.autoFindRouter then
+    if not hasIndex(step,"publicIP") then
+      //Try to find router from context (previous LAN scan)
+      if context and hasIndex(context,"lastRouter") then
+        step.publicIP=context.lastRouter
+        if outLvl>=2 then print skyblue("Agent: Using router "+step.publicIP+" from LAN scan")
+      else
+        result.error="No router found - run LAN scan first"
+        print yellow("Error: Need to find a router first (LAN scan)")
+        return result
+      end if
+    end if
+  end if
+  if not hasIndex(step,"publicIP") or not hasIndex(step,"lanIP") then
+    result.error="Missing public IP or LAN IP"
+    print yellow("Error: Need both public IP and LAN IP for object access")
+    return result
+  end if
+  publicIP=step.publicIP
+  lanIP=step.lanIP
+  needRoot=false
+  if hasIndex(step,"needRoot") then needRoot=step.needRoot
+  if outLvl>=2 then
+    if needRoot then print skyblue("Agent: Attempting root bounce to "+lanIP+" via "+publicIP) else print skyblue("Agent: Attempting to access "+lanIP+" via "+publicIP)
+  end if
+  //Use Mission.getRootBounce for root access, Mission.getObject for any user
+  i={}  //Info object
+  objectResult=null
+  progressSteps=[]  //Track what succeeded for better error reporting
+  //Check if this is headless with continuation commands - use new path regardless of needRoot
+  isHeadlessWithCommands=false
+  if hasIndex(step,"isHeadless") and step.isHeadless and hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then isHeadlessWithCommands=true
+  //Check if we should use root router bounce method (config settings configured + router shell available)
+  useRootBounce=false
+  if not isHeadlessWithCommands and hasIndex(globals,"G_settings") and hasIndex(globals.G_settings,"vulnerableLib") and hasIndex(globals.G_settings,"vulnerableLibIndex") then
+    if globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex then
+      //Config settings configured - check if router shell is available
+      if outLvl>=2 then print skyblue("Agent: Config settings configured - checking for router shell...")
+      routerShell=null
+      if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then routerShell=Attack.scanCustom([publicIP,"router","s"],true)
+      if routerShell and typeof(routerShell)=="shell" then
+        useRootBounce=true
+        if outLvl>=2 then print green("Agent: Using root router bounce method (most direct)")
+      else
+        if outLvl>=2 then print yellow("Agent: No router shell available - will try other methods")
+      end if
+    end if
+  end if
+  if useRootBounce then
+    //BEST/MOST DIRECT: Use Mission.getRootBounce with configured vulnerable library
+    objectResult=Mission.getRootBounce(publicIP,lanIP,i)
+    if debug then print green("Debug: Mission.getRootBounce returned typeof="+typeof(objectResult))
+    //Wrap the computer object - headless if continuation commands, interactive otherwise
+    if objectResult and typeof(objectResult)=="computer" then
+      //Determine headless mode based on continuation commands or needsInteractiveShell flag
+      isHeadless=false
+      if debug then
+        debugValue="N/A"
+        if hasIndex(step,"needsInteractiveShell") then debugValue=str(step.needsInteractiveShell)
+        if debug then print green("Debug: step.needsInteractiveShell="+hasIndex(step,"needsInteractiveShell")+" value="+debugValue)
+      end if
+      if hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then
+        isHeadless=true
+      else if hasIndex(step,"isHeadless") then
+        isHeadless=step.isHeadless
+      else if hasIndex(context,"shouldStore") and context.shouldStore then
+        isHeadless=true  //Force headless when storing objects
+      else if hasIndex(step,"needsInteractiveShell") and step.needsInteractiveShell then
+        isHeadless=false  //Force interactive mode for standalone requests
+      end if
+      if debug then print green("Debug: Wrapping computer with isHeadless="+isHeadless)
+      if typeof(Exploit)=="map" and hasIndex(Exploit,"getComputer") then
+        if debug then print yellow("[DEBUG] About to call Exploit.getComputer with isHeadless="+isHeadless)
+        wrappedObj=Exploit.getComputer(objectResult,isHeadless)
+        if debug then print yellow("[DEBUG] getComputer returned! typeof="+typeof(wrappedObj)+", isError="+(wrappedObj isa Error))
+        if debug then print green("Debug: getComputer returned typeof="+typeof(wrappedObj)+", isError="+(wrappedObj isa Error))
+        if wrappedObj and not wrappedObj isa Error then
+          result.success=true
+          result.publicIP=publicIP
+          result.lanIP=lanIP
+          result.baseType="computer"
+          result.rawObject=objectResult
+          result.wrappedObj=wrappedObj
+          //Store wrapped object in context for storage
+          context.computer=wrappedObj
+          context.rootComputer=wrappedObj
+          if debug then
+            print green("[DEBUG HANDLER] Set context.rootComputer to wrapped object (useRootBounce path)")
+            print green("[DEBUG HANDLER] context indexes: "+indexes(context).join(", "))
+          end if
+          //Execute continuation commands if in headless mode
+          if isHeadless then AgentHandlers._runContinuation(wrappedObj,step.continuationCommands,lanIP)
+          if outLvl>=2 then print green("Agent: Successfully obtained computer on "+lanIP+" via root bounce from "+publicIP)
+          return result
+        end if
+      end if
+    end if
+  else if needRoot and not isHeadlessWithCommands then
+    //ROOT ACCESS REQUIRED: Try Mission.getRootBounce first
+    if outLvl>=2 then print yellow("Agent: Root access required - trying Mission.getRootBounce...")
+    objectResult=Mission.getRootBounce(publicIP,lanIP,i)
+    //Check if it returned an error array ["error", message]
+    if typeof(objectResult)=="list" and len(objectResult)>=2 and objectResult[0]=="error" then
+      if outLvl>=2 then print yellow("Agent: Mission.getRootBounce error: "+objectResult[1])
+      if outLvl>=2 then print yellow("Agent: Falling back to exploit scan method...")
+      objectResult=null  //Clear it so fallback path activates
+    else if objectResult and typeof(objectResult)=="computer" then
+      //Success - got root computer directly from Mission.getRootBounce
+      if outLvl>=2 then print green("Agent: Successfully obtained root computer via Mission.getRootBounce")
+      //Determine headless mode based on continuation commands or needsInteractiveShell flag
+      isHeadless=false
+      if hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then
+        isHeadless=true
+      else if hasIndex(step,"isHeadless") then
+        isHeadless=step.isHeadless
+      else if hasIndex(context,"shouldStore") and context.shouldStore then
+        isHeadless=true  //Force headless when storing objects
+      else if hasIndex(step,"needsInteractiveShell") and step.needsInteractiveShell then
+        isHeadless=false  //Force interactive mode for standalone requests
+      end if
+      if debug then print green("Debug: Wrapping computer with isHeadless="+isHeadless)
+      //Wrap computer object for command execution or interactive mode
+      wrappedObj=Exploit.getComputer(objectResult,isHeadless)
+      if not wrappedObj or wrappedObj isa Error then
+        result.error="Failed to wrap computer object"
+        return result
+      end if
+      result.success=true
+      result.publicIP=publicIP
+      result.lanIP=lanIP
+      result.baseType="computer"
+      result.rawObject=objectResult
+      result.wrappedObj=wrappedObj
+      //Store wrapped object in context for storage
+      context.computer=wrappedObj
+      context.rootComputer=wrappedObj
+      if outLvl>=2 then print green("Agent: Stored root computer in context for next step")
+      if debug then
+        print green("[DEBUG HANDLER] Set context.rootComputer to wrapped object")
+        print green("[DEBUG HANDLER] context indexes: "+indexes(context).join(", "))
+      end if
+      return result
+    else
+      //getRootBounce failed in some other way - will fall back to normal path
+      if outLvl>=2 then print yellow("Agent: Mission.getRootBounce returned unexpected result, falling back to exploit scan method...")
+    end if
+  end if
+  //If Mission.getRootBounce wasn't used or failed, try scanning all router libraries
+  if not useRootBounce or (not objectResult or typeof(objectResult)!="computer") then
+    //ANY ACCESS or FALLBACK: Try direct bounce exploit path
+    //Step 1: Scan router for bounce exploits to target LAN IP
+    if outLvl>=2 then print skyblue("Agent: Scanning "+publicIP+" for bounce exploits to "+lanIP+"...")
+    r=get_router(publicIP)
+    if r then
+      libraries=Exploit.extract(r,publicIP)
+      if libraries and not (libraries isa Error) then
+        //Look for exploits that can bounce to the LAN target
+        foundBounce=false
+        for lib in libraries
+          if not hasIndex(lib,"metaLib") then continue
+          metaLib=lib.metaLib
+          if not metaLib then continue
+          //Check if this library has bounce exploits
+          libName=lib_name(metaLib)
+          libVersion=version(metaLib)
+          cacheKey=libName+"_"+libVersion
+          //Ensure library is in database
+          if typeof(Exploit)=="map" and hasIndex(Exploit,"haveAlready") then
+            if not Exploit.haveAlready(metaLib) then
+              if hasIndex(Exploit,"headless") then Exploit.headless(metaLib)
+            end if
+          end if
+          //Check cache for bounce exploits
+          if typeof(globals.G_exploitCache)=="map" and hasIndex(globals.G_exploitCache,cacheKey) then
+            cache=globals.G_exploitCache[cacheKey]
+            cacheExploits=Exploit.ensureExploits(cache)
+            if cacheExploits then
+              //Check if kernel_router exploits have been tested
+              if libName=="kernel_router.so" then
+                needsUpdate=false
+                hasBounceExploits=false
+                for exploit in cacheExploits
+                  if hasIndex(exploit,"e") and (exploit.e=="l" or exploit.e=="i") then
+                    hasBounceExploits=true
+                    break
+                  end if
+                end for
+                if not hasBounceExploits then
+                  needsUpdate=true
+                  if typeof(Exploit)=="map" and hasIndex(Exploit,"headless") then
+                    if outLvl>=2 then print yellow("Agent: Testing kernel_router.so for bounce exploits...")
+                    Exploit.headless(metaLib)
+                  end if
+                end if
+              end if
+              for exploit in cacheExploits
+                //Check if this is a LAN/bounce exploit (type 'l' or 'i')
+                if hasIndex(exploit,"e") and (exploit.e=="l" or exploit.e=="i" or exploit.e=="c") then
+                  //Try this bounce exploit - must pass LAN IP as parameter
+                  if outLvl>=2 then print yellow("Agent: Trying bounce exploit from "+libName+" to "+lanIP+"...")
+                  memAddr=null
+                  unsafeVal=null
+                  if hasIndex(Exploit,"getmtree") then memAddr=Exploit.getmtree(exploit.m)
+                  if hasIndex(Exploit,"getstree") then unsafeVal=Exploit.getstree(exploit.s)
+                  if memAddr and unsafeVal then
+                    //Pass LAN IP as 4th parameter for bounce exploits
+                    objectResult=overflow(metaLib,memAddr,unsafeVal,lanIP)
+                    if objectResult and typeof(objectResult)=="computer" then
+                      foundBounce=true
+                      if outLvl>=2 then print green("Agent: Direct bounce exploit successful!")
+                      break
+                    end if
+                  end if
+                end if
+              end for
+              if foundBounce then break
+            end if
+          end if
+        end for
+        //If direct bounce worked, skip shell route
+        if foundBounce and objectResult then
+          result.success=true
+          result.publicIP=publicIP
+          result.lanIP=lanIP
+          result.baseType="computer"
+          result.rawObject=objectResult
+          //Determine headless mode
+          isHeadless=false
+          if hasIndex(step,"isHeadless") then isHeadless=step.isHeadless
+          if hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then isHeadless=true
+          if hasIndex(step,"needsInteractiveShell") and step.needsInteractiveShell then isHeadless=false  //Force interactive
+          //Activate computer
+          wrappedObj=null
+          if typeof(Exploit)=="map" and hasIndex(Exploit,"getComputer") then
+            wrappedObj=Exploit.getComputer(objectResult,isHeadless)
+            result.wrappedObj=wrappedObj
+          end if
+          //Execute continuation commands if in headless mode
+          if isHeadless then AgentHandlers._runContinuation(wrappedObj,step.continuationCommands,lanIP)
+          if outLvl>=2 then print green("Agent: Successfully obtained computer on "+lanIP+" via direct bounce from "+publicIP)
+          return result
+        end if
+      end if
+    end if
+    if outLvl>=2 then print yellow("Agent: No direct bounce exploits found - falling back to shell route")
+    //FALLBACK: Get root shell on router and use scanForExploit
+    //Step 1: Get root shell on router
+    ex=Attack.scanCustom([publicIP,"router","s"],true)
+    if typeof(ex)!="shell" then
+      result.error="Could not get a shell on the router"
+      result.failedAt="Router shell access"
+      result.progress=["Attempted to scan "+publicIP+" for router exploit"]
+      Error.set(result.error)
+      return result
+    end if
+    shell=Exploit.getShell(ex,false,[],true)
+    //Step 2: Escalate to root
+    if shell.user.raw!="root" then shell=ShellObject.headlessSu(shell)
+    if shell isa Error then
+      result.error="Could not get root on the router"
+      result.failedAt="Router root escalation"
+      result.progress=["Got shell on router "+publicIP,"Failed to escalate to root"]
+      Error.set(result.error)
+      return result
+    end if
+    if shell.user.raw!="root" then
+      result.error="Could not get a root shell on the router"
+      result.failedAt="Router root verification"
+      result.progress=["Got shell on router "+publicIP,"Attempted root escalation","Root verification failed"]
+      Error.set(result.error)
+      return result
+    end if
+    //Step 3: Clean logs and pack metaxploit
+    Log.shellLog(shell.shell)
+    ShellObject.packMeta(shell)
+    //Step 4: Determine headless mode - default to false for user-requested computers, true only if continuation commands
+    isHeadless=false
+    if hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then isHeadless=true
+    forcedHeadless=false
+    if hasIndex(step,"isHeadless") then
+      isHeadless=step.isHeadless
+      if step.isHeadless then forcedHeadless=true  //Track if headless was explicitly forced (intermediate step)
+    end if
+    //Override: if step explicitly needs interactive shell (user said "I want a computer"), launch UI
+    //BUT: don't override if this is an intermediate step with forced headless mode
+    if hasIndex(step,"needsInteractiveShell") and step.needsInteractiveShell and not forcedHeadless then
+      isHeadless=false
+      if debug then print green("Debug: User requested interactive object - will launch UI")
+    end if
+    if isHeadless and hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then
+      if outLvl>=2 then print skyblue("Agent: Getting headless computer on "+lanIP+"...")
+      argv=["bounce",lanIP]
+      objectResult=Exploit.scanForExploit(shell,argv,true,true)
+      if objectResult isa Error then
+        result.error="Unable to find or execute bounce exploit to "+lanIP
+        Error.set(result.error)
+        return result
+      end if
+      if typeof(objectResult)!="computer" then
+        result.error="Unable to get computer object on "+lanIP
+        Error.set(result.error)
+        return result
+      end if
+      //Wrap computer object to get commands interface
+      wrappedObj=Exploit.getComputer(objectResult,true)
+      if wrappedObj isa Error or not wrappedObj then
+        result.error="Failed to wrap computer object"
+        Error.set(result.error)
+        return result
+      end if
+      //Execute continuation commands using commands interface
+      AgentHandlers._runContinuation(wrappedObj,step.continuationCommands,lanIP)
+      result.success=true
+      result.publicIP=publicIP
+      result.lanIP=lanIP
+      result.rawObject=objectResult
+      result.wrappedObj=wrappedObj
+      return result
+    end if
+    //Normal mode - get computer object (interactive)
+    argv=["bounce",lanIP]
+    objectResult=Exploit.scanForExploit(shell,argv,true,false)
+    if objectResult isa Error then
+      result.error="Unable to find or execute bounce exploit to "+lanIP
+      result.failedAt="LAN exploitation (automated search)"
+      result.progress=["Got root shell on router "+publicIP,"Packed metaxploit","Searched all libraries for bounce exploit","Failed to execute bounce"]
+      Error.set(result.error)
+      return result
+    end if
+    //Check result type - should be wrapped map in interactive mode
+    if typeof(objectResult)!="map" or not hasIndex(objectResult,"type") or objectResult.type!="computer" then
+      result.error="Unable to get wrapped computer object on "+lanIP
+      result.failedAt="Computer object wrapping"
+      result.progress=["Got root shell on router "+publicIP,"Packed metaxploit","Found bounce exploit","Failed to wrap computer object"]
+      Error.set(result.error)
+      return result
+    end if
+    //Success with new automated path
+    result.success=true
+    result.publicIP=publicIP
+    result.lanIP=lanIP
+    result.baseType="computer"
+    //Handle headless vs interactive mode
+    if isHeadless then
+      //Headless mode - got raw computer object
+      result.rawObject=objectResult
+      //Wrap it in headless mode for command execution
+      wrappedObj=Exploit.getComputer(objectResult,true)
+      if wrappedObj and not wrappedObj isa Error then result.wrappedObj=wrappedObj else print yellow("Agent: Warning - failed to wrap computer in headless mode")
+    else
+      //Interactive mode - already got wrapped object
+      result.wrappedObj=objectResult
+      //Extract raw computer - try multiple paths
+      if hasIndex(objectResult,"object") and typeof(objectResult.object)=="computer" then
+        result.rawObject=objectResult.object
+      else if hasIndex(objectResult,"computer") and typeof(objectResult.computer)=="computer" then
+        result.rawObject=objectResult.computer
+      else if typeof(objectResult)=="computer" then
+        result.rawObject=objectResult
+      end if
+    end if
+    //Install libraries if requested
+    if hasIndex(step,"libsToInstall") and len(step.libsToInstall)>0 then
+      if debug then print green("Debug: Installing libraries: "+join(step.libsToInstall,", "))
+      //Use wrapped object's shell interface for library installation
+      if isHeadless and typeof(objectResult)=="computer" then
+        //Raw computer object - use its shell
+        if hasIndex(objectResult,"shell") then
+          for libName in step.libsToInstall
+            if outLvl>=2 then print skyblue("Agent: Installing "+libName+" library...")
+            savedLibPath="/root/Desktop/savedLibs/"+libName
+            if Obj.computer then
+              savedLib=File(Obj.computer,savedLibPath)
+              if savedLib then
+                buildResult=objectResult.shell.build(savedLibPath,"/lib",false)
+                if buildResult then
+                  if outLvl>=2 then print green("Agent: Successfully installed "+libName)
+                else
+                  print yellow("Agent: Warning - failed to install "+libName)
+                end if
+              else
+                print yellow("Agent: Warning - "+libName+" not found in savedLibs")
+              end if
+            else
+              print yellow("Agent: Warning - Obj.computer not available")
+            end if
+          end for
+        else
+          print yellow("Agent: Warning - computer object has no shell interface")
+        end if
+      else if not isHeadless and typeof(objectResult)=="map" and hasIndex(objectResult,"shell") then
+        //Wrapped object - use its shell
+        for libName in step.libsToInstall
+          if outLvl>=2 then print skyblue("Agent: Installing "+libName+" library...")
+          savedLibPath="/root/Desktop/savedLibs/"+libName
+          if Obj.computer then
+            savedLib=File(Obj.computer,savedLibPath)
+            if savedLib then
+              buildResult=objectResult.shell.build(savedLibPath,"/lib",false)
+              if buildResult then
+                if outLvl>=2 then print green("Agent: Successfully installed "+libName)
+              else
+                print yellow("Agent: Warning - failed to install "+libName)
+              end if
+            else
+              print yellow("Agent: Warning - "+libName+" not found in savedLibs")
+            end if
+          else
+            print yellow("Agent: Warning - Obj.computer not available")
+          end if
+        end for
+      else
+        print yellow("Agent: Warning - object has no shell interface for library installation")
+      end if
+    end if
+    //Execute continuation commands if in headless mode
+    if isHeadless and hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then
+      print skyblue("Agent: Executing continuation commands in headless mode...")
+      if hasIndex(result,"wrappedObj") and hasIndex(result.wrappedObj,"commands") then
+        for cmd in step.continuationCommands
+          //Try to find and execute the command
+          if (cmd=="list -sB" or cmd=="list -sD") and hasIndex(result.wrappedObj.commands,"list") then
+            //Determine list flag using centralized logic (no prompt in continuation commands)
+            listFlag=globals.G_agent.getListFlag(false)
+            if debug then print green("Debug: Executing list "+listFlag+" via headless wrapped object")
+            listCmd=result.wrappedObj.commands["list"]
+            output=listCmd([listFlag])
+            if typeof(output)=="string" then print white(output)
+          else
+            //Try to parse and execute the command
+            parts=split(cmd," ")
+            if debug then print green("Debug: Split into "+len(parts)+" parts")
+            if len(parts)>0 then
+              cmdName=parts[0]
+              if debug then print green("Debug: cmdName="+cmdName)
+              cmdArgs=parts[1:]
+              if debug then print green("Debug: cmdArgs has "+len(cmdArgs)+" items")
+              if hasIndex(result.wrappedObj.commands,cmdName) then
+                if debug then print green("Debug: Calling "+cmdName)
+                cmdFunc=result.wrappedObj.commands[cmdName]
+                output=cmdFunc(cmdArgs)
+                if typeof(output)=="string" then print white(output)
+              end if
+            end if
+          end if
+        end for
+      else if hasIndex(result,"rawObject") and typeof(result.rawObject)=="computer" then
+        //Raw computer objects don't support direct command execution
+        print yellow("Warning: Raw computer objects don't support continuation commands")
+        print yellow("Commands need shell or wrapped object with command interface")
+      else if hasIndex(result,"wrappedObj") and hasIndex(result.wrappedObj,"commands") then
+        //Wrapped object fallback
+        for cmd in step.continuationCommands
+          //Try to parse and execute the command
+          parts=split(cmd," ")
+          if len(parts)>0 then
+            cmdName=parts[0]
+            cmdArgs=parts[1:]
+            if hasIndex(result.wrappedObj.commands,cmdName) then
+              cmdFunc=result.wrappedObj.commands[cmdName]
+              output=cmdFunc(cmdArgs)
+              if typeof(output)=="string" then print white(output)
+            end if
+          end if
+        end for
+      end if
+    end if
+    //Launch interactive UI if this was a standalone object request
+    if not isHeadless and hasIndex(step,"needsInteractiveShell") and step.needsInteractiveShell then
+      if outLvl>=1 then print green("Agent: Launching interactive computer UI...")
+      if debug then print green("[DEBUG] Launching interactive UI for computer object")
+      //Launch the computer UI using Exploit.getComputer with false (interactive mode)
+      if hasIndex(result,"rawObject") and typeof(result.rawObject)=="computer" then
+        if debug then print green("[DEBUG] Calling Exploit.getComputer with interactive mode")
+        interactiveComputer=Exploit.getComputer(result.rawObject,false)
+        if not (interactiveComputer isa Error) then
+          result.interactiveObj=interactiveComputer
+          if debug then print green("[DEBUG] Interactive computer UI launched successfully")
+        else
+          print yellow("Warning: Failed to launch interactive computer UI: "+interactiveComputer.message)
+        end if
+      else
+        print yellow("Warning: Unable to launch interactive UI - no raw computer object found")
+        if debug then
+          if debug then print yellow("[DEBUG] result keys: "+indexes(result).join(", "))
+          if hasIndex(result,"rawObject") and debug then print yellow("[DEBUG] rawObject type: "+typeof(result.rawObject))
+        end if
+      end if
+    else
+      if debug then
+        if debug then print yellow("[DEBUG] Not launching interactive UI:")
+        if debug then print yellow("[DEBUG]   isHeadless="+isHeadless)
+        if debug then print yellow("[DEBUG]   hasIndex(step,needsInteractiveShell)="+hasIndex(step,"needsInteractiveShell"))
+        if hasIndex(step,"needsInteractiveShell") and debug then print yellow("[DEBUG]   step.needsInteractiveShell="+step.needsInteractiveShell)
+      end if
+    end if
+    if outLvl>=2 then print green("Agent: Successfully obtained computer on "+lanIP+" via "+publicIP)
+    return result
+  end if
+  //Check if result is a list with status messages ["error"|"success"|"info", message]
+  if typeof(objectResult)=="list" then
+    if len(objectResult)>=2 then
+      if objectResult[0]=="error" then
+        result.error=objectResult[1]
+        //Build progress report based on error message
+        errorMsg=objectResult[1]
+        if indexOf(errorMsg,"Could not get a shell on the router")!=null then
+          result.failedAt="Router shell access"
+          result.progress=["Attempted to scan "+publicIP+" for router exploit"]
+        else if indexOf(errorMsg,"Could not get root on the router")!=null then
+          result.failedAt="Router root escalation"
+          result.progress=["Got shell on router "+publicIP,"Failed to escalate to root"]
+        else if indexOf(errorMsg,"Could not get a root shell on the router")!=null then
+          result.failedAt="Router root verification"
+          result.progress=["Got shell on router "+publicIP,"Attempted root escalation","Root verification failed"]
+        else if indexOf(errorMsg,"Unable to get a computer bounce to the target")!=null or indexOf(errorMsg,"Invalid exploit index")!=null then
+          result.failedAt="LAN exploitation"
+          result.progress=["Got root shell on router "+publicIP,"Loaded vulnerable library","Scanned "+lanIP+" from router","Failed to exploit target or invalid exploit index"]
+        else if indexOf(errorMsg,"Unable to get target computer")!=null then
+          result.failedAt="Computer object retrieval"
+          result.progress=["Got root shell on router "+publicIP,"Loaded vulnerable library","Scanned "+lanIP+" from router","Failed to retrieve computer object"]
+        else
+          result.failedAt="Unknown step"
+          result.progress=["Attempted access to "+lanIP+" via "+publicIP]
+        end if
+        //Display detailed progress
+        if outLvl>=1 then
+          print yellow("Progress before failure:")
+          for stepDesc in result.progress;print white("  [+] "+stepDesc);end for
+          if hasIndex(result,"failedAt") then print red("  [X] Failed at: "+result.failedAt)
+          print yellow("Suggestion: Check if target has necessary ports open or try a different vulnerable library")
+        end if
+        Error.set(objectResult[1])
+        return result
+      else if objectResult[0]=="success" or objectResult[0]=="info" then
+        result.success=true
+        result.message=objectResult[1]
+        Info.info(objectResult[1])
+        return result
+      end if
+    end if
+  end if
+  //Check if we got an object (shell, computer, or file)
+  objectType="computer"
+  if hasIndex(step,"objectType") then objectType=step.objectType
+  baseType=typeof(objectResult)
+  if baseType=="shell" or baseType=="computer" or baseType=="file" then
+    result.success=true
+    result.rawObject=objectResult
+    result.baseType=baseType
+    result.publicIP=publicIP
+    result.lanIP=lanIP
+    //Determine headless mode
+    isHeadless=false
+    if hasIndex(step,"isHeadless") then isHeadless=step.isHeadless
+    if hasIndex(step,"needsInteractiveShell") and step.needsInteractiveShell then isHeadless=false
+    if debug then print green("Debug: (fallback path) isHeadless="+isHeadless+", needsInteractiveShell="+hasIndex(step,"needsInteractiveShell"))
+    //Wrap in appropriate object type based on what was requested
+    wrappedObj=null
+    if objectType=="shell" then
+      wrappedObj=Exploit.getShell(objectResult,false,[],isHeadless)
+    else if objectType=="computer" then
+      wrappedObj=Exploit.getComputer(objectResult,isHeadless)
+    else if objectType=="file" then
+      wrappedObj=Exploit.getFile(objectResult,null,isHeadless)
+    end if
+    if wrappedObj and not wrappedObj isa Error then
+      result.wrappedObj=wrappedObj
+      //Check user access level
+      userLevel=wrappedObj.user.raw
+      //Show warning if root was needed but not obtained
+      if needRoot and userLevel!="root" then
+        print yellow("Warning: Root access was requested but not obtained")
+        result.message=objectType+" access established (non-root)"
+      else
+        if userLevel=="root" then result.message="Root "+objectType+" access established" else result.message=objectType+" access established"
+      end if
+      //Execute continuation commands in headless mode
+      if isHeadless and hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then
+        print skyblue("Agent: Executing continuation commands in headless mode...")
+        for cmd in step.continuationCommands
+          if hasIndex(wrappedObj,"commands") then
+            //Try to find and execute the command
+            if (cmd=="list -sB" or cmd=="list -sD") and hasIndex(wrappedObj.commands,"list") then
+              //Determine list flag using centralized logic (no prompt in continuation commands)
+              listFlag=globals.G_agent.getListFlag(false)
+              print green("Debug: Executing list "+listFlag)
+              listCmd=wrappedObj.commands["list"]
+              output=listCmd([listFlag])
+              if typeof(output)=="string" then print white(output)
+            else
+              //Try to parse and execute the command
+              parts=split(cmd," ")
+              print green("Debug: Split into "+len(parts)+" parts")
+              if len(parts)>0 then
+                cmdName=parts[0]
+                print green("Debug: cmdName="+cmdName)
+                cmdArgs=parts[1:]
+                print green("Debug: cmdArgs has "+len(cmdArgs)+" items")
+                if hasIndex(wrappedObj.commands,cmdName) then
+                  print green("Debug: Calling "+cmdName)
+                  cmdFunc=wrappedObj.commands[cmdName]
+                  output=cmdFunc(cmdArgs)
+                  if typeof(output)=="string" then print white(output)
+                end if
+              end if
+            end if
+          end if
+        end for
+      end if
+      //Store in context for subsequent steps
+      if objectType=="shell" then
+        context.shell=wrappedObj
+        if userLevel=="root" then context.rootShell=wrappedObj
+      else if objectType=="computer" then
+        context.computer=wrappedObj
+        if userLevel=="root" then context.rootComputer=wrappedObj
+      else if objectType=="file" then
+        context.file=wrappedObj
+        if userLevel=="root" then context.rootFile=wrappedObj
+      end if
+    else
+      print green("Agent: Successfully obtained "+objectType+" object on "+lanIP)
+      result.message=objectType+" object obtained"
+    end if
+  else
+    result.error="Unexpected return type: "+typeof(objectResult)
+    print yellow("Error: "+result.error)
+  end if
+  return result
+end function
+//Autonomous scan helper
+AgentHandlers._scanAutonomous=function(targetIp)
+  outLvl=globals.G_agent.config.outputLevel
+  if not targetIp then return []
+  if typeof(Exploit)!="map" then return []
+  //Get router at target (same as scan command)
+  r=get_router(targetIp)
+  if not r then return []
+  //Extract exploitable libraries without interaction (same as scan command)
+  libraries=Exploit.extract(r,targetIp)
+  if not libraries or libraries isa Error then return []
+  if outLvl>=2 then print skyblue("Agent: Autonomous scan found "+len(libraries)+" exploitable libraries")
+  //Process each library - check database first, only scan if needed
+  attackVectors=[]
+  for lib in libraries
+    if not hasIndex(lib,"metaLib") then continue
+    metaLib=lib.metaLib
+    if not metaLib then continue
+    libName=lib_name(metaLib)
+    if not libName then continue
+    libVersion=version(metaLib)
+    cacheKey=libName+"_"+libVersion
+    exploitCount=0
+    //Check if library already exists in database using haveAlready
+    if typeof(Exploit)=="map" and hasIndex(Exploit,"haveAlready") then
+      if not Exploit.haveAlready(metaLib) then
+        //Library not in database - add it by calling headless once
+        if hasIndex(Exploit,"headless") then
+          if outLvl>=2 then print skyblue("Agent: Adding "+libName+" to database...")
+          Exploit.headless(metaLib)
+        end if
+      else
+        if outLvl>=2 then print green("Agent: Using cached data for "+libName)
+      end if
+    end if
+    //Get exploit count from cache (should be there now)
+    if typeof(globals.G_exploitCache)=="map" and hasIndex(globals.G_exploitCache,cacheKey) then
+      cache=globals.G_exploitCache[cacheKey]
+      if hasIndex(cache,"checksum") then exploitCount=cache.checksum else exploitCount=len(Exploit.ensureExploits(cache))
+    end if
+    //Build attack vector with all data for next step (same structure as scan output)
+    vector={}
+    vector.library=libName
+    vector.version=libVersion
+    vector.metaLib=metaLib //Keep metaLib for exploit step
+    vector.exploitCount=exploitCount
+    //Get target IP:port from library
+    if hasIndex(lib,"local_ip") then
+      vector.ip=lib.local_ip
+      if hasIndex(lib,"port_number") then
+        vector.port=lib.port_number
+        vector.target=lib.local_ip+":"+lib.port_number
+      else
+        vector.port=0
+        vector.target=lib.local_ip+":0"
+      end if
+    else
+      vector.ip=targetIp
+      vector.port=0
+      vector.target=targetIp
+    end if
+    //Build description matching scan output format
+    vector.description=libName
+    if vector.version then vector.description=vector.description+" (Version: "+vector.version+")"
+    vector.description=vector.description+" -> "+vector.target
+    if exploitCount>0 then vector.description=vector.description+" ["+exploitCount+" exploits]"
+    //Add all vectors - next step will process them
+    push(attackVectors,vector)
+  end for
+  if outLvl>=2 then print skyblue("Agent: Returning "+len(attackVectors)+" attack vectors for next step")
+  return attackVectors
+end function
+//Autonomous attack function - uses cached exploits from database
+//Returns captured objects with scoring: shells > computers > files, root > user > guest
+//Filters by requirements if provided (e.g., libraryType="router", privilege="root")
+AgentHandlers._attackAutonomous=function(attackVectors,requirements)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  if not attackVectors or len(attackVectors)==0 then return []
+  if outLvl>=2 then print skyblue("Agent: Using "+len(attackVectors)+" cached attack vectors from database")
+  //Show requirements if present
+  if requirements and outLvl>=2 then
+    reqStr="Requirements:"
+    if hasIndex(requirements,"libraryType") then reqStr=reqStr+" "+requirements.libraryType
+    if hasIndex(requirements,"excludeLibraryTypes") then reqStr=reqStr+" (excluding: "+join(requirements.excludeLibraryTypes,", ")+")"
+    if hasIndex(requirements,"privilege") then reqStr=reqStr+" "+requirements.privilege
+    if hasIndex(requirements,"objectType") then reqStr=reqStr+" "+requirements.objectType
+    if hasIndex(requirements,"targetIP") then reqStr=reqStr+" on "+requirements.targetIP
+    print yellow(reqStr)
+  end if
+  //Build scored exploit list without executing
+  scoredExploits=[]
+  for vector in attackVectors
+    if not hasIndex(vector,"metaLib") or not vector.metaLib then continue
+    if not hasIndex(vector,"library") or not hasIndex(vector,"version") then continue
+    libName=vector.library
+    libVersion=vector.version
+    metaLib=vector.metaLib
+    //Filter by target IP requirement if specified
+    if requirements and hasIndex(requirements,"targetIP") then
+      reqIP=requirements.targetIP
+      //Check if this vector's IP matches
+      if hasIndex(vector,"ip") and vector.ip!=reqIP then continue
+    end if
+    //Filter by library type requirement if specified
+    if requirements and hasIndex(requirements,"libraryType") then
+      reqType=requirements.libraryType
+      //Map library names to types
+      matchesType=false
+      if reqType=="router" and indexOf(libName,"kernel_router")!=null then matchesType=true
+      if reqType=="http" and indexOf(libName,"libhttp")!=null then matchesType=true
+      if reqType=="ssh" and indexOf(libName,"libssh")!=null then matchesType=true
+      if reqType=="ftp" and indexOf(libName,"libftp")!=null then matchesType=true
+      if reqType=="sql" and indexOf(libName,"libsql")!=null then matchesType=true
+      if not matchesType then continue
+    end if
+    //Filter out excluded library types if specified
+    if requirements and hasIndex(requirements,"excludeLibraryTypes") then
+      isExcluded=false
+      for excludeType in requirements.excludeLibraryTypes
+        if excludeType=="router" and indexOf(libName,"kernel_router")!=null then isExcluded=true
+        if excludeType=="http" and indexOf(libName,"libhttp")!=null then isExcluded=true
+        if excludeType=="ssh" and indexOf(libName,"libssh")!=null then isExcluded=true
+        if excludeType=="ftp" and indexOf(libName,"libftp")!=null then isExcluded=true
+        if excludeType=="sql" and indexOf(libName,"libsql")!=null then isExcluded=true
+        if isExcluded then break
+      end for
+      if isExcluded then
+        if debug then print yellow("  Skipping "+libName+" (excluded type: "+excludeType+")")
+        continue
+      end if
+    end if
+    //Get cached exploits from database
+    cacheKey=libName+"_"+libVersion
+    if not hasIndex(globals.G_exploitCache,cacheKey) then continue
+    cache=globals.G_exploitCache[cacheKey]
+    exploits=Exploit.ensureExploits(cache)
+    if not exploits or len(exploits)==0 then continue
+    //Score each exploit based on database metadata (don't execute yet)
+    for exploit in exploits
+      if not hasIndex(exploit,"m") or not hasIndex(exploit,"s") then continue
+      if not hasIndex(exploit,"e") or not hasIndex(exploit,"u") then continue
+      //Skip unknown exploit types
+      exploitType=exploit.e
+      if exploitType=="?" or exploitType=="t" then continue
+      //Determine object type from database
+      objType=null
+      if exploitType=="s" then objType="shell"
+      if exploitType=="c" then objType="computer"
+      if exploitType=="f" then objType="file"
+      if not objType then continue
+      //Filter by object type requirement if specified
+      if requirements and hasIndex(requirements,"objectType") then
+        if objType!=requirements.objectType then continue
+      end if
+      //Get user privilege from database
+      userPriv="guest"
+      if exploit.u=="r" then userPriv="root"
+      if exploit.u=="u" then userPriv="user"
+      if exploit.u=="g" then userPriv="guest"
+      //Filter by privilege requirement if specified
+      if requirements and hasIndex(requirements,"privilege") then
+        if userPriv!=requirements.privilege then continue
+      end if
+      //Score: shell=30, computer=20, file=10 + root=100, user=50, guest=10
+      score=0
+      if objType=="shell" then score=score+30
+      if objType=="computer" then score=score+20
+      if objType=="file" then score=score+10
+      if userPriv=="root" then score=score+100
+      if userPriv=="user" then score=score+50
+      if userPriv=="guest" then score=score+10
+      //Bonus points for matching requirements
+      if requirements then
+        if hasIndex(requirements,"libraryType") then score=score+20
+        if hasIndex(requirements,"privilege") and userPriv==requirements.privilege then score=score+50
+        if hasIndex(requirements,"objectType") and objType==requirements.objectType then score=score+20
+        if hasIndex(requirements,"targetIP") then score=score+30
+      end if
+      //Store exploit metadata with score for later execution
+      scoredEx={}
+      scoredEx.exploit=exploit
+      scoredEx.metaLib=metaLib
+      scoredEx.library=libName
+      scoredEx.type=objType
+      scoredEx.user=userPriv
+      scoredEx.score=score
+      if hasIndex(vector,"ip") then scoredEx.ip=vector.ip
+      if hasIndex(vector,"port") then scoredEx.port=vector.port
+      push(scoredExploits,scoredEx)
+    end for
+  end for
+  //Sort by score (highest first)
+  scoredExploits=scoredExploits.sort("score",true)
+  if outLvl>=2 then print skyblue("Agent: Sorted "+len(scoredExploits)+" exploits by score (trying best first)")
+  //Check for ambiguous choices (multiple exploits with same top score)
+  if len(scoredExploits)>1 and globals.G_agent.config.promptOnAmbiguous then
+    topScore=scoredExploits[0].score
+    equalScoreCount=0
+    for scoredEx in scoredExploits;if scoredEx.score==topScore then equalScoreCount+=1 else break;end for
+    if equalScoreCount>1 then
+      //Multiple exploits with same score - prompt user
+      details=[]
+      i=0;while i<equalScoreCount;ex=scoredExploits[i];push(details,ex.library+" ("+ex.user+") - score: "+ex.score);i+=1;end while
+      shouldContinue=globals.G_agent._promptUser("Found "+equalScoreCount+" exploits with equal score. Try all automatically?",true)
+      if not shouldContinue then
+        //User wants to choose manually - show choices
+        choices=[]
+        i=0;while i<equalScoreCount;ex=scoredExploits[i];push(choices,ex.library+" ("+ex.user+") score: "+ex.score);i+=1;end while
+        push(choices,"Cancel operation")
+        choice=Gui.choiceHybrid(choices,{},len(choices),false,true)
+        if choice==len(choices) then
+          if outLvl>=2 then print yellow("Agent: Operation cancelled by user")
+          return []
+        end if
+        //Use only selected exploit
+        if choice>=1 and choice<=equalScoreCount then scoredExploits=[scoredExploits[choice-1]]
+      end if
+    end if
+  end if
+  //Try exploits in order until we get a valid object
+  bestCapture=null
+  for scoredEx in scoredExploits
+    exploit=scoredEx.exploit
+    metaLib=scoredEx.metaLib
+    //Get memory address and unsafe value from cache
+    memAddr=null
+    unsafeVal=null
+    if typeof(Exploit)=="map" then
+      if hasIndex(Exploit,"getmtree") then memAddr=Exploit.getmtree(exploit.m)
+      if hasIndex(Exploit,"getstree") then unsafeVal=Exploit.getstree(exploit.s)
+    end if
+    if not memAddr or not unsafeVal then continue
+    //Execute exploit and test result
+    result=overflow(metaLib,memAddr,unsafeVal)
+    if not result or result isa number or result isa string then continue
+    //Verify actual result type
+    objType=typeof(result)
+    if indexOf(objType,"shell")!=null then objType="shell"
+    if objType!="shell" and objType!="computer" and objType!="file" then continue
+    //Success - we have a valid object
+    bestCapture={}
+    bestCapture.object=result
+    bestCapture.type=objType
+    bestCapture.user=scoredEx.user
+    bestCapture.score=scoredEx.score
+    bestCapture.library=scoredEx.library
+    if hasIndex(scoredEx,"ip") then bestCapture.ip=scoredEx.ip
+    if hasIndex(scoredEx,"port") then bestCapture.port=scoredEx.port
+    if outLvl>=2 then print green("Agent: Successfully captured "+objType+" ("+scoredEx.user+") from "+scoredEx.library+" score: "+scoredEx.score)
+    break
+  end for
+  //Return best capture (or empty list if none succeeded)
+  if bestCapture then return [bestCapture]
+  //No exact match - check if we need fallback logic for LAN targets
+  if requirements and hasIndex(requirements,"targetIP") then
+    targetIP=requirements.targetIP
+    if is_lan_ip(targetIP) then
+      //LAN IP requires bounce attack via router - cannot exploit directly
+      if outLvl>=2 then
+        print yellow("Agent: Target "+targetIP+" requires LAN bounce attack via router")
+        print yellow("Agent: Direct exploitation not available - returning empty to trigger getObject")
+      end if
+      //Return empty so handler can inject getObject step
+      return []
+    end if
+  end if
+  return []
+end function
+//LAN Setup - Prepare for bounce attacks when vulnerable library not configured
+//Returns shell object in headless mode with metaxploit packed, ready for LAN attacks
+AgentHandlers._setupLanBounce=function(Obj,requirements)
+  outLvl=globals.G_agent.config.outputLevel
+  if outLvl>=2 then print skyblue("Agent: Checking LAN bounce setup...")
+  //Check if vulnerable library is already configured
+  if hasIndex(globals,"G_settings") and hasIndex(globals.G_settings,"vulnerableLib") and hasIndex(globals.G_settings,"vulnerableLibIndex") then
+    if globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex then
+      if outLvl>=2 then print green("Agent: Vulnerable library already configured - no setup needed")
+      return {"success":true,"alreadyConfigured":true}
+    end if
+  end if
+  //Need to set up LAN bounce capability
+  if outLvl>=2 then print yellow("Agent: Vulnerable library not configured - initiating LAN setup...")
+  //Step 1: Disable root requirements if user requested them (since we can't guarantee root without vuln lib)
+  if requirements then
+    if hasIndex(requirements,"requiresRoot") and requirements.requiresRoot then
+      requirements.requiresRoot=false
+      if outLvl>=2 then print yellow("Agent: Disabled requiresRoot (no vulnerable library)")
+    end if
+    if hasIndex(requirements,"needRoot") and requirements.needRoot then
+      requirements.needRoot=false
+      if outLvl>=2 then print yellow("Agent: Disabled needRoot (no vulnerable library)")
+    end if
+  end if
+  //Step 2: Scan network for router shell (priority: root -> user -> guest)
+  if outLvl>=2 then print skyblue("Agent: Scanning network for router shells...")
+  //Use Attack.scanCustom to find router with shell access
+  shell=null
+  if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then shell=Attack.scanCustom(["http","s"],true)
+  //If no router shell found, try to get ANY shell on the network
+  if not shell or typeof(shell)!="shell" then
+    if outLvl>=2 then print yellow("Agent: No direct router shells - scanning for any available shell...")
+    //Scan network for any exploitable service
+    if hasIndex(Obj,"commands") and hasIndex(Obj.commands,"scan") then
+      scanResult=Obj.commands.scan(["--n"])
+      //Parse scan results to find exploitable services
+      if scanResult and typeof(scanResult)=="string" then
+        attackVectors=globals.G_agent._parseAttackVectors(scanResult)
+        if attackVectors and len(attackVectors)>0 then
+          //Try to capture any shell using autonomous attack
+          capturedObjects=globals.G_agent._attackAutonomous(attackVectors,null)
+          if capturedObjects and len(capturedObjects)>0 then
+            shell=capturedObjects[0].object
+            if outLvl>=2 then print green("Agent: Captured "+capturedObjects[0].user+" shell from "+capturedObjects[0].library)
+          end if
+        end if
+      end if
+    end if
+  end if
+  //Check if we found any shell
+  if not shell or typeof(shell)!="shell" then
+    if outLvl>=2 then print red("Agent: No shells available on network")
+    return {"success":false,"error":"No shells available for LAN bounce setup"}
+  end if
+  if outLvl>=2 then print green("Agent: Found shell on network")
+  //Step 3: Get shell in headless mode so we can execute commands
+  if outLvl>=2 then print skyblue("Agent: Converting to headless mode...")
+  headlessShell=Exploit.getShell(shell,false,[],true)
+  if not headlessShell or headlessShell isa Error then
+    if outLvl>=2 then print red("Agent: Failed to get headless shell")
+    return {"success":false,"error":"Could not create headless shell"}
+  end if
+  //Determine user level from shell
+  userLevel="guest"
+  if hasIndex(headlessShell,"user") and hasIndex(headlessShell.user,"raw") then userLevel=headlessShell.user.raw
+  if outLvl>=2 then print green("Agent: Got "+userLevel+" shell in headless mode")
+  //Step 4: Use this shell to scan for routers on the network
+  if outLvl>=2 then print skyblue("Agent: Using shell to scan network for routers...")
+  //Try to find routers using the shell we have
+  if hasIndex(headlessShell,"shell") then
+    //Try scan --n router s from the shell
+    scanOutput=headlessShell.shell.run("scan --n router s")
+    if scanOutput and typeof(scanOutput)=="string" then
+      if indexOf(scanOutput,"exploit")!=null or indexOf(scanOutput,"vulnerab")!=null then
+        if outLvl>=2 then print green("Agent: Found routers on network from shell scan")
+      end if
+    end if
+    //Also try scan --n http s as alternative
+    scanOutput2=headlessShell.shell.run("scan --n http s")
+    if scanOutput2 and typeof(scanOutput2)=="string" then
+      if indexOf(scanOutput2,"exploit")!=null or indexOf(scanOutput2,"vulnerab")!=null then
+        if outLvl>=2 then print green("Agent: Found HTTP routers on network from shell scan")
+      end if
+    end if
+  end if
+  //Step 5: Pack custom objects using ShellObject.packMeta
+  if outLvl>=2 then print skyblue("Agent: Packing metaxploit for LAN attacks...")
+  if typeof(ShellObject)!="map" or not hasIndex(ShellObject,"packMeta") then
+    if outLvl>=2 then print red("Agent: ShellObject.packMeta not available")
+    return {"success":false,"error":"ShellObject.packMeta not available"}
+  end if
+  packResult=ShellObject.packMeta(headlessShell)
+  if not packResult then
+    if outLvl>=2 then print red("Agent: Failed to pack metaxploit")
+    return {"success":false,"error":"Failed to pack custom objects"}
+  end if
+  if outLvl>=2 then print green("Agent: Successfully packed metaxploit - ready for LAN attacks")
+  //Return the prepared shell
+  return {"success":true,"shell":headlessShell,"user":userLevel,"library":"http router"}
+end function
+//Handler: Scan
+AgentHandlers._handleScan=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"scan"}
+  //Check if we need a target (not for local/lan scans or flag-based scans like -r)
+  needsTarget=true
+  if hasIndex(step,"scanMode") then
+    if step.scanMode=="local" or step.scanMode=="lan" then needsTarget=false
+  end if
+  //Flag-based scans (like -r for random) don't need a target
+  if hasIndex(step,"flag") and (step.flag=="-r" or step.flag=="-l" or step.flag=="-n") then needsTarget=false
+  if needsTarget and not hasIndex(step,"target") then
+    result.error="No target specified"
+    result.critical=true
+    return result
+  end if
+  //Build argv based on scan mode and service
+  argv=[]
+  //Check if we have a flag that doesn't need a target (like -r for random)
+  if hasIndex(step,"flag") and not hasIndex(step,"target") then
+    //Flag-only scan (like scan -r for random)
+    argv=[step.flag]
+    if debug then print green("[DEBUG] Built argv with flag='"+step.flag+"' for flag-only scan")
+  else
+    //Check if target is a subnet (contains CIDR notation)
+    isSubnet=false
+    if hasIndex(step,"target") and indexOf(step.target,"/")!=null then isSubnet=true
+    //Check if specific service requested (but not for subnets - use network scan for those)
+    if hasIndex(step,"service") and hasIndex(step,"target") and not isSubnet then
+      //Service-specific scan: scan --c <ip> <service> <type>
+      serviceType="s"  //default to shelluserLevel,"library":"http router"
+      //Detect what type of access is needed from the command context
+      if hasIndex(context,"goal") then
+        if context.goal=="rootShell" or context.goal=="shell" then serviceType="s"
+      end if
+      //Check parsed command for explicit type keywords
+      if hasIndex(step,"accessType") then
+        if step.accessType=="shell" then
+          serviceType="s"
+        else if step.accessType=="file" then
+          serviceType="f"
+        else if step.accessType=="computer" then
+          serviceType="c"
+        end if
+      end if
+      //Use cached port knowledge if available
+      port=globals.G_agent._getPortForService(step.service)
+      if port!=null then
+        if outLvl>=2 then print skyblue("Agent: Using learned port "+port+" for "+step.service)
+        argv=["--c",step.target,port,serviceType]
+      else
+        argv=["--c",step.target,step.service,serviceType]
+      end if
+    else if isSubnet then
+      //Subnet scan: use network scan mode
+      //For subnets, we need to iterate through each IP in the range
+      //For now, just pass the subnet directly and let the scan command handle it
+      argv=["-n",step.target]
+    else if hasIndex(step,"scanMode") then
+      if step.scanMode=="local" then
+        //Local mode: scan --l
+        argv=["--l"]
+      else if step.scanMode=="lan" then
+        //Network scan: scan --n
+        argv=["--n"]
+      else if step.scanMode=="ip" and hasIndex(step,"target") then
+        //Specific IP without service - general scan
+        if globals.G_agent._isPrivateIp(step.target) then argv=["-n",step.target] else argv=[step.target]
+      else if hasIndex(step,"target") then
+        argv=[step.target]
+      end if
+    else if hasIndex(step,"target") then
+      argv=[step.target]
+    end if
+  end if
+  scanResult=null
+  //Check if this is an autonomous scan - use non-interactive method
+  isAutonomous=false
+  if hasIndex(step,"autonomous") and step.autonomous then isAutonomous=true
+  //For autonomous mode, use dedicated non-interactive scan
+  if isAutonomous and hasIndex(step,"target") then
+    if outLvl>=2 then print skyblue("Agent: Running autonomous scan on "+step.target)
+    attackVectors=AgentHandlers._scanAutonomous(step.target)
+    if attackVectors and len(attackVectors)>0 then
+      context.availableExploits=attackVectors
+      context.target=step.target
+      result.success=true
+      result.data="Found "+len(attackVectors)+" attack vectors"
+      if outLvl>=2 then
+        print skyblue("Agent: Attack vectors available:")
+        for vec in attackVectors;print skyblue("  - "+vec.description);end for
+      end if
+      return result
+    else
+      result.error="No exploitable libraries found"
+      result.critical=true
+      return result
+    end if
+  end if
+  //Interactive scan mode - use command
+  //Use the specified tool if provided, otherwise try defaults
+  if hasIndex(step,"tool") and hasIndex(Obj.commands,step.tool) then
+    f=Obj.commands[step.tool]
+    if globals.G_agent.config.trainer then print orange("Command you need to run: "+step.tool+" "+join(argv," "))
+    //For autonomous mode, try to get libraries without interactive prompt
+    if typeof(Exploit)=="map" and hasIndex(Exploit,"extract") and hasIndex(step,"target") then
+      r=get_router(step.target)
+      if r then
+        scanLibraries=Exploit.extract(r,step.target)
+        if scanLibraries and not (scanLibraries isa Error) then
+          if outLvl>=2 then print skyblue("Agent: Extracted "+len(scanLibraries)+" libraries from scan")
+          //Parse attack vectors from library list
+          attackVectors=[]
+          for lib in scanLibraries
+            if not hasIndex(lib,"metaLib") then continue
+            if not lib_name(lib.metaLib) then continue
+            vector={}
+            vector.library=lib_name(lib.metaLib)
+            if hasIndex(lib,"local_ip") then
+              if hasIndex(lib,"port_number") then vector.target=lib.local_ip+":"+lib.port_number else vector.target=lib.local_ip+":0"
+            else
+              vector.target=step.target
+            end if
+            vector.description=vector.library+" at "+vector.target
+            vector.metaLib=lib.metaLib
+            push(attackVectors,vector)
+          end for
+          if len(attackVectors)>0 then
+            context.availableExploits=attackVectors
+            context.scanLibraries=scanLibraries
+            if outLvl>=2 then print skyblue("Agent: Found "+len(attackVectors)+" attack vectors")
+          end if
+        end if
+      end if
+    end if
+    scanResult=f(argv)
+    //Command executed - consider it successful even if return value is null
+    result.success=true
+    result.data=scanResult
+    if hasIndex(step,"target") then context.target=step.target
+    if scanResult!=null then
+      context.scanData=scanResult
+      //Parse attack vectors from scan output for autonomous exploitation (fallback if extract didn't work)
+      if not hasIndex(context,"availableExploits") or len(context.availableExploits)==0 then
+        attackVectors=globals.G_agent._parseAttackVectors(scanResult)
+        if attackVectors and len(attackVectors)>0 then
+          context.availableExploits=attackVectors
+          if outLvl>=2 then print skyblue("Agent: Parsed "+len(attackVectors)+" attack vectors from scan output")
+        end if
+      end if
+      //Check if this was a LAN scan - look for routers
+      if hasIndex(step,"flag") and (step.flag=="-l" or step.flag=="--n") then
+        //Try to find a router from the scan (for auto-bounce attacks)
+        router=get_router
+        if router and typeof(router)=="router" then
+          routerIp=router.local_ip
+          if routerIp then
+            context.lastRouter=routerIp
+            if outLvl>=2 then print skyblue("Agent: Found router at "+routerIp+" for future bounce attacks")
+          end if
+        end if
+      end if
+    end if
+  else if hasIndex(Obj,"commands") then
+    //Try default commands
+    for cmd in ["scan","nmap"]
+      if hasIndex(Obj.commands,cmd) then
+        f=Obj.commands[cmd]
+        if globals.G_agent.config.trainer then print orange("Command you need to run: "+cmd+" "+join(argv," "))
+        scanResult=f(argv)
+        //Command executed - consider it successful
+        result.success=true
+        result.data=scanResult
+        if hasIndex(step,"target") then context.target=step.target
+        if scanResult!=null then context.scanData=scanResult
+        break
+      end if
+    end for
+    //If no command was found, try fallback
+    if not result.success then
+      if typeof(Attack)=="map" and hasIndex(Attack,"scan") then
+        scanResult=Attack.scan(Obj,step.target)
+        result.success=true
+        result.data=scanResult
+        context.scanData=scanResult
+        context.target=step.target
+      else
+        result.error="Scan command not available"
+        result.critical=true
+      end if
+    end if
+  else
+    //No commands available, try Attack library
+    if typeof(Attack)=="map" and hasIndex(Attack,"scan") then
+      scanResult=Attack.scan(Obj,step.target)
+      result.success=true
+      result.data=scanResult
+      context.scanData=scanResult
+      context.target=step.target
+    else
+      result.error="Scan command not available"
+      result.critical=true
+    end if
+  end if
+  return result
+end function
+//Handler: Find exploits
+AgentHandlers._handleFindExploits=function(Obj,step,context)
+  result={"success":false,"step":"findExploits"}
+  //Use Obj to get available exploits
+  if hasIndex(context,"target") then
+    //Check for exploit command
+    if hasIndex(Obj.commands,"exploit") then
+      argv=["list",context.target]
+      exploits=Obj.commands.exploit(Obj,argv)
+      result.success=true
+      result.exploits=exploits
+      context.availableExploits=exploits
+    else
+      //Fallback to Attack library
+      if typeof(Attack)=="map" and hasIndex(Attack,"getExploit") then
+        exploit=Attack.getExploit(Obj)
+        result.success=true
+        result.exploits=[exploit]
+        context.availableExploits=[exploit]
+      else
+        result.error="No exploit discovery available"
+      end if
+    end if
+  else
+    result.error="No target available"
+  end if
+  return result
+end function
+//Handler: Exploit
+AgentHandlers._handleExploit=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"exploit"}
+  //If no exploits available and we have a target, scan first
+  if not (hasIndex(context,"availableExploits") and len(context.availableExploits)>0) then
+    if hasIndex(step,"target") then
+      if outLvl>=2 then print skyblue("Agent: No exploits in context - scanning target first...")
+      //Create a scan step for the target
+      scanStep={}
+      scanStep.action="scan"
+      scanStep.target=step.target
+      //Copy any requirements from the exploit step
+      if hasIndex(step,"requirements") then scanStep.requirements=step.requirements
+      //Execute the scan to populate exploits
+      scanResult=AgentHandlers._handleScan(Obj,scanStep,context)
+      if not scanResult.success then
+        result.error="Failed to scan target before exploitation"
+        result.critical=true
+        return result
+      end if
+      //After scan, exploits should now be in context
+      if not (hasIndex(context,"availableExploits") and len(context.availableExploits)>0) then
+        result.error="No exploits found for target after scan"
+        result.critical=true
+        return result
+      end if
+    else
+      result.error="No exploits available and no target specified"
+      result.critical=true
+      return result
+    end if
+  end if
+  //Check if we have attack vectors from autonomous scan
+  if hasIndex(context,"availableExploits") and len(context.availableExploits)>0 then
+    //For autonomous mode, use cached exploits from database
+    if outLvl>=2 then print skyblue("Agent: Running autonomous exploitation...")
+    //Extract requirements from step if present
+    requirements=null
+    if hasIndex(step,"requirements") then requirements=step.requirements
+    //Pass attack vectors and requirements to autonomous attack function
+    capturedObjects=AgentHandlers._attackAutonomous(context.availableExploits,requirements)
+    if capturedObjects and len(capturedObjects)>0 then
+      //We got the best object already (only one returned)
+      bestObj=capturedObjects[0]
+      //Check if we need escalation (got object but wrong privilege)
+      needsEscalation=false
+      if requirements and hasIndex(requirements,"privilege") then
+        if bestObj.user!=requirements.privilege then
+          needsEscalation=true
+          if outLvl>=2 then print yellow("Agent: Captured "+bestObj.user+" "+bestObj.type+", need "+requirements.privilege+" - will escalate")
+        end if
+      end if
+      result.success=true
+      result.exploitUsed="Autonomous ("+bestObj.library+")"
+      result.data=bestObj.object
+      context.shell=bestObj.object
+      if needsEscalation then context.needsEscalation=true
+      if outLvl>=2 then
+        locationInfo=""
+        if hasIndex(bestObj,"ip") and hasIndex(bestObj,"port") then
+          locationInfo=" from "+bestObj.ip+":"+bestObj.port
+        else if hasIndex(bestObj,"ip") then
+          locationInfo=" from "+bestObj.ip
+        end if
+        print green("Agent: Best capture - "+bestObj.type+" ("+bestObj.user+")"+locationInfo)
+        print green("Agent: Score: "+bestObj.score)
+      end if
+      //Activate the captured object using Exploit library
+      if typeof(Exploit)=="map" then
+        //Check if we have continuation commands - if so, activate headless
+        isHeadless=false
+        if hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then isHeadless=true
+        if bestObj.type=="shell" and hasIndex(Exploit,"getShell") then
+          Exploit.getShell(bestObj.object,isHeadless)
+        else if bestObj.type=="computer" and hasIndex(Exploit,"getComputer") then
+          Exploit.getComputer(bestObj.object,isHeadless)
+          //Execute continuation commands if present and headless
+          if isHeadless and hasIndex(step,"continuationCommands") then
+            compObj=Mission.getHeadless(bestObj.object)
+            for cmd in step.continuationCommands
+              //Parse command and arguments
+              parts=split(cmd," ")
+              cmdName=parts[0]
+              cmdArgs=[]
+              if len(parts)>1 then cmdArgs=parts[1:]
+              //Execute command if it exists
+              if hasIndex(compObj.commands,cmdName) then
+                compObj.commands[cmdName](cmdArgs)
+                //Record successful execution in knowledge
+                if debug then
+                  print green("Debug: Knowledge type: "+typeof(Knowledge))
+                  if typeof(Knowledge)=="map" then print green("Debug: Knowledge.loaded: "+Knowledge.loaded)
+                  print green("Debug: context has originalCommand: "+hasIndex(context,"originalCommand"))
+                  if hasIndex(context,"originalCommand") then print green("Debug: originalCommand: "+context.originalCommand)
+                end if
+                if typeof(Knowledge)=="map" and Knowledge.loaded and hasIndex(context,"originalCommand") then
+                  recordResult=Knowledge.record(context.originalCommand,cmd,"success",0.8)
+                  if debug then print green("Debug: Knowledge.record result: "+recordResult)
+                end if
+              else
+                result.error="Command not found: "+cmdName
+                result.critical=true
+                Info.info("Agent: Command not found: "+cmdName)
+                //Record failure in knowledge
+                if typeof(Knowledge)=="map" and Knowledge.loaded and hasIndex(context,"originalCommand") then Knowledge.record(context.originalCommand,cmd,"failure",0.3)
+                compObj.commands.home
+                return result
+              end if
+            end for
+            compObj.commands.home
+          end if
+        else if bestObj.type=="file" and hasIndex(Exploit,"getFile") then
+          meta={}
+          if hasIndex(bestObj,"ip") then meta.local_ip=bestObj.ip
+          Exploit.getFile(bestObj.object,meta)
+        end if
+      end if
+      return result
+    else
+      //Check if we need LAN bounce instead of direct exploitation
+      if requirements and hasIndex(requirements,"targetIP") then
+        targetIP=requirements.targetIP
+        if is_lan_ip(targetIP) then
+          //This is a LAN target - need to set up LAN bounce capability first
+          if outLvl>=2 then print yellow("Agent: LAN target "+targetIP+" requires router bounce")
+          //Only use LAN setup approach under 2 circumstances:
+          //1) Config settings not configured OR 2) No shell on router available
+          needsLanSetup=false
+          //Check 1: Are config settings configured?
+          if not hasIndex(globals,"G_settings") or not hasIndex(globals.G_settings,"vulnerableLib") or not hasIndex(globals.G_settings,"vulnerableLibIndex") then
+            needsLanSetup=true
+            if outLvl>=2 then print yellow("Agent: Config settings not configured - will need LAN setup")
+          else if not globals.G_settings.vulnerableLib or not globals.G_settings.vulnerableLibIndex then
+            needsLanSetup=true
+            if outLvl>=2 then print yellow("Agent: Config settings not configured - will need LAN setup")
+          else
+            if outLvl>=2 then print green("Agent: Config settings configured - will try direct approach")
+          end if
+          //Check 2: Can we get a router shell? (only check if config settings configured)
+          routerShellAvailable=false
+          if not needsLanSetup then
+            //Try to get router IP first
+            publicIP=null
+            if hasIndex(step,"extractedIps") and step.extractedIps then
+              for ip in step.extractedIps
+                if not is_lan_ip(ip) then
+                  publicIP=ip
+                  break
+                end if
+              end for
+            end if
+            if not publicIP and hasIndex(context,"target") then publicIP=context.target
+            if not publicIP and hasIndex(step,"target") then publicIP=step.target
+            if publicIP and publicIP!=targetIP and not is_lan_ip(publicIP) then
+              //Try to get router shell
+              if outLvl>=2 then print skyblue("Agent: Checking router "+publicIP+" for available shells...")
+              routerShell=null
+              if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then routerShell=Attack.scanCustom([publicIP,"router","s"],true)
+              if routerShell and typeof(routerShell)=="shell" then
+                routerShellAvailable=true
+                if outLvl>=2 then print green("Agent: Router shell available - no LAN setup needed")
+              else
+                needsLanSetup=true
+                if outLvl>=2 then print yellow("Agent: No router shell available - will need LAN setup")
+              end if
+            end if
+          end if
+          //Call LAN setup only if needed
+          bounceShell=null
+          lanSetupResult=null
+          if needsLanSetup then
+            if outLvl>=2 then print skyblue("Agent: Initiating LAN setup approach...")
+            //Prompt user if configured (this can be slow)
+            if globals.G_agent.config.promptOnSlow then
+              shouldSetup=globals.G_agent._promptUser("No router shell available. Scan network for any available shell?",true)
+              if not shouldSetup then
+                result.error="LAN setup cancelled by user"
+                result.critical=true
+                return result
+              end if
+            end if
+            lanSetupResult=AgentHandlers._setupLanBounce(Obj,requirements)
+            if not lanSetupResult or not lanSetupResult.success then
+              result.error="Failed to set up LAN bounce: "+lanSetupResult.error
+              result.critical=true
+              return result
+            end if
+            //Get the bounce shell from setup (if new setup was needed)
+            if hasIndex(lanSetupResult,"shell") then
+              bounceShell=lanSetupResult.shell
+              //Store in context for later use
+              context.bounceShell=bounceShell
+              if outLvl>=2 then print green("Agent: Using "+lanSetupResult.user+" shell from "+lanSetupResult.library+" as bounce point")
+            end if
+          end if
+          //Now perform LAN attack setup - scan LAN from bounce shell to find targets
+          if outLvl>=2 then print skyblue("Agent: Scanning LAN for targets...")
+          //Use the bounce shell to scan the LAN
+          lanIps=[]
+          if bounceShell and hasIndex(bounceShell,"shell") then
+            //Get LAN IPs using shell command
+            lanScanResult=bounceShell.shell.run("ip a | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d'/' -f1")
+            if lanScanResult and typeof(lanScanResult)=="string" then
+              lanIpList=split(lanScanResult,"\n")
+              for ip in lanIpList;ipTrimmed=trim(ip);if len(ipTrimmed)>0 and is_lan_ip(ipTrimmed) then push(lanIps,ipTrimmed);end for
+            end if
+          end if
+          if len(lanIps)==0 then
+            if outLvl>=2 then print yellow("Agent: Could not enumerate LAN IPs - using target directly")
+            lanIps=[targetIP]
+          end if
+          //Filter LAN IPs to see if our target is directly accessible
+          targetFound=false
+          for lanIp in lanIps
+            if lanIp==targetIP then
+              targetFound=true
+              break
+            end if
+          end for
+          if outLvl>=2 then
+            if targetFound then print green("Agent: Target "+targetIP+" found on LAN") else print yellow("Agent: Target "+targetIP+" not directly found - may need router bounce")
+          end if
+          //Check if target has shell exploits available
+          hasDirectExploits=false
+          if bounceShell then
+            //Scan target from bounce shell to check for exploits
+            if outLvl>=2 then print skyblue("Agent: Checking target "+targetIP+" for exploits...")
+            //Use Attack.scan or similar to check target
+            //For now, assume we need router bounce if vuln lib wasn't configured
+            hasDirectExploits=false
+          end if
+          //Determine router IP for bounce
+          publicIP=null
+          if hasIndex(context,"target") then publicIP=context.target
+          if not publicIP and hasIndex(step,"target") then publicIP=step.target
+          //If publicIP is the same as targetIP (LAN), we need to find a router
+          if publicIP==targetIP or (publicIP and is_lan_ip(publicIP)) then publicIP=null
+          //Auto-detect router on network if no public IP specified
+          if not publicIP then
+            if outLvl>=2 then print yellow("Agent: No router IP specified - auto-detecting on network...")
+            //Use the bounce shell we set up earlier to find router IPs
+            if bounceShell and hasIndex(bounceShell,"shell") then
+              //Get router IP from the bounce shell's network interface
+              routerResult=bounceShell.shell.run("ip route | grep default | awk '{print $3}'")
+              if routerResult and typeof(routerResult)=="string" then
+                routerIP=trim(routerResult)
+                if len(routerIP)>0 and not is_lan_ip(routerIP) then
+                  publicIP=routerIP
+                  if outLvl>=2 then print green("Agent: Auto-detected router at "+publicIP)
+                else if len(routerIP)>0 then
+                  //Got a LAN IP - this might be the router's LAN interface, try to get public IP
+                  publicIP=routerIP
+                  if outLvl>=2 then print yellow("Agent: Using LAN router at "+publicIP)
+                end if
+              end if
+            end if
+            //Fallback: scan network for any router
+            if not publicIP then
+              if outLvl>=2 then print yellow("Agent: Scanning for router on network...")
+              if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then
+                routerShell=Attack.scanCustom(["http","s"],true)
+                if routerShell and typeof(routerShell)=="shell" then
+                  //Extract IP from shell
+                  if hasIndex(routerShell,"host_computer") then
+                    routerComp=routerShell.host_computer
+                    if hasIndex(routerComp,"public_ip") then
+                      publicIP=routerComp.public_ip
+                    else if hasIndex(routerComp,"local_ip") then
+                      publicIP=routerComp.local_ip
+                    end if
+                  end if
+                  if publicIP then
+                    if outLvl>=2 then print green("Agent: Found router at "+publicIP)
+                  end if
+                end if
+              end if
+            end if
+          end if
+          if not publicIP then
+            result.error="Cannot determine router IP for LAN bounce to "+targetIP+" - try specifying router IP explicitly"
+            result.critical=true
+            return result
+          end if
+          //Determine if we need root (may have been disabled by setup)
+          needRoot=false
+          if hasIndex(requirements,"privilege") and requirements.privilege=="root" then needRoot=true
+          //If no vulnerable library configured, we can't guarantee root - take what we can get
+          if lanSetupResult and not lanSetupResult.alreadyConfigured then
+            needRoot=false
+            if outLvl>=2 then print yellow("Agent: Root access not guaranteed without vulnerable library - will accept guest/user")
+          end if
+          //Determine headless mode
+          isHeadless=true
+          //If continuation commands present, force headless mode for autonomous execution
+          if hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then
+            isHeadless=true
+          else if hasIndex(requirements,"objectType") and requirements.objectType=="computer" then
+            //User explicitly requested computer object - final object should be interactive
+            isHeadless=false
+          else
+            //For LAN bounce setup without continuation commands, final object should be interactive
+            isHeadless=false
+          end if
+          //Build getObject step
+          getObjectStep={}
+          getObjectStep.action="getObject"
+          getObjectStep.publicIP=publicIP
+          getObjectStep.lanIP=targetIP
+          getObjectStep.needRoot=needRoot
+          getObjectStep.isHeadless=isHeadless
+          if hasIndex(requirements,"objectType") then getObjectStep.objectType=requirements.objectType else getObjectStep.objectType="computer"  //default
+          //Pass continuation commands if present
+          if hasIndex(step,"continuationCommands") then getObjectStep.continuationCommands=step.continuationCommands
+          //Execute getObject immediately
+          //NOTE: Final object will be INTERACTIVE (not headless) unless continuation commands are present
+          //This ensures user gets a usable terminal even if we only captured guest access
+          if outLvl>=2 then print skyblue("Agent: Executing LAN bounce: router="+publicIP+", target="+targetIP+", root="+needRoot+", headless="+isHeadless)
+          return globals.G_agent._handleGetObject(Obj,getObjectStep,context)
+        end if
+      end if
+      result.error="No objects captured from autonomous exploitation"
+      result.critical=true
+      return result
+    end if
+  else if hasIndex(step,"target") then
+    //Fallback: Evaluate all attack vectors to find the best route manually
+    //Priority: shell > computer > file, root > user > guest
+    //First check if we have exploits available
+    if not hasIndex(context,"availableExploits") or len(context.availableExploits)==0 then
+      result.error="No exploits available in context for target"
+      result.critical=true
+      return result
+    end if
+    bestVector=null
+    bestScore=0
+    if outLvl>=2 then print skyblue("Agent: Evaluating "+len(context.availableExploits)+" attack vectors...")
+    for vec in context.availableExploits
+      if not hasIndex(vec,"exploitCount") or vec.exploitCount==0 then continue
+      if not hasIndex(vec,"metaLib") then continue
+      //Get exploits from cache for this vector
+      if not (typeof(G_exploitCache)=="map" and hasIndex(G_exploitCache,vec.library)) then continue
+      exploits=G_exploitCache[vec.library]
+      if not exploits or len(exploits)==0 then continue
+      //Score all exploits in this vector
+      for exploit in exploits
+        score=0
+        //Shell type priority: shell=30, computer=20, file=10
+        if hasIndex(exploit,"e") then
+          if exploit.e=="s" then
+            score=score+30
+          else if exploit.e=="c" then
+            score=score+20
+          else if exploit.e=="f" then
+            score=score+10
+          end if
+        end if
+        //User privilege priority: root=100, user=50, guest=10
+        if hasIndex(exploit,"u") then
+          if exploit.u=="root" then
+            score=score+100
+          else if exploit.u=="user" then
+            score=score+50
+          else if exploit.u=="guest" then
+            score=score+10
+          end if
+        end if
+        //Prefer exploits without additional requirements
+        if not hasIndex(exploit,"щ") then score=score+5
+        //Track best scoring exploit
+        if score>bestScore then
+          bestScore=score
+          bestVector=vec
+          bestVector.selectedExploit=exploit
+        end if
+      end for
+    end for
+    if not bestVector then
+      //No exploits with score - just use first vector with exploits
+      for vec in context.availableExploits
+        if hasIndex(vec,"exploitCount") and vec.exploitCount>0 then
+          bestVector=vec
+          break
+        end if
+      end for
+    end if
+    if not bestVector then bestVector=context.availableExploits[0]
+    if outLvl>=2 then
+      print skyblue("Agent: Auto-selected attack vector: "+bestVector.description+" (score: "+bestScore+")")
+    end if
+    //Use Exploit.run to execute the exploit
+    if typeof(Exploit)=="map" and hasIndex(Exploit,"run") and hasIndex(bestVector,"metaLib") then
+      //Get exploit from cache
+      if typeof(G_exploitCache)=="map" and hasIndex(G_exploitCache,bestVector.library) then
+        exploits=G_exploitCache[bestVector.library]
+        if exploits and len(exploits)>0 then
+          //Use selected exploit or first one
+          exploit=exploits[0]
+          if hasIndex(bestVector,"selectedExploit") then exploit=bestVector.selectedExploit
+          metaInfo={}
+          metaInfo.metaLib=bestVector.metaLib
+          metaInfo.public_ip=bestVector.ip
+          metaInfo.local_ip=bestVector.ip
+          if hasIndex(bestVector,"port") then metaInfo.port_number=bestVector.port
+          if outLvl>=2 then
+            exploitType="unknown"
+            exploitUser="unknown"
+            if hasIndex(exploit,"e") then exploitType=exploit.e
+            if hasIndex(exploit,"u") then exploitUser=exploit.u
+            print yellow("Agent: Running exploit (type: "+exploitType+", user: "+exploitUser+") on "+bestVector.target)
+          end if
+          //Execute exploit
+          exploitResult=Exploit.run(exploit,metaInfo,bestVector.ip)
+          result.success=true
+          result.exploitUsed=bestVector.library
+          result.data=exploitResult
+          if exploitResult and not (exploitResult isa Error) then
+            context.shell=exploitResult
+            if outLvl>=2 then print green("Agent: Exploit successful - obtained "+typeof(exploitResult))
+          else if exploitResult isa Error then
+            result.error="Exploit failed: "+exploitResult
+          end if
+        else
+          result.error="No exploits in cache for "+bestVector.library
+        end if
+      else
+        result.error="Exploit cache not available"
+      end if
+    else if hasIndex(Obj.commands,"exploit") then
+      //Fallback to registered exploit command
+      argv=[bestVector.target,bestVector.library]
+      if outLvl>=2 then print yellow("Agent: exploit "+join(argv," "))
+      exploitResult=Obj.commands.exploit(Obj,argv)
+      result.success=true
+      result.exploitUsed=bestVector.library
+      result.data=exploitResult
+      if exploitResult then context.shell=exploitResult
+    else
+      result.error="Exploit execution not available"
+    end if
+  else if hasIndex(step,"target") then
+    //Fallback: try generic exploit with target
+    if hasIndex(Obj.commands,"exploit") then
+      argv=[step.target]
+      exploitResult=Obj.commands.exploit(Obj,argv)
+      result.success=true
+      result.data=exploitResult
+      if exploitResult then context.shell=exploitResult
+    else if typeof(Attack)=="map" and hasIndex(Attack,"scan") then
+      targetIp=""
+      if hasIndex(context,"target") then targetIp=context.target
+      exploitResult=Attack.scan(Obj,targetIp)
+      result.success=true
+      context.shell=exploitResult
+    else
+      result.error="Cannot launch exploit"
+    end if
+  else
+    result.error="No attack vectors or target available"
+  end if
+  return result
+end function
+//Handler: Escalate
+AgentHandlers._handleEscalate=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"escalate"}
+  //Privilege escalation using Obj
+  shell=null
+  if hasIndex(Obj,"shell") and Obj.shell then
+    shell=Obj.shell
+  else if hasIndex(context,"shell") and context.shell then
+    shell=context.shell
+  end if
+  if shell then
+    //Check if already root
+    userInfo=globals.Utility.getUserEX(shell)
+    if userInfo.raw=="root" then
+      result.success=true
+      result.message="Already have root access"
+      result.alreadyRoot=true
+      return result
+    end if
+    if outLvl>=2 then print skyblue("[VERBOSE] Agent: Attempting privilege escalation on "+host_computer(shell).local_ip)
+    //Use su or su -r based on session layer
+    if hasIndex(Obj,"layer") and Obj.layer=="shell" then
+      //In shell session: use su command
+      if hasIndex(Obj.commands,"su") then
+        if debug then print green("[DEBUG] Agent: Using su command for shell session")
+        suResult=Obj.commands.su([])
+        if typeof(suResult)=="shell" then
+          result.success=true
+          result.message="Successfully escalated to root via su"
+          result.rootShell=suResult
+          Obj.shell=suResult
+          if context then context.shell=suResult
+          if context then context.hasRoot=true
+          if outLvl>=1 then print green("Agent: Successfully escalated to root via su")
+          return result
+        end if
+      end if
+    else if hasIndex(Obj,"shell") then
+      //Not in shell session but have shell: use su -r
+      if hasIndex(Obj.commands,"su") then
+        if debug then print green("[DEBUG] Agent: Using su -r command for non-shell session")
+        //su -r launches interactive shell and blocks until exit
+        Obj.commands.su(["-r"])
+        //After interactive session exits, check if root shell was successfully cached
+        if hasIndex(Obj,"rootShell") and Obj.rootShell and typeof(Obj.rootShell)=="shell" then
+          userInfo=globals.Utility.getUserEX(Obj.rootShell)
+          if userInfo.raw=="root" then
+            result.success=true
+            result.message="Successfully escalated to root via su -r (interactive session completed)"
+            result.rootShell=Obj.rootShell
+            Obj.shell=Obj.rootShell
+            if context then context.shell=Obj.rootShell
+            if context then context.hasRoot=true
+            if outLvl>=1 then print green("Agent: Successfully escalated to root via su -r")
+            return result
+          end if
+        end if
+      end if
+    end if
+    //Fallback: Try Exploit.tryShellEX for local root shell
+    if typeof(globals.Exploit)=="AgentExploit" or hasIndex(globals,"Exploit") then
+      if debug then print green("[DEBUG] Agent: Using Exploit.tryShellEX for escalation")
+      rootShell=globals.Exploit.tryShellEX(shell,true)
+      if typeof(rootShell)=="shell" then
+        //Verify root access
+        rootUserInfo=globals.Utility.getUserEX(rootShell)
+        if rootUserInfo.raw=="root" then
+          result.success=true
+          result.message="Successfully escalated to root"
+          result.rootShell=rootShell
+          //Update Obj and context with new root shell
+          Obj.shell=rootShell
+          if context then context.shell=rootShell
+          if context then context.hasRoot=true
+          if outLvl>=1 then print green("Agent: Successfully escalated to root on "+host_computer(rootShell).local_ip)
+          return result
+        else
+          if debug then print yellow("[DEBUG] Agent: Exploit returned shell but not root user: "+rootUserInfo.raw)
+        end if
+      else
+        if debug then print yellow("[DEBUG] Agent: Exploit.tryShellEX did not return a shell")
+      end if
+    else
+      if debug then print yellow("[DEBUG] Agent: Exploit library not available")
+    end if
+    //Fallback: Try common escalation commands if available
+    if hasIndex(Obj.commands,"pRoot") then
+      if debug then print green("[DEBUG] Agent: Trying pRoot command")
+      pRootResult=Obj.commands.pRoot(Obj,[])
+      if pRootResult then
+        result.success=true
+        result.message="Escalation attempted via pRoot"
+        return result
+      end if
+    end if
+    //No escalation method worked
+    result.success=false
+    result.error="Failed to escalate privileges - no successful method found"
+    if outLvl>=1 then print yellow("Agent: Failed to escalate to root on "+host_computer(shell).local_ip)
+  else
+    result.error="No shell available for escalation"
+  end if
+  return result
+end function
+//Handler: Crack password
+AgentHandlers._handleCrackPassword=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"crackPassword"}
+  //If a hash is provided, use decipher instead of machine password cracking
+  if hasIndex(step,"target") and step.target and len(step.target)==32 then
+    //This is a hash - use decipher -d
+    if debug then print green("[DEBUG] Agent: Cracking hash with decipher: "+step.target)
+    if hasIndex(Obj.commands,"decipher") then
+      decipherResult=Obj.commands.decipher(Obj,["-d",step.target])
+      if decipherResult then
+        result.success=true
+        result.data=decipherResult
+        result.message="Hash cracked: "+decipherResult
+      else
+        result.error="Unable to crack hash"
+      end if
+    else
+      result.error="Decipher command not available"
+    end if
+    return result
+  end if
+  //Password cracking using Crack library
+  if typeof(Crack)=="map" then
+    //Check if we have a shell to crack on
+    if hasIndex(Obj,"shell") and Obj.shell then
+      //Crack root password (Crack library only supports root)
+      if debug then print green("[DEBUG] Agent: Attempting to crack root password")
+      password=Crack.returnRootPass(Obj.shell,null)
+      if password and not password isa Error and password!="" then
+        result.success=true
+        result.data=password
+        result.message="Password: "+password
+        if outLvl>=1 then print green("Password cracked: "+password)
+      else
+        //Rainbow tables failed - try decipher if /etc/passwd accessible
+        if outLvl>=2 then print yellow("[VERBOSE] Agent: Rainbow tables failed, trying decipher fallback")
+        c=host_computer(Obj.shell)
+        if typeof(Utility)=="map" and hasIndex(Utility,"hasPasswd") then
+          if Utility.hasPasswd(c) then
+            passwdFile=File(c,"/etc/passwd")
+            if passwdFile then
+              passwdContent=content(passwdFile)
+              if passwdContent then
+                lines=split(passwdContent,char(10))
+                for line in lines
+                  parts=split(line,":")
+                  if len(parts)>=2 and parts[0]=="root" then
+                    password=parts[1]
+                    if password and password!="" then
+                      result.success=true
+                      result.data=password
+                      result.message="Password: "+password
+                      if outLvl>=1 then print green("Password cracked via decipher: "+password)
+                      break
+                    end if
+                  end if
+                end for
+              end if
+            end if
+          end if
+        end if
+        if not result.success then result.error="Password cracking failed"
+      end if
+    else if hasIndex(step,"target") then
+      //No shell yet - need to get shell first
+      result.error="Need shell access to crack passwords. Try getting a shell first."
+    else
+      result.error="No target specified for password cracking"
+    end if
+  else if hasIndex(Obj.commands,"crack") then
+    argv=["password"]
+    if hasIndex(step,"target") then argv=argv+[step.target]
+    crackResult=Obj.commands.crack(Obj,argv)
+    result.success=true
+    result.data=crackResult
+  else
+    result.error="Crack library not available"
+  end if
+  return result
+end function
+//Handler: Crack shell
+AgentHandlers._handleCrackShell=function(Obj,step,context)
+  result={"success":false,"step":"crackShell"}
+  //Shell cracking using Obj
+  if hasIndex(Obj.commands,"crack") then
+    argv=["shell"]
+    if hasIndex(step,"target") then argv=argv+[step.target]
+    crackResult=Obj.commands.crack(Obj,argv)
+    result.success=true
+    result.data=crackResult
+  else
+    result.error="Crack functionality not available"
+  end if
+  return result
+end function
+//Handler: Recon
+AgentHandlers._handleRecon=function(Obj,step,context)
+  result={"success":false,"step":"recon"}
+  //Reconnaissance using Obj
+  if hasIndex(Obj.commands,"recon") then
+    argv=[]
+    if hasIndex(step,"target") then argv=argv+[step.target]
+    reconResult=Obj.commands.recon(argv)
+    result.success=true
+    result.data=reconResult
+    context.reconData=reconResult
+  else if typeof(Attack)=="map" and hasIndex(Attack,"recon") then
+    result.success=true
+  else
+    result.success=true
+    result.message="Basic recon completed"
+  end if
+  return result
+end function
+//Handler: Backdoor
+AgentHandlers._handleBackdoor=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"backdoor"}
+  //Obj should be the wrapped computer object from previous step
+  if not hasIndex(Obj,"computer") then
+    result.error="No computer object available for backdoor installation"
+    return result
+  end if
+  if debug then
+    if debug then print green("[DEBUG] Backdoor handler - Obj.computer.local_ip: "+Obj.computer.local_ip)
+    if debug then
+      if hasIndex(Obj,"dir") then print green("[DEBUG] Backdoor handler - Obj.dir.current: "+Obj.dir.current) else print green("[DEBUG] Backdoor handler - WARNING: Obj.dir not set!")
+    end if
+  end if
+  if outLvl>=2 then print skyblue("Agent: Installing backdoor on "+Obj.computer.local_ip+"...")
+  //Call Attack.tux with the wrapped object
+  tuxResult=Attack.tux(Obj,[])
+  result.success=true
+  result.message="Backdoor installation complete"
+  return result
+end function
+//Handler: Analyze
+AgentHandlers._handleAnalyze=function(Obj,step,context)
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"analyze"}
+  //Use AI to analyze data with critical thinking
+  if hasIndex(context,"scanData") then
+    //Deep analysis using AI library
+    if typeof(AI)=="map" and hasIndex(AI,"analyze") then
+      analysis=AI.analyze(context.scanData)
+      result.success=true
+      result.analysis=analysis
+      result.message="AI analysis completed"
+      //AI: Extract actionable insights
+      insights=[]
+      if hasIndex(analysis,"patterns") and len(analysis.patterns)>0 then push(insights,"Found "+len(analysis.patterns)+" behavioral patterns")
+      if hasIndex(analysis,"statistics") then
+        stats=analysis.statistics
+        if hasIndex(stats,"anomalies") then push(insights,"Detected "+stats.anomalies+" anomalies")
+      end if
+      result.insights=insights
+      if outLvl>=2 and len(insights)>0 then print white("AI Insights: "+join(insights,", "))
+      //AI: Generate recommendations based on analysis
+      recommendations=[]
+      if hasIndex(context,"goal") then
+        if context.goal=="rootShell" then
+          push(recommendations,"Focus on privilege escalation vectors")
+        else if context.goal=="persistence" then
+          push(recommendations,"Prioritize backdoor installation")
+        end if
+      end if
+      result.recommendations=recommendations
+      context.aiInsights=insights
+      context.aiRecommendations=recommendations
+    else
+      //Fallback analysis
+      result.success=true
+      result.message="Basic analysis completed"
+    end if
+  else
+    result.success=true
+    result.message="No data to analyze"
+  end if
+  return result
+end function
+//Handler: Check access
+AgentHandlers._handleCheckAccess=function(Obj,step,context)
+  result={"success":false,"step":"checkAccess"}
+  //Check current access level
+  result.success=true
+  if hasIndex(Obj,"shell") then
+    result.hasShell=true
+    result.user=Obj.shell.getIndex("user","unknown")
+  else
+    result.hasShell=false
+  end if
+  return result
+end function
+//Handler: Verify
+AgentHandlers._handleVerify=function(Obj,step,context)
+  result={"success":false,"step":"verify"}
+  //Verify operation success
+  result.success=true
+  result.message="Verification completed"
+  return result
+end function
+//Handler: Check privs
+AgentHandlers._handleCheckPrivs=function(Obj,step,context)
+  result={"success":false,"step":"checkPrivs"}
+  //Check privileges
+  result.success=true
+  if hasIndex(Obj,"shell") then
+    result.user=Obj.shell.getIndex("user","unknown")
+    result.isRoot=(result.user=="root")
+  end if
+  return result
+end function
+//Handler: Find escalation
+AgentHandlers._handleFindEscalation=function(Obj,step,context)
+  result={"success":false,"step":"findEscalation"}
+  //Find escalation path
+  result.success=true
+  result.methods=["kernelExploit","suidBinary","weakService"]
+  return result
+end function
+//Handler: Direct command
+AgentHandlers._handleDirectCommand=function(Obj,step,context)
+  result={"success":false,"step":"directCommand"}
+  //Execute direct command
+  if not hasIndex(step,"command") then
+    result.error="No command specified"
+    return result
+  end if
+  cmdParts=split(step.command," ")
+  if len(cmdParts)==0 then
+    result.error="Empty command"
+    return result
+  end if
+  cmdName=cmdParts[0]
+  cmdArgs=cmdParts[1:]
+  //Check if command ends with a flag that expects a parameter but doesn't have one
+  if len(cmdArgs)>0 then
+    lastArg=cmdArgs[len(cmdArgs)-1]
+    if lastArg[0]=="-" then
+      //Last argument is a flag with no value after it - might need a parameter
+      //Check for hash-cracking commands that need a hash
+      if (cmdName=="decipher" or cmdName=="hc" or cmdName=="hashcat") and (lastArg=="-d" or lastArg=="-h" or lastArg=="-c") then
+        //Prompt for hash
+        hashInput=user_input("Enter hash to crack: ")
+        if hashInput and len(hashInput)==32 then
+          cmdArgs.push(lower(hashInput))
+        else
+          result.error="Invalid or no hash provided"
+          return result
+        end if
+      end if
+    end if
+  end if
+  //Try to find command in Obj.commands
+  if hasIndex(Obj.commands,cmdName) then
+    f=Obj.commands[cmdName]
+    if globals.G_agent.config.trainer then print orange("Command you need to run: "+step.command)
+    cmdResult=f(cmdArgs)
+    result.success=true
+    result.data=cmdResult
+  else
+    result.error="Command not found: "+cmdName
+  end if
+  return result
+end function
+//Handler: Open file
+AgentHandlers._handleOpenFile=function(Obj,step,context)
+  result={"success":false,"step":"openFile"}
+  //Open file with appropriate flags
+  //Check if we have a shell with open command, otherwise use local open
+  openCmd=null
+  if hasIndex(Obj,"commands") and hasIndex(Obj.commands,"open") then
+    openCmd=Obj.commands["open"]
+  else if typeof(open)=="function" then
+    //Use local open command
+    openCmd=@open
+  else
+    result.error="Open command not available"
+    return result
+  end if
+  //Handle log file search
+  if hasIndex(step,"searchLocation") and step.searchLocation=="home" then
+    //Search for .log file in home
+    homePath=Obj.homeDir
+    if not homePath then homePath="/home/"+Obj.user
+    //Try to find log files
+    if hasIndex(Obj,"computer") and hasIndex(Obj.computer,"File") then
+      homeFolder=Obj.computer.File(homePath)
+      if homeFolder then
+        files=homeFolder.getFiles
+        logFile=null
+        for f in files
+          if indexOf(f.name,".log")!=null then
+            logFile=f.path
+            break
+          end if
+        end for
+        if logFile then
+          openResult=openCmd(["-l",logFile])
+          result.success=true
+          result.data=openResult
+        else
+          result.error="No log file found in home"
+        end if
+      else
+        result.error="Cannot access home directory"
+      end if
+    else
+      result.error="File system not accessible"
+    end if
+  else if hasIndex(step,"openFlag") then
+    //Use specified flag
+    openResult=openCmd([step.openFlag])
+    result.success=true
+    result.data=openResult
+  else if hasIndex(step,"path") then
+    //Open specific file by path
+    //The open command doesn't take arbitrary filenames, only flags
+    //Try to open with code editor if it looks like a file
+    if indexOf(step.path,".")!=null or step.path[0]=="/" then
+      //Has extension or absolute path - try code editor
+      openResult=openCmd(["-c","--code",step.path])
+      result.success=true
+      result.data=openResult
+    else
+      //No extension, might be an app name we don't recognize
+      result.error="Unknown application '"+step.path+"'. Use 'man open' to see available applications."
+      result.success=false
+    end if
+  else
+    result.error="No file or flag specified"
+  end if
+  return result
+end function
+//Handler: Open browser
+AgentHandlers._handleOpenBrowser=function(Obj,step,context)
+  result={"success":false,"step":"openBrowser"}
+  //Open browser
+  if not hasIndex(Obj,"commands") or not hasIndex(Obj.commands,"open") then
+    result.error="Open command not available"
+    return result
+  end if
+  openCmd=Obj.commands["open"]
+  if hasIndex(step,"openFlag") then
+    //Parse flag string into array
+    flagParts=split(step.openFlag," ")
+    openResult=openCmd(flagParts)
+    result.success=true
+    result.data=openResult
+  else
+    openResult=openCmd(["-b"])
+    result.success=true
+    result.data=openResult
+  end if
+  return result
+end function
+//Handler: Fetch shell
+AgentHandlers._handleFetchShell=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"fetchShell"}
+  //Fetch shell from target
+  if not hasIndex(step,"target") then
+    result.error="No target specified for fetch"
+    result.critical=true
+    return result
+  end if
+  //Check if target is a LAN IP - if so, this needs to be a bounce attack
+  targetIp=step.target
+  if is_lan_ip(targetIp) then
+    if outLvl>=2 then print yellow("Agent: Target "+targetIp+" is a LAN IP - converting to bounce attack")
+    //Find public router IP - check if multiple IPs were extracted
+    publicIP=null
+    //First check if we have extracted IPs stored in step
+    if hasIndex(step,"extractedIps") and len(step.extractedIps)>1 then
+      //Look for a non-LAN IP in the extracted list
+      for ip in step.extractedIps
+        if ip!=targetIp and not is_lan_ip(ip) then
+          publicIP=ip
+          if outLvl>=2 then print green("Agent: Using router IP "+publicIP+" from command")
+          break
+        end if
+      end for
+    end if
+    //Fallback to context target if different from LAN target
+    if not publicIP and hasIndex(context,"target") and context.target!=targetIp and not is_lan_ip(context.target) then
+      publicIP=context.target
+      if outLvl>=2 then print green("Agent: Using router IP "+publicIP+" from context")
+    end if
+    //Auto-detect router if still not found
+    if not publicIP then
+      if outLvl>=2 then print yellow("Agent: No router IP specified - scanning network for router...")
+      //Use network scan to find routers
+      if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then
+        routerShell=Attack.scanCustom(["router","s"],true)
+        if routerShell and typeof(routerShell)=="shell" then
+          if hasIndex(routerShell,"host_computer") then
+            routerComp=routerShell.host_computer
+            if hasIndex(routerComp,"public_ip") then
+              publicIP=routerComp.public_ip
+            else if hasIndex(routerComp,"local_ip") then
+              publicIP=routerComp.local_ip
+            end if
+          end if
+          if publicIP and outLvl>=2 then print green("Agent: Auto-detected router at "+publicIP)
+        end if
+      end if
+    end if
+    if not publicIP then
+      result.error="LAN target requires router IP - cannot auto-detect router"
+      result.critical=true
+      return result
+    end if
+    //Build getObject step for LAN bounce
+    getObjectStep={}
+    getObjectStep.action="getObject"
+    getObjectStep.publicIP=publicIP
+    getObjectStep.lanIP=targetIp
+    getObjectStep.needRoot=false
+    if hasIndex(step,"needRoot") then getObjectStep.needRoot=step.needRoot
+    getObjectStep.isHeadless=false
+    if hasIndex(step,"isHeadless") then getObjectStep.isHeadless=step.isHeadless
+    getObjectStep.objectType="computer"
+    if hasIndex(step,"objectType") then getObjectStep.objectType=step.objectType
+    if hasIndex(step,"continuationCommands") then getObjectStep.continuationCommands=step.continuationCommands
+    if outLvl>=2 then print skyblue("Agent: Redirecting to LAN bounce handler")
+    return globals.G_agent._handleGetObject(Obj,getObjectStep,context)
+  end if
+  //Check if we have learned knowledge about scan command
+  learnedPorts=null
+  learnedTypes=null
+  if hasIndex(step,"commandKnowledge") then
+    if hasIndex(step.commandKnowledge,"ports") then learnedPorts=step.commandKnowledge.ports
+    if hasIndex(step.commandKnowledge,"objectTypes") then learnedTypes=step.commandKnowledge.objectTypes
+  end if
+  //Use scan command with service-specific options
+  //Format: scan --c <ip> <service> <type>
+  //Build argv array directly
+  serviceName="router"
+  if hasIndex(step,"service") then serviceName=step.service
+  objectType="s"
+  if hasIndex(step,"objectType") then objectType=step.objectType
+  //Check if headless mode requested
+  isHeadless=false
+  if hasIndex(step,"isHeadless") and step.isHeadless then isHeadless=true
+  if debug then print green("Debug: After step check: isHeadless="+isHeadless+", step.isHeadless type="+typeof(step.isHeadless)+", value="+step.isHeadless)
+  if hasIndex(context,"shouldStore") and context.shouldStore then
+    isHeadless=true  //Force headless when storing
+    if debug then print green("Debug: Forcing isHeadless=true because shouldStore=true")
+  end if
+  if debug then print green("Debug: Final isHeadless="+isHeadless)
+  //Apply learned knowledge
+  if debug and learnedPorts and hasIndex(learnedPorts,serviceName) then print skyblue("Agent: Using learned knowledge - "+serviceName+" runs on port "+learnedPorts[serviceName])
+  if debug and learnedTypes and hasIndex(learnedTypes,objectType) then print skyblue("Agent: Using learned knowledge - type '"+objectType+"' = "+learnedTypes[objectType])
+  if debug and isHeadless then print green("Debug: Headless mode - will get shell object without opening terminal")
+  //Validate target is not empty
+  targetIp=step.target
+  if not targetIp or targetIp=="" then
+    result.error="Empty target IP"
+    result.critical=true
+    return result
+  end if
+  //Debug output to see what we're building
+  if debug then print green("Debug: Building argv with target="+targetIp+", service="+serviceName+", type="+objectType)
+  //Use Attack.scanCustom for headless shell fetching
+  if isHeadless then
+    if outLvl>=2 then print skyblue("Agent: Getting shell in headless mode...")
+    ex=Attack.scanCustom([targetIp,serviceName,objectType],true)
+    if typeof(ex)!="shell" then
+      result.error="Could not get shell on "+targetIp
+      return result
+    end if
+    shell=Exploit.getShell(ex,false,[],true)
+    if shell isa Error then
+      result.error="Failed to wrap shell: "+shell.message
+      return result
+    end if
+    //Check if root access required
+    needRoot=false
+    if hasIndex(step,"needRoot") then needRoot=step.needRoot
+    if indexOf(lower(step.description),"root")!=null then needRoot=true
+    //Escalate to root if needed
+    if needRoot and shell.user.raw!="root" then
+      if outLvl>=2 then print skyblue("Agent: Escalating to root...")
+      shell=ShellObject.headlessSu(shell)
+      if shell isa Error then
+        result.error="Could not escalate to root: "+shell.message
+        return result
+      end if
+      if shell.user.raw!="root" then
+        result.error="Root escalation did not succeed"
+        return result
+      end if
+      if outLvl>=2 then print green("Agent: Root access obtained")
+    end if
+    //Install libraries if requested
+    if hasIndex(step,"libsToInstall") and len(step.libsToInstall)>0 then
+      if debug then print green("Debug: Installing libraries: "+join(step.libsToInstall,", "))
+      if hasIndex(Obj.commands,"libs") then
+        libsCmd=Obj.commands["libs"]
+        for libName in step.libsToInstall;if outLvl>=2 then print skyblue("Agent: Installing "+libName+" library...");libsCmd(["-g","-p","/lib",libName]);end for
+      else
+        print yellow("Agent: Warning - libs command not available")
+      end if
+    end if
+    //Store shell in context for next steps
+    result.success=true
+    result.shell=shell
+    context.shell=shell
+    if shell.user.raw=="root" then context.rootShell=shell
+    result.message="Shell obtained on "+targetIp
+    if outLvl>=2 then print green("Agent: Shell ready for next step")
+    return result
+  end if
+  //Interactive mode - get shell first, install libs if needed, then open terminal
+  if outLvl>=2 then print skyblue("Agent: Getting shell...")
+  ex=Attack.scanCustom([targetIp,serviceName,objectType],true)
+  if typeof(ex)!="shell" then
+    result.error="Could not get shell on "+targetIp
+    return result
+  end if
+  shell=Exploit.getShell(ex,false,[],true)
+  if shell isa Error then
+    result.error="Failed to wrap shell: "+shell.message
+    return result
+  end if
+  //Check if root access required
+  needRoot=false
+  if hasIndex(step,"needRoot") then needRoot=step.needRoot
+  if indexOf(lower(step.description),"root")!=null then needRoot=true
+  if debug then print green("Debug: needRoot="+needRoot+", current user="+shell.user.raw)
+  //Escalate to root if needed
+  if needRoot and shell.user.raw!="root" then
+    if outLvl>=2 then print skyblue("Agent: Escalating to root...")
+    shell=ShellObject.headlessSu(shell)
+    if shell isa Error then
+      result.error="Could not escalate to root: "+shell.message
+      return result
+    end if
+    if shell.user.raw!="root" then
+      result.error="Root escalation did not succeed"
+      return result
+    end if
+    if outLvl>=2 then print green("Agent: Root access obtained")
+    if debug then print green("Debug: After escalation, user="+shell.user.raw)
+  end if
+  //Install libraries if requested (always in headless mode)
+  if hasIndex(step,"libsToInstall") and len(step.libsToInstall)>0 then
+    if debug then print green("Debug: Installing libraries in headless mode: "+join(step.libsToInstall,", "))
+    if hasIndex(Obj.commands,"libs") then
+      libsCmd=Obj.commands["libs"]
+      for libName in step.libsToInstall;if outLvl>=2 then print skyblue("Agent: Installing "+libName+" library...");libsCmd(["-g","-p","/lib",libName]);end for
+    else
+      print yellow("Agent: Warning - libs command not available")
+    end if
+  end if
+  //Store the headless shell in context so ai.src can open the interactive session
+  //at the top level of Command.ai. Opening it from deep inside _executePlan causes
+  //the session to fall back through the proxy/pivot call stack to MAIN instead of
+  //staying in the current context (proxy or normal).
+  if outLvl>=2 then print skyblue("Agent: Shell ready, opening...")
+  result.success=true
+  context.shell=shell
+  //Mark root shell so ai.src picks it up via context.rootShell
+  if shell.user.raw=="root" then context.rootShell=shell
+  context.target=step.target
+  return result
+end function

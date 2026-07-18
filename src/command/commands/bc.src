@@ -1,0 +1,540 @@
+// =============================================================================
+// BC
+// Advanced calculator with arithmetic, trig, conversions, and random IP generation.
+// =============================================================================
+Command.bc=function(Obj,argv)
+  // Initialize argument parser (needed for ip redirect handling too)
+  _p=ArgumentParser.init
+  _p.addArgument("post",true,"flag")  // Long flag: --post (redirect output)
+  // Check for "ip" command first (before argument parsing)
+  if argv and len(argv)>=1 and argv[0]=="ip" then
+    // Get IP count
+    if len(argv)>=2 then count=to_int(argv[1]) else count=1
+    if not count isa number or count<1 then count=1
+    // Generate IP(s)
+    ips=[]
+    i=1;while i<=count;push(ips,Net.rip);i+=1;end while
+    // Handle output redirection via ArgumentParser
+    ipArgv={"rest":argv[1:]}
+    ipArgv=_p.checkRedirect(Obj,"bc",ipArgv)
+    if ipArgv isa Error then return ipArgv
+    // Handle PIPE_MODE
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+      for ip in ips;push(globals.G_pipe.stdout,ip);end for
+      return
+    end if
+    // Handle redirect write
+    if _p.write then
+      ipArgv.data=ips
+      return _p.out(Obj,ipArgv)
+    end if
+    // Normal display
+    if count==1 then return Info.info("Here is a random ip: "+blue(ips[0]),"=")
+    if count>1 then s="s" else s=""
+    Info.info("Generating "+count+" random IP"+s+"...")
+    Info.info("Here are "+count+" random IP"+s+":")
+    for ip in ips;print blue(ip);end for
+    return
+  end if
+  // Check for stdin from pipe early
+  hasStdin=false
+  stdinData=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    hasStdin=true
+    stdinData=globals.G_pipe.stdin
+  end if
+  // If we have stdin but no argv, bypass ArgumentParser
+  if hasStdin and not argv then
+    argv={"rest":[]}
+    if typeof(stdinData)=="string" then
+      trimmed=trim(stdinData)
+      if len(trimmed)>0 then
+        // Split stdin by spaces to handle expressions like "sqrt 16"
+        tokens=split(trimmed," ")
+        for token in tokens;if len(trim(token))>0 then push(argv.rest,trim(token));end for
+      end if
+    else if stdinData isa list then
+      for item in stdinData;if item then push(argv.rest,str(item));end for
+    end if
+  else
+    // Protect operators from ArgumentParser (- as flags, * as glob expansion)
+    _protectMap={}
+    if argv then
+      _len=len(argv)
+      i=0
+      while i<_len
+        arg=argv[i]
+        if typeof(arg)=="string" and len(arg)>=1 then
+          if arg[0]=="-" or indexOf(arg,"*")!=null then
+            placeholder="__OP"+i+"__"
+            _protectMap[placeholder]=arg
+            argv[i]=placeholder
+          end if
+        end if
+      i+=1
+      end while
+    end if
+    // Parse arguments with redirect support
+    argv=_p.parse("bc",argv,Obj)
+    if argv isa Error then return
+    // Add stdin to argv if we didn't already handle it above
+    if hasStdin then
+      if typeof(stdinData)=="string" then
+        // Don't split - pass as single string for bc to parse
+        if len(trim(stdinData))>0 then argv.rest.insert(0,trim(stdinData))
+      else if stdinData isa list then
+        // If list, prepend to argv.rest
+        i=len(stdinData)-1;while i>=0;if stdinData[i] then argv.rest.insert(0,str(stdinData[i]));i-=1;end while
+      end if
+    end if
+    // Restore protected operators
+    if len(_protectMap)>0 then
+      _len=len(argv.rest);i=0;while i<_len;if hasIndex(_protectMap,argv.rest[i]) then argv.rest[i]=_protectMap[argv.rest[i]];i+=1;end while
+    end if
+  end if
+  // Preserve the full argv map for redirect operations (has .data property)
+  argvMap=argv
+  // Convert argv to list for rest of function
+  argv=argv.rest
+  // Define all operations upfront so they're available for interactive mode
+  opPercent=function(arg);if len(arg)!=3 then return null;return (val(arg[0]))%val(arg[-1]);end function
+  opPower=function(arg);if len(arg)!=3 then return null;return (val(arg[0]))^val(arg[-1]);end function
+  opPlus=function(arg);if len(arg)!=3 then return null;return (val(arg[0]))+val(arg[-1]);end function
+  opMinus=function(arg);if len(arg)!=3 then return null;return (val(arg[0]))-val(arg[-1]);end function
+  opDivide=function(arg)
+    if len(arg)!=3 then return null
+    if val(arg[-1])==0 then return "Error: division by zero"
+    return (val(arg[0]))/val(arg[-1])
+  end function
+  opMultiply=function(arg);if len(arg)!=3 then return null;return (val(arg[0]))*val(arg[-1]);end function
+  fnAbs=function(arg);return abs(val(arg[0]));end function
+  fnAcos=function(arg);return acos(val(arg[0]));end function
+  fnAsin=function(arg);return asin(val(arg[0]));end function
+  fnAtan=function(arg);return atan(val(arg[0]));end function
+  fnTan=function(arg);return tan(val(arg[0]));end function
+  fnCos=function(arg);return cos(val(arg[0]));end function
+  fnSin=function(arg);return sin(val(arg[0]));end function
+  fnChar=function(arg)
+    // Single character string - get its code point
+    if len(arg)==1 and len(arg[0])==1 then return "[ "+char(to_int(arg[0]))+" ]"
+    // Handle array of numbers
+    result=[]
+    source=arg
+    // If single arg that's a multi-char number string, convert it
+    if len(arg)==1 then
+      num=to_int(arg[0])
+      if num isa number then return "[ "+char(num)+" ]"
+      // Otherwise iterate over characters
+      source=arg[0]
+    end if
+    for i in source;push(result,char(to_int(i)));end for
+    return "[ "+join(result,"")+" ]"
+  end function
+  fnCode=function(arg)
+    if len(arg)==1 and len(arg[0])==1 then return "[ "+code(str(arg[0]))+" ]"
+    result=[]
+    source=arg
+    if len(arg)==1 then source=arg[0]
+    for i in source;push(result,code(str(i)));end for
+    return "[ "+join(result,", ")+" ]"
+  end function
+  fnFloor=function(arg);return floor(val(arg[0]));end function
+  fnRound=function(arg);return round(val(arg[0]));end function
+  fnCeil=function(arg);return ceil(val(arg[0]));end function
+  fnRange=function(arg)
+    if len(arg)==1 then return range(val(arg[0]))
+    if len(arg)==2 then return range(val(arg[0]),val(arg[-1]))
+    if len(arg)==3 then return range(val(arg[0]),val(arg[1]),val(arg[2]))
+    return null
+  end function
+  fnRnd=function(arg)
+    if not arg then return rnd
+    x=val(arg[0])
+    if x then return rnd(x)
+    return rnd
+  end function
+  fnSign=function(arg);return sign(val(arg[0]));end function
+  fnSqrt=function(arg);return sqrt(val(arg[0]));end function
+  fnSum=function(arg)
+    values=[]
+    for i in arg
+      if typeof(i)=="string" and indexOf(i,",")!=null then
+        for part in split(i,",");if len(trim(part))>0 then push(values,val(trim(part)));end for
+      else
+        push(values,val(i))
+      end if
+    end for
+    return values.sum
+  end function
+  operations={"%":@opPercent,"^":@opPower,"+":@opPlus,"-":@opMinus,"/":@opDivide,"*":@opMultiply,"abs":@fnAbs,"acos":@fnAcos,"asin":@fnAsin,"atan":@fnAtan,"tan":@fnTan,"cos":@fnCos,"sin":@fnSin,"char":@fnChar,"code":@fnCode,"floor":@fnFloor,"range":@fnRange,"round":@fnRound,"rnd":@fnRnd,"sign":@fnSign,"sqrt":@fnSqrt,"ceil":@fnCeil,"sum":@fnSum}
+  // Check for interactive mode flag
+  if len(argv)>0 and argv[0]=="-i" then
+    Info.info("bc interactive mode - Enter expressions or 'exit' to quit")
+    lastResult=0
+    while true
+      input=user_input("bc> ")
+      if not input then continue
+      input=trim(input)
+      if input=="exit" or input=="quit" or input=="q" then break
+      if not input then continue
+      // Handle pi constant
+      if indexOf(input,"pi")!=null then input=input.replace("pi","3.141593")
+      // Parse the input into tokens
+      tokens=[]
+      current=""
+      lastWasOperator=true  // Start as true to handle leading signed numbers
+      _len=len(input)
+      i=0
+      while i<_len
+        char=input[i]
+        // Check if this is a + or - that should be part of a signed number
+        if (char=="-" or char=="+") and lastWasOperator and len(current)==0 then
+          // This sign is part of a signed number
+          current=char
+          lastWasOperator=false
+        else if char=="+" or char=="-" or char=="*" or char=="/" or char=="^" or char=="%" then
+          if len(current)>0 then push(tokens,trim(current))
+          push(tokens,char)
+          current=""
+          lastWasOperator=true
+        else if char==" " then
+          if len(current)>0 then
+            push(tokens,trim(current))
+            lastWasOperator=false
+          end if
+          current=""
+        else
+          current=current+char
+          lastWasOperator=false
+        end if
+        i+=1
+      end while
+      if len(current)>0 then push(tokens,trim(current))
+      // If no tokens, skip
+      if len(tokens)==0 then continue
+      // Check if first token is an operator (continues from last result)
+      if len(tokens)==2 and hasIndex(operations,tokens[0]) and (tokens[0]=="+" or tokens[0]=="-" or tokens[0]=="*" or tokens[0]=="/" or tokens[0]=="^" or tokens[0]=="%") then tokens=[str(lastResult),tokens[0],tokens[1]]
+      // Now process the expression
+      result=null
+      // Single value or single function applied to last result
+      if len(tokens)==1 then
+        // Check if this is a function name - apply to last result
+        if hasIndex(operations,tokens[0]) and tokens[0]!="+" and tokens[0]!="-" and tokens[0]!="*" and tokens[0]!="/" and tokens[0]!="^" and tokens[0]!="%" then
+          fn=operations[tokens[0]]
+          result=fn([str(lastResult)])
+        else
+          result=val(tokens[0])
+        end if
+      // Function call: func value (e.g., "sqrt 16", "abs -5")
+      else if len(tokens)==2 and hasIndex(operations,tokens[0]) then
+        fn=operations[tokens[0]]
+        result=fn([tokens[1]])
+      // Infix operation: value op value (e.g., "5 + 3")
+      else if len(tokens)==3 and hasIndex(operations,tokens[1]) then
+        fn=operations[tokens[1]]
+        result=fn(tokens)
+      // Function with multiple args: func val1 val2 ... (e.g., "sum 1 2 3")
+      else if len(tokens)>2 and hasIndex(operations,tokens[0]) then
+        fn=operations[tokens[0]]
+        result=fn(tokens[1:])
+      end if
+      if result==null then
+        print red("[!] Invalid expression")
+      else
+        if result isa list then print yellow(join(result,",")) else print yellow(str(result))
+        lastResult=result
+      end if
+    end while
+    return
+  end if
+  displayResult=function(result)
+    // Check for PIPE_MODE first - pipe chain takes priority
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+      if result isa list then push(globals.G_pipe.stdout,join(result,",")) else push(globals.G_pipe.stdout,str(result))
+      return
+    end if
+    // Check for output redirection - return data silently (standalone only)
+    if _p.write then
+      resultStr=""
+      if result isa list then resultStr=join(result,",") else resultStr=str(result)
+      argvMap.data=[resultStr]
+      _p.out(Obj,argvMap)
+      return
+    end if
+    // Normal output
+    if result isa list then Info.info("The result is: "+join(result,","),"=") else Info.info("The result is: "+str(result),"=")
+  end function
+  // Evaluate expression with proper order of operations
+  evaluateExpression=function(tokens)
+    // Make a copy to avoid modifying original
+    tokens=tokens[:]
+    // First handle parentheses - evaluate innermost first
+    while indexOf(tokens,"(")!=null or indexOf(tokens,")")!=null
+      // Find innermost parentheses pair
+      openIdx=-1
+      closeIdx=-1
+      i=0
+      while i<len(tokens)
+        if tokens[i]=="(" then openIdx=i
+        if tokens[i]==")" then
+          closeIdx=i
+          break
+        end if
+      i+=1
+      end while
+      if openIdx==-1 or closeIdx==-1 or closeIdx<=openIdx then return null // Mismatched parentheses
+      // Extract expression inside parentheses
+      innerTokens=tokens[openIdx+1:closeIdx]
+      if len(innerTokens)==0 then return null
+      // Recursively evaluate the inner expression
+      innerResult=evaluateExpression(innerTokens)
+      if innerResult==null then return null
+      // Replace the parentheses group with the result
+      tokens[openIdx]=str(innerResult)
+      // Remove tokens from openIdx+1 to closeIdx (inclusive)
+      // Remove closeIdx - openIdx elements, starting from openIdx+1
+      numToRemove=closeIdx-openIdx
+      i=1;while i<=numToRemove;tokens.remove(openIdx+1);i+=1;end while
+    end while
+    // Handle operator precedence: ^ > *, /, % > +, -
+    // First pass: handle exponentiation (^)
+    i=0
+    while i<len(tokens)
+      if tokens[i]=="^" and i>0 and i<len(tokens)-1 then
+        left=val(tokens[i-1])
+        right=val(tokens[i+1])
+        result=(left)^right
+        tokens[i-1]=str(result)
+        tokens.remove(i)
+        tokens.remove(i)
+        i-=1
+      else
+        i+=1
+      end if
+    end while
+    // Second pass: handle multiplication, division, modulo (*, /, %)
+    i=0
+    while i<len(tokens)
+      if (tokens[i]=="*" or tokens[i]=="/" or tokens[i]=="%") and i>0 and i<len(tokens)-1 then
+        left=val(tokens[i-1])
+        right=val(tokens[i+1])
+        result=0
+        if tokens[i]=="*" then result=(left)*right
+        if tokens[i]=="/" then
+          if right==0 then return null
+          result=(left)/right
+        end if
+        if tokens[i]=="%" then
+          if right==0 then return null
+          result=(left)%right
+        end if
+        tokens[i-1]=str(result)
+        tokens.remove(i)
+        tokens.remove(i)
+        i-=1
+      else
+        i+=1
+      end if
+    end while
+    // Third pass: handle addition and subtraction (+, -)
+    i=0
+    while i<len(tokens)
+      if (tokens[i]=="+" or tokens[i]=="-") and i>0 and i<len(tokens)-1 then
+        left=val(tokens[i-1])
+        right=val(tokens[i+1])
+        result=0
+        if tokens[i]=="+" then result=(left)+right
+        if tokens[i]=="-" then result=(left)-right
+        tokens[i-1]=str(result)
+        tokens.remove(i)
+        tokens.remove(i)
+        i-=1
+      else
+        i+=1
+      end if
+    end while
+    // Should be left with single value
+    if len(tokens)==1 then return val(tokens[0])
+    return null
+  end function
+  //Parse single expression string without spaces (e.g., "2+2" -> ["2","+","2"])
+  if len(argv)==1 and typeof(argv[0])=="string" then
+    text=argv[0]
+    //Check if this is an expression that needs parsing
+    hasOperator=false
+    for op in ["+","-","*","/","^","%","(",")"]
+      if indexOf(text,op)!=null then
+        hasOperator=true
+        break
+      end if
+    end for
+    if hasOperator then
+      tokens=[]
+      current=""
+      _len=len(text)
+      i=0
+      while i<_len
+        char=text[i]
+        if char=="+" or char=="-" or char=="*" or char=="/" or char=="^" or char=="%" or char=="(" or char==")" then
+          if len(current)>0 then push(tokens,trim(current))
+          push(tokens,char)
+          current=""
+        else if char==" " then
+          if len(current)>0 then push(tokens,trim(current))
+          current=""
+        else
+          current=current+char
+        end if
+      i+=1
+      end while
+      if len(current)>0 then push(tokens,trim(current))
+      if len(tokens)>1 then argv=tokens
+    end if
+  end if
+  piIndex=indexOf(argv,"pi")
+  if piIndex!=null then
+    if len(argv)>1 then argv[piIndex]="3.141593" else return Info.info(3.141593,"=")
+  end if
+  // Re-tokenize to extract embedded parens/operators (e.g. "2(3+4)" -> ["2","(","3","+","4",")"])
+  reTok=[]
+  for _t in argv
+    _subCur=""
+    _ci=0;_tLen=len(_t)
+    while _ci<_tLen
+      _ch=_t[_ci]
+      if _ch=="(" or _ch==")" then
+        if len(_subCur)>0 then push(reTok,_subCur)
+        _subCur=""
+        push(reTok,_ch)
+      else if _ch=="+" or _ch=="-" or _ch=="*" or _ch=="/" or _ch=="^" or _ch=="%" then
+        // Treat as sign/part-of-number if nothing accumulated yet
+        if (_ch=="-" or _ch=="+") and len(_subCur)==0 then
+          _subCur=_ch
+        else
+          if len(_subCur)>0 then push(reTok,_subCur)
+          push(reTok,_ch)
+          _subCur=""
+        end if
+      else
+        _subCur=_subCur+_ch
+      end if
+    _ci+=1
+    end while
+    if len(_subCur)>0 then push(reTok,_subCur)
+  end for
+  // Insert implicit * between number/) and ( (e.g. ["2","("] -> ["2","*","("])
+  argv=[]
+  _i=0;_reTokLen=len(reTok)
+  while _i<_reTokLen
+    push(argv,reTok[_i])
+    if _i<_reTokLen-1 then
+      _cur=reTok[_i]
+      _nxt=reTok[_i+1]
+      if _nxt=="(" and _cur!="(" and _cur!="*" and _cur!="/" and _cur!="+" and _cur!="-" and _cur!="^" and _cur!="%" then push(argv,"*")
+    end if
+  _i+=1
+  end while
+  hasComma=indexOf(join(argv,""),",")!=null
+  // Check if first arg is a multi-arg function (sum) - don't treat commas as chaining
+  isMultiArgFunction=false
+  if len(argv)>0 and hasIndex(operations,argv[0]) then
+    if argv[0]=="sum" then isMultiArgFunction=true
+  end if
+  if hasComma and not isMultiArgFunction then
+    expressions=split(join(argv," "),",")
+    result=null
+    for expr in expressions
+      exprTrimmed=trim(expr)
+      if not exprTrimmed then continue
+      tokens=split(exprTrimmed," ")
+      if result==null then
+        if len(tokens)==1 then
+          result=val(tokens[0])
+        else if len(tokens)==2 and hasIndex(operations,tokens[0]) then
+          fn=operations[tokens[0]]
+          result=fn(tokens[1:])
+          if result==null then return Error.set("Invalid operation: "+exprTrimmed)
+        else if len(tokens)>=3 and hasIndex(operations,tokens[1]) then
+          fn=operations[tokens[1]]
+          result=fn(tokens)
+          if result==null then return Error.set("Invalid operation: "+exprTrimmed)
+        else
+          return Error.set("Invalid expression: "+exprTrimmed)
+        end if
+        continue
+      end if
+      if len(tokens)>=3 and hasIndex(operations,tokens[1]) then
+        fn=operations[tokens[1]]
+        result=fn(tokens)
+        if result==null then return Error.set("Invalid operation: "+exprTrimmed)
+      else if len(tokens)==2 and hasIndex(operations,tokens[0]) then
+        args=[str(result),tokens[0],tokens[1]]
+        fn=operations[tokens[0]]
+        result=fn(args)
+        if result==null then return Error.set("Invalid operation: "+exprTrimmed)
+      else if len(tokens)==1 and hasIndex(operations,tokens[0]) then
+        args=[str(result)]
+        fn=operations[tokens[0]]
+        result=fn(args)
+        if result==null then return Error.set("Invalid operation: "+exprTrimmed)
+      else
+        return Error.set("Invalid chained expression: "+exprTrimmed)
+      end if
+    end for
+    if result==null then return Error.set("No valid result from chained calculation")
+    return displayResult(result)
+  end if
+  if len(argv)==1 then
+    if hasIndex(operations,argv[0]) then
+      fn=operations[argv[0]]
+      result=fn([])
+      if result==null then return Error.set("Invalid syntax or missing arguments")
+      return displayResult(result)
+    end if
+    return Error.set("Unknown operation: "+argv[0])
+  end if
+  if len(argv)==2 then
+    // Check if first arg is an operation (e.g., "sqrt 16")
+    if hasIndex(operations,argv[0]) then
+      fn=operations[argv[0]]
+      result=fn(argv[1:])
+      if result==null then return Error.set("Invalid syntax")
+      return displayResult(result)
+    end if
+    // Check if second arg is an operation (e.g., "16 sqrt")
+    if hasIndex(operations,argv[1]) then
+      fn=operations[argv[1]]
+      result=fn(argv[:1])
+      if result==null then return Warning.set("Invalid syntax")
+      return displayResult(result)
+    end if
+    return Error.set("Unknown operation or invalid syntax")
+  end if
+  if len(argv)>2 then
+    // Check if this contains parentheses or is a multi-operator expression
+    hasParens=false
+    operatorCount=0
+    for token in argv;if token=="(" or token==")" then hasParens=true;if token=="+" or token=="-" or token=="*" or token=="/" or token=="^" or token=="%" then operatorCount+=1;end for
+    // If it has parentheses or multiple operators, use evaluateExpression
+    if hasParens or operatorCount>=2 then
+      result=evaluateExpression(argv)
+      if result==null then return Warning.set("Invalid syntax")
+      return displayResult(result)
+    end if
+    // Otherwise try the old logic for simple operations
+    if hasIndex(operations,argv[1]) then
+      fn=operations[argv[1]]
+      result=fn(argv)
+      if result==null then return Warning.set("Invalid syntax")
+      return displayResult(result)
+    end if
+    if hasIndex(operations,argv[0]) then
+      fn=operations[argv[0]]
+      result=fn(argv[1:])
+      if result==null then return Warning.set("Invalid syntax")
+      return displayResult(result)
+    end if
+    return Error.set("Unknown operation or invalid syntax")
+  end if
+  return Error.set("Invalid syntax")
+end function

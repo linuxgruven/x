@@ -1,0 +1,467 @@
+// =============================================================================
+// SYNTAXPARSER
+// GreyScript syntax highlighter; tokenizes and colorizes source code for terminal display.
+// =============================================================================
+parseSyntax=function(text,lineNumber=false)
+ //Array of all built-in GreyScript functions (260+)
+  functions=[
+    "File",
+    "abs",
+    "acos",
+    "active_net_card",
+    "active_user",
+    "add_repo",
+    "aircrack",
+    "aireplay",
+    "airmon",
+    "allow_import",
+    "amount_mined",
+    "apply_patch",
+    "asin",
+    "atan",
+    "bitAnd",
+    "bitOr",
+    "bitXor",
+    "bitwise",
+    "bssid_name",
+    "build",
+    "buy_coin",
+    "camera_link_system",
+    "cancel_pending_trade",
+    "ceil",
+    "change_password",
+    "char",
+    "check_password",
+    "check_upgrade",
+    "chmod",
+    "clear_screen",
+    "close_program",
+    "code",
+    "coin_price",
+    "command_info",
+    "connect_ethernet",
+    "connect_service",
+    "connect_wifi",
+    "copy",
+    "cos",
+    "create_folder",
+    "create_group",
+    "create_subwallet",
+    "create_user",
+    "create_wallet",
+    "current_date",
+    "current_path",
+    "debug_tools",
+    "decipher",
+    "del_repo",
+    "delete",
+    "delete_coin",
+    "delete_group",
+    "delete_mail",
+    "delete_subwallet",
+    "delete_user",
+    "device_ports",
+    "devices_lan_ip",
+    "dump_lib",
+    "essid_name",
+    "exit",
+    "fetch",
+    "firewall_rules",
+    "floor",
+    "format_columns",
+    "get_address",
+    "get_balance",
+    "get_balance_subwallet",
+    "get_coin",
+    "get_coin_name",
+    "get_content",
+    "get_creator_name",
+    "get_ctf",
+    "get_custom_object",
+    "get_cycle_mining",
+    "get_description",
+    "get_files",
+    "get_folders",
+    "get_global_offers",
+    "get_info",
+    "get_lan_ip",
+    "get_mail_content",
+    "get_mined_coins",
+    "get_name",
+    "get_num_conn_gateway",
+    "get_num_portforward",
+    "get_num_users",
+    "get_pending_trade",
+    "get_pin",
+    "get_ports",
+    "get_reward",
+    "get_router",
+    "get_shell",
+    "get_subwallet",
+    "get_subwallets",
+    "get_switch",
+    "get_template",
+    "get_user",
+    "group",
+    "groups",
+    "hasIndex",
+    "has_permission",
+    "hash",
+    "home_dir",
+    "host_computer",
+    "import_code",
+    "include_lib",
+    "indexOf",
+    "indexes",
+    "insert",
+    "install",
+    "install_service",
+    "is_any_active_user",
+    "is_binary",
+    "is_closed",
+    "is_folder",
+    "is_lan_ip",
+    "is_match",
+    "is_network_active",
+    "is_root_active_user",
+    "is_symlink",
+    "is_valid_ip",
+    "join",
+    "kernel_version",
+    "lan_ip",
+    "lastIndexOf",
+    "last_transaction",
+    "launch",
+    "launch_path",
+    "len",
+    "lib_name",
+    "list_coins",
+    "list_global_coins",
+    "load",
+    "local_ip",
+    "locate_vehicle",
+    "log",
+    "login_wallet",
+    "lower",
+    "mail_login",
+    "matches",
+    "md5",
+    "mining",
+    "model",
+    "move",
+    "name",
+    "net_use",
+    "network_devices",
+    "network_gateway",
+    "next_camera",
+    "nslookup",
+    "overflow",
+    "override_settings",
+    "owner",
+    "parent",
+    "parent_path",
+    "path",
+    "payload",
+    "permissions",
+    "pi",
+    "ping",
+    "ping_port",
+    "player_success",
+    "pop",
+    "port_info",
+    "port_number",
+    "prev_camera",
+    "print",
+    "program_path",
+    "public_ip",
+    "public_ip_pc",
+    "pull",
+    "push",
+    "range",
+    "read",
+    "remove",
+    "rename",
+    "replace",
+    "replace_regex",
+    "reset_ctf_password",
+    "reset_password",
+    "reset_password_coin",
+    "reverse",
+    "rnd",
+    "round",
+    "rshell_client",
+    "rshell_server",
+    "scan",
+    "scan_address",
+    "scan_debuglib",
+    "scp",
+    "search",
+    "sell_coin",
+    "send",
+    "set_address",
+    "set_alarm",
+    "set_content",
+    "set_cycle_mining",
+    "set_group",
+    "set_info",
+    "set_owner",
+    "set_reward",
+    "show",
+    "show_history",
+    "show_nodes",
+    "show_procs",
+    "shuffle",
+    "sign",
+    "sin",
+    "size",
+    "slice",
+    "smtp_user_list",
+    "sniffer",
+    "sort",
+    "split",
+    "sqrt",
+    "start_service",
+    "start_terminal",
+    "stop_service",
+    "str",
+    "sum",
+    "symlink",
+    "tan",
+    "time",
+    "to_int",
+    "touch",
+    "traffic_light_config",
+    "transaction",
+    "trim",
+    "typeof",
+    "unit_testing",
+    "update",
+    "upper",
+    "used_ports",
+    "user_bank_number",
+    "user_input",
+    "user_mail_address",
+    "val",
+    "values",
+    "version",
+    "wait",
+    "wallet_username",
+    "whois",
+    "wifi_networks",
+    "yield"
+  ]
+ //Array of built-in GreyScript classes/types
+  classes=[
+    "string",
+    "funcRef",
+    "list",
+    "map",
+    "number"
+  ]
+ //Array of GreyScript keywords and control structures
+  others=[
+    "break",
+    "continue",
+    "else",
+    "end",
+    "for",
+    "function",
+    "if",
+    "in",
+    "isa",
+    "new",
+    "then",
+    "repeat",
+    "return",
+    "while",
+    "and",
+    "or",
+    "not"
+  ]
+  //Build lookup maps for O(1) token classification
+  functionsMap={}
+  for _f in functions;functionsMap[_f]=true;end for
+  classesMap={}
+  for _c in classes;classesMap[_c]=true;end for
+  othersMap={}
+  for _o in others;othersMap[_o]=true;end for
+  //Pre-built boolean/null literal set
+  booleansMap={"true":true,"false":true,"null":true}
+  //String of operator and punctuation tokens
+  tokens="!.,/{}:-=+<>*[]()%"
+  //Color markup tags for different element types
+  //Yellow for functions
+  funcColors="<color=#E4E478>"
+  //Green for classes
+  classColors="<color=#50CA8D>"
+  //Purple for keywords
+  otherColors="<color=#9F1786>"
+  //Cream for numbers
+  intColor="<color=#F3D998>"
+  //Orange for strings
+  stringColor="<color=#D0740B>"
+  //Red for malformed strings
+  errorStringColor="<color=#DC143C>"
+  //Blue for booleans
+  boolColor="<color=#0518ED>"
+  //Gray italic for comments
+  commentColor="<i><#555>"
+  //Light gray default
+  nothingColor="<#ccc>"
+  //Lime for operators
+  tokenColor="<color=#DFF426>"
+  //Character sets for parsing
+  wordChars="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_"
+  capitals="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  numberChars="1234567890"
+  //Helper function to check if text is a number
+  isNumber=function(text)
+    //Check if all characters are digits
+    for x in text;if numberChars.indexOf(x)==null then return false;end for
+    return true
+  end function
+  //Helper function to colorize text with a color tag and reset
+  colorize=function(color,text);return color+text+nothingColor;end function
+  //Helper function to determine color for a word based on context
+  get_color=function(text,seperator,lastSep)
+    //Number literals (all digits)
+    if isNumber(text) then return colorize(intColor,text)
+    //Built-in functions
+    if hasIndex(functionsMap,text) then return colorize(funcColors,text)
+    //Built-in classes/types
+    if hasIndex(classesMap,text) then return colorize(classColors,text)
+    //Boolean and null literals
+    if hasIndex(booleansMap,text) then return colorize(boolColor,text)
+    //Keywords and control structures
+    if hasIndex(othersMap,text) then return colorize(otherColors,text)
+    //Capitalized words (custom classes)
+    if capitals.indexOf(text[0])!=null then return colorize(classColors,text)
+    //Word before opening parenthesis (function call)
+    if seperator=="(" then return colorize(funcColors,text)
+    //Word after dot (property/method access)
+    if lastSep=="." then return colorize(classColors,text)
+    //Word after @ (function reference)
+    if lastSep=="@" then return colorize(funcColors,text)
+    //Default: no coloring
+    return text
+  end function
+  //Helper function to pad line numbers with spaces
+  padding=function(num,width)
+    //Add leading spaces to right-align number
+    return " "*(width-len(str(num)))+num
+  end function
+  //Split text into lines for processing
+  lines=text.split(char(10))
+  //Calculate width needed for line numbers
+  lineLength=len(""+len(lines))
+  //Track if currently inside a string literal
+  isString=false
+  //Initialize output string
+  final=""
+  //Process each line
+  for line in lines
+    //Track if currently inside a comment
+    isComment=false
+    //Initialize line result with default color
+    result=nothingColor
+    //Track last separator character for context
+    lastSep=""
+    //Continue string color from previous line if needed
+    if isString then result=stringColor
+    //Add line number formatting if enabled
+    if lineNumber then result="<size=18px><mark=#282A3D88> "+" "*lineLength+" </size><pos=0><#fff> "+padding(__line_idx+1,lineLength)+" </mark></color>  <indent="+(20+20*lineLength)+"px>"+result
+    //Track previous character for multi-char token detection
+    last=""
+    //Accumulate word characters
+    word=""   //Track if this line started a new string (for error recovery)
+    lineStartedString=false   //Process each character (add space to flush final word)
+    for chr in line+" "
+      //If in comment, just append character and continue
+      if isComment then 
+        result=result+chr
+        continue
+      end if
+      //Cache wordChars membership for this character (used 3x below)
+      _wc=wordChars.indexOf(chr)
+      //End of word: color it based on context
+      if _wc==null and word!="" and not isString then
+        result=result+get_color(word,chr,lastSep)
+        word=""
+      end if
+      //Update last separator for context-aware coloring
+      if _wc==null then lastSep=chr
+      //Comment detection (//)
+      if chr=="/" and not isString then
+        //Second slash: start comment
+        if last=="/" then 
+          isComment=true
+          result=result+commentColor+"//"
+          continue
+        //First slash: wait for next character
+        else
+          last="/"
+          continue
+        end if
+      //Single slash followed by non-slash: output as token
+      else if last=="/" and chr!="/" and not isString then
+        result=result+tokenColor+"/"+nothingColor
+      end if
+      //String literal handling
+      if chr=="""" then
+          //Opening quote: start string
+          if not isString then
+            isString=true
+            lineStartedString=true
+            last=""
+            result=result+stringColor+chr
+            continue
+          //Inside string: check for escape sequence
+          else
+            //Escaped quote (""): append both and continue
+            if last==chr then
+              last=""
+              result=result+chr*2
+              continue
+            //First quote: might be closing or escaping
+            else 
+              last=chr
+              continue
+            end if
+          end if
+      //Closing quote: end string coloring
+      else if last=="""" then
+        result=result+""""+nothingColor
+        isString=false
+        lineStartedString=false
+        last=""
+      //Inside string: just append character
+      else if isString then
+        result=result+chr
+        continue
+      end if
+      //Word character: accumulate into word
+      if _wc!=null then 
+        word=word+chr
+      //Token character: color as operator
+      else if tokens.indexOf(chr)!=null then
+        result=result+tokenColor+chr+nothingColor
+      //Other character (whitespace, etc.): append as-is
+      else
+        result=result+chr
+      end if
+      //Update last character for next iteration
+      last=chr
+    end for
+    //Error recovery: if string started on this line but never closed, mark as error and close it
+    if isString and lineStartedString then
+      //Replace the string color with error color for malformed strings
+      result=result.replace(stringColor,errorStringColor)
+      result=result+nothingColor
+      isString=false
+    end if
+    //Add line to final output (close indent tag, add newline except for last line)
+    if __line_idx!=len(lines)-1 then final=final+result+"</indent>"+char(10) else final=final+result+"</indent>"
+  end for
+  //Return complete colored markup
+  return final
+end function

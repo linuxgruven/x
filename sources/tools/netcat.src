@@ -1,0 +1,20 @@
+toolNetcat="router=get_router
+output=[]
+push(output,join([""Device IP"".replace("" "",char(160)),""Gateway"",""Gateway type"".replace("" "", char(160)),""Bssid"",""Essid"",""Firewall"",""Ping status"".replace("" "",char(160))],"" ""))
+push(output,join([""---------"",""-------"",""------------"",""-----"",""-----"",""--------"",""-----------""],"" ""))
+for deviceIP in devices_lan_ip(router)
+	deviceRouter=get_router(deviceIP)
+	deviceSwitch=get_switch(deviceIP)
+	if not deviceRouter then continue
+	deviceType=""Device""
+	if not deviceSwitch then deviceType=""Router""
+	if deviceSwitch then deviceType=""Switch""
+	for lanDevice in devices_lan_ip(deviceRouter)
+		if deviceRouter.local_ip==lanDevice or indexOf(lanDevice,join(split(deviceRouter.local_ip,""\."")[0:-1],"".""))==null then continue
+		pingStatus=""successful""
+		if deviceSwitch then pingStatus=""<color=#FF3A3A>unreachable</color>""
+		if len(firewall_rules(deviceRouter))>0 and indexOf(firewall_rules(deviceRouter),""DENY Any Any Any"")!=null then firewallStatus=""enabled"" else firewallStatus=""disabled""
+		push(output,join([lanDevice,deviceRouter.local_ip,(deviceType+"" ""+kernel_version(deviceRouter)).replace("" "",char(160)),bssid_name(deviceRouter),essid_name(deviceRouter),firewallStatus,pingStatus],"" ""))
+	end for
+end for
+print format_columns(join(output,""\n""))"

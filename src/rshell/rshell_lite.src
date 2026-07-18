@@ -1,0 +1,128 @@
+// =============================================================================
+// RSHELL_LITE
+// Lightweight reverse-shell helpers; import, track, interact with, and clean up shells.
+// =============================================================================
+RshellLite=new RshellCommon
+// Rebuild history map from imported rshell instances
+RshellLite.historyImport=function
+  // Rebuild history cache from currently tracked shells
+  globals.G_rshell.history={}
+  for s in globals.G_rshell.rshells.values;globals.G_rshell.history[System.GUID]=s;end for
+  return {}
+end function
+// Show, reuse, or clear reverse-shell history
+RshellLite.history=function(Obj,argv)
+  if not argv then return Man.help(["rshell"])
+  Arg1=lower(argv[0])
+  display=function(z)
+    if not globals.G_rshell.history then return Info.info(RshellLite._MSG_HISTORY_EMPTY)
+    Info.info("Available Reverse Shell's in history:")
+    l=[]
+    for v in globals.G_rshell.history.values;push(l,RshellLite._formatShellDisplay(v));end for
+    listNHNC(l)
+  end function
+  use=function(z)
+    if not globals.G_rshell.history then return Info.info(RshellLite._MSG_HISTORY_EMPTY)
+    if z then x=to_int(z[0]) else x=null
+    if not x isa number then return Error.set(RshellLite._MSG_ID_EXPECTED)
+    if not hasIndex(globals.G_rshell.history.values,x) then return Error.set(RshellLite._MSG_INVALID_ID)
+    Exploit.getShell(globals.G_rshell.history.values[x])
+  end function
+  clear=function(z)
+    // Drop all history entries
+    globals.G_rshell.history={}
+  end function
+  cmds={
+    "-l":@display,
+    "-u":@use,
+    "--use":@use,
+    "-c":@clear
+  }
+  if not hasIndex(cmds,Arg1) then return Error.set("Check your syntax, there is no help for [ "+Arg1+" ]")
+	cmds[Arg1](argv[1:])
+end function
+// Import an rshell server (library or packed object)
+// Refresh live rshell list from imported servers
+RshellLite.refresh=function(z=true)
+  if not globals.G_rshell.servers then return Error.set("You do not have any rshell servers imported")
+  // Save current rshells to history, then rebuild from server
+  self.historyImport
+  globals.G_rshell.rshells={}
+  for l in globals.G_rshell.servers
+    _rs=rshell_server(l.value)
+    if not _rs isa list then continue
+    for s in _rs
+      if typeof(s)=="shell" then globals.G_rshell.rshells[System.GUID]=s else Warning.set("Check your rshell server port forwarding")
+    end for
+  end for
+  // Merge history shells not returned by server; deduplicate by IP fingerprint
+  fingerprints={}
+  for s in globals.G_rshell.rshells.values;fingerprints[self._getPublicIP(s)+":"+self._getLocalIP(s)]=true;end for
+  for k in globals.G_rshell.history.indexes;h=globals.G_rshell.history[k];fp=self._getPublicIP(h)+":"+self._getLocalIP(h);if not hasIndex(fingerprints,fp) then globals.G_rshell.rshells[k]=h;end for
+  if z then Info.info("RShell list refreshed")
+end function
+RshellLite.view=function
+  if self.refresh(false) isa Error then return
+	if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS+" to view")
+  Info.info("Available Reverse Shell's:")
+	l=[]
+  for s in globals.G_rshell.rshells.values;push(l,self._formatShellDisplay(s));end for
+	listNHNC(l)
+end function
+RshellLite.killSingle=function(x,n=null)
+  s=self._validateAndGetShell(x)
+  if not s then return
+  processNames=self._PROCESS_LIST
+	if n then processNames=processNames+[n]
+  k=globals.G_rshell.rshells.indexes[x]
+  id=self._killProcess(s,k,processNames)
+  if id then
+    if hasIndex(globals.G_rshell.rshells,id) then remove(globals.G_rshell.rshells,id)
+    if hasIndex(globals.G_rshell.history,id) then remove(globals.G_rshell.history,id)
+  end if
+end function
+RshellLite.shell=function(x)
+  s=self._validateAndGetShell(x)
+  if not s then return
+  Exploit.getShell(s)
+end function
+RshellLite.start=function(argv,Obj=null)
+  if not Library.haveMetaxploit then return
+  if argv then Arg1=argv[0] else Arg1=null
+  if not Arg1 then Arg1=System.rshell
+  if not Arg1 then
+    srvIps=globals.G_rshell.servers.indexes
+    if srvIps and len(srvIps)==1 then
+      Arg1=srvIps[0]
+    else if srvIps and len(srvIps)>1 then
+      CH=[green("Select a rshell server ip to use")]
+      for ip in srvIps;push(CH,yellow(ip));end for
+      push(CH,iyellow("Cancel"))
+      UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true)
+      if UCH!=len(CH)-1 then Arg1=srvIps[UCH-1]
+    end if
+  end if
+  if not Arg1 then Arg1=Gui.inputIP({"text":"What rshell server ip would you like to use?"})
+  if Arg1==null then return Error.set("Invalid rshell server ip")
+  if len(argv)>=2 then Arg2=to_int(argv[1]) else Arg2=null
+  if not Arg2 then Arg2=1222
+  if len(argv)>=3 then Arg3=argv[2] else Arg3=null
+  if not Arg3 then Arg3="ps"
+  // Choose metaxploit context and launch client
+  if not Obj then
+    r=rshell_client(Library.metaxploit,Arg1,Arg2,Arg3)
+  else
+    _=Builder.packMetaxploit(Obj)
+    if _ isa Error then return Error.set("Unable to start an rshell")
+    r=rshell_client(_,Arg1,Arg2,Arg3)
+  end if
+  if r isa string then
+    Info.info(r)
+  else
+    // Directly track the shell we used — avoids rshell_server timing issues
+    if Obj then globals.G_rshell.rshells[System.GUID]=Obj.shell
+    // Save to history so refresh can recover it if server misses timing
+    self.historyImport
+    Info.info("Up and running you sneaky dog")
+  end if
+end function

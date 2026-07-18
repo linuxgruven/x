@@ -1,0 +1,64 @@
+_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  AUTOMATED CORRUPTION MISSION</color>
+_print <color=#eb0cc6>========================================</color>
+_print
+
+_setvar(pub, get_string(Enter target public IP:))
+_setvar(lan, get_string(Enter target LAN IP:))
+
+_print
+_print <color=#00ff00>Target Information:</color>
+_print <color=#ffffff>  Public IP: <color=#ffff00>_getvar(pub)</color>
+_print <color=#ffffff>     LAN IP: <color=#ffff00>_getvar(lan)</color>
+_print
+if _getvar(pub) == "" or _getvar(lan) == ""
+  _print <color=#ff0000>[X] Error: No IP address specified</color>
+  _print
+  _home
+endif
+_print <color=#00bfff>[1/7]</color> Connecting to router...
+scan --c _getvar(pub) router s
+_print
+if file_exists(/lib/kernel_router.so)
+  _print <color=#00ff00> Successfully connected to router</color>
+  _print
+  _print <color=#00bfff>[2/7]</color> Escalating privileges to root...
+  su root
+  if whoami(true) == "root"
+    _print <color=#00ff00> Privilege escalation successful</color>
+  else
+    _print <color=#ff0000>[X] Error: Privilege escalation failed!</color>
+    _print <color=#ffff00>    Skipping mission and returning to home</color>
+    _print
+    _home
+  endif
+  _print <color=#00bfff>[3/7]</color> Uploading HTTP library...
+  libs -g sql
+  _print <color=#00bfff>[4/7]</color> Scanning local for exploitation vectors...
+  scan --l sql 21 _getvar(lan)
+  _print <color=#00bfff>[5/7]</color> Corrupting system files...
+  if whoami(true) == "root"
+    _print <color=#00ff00> Privilege escalation successful</color>
+  else
+    _print <color=#ff0000>[X] Error: We have been cocked blocked by a admin!</color>
+    _print <color=#ffff00>    Skipping mission and returning to home</color>
+    _print
+    _home
+  endif
+  rn /boot boots
+  _print <color=#00bfff>[6/7]</color> Wiping system logs...
+  wipe -l
+  _print <color=#00bfff>[7/7]</color> Returning to home...
+  _print
+  _print <color=#00ff00>========================================</color>
+  _print <color=#00ff00>   MISSION COMPLETE</color>
+  _print <color=#00ff00>========================================</color>
+  _print <color=#ffff00>Please reply to the mission email.</color>
+  _print
+  _home
+else
+  _print <color=#ff0000>[X] Error: Not connected to a router!</color>
+  _print <color=#ffff00>    Skipping mission and returning to home</color>
+  _print
+  _home
+endif

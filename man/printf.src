@@ -1,0 +1,91 @@
+// Man page for printf
+manPrintf="PRINTF(1)                        X Shell Manual                        PRINTF(1)
+
+<b>NAME</b>
+    printf - Format and print data
+<b>SYNOPSIS</b>
+    <b>printf</b> FORMAT [ARG...]
+    stdin | <b>printf</b> FORMAT
+<b>DESCRIPTION</b>
+    Format and print ARGs according to FORMAT. Supports width, precision,
+    and padding controls. Useful for zero-padded counters, hex output,
+    aligned table columns, and formatted log lines in bash scripts.
+    When piped, stdin values are appended as additional arguments.
+<b>OPTIONS</b>
+    <b>> FILE</b>
+    Redirect output to FILE (overwrite).
+
+    <b>>> FILE</b>
+    Append output to FILE.
+<b>FORMAT SPECIFIERS</b>
+    <b>%s</b>     String
+    <b>%d</b>     Decimal integer
+    <b>%f</b>     Floating-point number
+    <b>%x</b>     Hexadecimal (lowercase)
+    <b>%X</b>     Hexadecimal (uppercase)
+    <b>%o</b>     Octal
+    <b>%c</b>     Character (from ASCII code)
+<b>FORMAT FLAGS</b>
+    <b>%-20s</b>  Left-align in field of width 20
+    <b>%20s</b>   Right-align in field of width 20
+    <b>%03d</b>   Zero-pad integer to width 3
+    <b>%.2f</b>   Float with 2 decimal places
+    <b>%+d</b>    Always show sign for numbers
+<b>ESCAPE SEQUENCES</b>
+    <b>\"+char(8203)+"n</b>     Newline
+    <b>\t</b>     Tab
+    <b>\r</b>     Carriage return
+    <b>\\</b>     Backslash literal
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man printf</b>.
+
+    In pipelines, place options/operands after the command:
+    echo ""255"" | <b>printf</b> ""%x"" ...
+
+    Quote format strings that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Formatting</color>
+    <b>printf ""%s\"+char(8203)+"n"" hello</b>
+    Print hello on its own line
+
+    <b>printf ""%d + %d = %d\"+char(8203)+"n"" 3 5 8</b>
+    3 + 5 = 8
+
+    <b>printf ""%.2f\"+char(8203)+"n"" 3.14159</b>
+    3.14
+
+    <color=#e4ff34># Hex Conversion</color>
+    <b>printf ""%x\"+char(8203)+"n"" 255</b>
+    ff
+
+    <b>printf ""%X\"+char(8203)+"n"" 255</b>
+    FF
+
+    <b>printf ""%08x\"+char(8203)+"n"" 255</b>
+    000000ff (zero-padded to 8 chars)
+
+    <color=#e4ff34># Padding and Alignment</color>
+    <b>printf ""%-20s %s\"+char(8203)+"n"" host 192.168.1.1</b>
+    Left-align hostname column
+
+    <b>printf ""%03d: scanning\"+char(8203)+"n"" 7</b>
+    007: scanning
+
+    <color=#e4ff34># Pipeline Use</color>
+    <b>echo 255 | printf ""%x""</b>
+    Convert piped number to hex
+
+    <b>seq 1 5 | xargs -n1 printf ""%02d: host\"+char(8203)+"n""</b>
+    01: host through 05: host
+    <color=#e4ff34># Redirect to File</color>
+    <b>printf ""%03d: scanning\"+char(8203)+"n"" 7 > log.txt</b>
+    Write formatted output to file
+
+    <b>printf ""host: %s\"+char(8203)+"n"" 192.168.1.1 >> log.txt</b>
+    Append formatted line to file
+    <color=#e4ff34># Octal</color>
+    <b>printf ""%o\"+char(8203)+"n"" 8</b>
+    10
+<b>SEE ALSO</b>
+    <b>echo</b>, <b>seq</b>, <b>bc</b>"

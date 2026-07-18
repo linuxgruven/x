@@ -1,0 +1,173 @@
+// Man page for vi
+manVi="VI(1)                            X Shell Manual                            VI(1)
+
+<b>NAME</b>
+    vi - interactive text editor with multiple buffer support
+<b>SYNOPSIS</b>
+    <b>vi</b>
+    <b>vi -o</b> FILE [FILE...]
+    <b>vi -n</b> FILE
+    <b>vi -l</b> FOLDER
+    <b>vi -e -k</b> KEY <b>-o</b> FILE
+    echo FILE <b>| vi -n</b>
+    echo FILE <b>| vi -o</b>
+    echo FOLDER <b>| vi -l</b>
+<b>DESCRIPTION</b>
+    Full-featured text editor with vi-style commands and multiple file buffers. Supports
+    syntax highlighting for .src files, file encryption, line editing operations, undo/redo,
+    visual mode, search/replace, and build integration. Buffer system allows managing multiple
+    files simultaneously with quick navigation.
+    Supports glob patterns: <b>vi src/*.src</b>, <b>vi config/*.conf</b>
+<b>OPTIONS</b>
+    <b>-o</b> FILE
+    Open existing file. If FILE is omitted, reads filename from stdin.
+
+    <b>-n</b> FILE
+    Create new file. If FILE is omitted, reads filename from stdin.
+
+    <b>-l</b> FOLDER
+    Load all files from folder. If FOLDER is omitted, reads folder name from stdin.
+
+    <b>-c</b>
+    Clear screen mode
+
+    <b>-e -k</b> KEY
+    Open encrypted file with key
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Movement Commands</color>
+    <b>j</b>       Move down one line
+    <b>k</b>       Move up one line
+    <b>h</b>       Move left one character
+    <b>l</b>       Move right one character
+    <b>3j</b>      Move down 3 lines
+    <b>7k</b>      Move up 7 lines
+    <b>15l</b>     Move right 15 characters
+    <b>gg</b>      Jump to first line
+    <b>G</b>       Jump to last line
+    <b>0</b>       Jump to start of line
+    <b>$</b>       Jump to end of line
+    <b>25G</b>     Jump to line 25
+
+    <color=#e4ff34># Insert Commands</color>
+    <b>i</b>       Insert at cursor
+    <b>a</b>       Append after cursor
+    <b>o</b>       Open line below
+    <b>O</b>       Open line above
+            Type text, press <Enter> to exit insert mode
+
+    <color=#e4ff34># Delete Commands</color>
+    <b>dd</b>      Delete current line
+    <b>3dd</b>     Delete 3 lines
+    <b>x</b>       Delete character at cursor
+    <b>5x</b>      Delete 5 characters
+    <b>cc</b>      Change line (delete and enter insert)
+
+    <color=#e4ff34># Copy & Paste</color>
+    <b>yy</b>      Yank (copy) current line
+    <b>5yy</b>     Yank 5 lines
+    <b>p</b>       Put (paste) below cursor
+    <b>P</b>       Put (paste) above cursor
+
+    <color=#e4ff34># Visual Mode</color>
+    <b>V</b>       Enter visual line mode
+    <b>j/k</b>     Move selection up/down
+    <b>d</b>       Delete selection
+    <b>y</b>       Yank selection
+
+    <color=#e4ff34># Search & Replace</color>
+    <b>/text</b>   Search for 'text'
+    <b>/^func</b>  Search with regex
+    <b>:s/old/new/</b>       Replace on current line
+    <b>:%s/old/new/</b>      Replace first in all lines
+    <b>:%s/old/new/g</b>     Replace all in file
+
+    <color=#e4ff34># File Operations</color>
+    <b>:o file</b>   Open file in new buffer
+    <b>:n newfile</b> Create new file
+    <b>:w</b>        Write (save) current file
+    <b>:q</b>        Quit and save all
+    <b>:q!</b>       Quit without saving
+    <b>:c</b>        Close current file (save)
+    <b>:c!</b>       Close without saving
+
+    <color=#e4ff34># Buffer Navigation</color>
+    <b>></b>        Next file in buffer
+            Previous file in buffer
+    <b>:l</b>       List all buffers
+    <b>:g 2</b>     Go to buffer 2
+
+    <color=#e4ff34># Undo & Redo</color>
+    <b>u</b>        Undo last change
+    <b>r</b>        Redo undone change
+    <b>.</b>        Repeat last command
+
+    <color=#e4ff34># Ex-Style Line Commands</color>
+    <b>:s 5 new text</b>   Set line 5 to 'new text'
+    <b>:d 10</b>           Delete line 10
+    <b>:r 3 old new</b>    Replace 'old' with 'new' on line 3
+    <b>:a 7 more</b>       Append 'more' to end of line 7
+    <b>:p 2 start</b>      Prepend 'start' to line 2
+
+    <color=#e4ff34># Advanced Features</color>
+    <b>:f</b>        Toggle syntax highlighting
+    <b>:hide</b>     Toggle line numbers
+    <b>:clear</b>    Toggle clear screen mode
+    <b>:zap</b>      Remove all empty lines
+    <b>:x</b>        Clear all file content
+    <b>:j newname</b> Rename current file
+    <b>:del</b>      Delete current file
+    <b>:build</b>    Compile .src file
+    <b>:exec ls</b>  Run shell command
+    <b>:man ls</b>   View man page for command
+
+    <color=#e4ff34># Complete Editing Session Example</color>
+    <b>vi script.src</b>
+    i              (enter insert mode)
+    print hello    (type code)
+    Enter        (back to normal mode)
+    o              (open line below)
+    print world
+    Enter        (exit insert)
+    gg             (jump to top)
+    3j             (move down 3 lines)
+    dd             (delete line)
+    u              (undo)
+    :w             (save)
+    :q             (quit)
+
+    <color=#e4ff34># Search & Replace Workflow</color>
+    <b>/function</b>
+    Find 'function' in file
+    <b>:%s/oldVar/newVar/g</b>
+    Replace all oldVar with newVar
+    <b>:w</b>
+    Save changes
+
+    <color=#e4ff34># Visual Mode Workflow</color>
+    <b>gg</b>      Go to top
+    <b>V</b>       Enter visual mode
+    <b>5j</b>      Select 5 lines down
+    <b>y</b>       Yank selection
+    <b>G</b>       Go to bottom
+    <b>p</b>       Paste
+
+    <color=#e4ff34># Multi-File Editing</color>
+    <b>vi -l /home/user/src</b>
+    :l             (list all files)
+    >              (next file)
+                  (previous file)
+    :g 3           (jump to file 3)
+    dd             (edit file)
+    :w             (save)
+    >              (next file)
+    :q             (quit all)
+
+    <color=#e4ff34># Build & Execute</color>
+    <b>vi -o script.src</b>
+    (make your edits)
+    <b>:build</b>
+    Auto-save and compile
+    <b>:exec ./script</b>
+    Run the compiled binary
+<b>SEE ALSO</b>
+    <b>cat</b>, <b>build</b>, <b>grep</b>, <b>editor</b>"

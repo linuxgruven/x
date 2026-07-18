@@ -1,0 +1,190 @@
+// =============================================================================
+// CUT
+// Extract fields or characters from file lines by position or delimiter.
+// =============================================================================
+Command.cut=function(Obj,argv)
+	//Initialize argument parser
+	_p=ArgumentParser.init
+	//Add mode flags (mutually exclusive)
+	_p.addArgument("b",false,"store")  // Extract bytes at position range
+	_p.addArgument("c",false,"store")  // Extract characters at position range
+	_p.addArgument("f",false,"store")  // Extract fields by number
+	//Add delimiter flag (optional, used with -f)
+	_p.addArgument("d",false,"store")  // Field delimiter (used with -f)
+	//Parse command arguments
+	argv=_p.parseArgs("cut",argv)
+	if argv isa Error then return argv
+	//Validate exactly one mode flag is provided
+	modeCount=0
+	mode=null
+	positions=null
+	if argv.b then
+		modeCount+=1
+		mode="-b"
+		positions=argv.b
+	end if
+	if argv.c then
+		modeCount+=1
+		mode="-c"
+		positions=argv.c
+	end if
+	if argv.f then
+		modeCount+=1
+		mode="-f"
+		positions=argv.f
+	end if
+	if modeCount==0 then return Error.set("You must specify a mode flag (-b, -c, or -f)")
+	if modeCount>1 then return Error.set("Only one mode flag can be used at a time")
+	// Get delimiter for field mode
+	delimiter="\t"
+	joinDelimiter="\t"
+	if mode=="-f" and argv.d then
+    delimiter=escape(argv.d)
+		joinDelimiter=argv.d
+	end if
+	// Check for stdin from pipe (check for existence, not truthiness - empty string is valid stdin)
+	usePipedInput=false
+	if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then usePipedInput=true
+	lines=[]
+	if usePipedInput then
+		// Use piped input
+		stdinData=globals.G_pipe.stdin
+		if typeof(stdinData)=="string" then
+			lines=split(stdinData,char(10))
+		else if stdinData isa list then
+			lines=stdinData
+		else
+			lines=[str(stdinData)]
+		end if
+	else
+		// Validate file argument provided
+		if len(argv.rest)==0 then return Error.set("Missing file operand")
+		// Handle glob expansion for file argument
+		fileArg=argv.rest[0]
+		filePath=fileArg
+		if indexOf(fileArg,"*")!=null then
+			expanded=Glob.expand(Obj,fileArg)
+			if expanded and len(expanded)>0 and not(len(expanded)==1 and expanded[0]==fileArg) then filePath=expanded[0]
+		end if
+		// Resolve file path to file object
+		file=Io._getFile(Obj,filePath)
+		if file isa Error then return file
+		// Check read permissions
+		if not has_permission(file,"r") then return Error.set(name(file)+": Permission denied")
+		// Validate not binary or folder
+		if Io.isBinFolder(file) then return Error.set(name(file)+": cannot process binary file or directory")
+		// Read file content
+		content=get_content(file)
+		if not content then return Info.info(name(file)+": empty file")
+		// Split content into lines
+		lines=split(content,char(10))
+	end if
+	// Parse position specification into list of ranges/indices
+	// Format: "1", "1-5", "1,3,5", "1-3,5-7", etc.
+	ranges=[]
+	parts=split(positions,",")
+	for part in parts
+		part=trim(part)
+		dashIdx=indexOf(part,"-")
+		if dashIdx!=null then
+			// Range format: "N-M" or "N-" or "-M"
+			rangeParts=split(part,"-")
+			if len(rangeParts)==2 then
+				startPos=rangeParts[0]
+				endPos=rangeParts[1]
+				if startPos=="" then
+					// Format: "-M" (from start to M)
+					ranges.push({"type":"range","start":1,"end":to_int(endPos)})
+				else if endPos=="" then
+					// Format: "N-" (from N to end)
+					ranges.push({"type":"range","start":to_int(startPos),"end":-1})
+				else
+					// Format: "N-M"
+					ranges.push({"type":"range","start":to_int(startPos),"end":to_int(endPos)})
+				end if
+			end if
+		else
+			// Single position format: "N"
+			pos=to_int(part)
+			if pos>0 then push(ranges,{"type":"single","pos":pos})
+		end if
+	end for
+	// Validate at least one valid position/range parsed
+	if len(ranges)==0 then return Error.set("Invalid position specification")
+	// Process each line and extract specified sections
+	results=[]
+	for line in lines
+		if not line then
+			push(results,"")
+			continue
+		end if
+		extracted=""
+		if mode=="-f" then
+			// Field mode: split by delimiter and extract fields
+			fields=split(line,delimiter)
+			fieldResults=[]
+			for rng in ranges
+				if rng["type"]=="single" then
+					// Extract single field (1-indexed)
+					if rng["pos"]>=1 and rng["pos"]<=len(fields) then push(fieldResults,fields[rng["pos"]-1])
+				else if rng["type"]=="range" then
+					// Extract field range
+					startIdx=rng["start"]-1
+					endIdx=rng["end"]
+					if endIdx==-1 then endIdx=len(fields)
+					endIdx-=1
+					if startIdx<0 then startIdx=0
+					if endIdx>=len(fields) then endIdx=len(fields)-1
+					i=startIdx;while i<=endIdx;if i>=0 and i<len(fields) then push(fieldResults,fields[i]);i+=1;end while
+				end if
+			end for
+			extracted=join(fieldResults,joinDelimiter)
+		else
+			// Byte/character mode: extract by position
+			chars=[]
+			_len=len(line);i=0;while i<_len;push(chars,line[i]);i+=1;end while
+			extractedChars=[]
+			for rng in ranges
+				if rng["type"]=="single" then
+					// Extract single character (1-indexed)
+					if rng["pos"]>=1 and rng["pos"]<=len(chars) then push(extractedChars,chars[rng["pos"]-1])
+				else if rng["type"]=="range" then
+					// Extract character range
+					startIdx=rng["start"]-1
+					endIdx=rng["end"]
+					if endIdx==-1 then endIdx=len(chars)
+					endIdx-=1
+					if startIdx<0 then startIdx=0
+					if endIdx>=len(chars) then endIdx=len(chars)-1
+					i=startIdx;while i<=endIdx;if i>=0 and i<len(chars) then push(extractedChars,chars[i]);i+=1;end while
+				end if
+			end for
+			extracted=join(extractedChars,"")
+		end if
+		push(results,extracted)
+	end for
+	// Check for PIPE_MODE - buffer to stdout
+	if globals.G_pipe.PIPE_MODE then
+		for line in results;push(globals.G_pipe.stdout,line);end for
+		return
+	end if
+	// Check for output redirection (if post-processing was added by parser)
+	if hasIndex(argv,"post") and argv.post then
+		//Write results to output file
+		outputFile=Io._getFile(Obj,argv.post)
+		if outputFile isa Error then
+			//Create new file if doesn't exist
+			outputFile=touch(Obj.computer,Obj.dir.current,argv.post)
+			if not outputFile then return Error.set("Cannot create output file: "+argv.post)
+		end if
+		//Check write permissions
+		if not has_permission(outputFile,"w") then return Error.set(name(outputFile)+": Permission denied")
+		//Join results with newlines and write
+		outputContent=join(results,char(10))
+		set_content(outputFile,outputContent)
+		return Info.info("Output written to "+path(outputFile))
+	end if
+	//Display results
+	if len(results)==0 then return Info.info("No output")
+	for line in results;print white(line);end for
+end function

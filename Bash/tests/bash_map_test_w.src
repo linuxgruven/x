@@ -1,0 +1,415 @@
+testBashMapTest="// Bash Map & JSON Test Script
+// Tests map creation, manipulation, serialization, and round-trip JSON.
+
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>[PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>[FAIL]</color> _getvar(label) <color=#ffff00> expected:</color>_getvar(expected) <color=#ffff00> got:</color>_getvar(actual)
+  endif
+endfunc
+
+func assertType(label, actual, expected)
+  _setvar(t, typeof_val(_getvar(actual)))
+  if _getvar(t) == _getvar(expected)
+    _print <color=#00ff00>[PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>[FAIL]</color> _getvar(label) <color=#ffff00> expected type:</color>_getvar(expected) <color=#ffff00> got:</color>_getvar(t)
+  endif
+endfunc
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     BASH MAP & JSON TESTS</color>
+_print <color=#eb0cc6>============================================</color>
+_print
+
+// ===================================================================
+// SECTION 1 - MAP CREATION
+// ===================================================================
+_print <color=#00bfff>--- Section 1: Map Creation ---</color>
+
+// 1.1 - Empty map
+_setvar(m, map())
+assertType(1.1 map() returns map, _getvar(m), map)
+
+// 1.2 - Map with one key-value pair
+_setvar(m, map(""name"", ""alice""))
+assertType(1.2 map with pair returns map, _getvar(m), map)
+
+// 1.3 - Map with multiple pairs
+_setvar(m, map(""x"", 10, ""y"", 20, ""z"", 30))
+_setvar(r, map_len(_getvar(m)))
+assert(1.3 map with 3 pairs has len 3, _getvar(r), 3)
+
+// 1.4 - Map len of empty map
+_setvar(m, map())
+_setvar(r, map_len(_getvar(m)))
+assert(1.4 empty map has len 0, _getvar(r), 0)
+
+_print
+
+// ===================================================================
+// SECTION 2 - MAP GET / SET
+// ===================================================================
+_print <color=#00bfff>--- Section 2: Map Get / Set ---</color>
+
+// 2.1 - Get existing key
+_setvar(m, map(""fruit"", ""apple""))
+_setvar(r, map_get(_getvar(m), ""fruit""))
+assert(2.1 get existing key, _getvar(r), apple)
+
+// 2.2 - Missing key not found
+_setvar(m, map(""a"", 1))
+_setvar(r, map_has(_getvar(m), ""b""))
+assert(2.2 missing key not found, _getvar(r), 0)
+
+// 2.3 - Set new key
+_setvar(m, map())
+_setvar(m, map_set(_getvar(m), ""color"", ""red""))
+_setvar(r, map_get(_getvar(m), ""color""))
+assert(2.3 set then get, _getvar(r), red)
+
+// 2.4 - Set overwrites existing key
+_setvar(m, map(""k"", ""old""))
+_setvar(m, map_set(_getvar(m), ""k"", ""new""))
+_setvar(r, map_get(_getvar(m), ""k""))
+assert(2.4 set overwrites, _getvar(r), new)
+
+// 2.5 - Set numeric value
+_setvar(m, map())
+_setvar(m, map_set(_getvar(m), ""port"", 22))
+_setvar(r, map_get(_getvar(m), ""port""))
+assert(2.5 set numeric value, _getvar(r), 22)
+
+// 2.6 - Set via variable keys
+_setvar(mykey, ip)
+_setvar(myval, 192.168.1.1)
+_setvar(m, map())
+_setvar(m, map_set(_getvar(m), _getvar(mykey), _getvar(myval)))
+_setvar(r, map_get(_getvar(m), ""ip""))
+assert(2.6 set via variable key, _getvar(r), 192.168.1.1)
+
+_print
+
+// ===================================================================
+// SECTION 3 - MAP DELETE
+// ===================================================================
+_print <color=#00bfff>--- Section 3: Map Delete ---</color>
+
+// 3.1 - Delete existing key
+_setvar(m, map(""a"", 1, ""b"", 2, ""c"", 3))
+_setvar(m, map_del(_getvar(m), ""b""))
+_setvar(r, map_len(_getvar(m)))
+assert(3.1 delete reduces len, _getvar(r), 2)
+
+// 3.2 - Deleted key no longer found
+_setvar(r, map_has(_getvar(m), ""b""))
+assert(3.2 deleted key not found, _getvar(r), 0)
+
+// 3.3 - Delete non-existing key (no crash)
+_setvar(m, map(""x"", 1))
+_setvar(m, map_del(_getvar(m), ""y""))
+_setvar(r, map_len(_getvar(m)))
+assert(3.3 delete missing key no crash, _getvar(r), 1)
+
+_print
+
+// ===================================================================
+// SECTION 4 - MAP HAS / KEYS / VALUES
+// ===================================================================
+_print <color=#00bfff>--- Section 4: Map Has / Keys / Values ---</color>
+
+// 4.1 - has returns 1 for existing key
+_setvar(m, map(""ip"", ""10.0.0.1"", ""port"", 22))
+_setvar(r, map_has(_getvar(m), ""ip""))
+assert(4.1 has existing key, _getvar(r), 1)
+
+// 4.2 - has returns 0 for missing key
+_setvar(r, map_has(_getvar(m), ""user""))
+assert(4.2 has missing key, _getvar(r), 0)
+
+// 4.3 - keys returns list
+_setvar(k, map_keys(_getvar(m)))
+assertType(4.3 keys returns list, _getvar(k), list)
+
+// 4.4 - keys has correct length
+_setvar(r, len(_getvar(k)))
+assert(4.4 keys len matches, _getvar(r), 2)
+
+// 4.5 - values returns list
+_setvar(v, map_values(_getvar(m)))
+assertType(4.5 values returns list, _getvar(v), list)
+
+// 4.6 - values has correct length
+_setvar(r, len(_getvar(v)))
+assert(4.6 values len matches, _getvar(r), 2)
+
+_print
+
+// ===================================================================
+// SECTION 5 - JSON SERIALIZATION
+// ===================================================================
+_print <color=#00bfff>--- Section 5: JSON Serialization ---</color>
+
+// 5.1 - json of number
+_setvar(r, json(42))
+assert(5.1 json number, _getvar(r), 42)
+
+// 5.2 - json of string
+_setvar(r, json(""hello""))
+assert(5.2 json string, _getvar(r), ""hello"")
+
+// 5.3 - json of empty map
+_setvar(m, map())
+_setvar(r, json(_getvar(m)))
+assert(5.3 json empty map, _getvar(r), {})
+
+// 5.4 - json of list round-trips correctly
+_setvar(mylist, [1, 2, 3])
+_setvar(r, json(_getvar(mylist)))
+_setvar(parsed54, json_parse(_getvar(r)))
+_setvar(r54, len(_getvar(parsed54)))
+assert(5.4 json list round-trip len, _getvar(r54), 3)
+
+// 5.5 - json of map with values
+_setvar(m, map(""a"", 1))
+_setvar(r, json(_getvar(m)))
+assert(5.5 json map with value, _getvar(r), {""a"":1})
+
+// 5.6 - json of null
+_setvar(r, json(null))
+assert(5.6 json null, _getvar(r), null)
+
+_print
+
+// ===================================================================
+// SECTION 6 - JSON PARSING
+// ===================================================================
+_print <color=#00bfff>--- Section 6: JSON Parsing ---</color>
+
+// 6.1 - parse via round-trip (json->json_parse)
+_setvar(src6, map(""name"", ""bob""))
+_setvar(jsonStr6, json(_getvar(src6)))
+_setvar(m6, json_parse(_getvar(jsonStr6)))
+assertType(6.1 parsed object is map, _getvar(m6), map)
+
+// 6.2 - parsed value retrieval
+_setvar(r, map_get(_getvar(m6), ""name""))
+assert(6.2 parsed value, _getvar(r), bob)
+
+// 6.3 - parse array via round-trip
+_setvar(srcList6, [1, 2, 3])
+_setvar(jsonStr6, json(_getvar(srcList6)))
+_setvar(lst, json_parse(_getvar(jsonStr6)))
+assertType(6.3 parsed array is list, _getvar(lst), list)
+
+// 6.4 - parsed array length
+_setvar(r, len(_getvar(lst)))
+assert(6.4 parsed array len, _getvar(r), 3)
+
+// 6.5 - parse nested object via round-trip
+_setvar(innerSrc, map(""ip"", ""10.0.0.1"", ""port"", 22))
+_setvar(outerSrc, map(""server"", _getvar(innerSrc)))
+_setvar(jsonStr6, json(_getvar(outerSrc)))
+_setvar(m6, json_parse(_getvar(jsonStr6)))
+_setvar(inner6, map_get(_getvar(m6), ""server""))
+_setvar(r, map_get(_getvar(inner6), ""ip""))
+assert(6.5 nested object value, _getvar(r), 10.0.0.1)
+
+// 6.6 - parse nested port value
+_setvar(r, map_get(_getvar(inner6), ""port""))
+assert(6.6 nested port value, _getvar(r), 22)
+
+_print
+
+// ===================================================================
+// SECTION 7 - JSON ROUND-TRIP
+// ===================================================================
+_print <color=#00bfff>--- Section 7: JSON Round-Trip ---</color>
+
+// 7.1 - create map, serialize, parse back, verify
+_setvar(orig, map(""user"", ""root"", ""pass"", ""toor""))
+_setvar(jsonStr, json(_getvar(orig)))
+_setvar(restored, json_parse(_getvar(jsonStr)))
+_setvar(r, map_get(_getvar(restored), ""user""))
+assert(7.1 round-trip user, _getvar(r), root)
+
+// 7.2 - round-trip password
+_setvar(r, map_get(_getvar(restored), ""pass""))
+assert(7.2 round-trip pass, _getvar(r), toor)
+
+// 7.3 - round-trip preserves length
+_setvar(r, map_len(_getvar(restored)))
+assert(7.3 round-trip length, _getvar(r), 2)
+
+// 7.4 - round-trip list
+_setvar(origList, [10, 20, 30])
+_setvar(jsonStr, json(_getvar(origList)))
+_setvar(restored, json_parse(_getvar(jsonStr)))
+_setvar(r, len(_getvar(restored)))
+assert(7.4 round-trip list len, _getvar(r), 3)
+
+_print
+
+// Yield to reset tick counter
+_sleep 0.01
+
+// ===================================================================
+// SECTION 8 - MAP IN LOOPS
+// ===================================================================
+_print <color=#00bfff>--- Section 8: Map In Loops ---</color>
+
+// 8.1 - Build map in loop
+_setvar(m, map())
+for i in [1, 2, 3]
+  _setvar(k, concat(""key"", _getvar(i)))
+  _setvar(m, map_set(_getvar(m), _getvar(k), _getvar(i)))
+endfor
+_setvar(r, map_len(_getvar(m)))
+assert(8.1 map built in loop, _getvar(r), 3)
+
+// 8.2 - Loop reads correct values
+_setvar(r, map_get(_getvar(m), ""key2""))
+assert(8.2 loop-built value, _getvar(r), 2)
+
+// 8.3 - Iterate keys
+_setvar(keys, map_keys(_getvar(m)))
+_setvar(count, 0)
+for kk in _getvar(keys)
+  _setvar(count, _getvar(count) + 1)
+endfor
+assert(8.3 iterate keys count, _getvar(count), 3)
+
+_print
+
+// ===================================================================
+// SECTION 9 - MAP WITH PROPERTY ACCESS
+// ===================================================================
+_print <color=#00bfff>--- Section 9: Map Property Access ---</color>
+
+// 9.1 - dot access on map variable
+_setvar(m, map(""ip"", ""1.2.3.4"", ""port"", 80))
+_setvar(r, _getvar(m).ip)
+assert(9.1 dot access ip, _getvar(r), 1.2.3.4)
+
+// 9.2 - dot access port
+_setvar(r, _getvar(m).port)
+assert(9.2 dot access port, _getvar(r), 80)
+
+_print
+
+// ===================================================================
+// SECTION 10 - EDGE CASES
+// ===================================================================
+_print <color=#00bfff>--- Section 10: Edge Cases ---</color>
+
+// 10.1 - map_get on non-map (should not crash)
+_setvar(notmap, notamap)
+_setvar(r, map_has(_getvar(notmap), ""key""))
+assert(10.1 has on non-map string, _getvar(r), 0)
+
+// 10.2 - map_has on non-map returns 0
+_setvar(r, map_has(""notamap"", ""key""))
+assert(10.2 has on non-map, _getvar(r), 0)
+
+// 10.3 - map_keys on non-map returns empty list
+_setvar(r, map_keys(""notamap""))
+_setvar(r2, len(_getvar(r)))
+assert(10.3 keys on non-map is empty, _getvar(r2), 0)
+
+// 10.4 - map_len on non-map returns 0
+_setvar(r, map_len(""notamap""))
+assert(10.4 len on non-map, _getvar(r), 0)
+
+// 10.5 - json of deeply nested
+_setvar(inner, map(""deep"", ""value""))
+_setvar(outer, map(""nested"", _getvar(inner)))
+_setvar(r, json(_getvar(outer)))
+assert(10.5 json nested maps, _getvar(r), {""nested"":{""deep"":""value""}})
+
+// 10.6 - map with numeric keys
+_setvar(m, map(""1"", ""one"", ""2"", ""two""))
+_setvar(r, map_get(_getvar(m), ""1""))
+assert(10.6 numeric string key, _getvar(r), one)
+
+_print
+
+// Yield to reset tick counter
+_sleep 0.01
+
+// ===================================================================
+// SECTION 11 - MAP IN FUNCTIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 11: Map In Functions ---</color>
+
+// 11.1 - function returns a map
+func makeConfig(host, port)
+  _setvar(cfg, map(""host"", _getvar(host), ""port"", _getvar(port)))
+  _return _getvar(cfg)
+endfunc
+
+_setvar(c, makeConfig(""10.0.0.5"", 22))
+assertType(11.1 function returns map, _getvar(c), map)
+
+// 11.2 - can read returned map
+_setvar(r, map_get(_getvar(c), ""host""))
+assert(11.2 read returned map, _getvar(r), 10.0.0.5)
+
+// Yield before next func block
+_sleep 0.01
+
+// 11.3 - function modifies map
+func addKey(m, k, v)
+  _setvar(m, map_set(_getvar(m), _getvar(k), _getvar(v)))
+  _return _getvar(m)
+endfunc
+
+_setvar(m, map(""a"", 1))
+_setvar(m, addKey(_getvar(m), ""b"", 2))
+_setvar(r, map_len(_getvar(m)))
+assert(11.3 function adds key, _getvar(r), 2)
+
+_print
+
+// ===================================================================
+// SECTION 12 - MAP SAVE & LOAD (FILE PERSISTENCE)
+// ===================================================================
+_print <color=#00bfff>--- Section 12: Map Save & Load ---</color>
+
+// 12.1 - Save map to file
+_setvar(m, map(""host"", ""server1"", ""port"", 22, ""user"", ""root""))
+_setvar(ok, map_save(_getvar(m), ""bash_test_map.json""))
+assert(12.1 map_save returns 1, _getvar(ok), 1)
+_setvar(exists, file_exists(""bash_test_map.json""))
+assert(12.1b file was created, _getvar(exists), 1)
+
+// 12.2 - Load map from file
+_setvar(loaded, map_load(""bash_test_map.json""))
+assertType(12.2 map_load returns map, _getvar(loaded), map)
+
+// 12.3 - Loaded map has correct values
+_setvar(h, map_get(_getvar(loaded), ""host""))
+assert(12.3 loaded host matches, _getvar(h), server1)
+
+// 12.4 - Loaded map has correct numeric value
+_setvar(p, map_get(_getvar(loaded), ""port""))
+assert(12.4 loaded port matches, _getvar(p), 22)
+
+// 12.5 - Loaded map has correct key count
+_setvar(n, map_len(_getvar(loaded)))
+assert(12.5 loaded map has 3 keys, _getvar(n), 3)
+
+// 12.6 - map_load non-existent file returns null
+_setvar(bad, map_load(""no_such_file_xyz.json""))
+assert(12.6 map_load missing file is null, _getvar(bad), )
+
+_print
+
+// ===================================================================
+// SUMMARY
+// ===================================================================
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     MAP & JSON TESTS COMPLETE</color>
+_print <color=#eb0cc6>============================================</color>"

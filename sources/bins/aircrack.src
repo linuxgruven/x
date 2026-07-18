@@ -1,0 +1,10 @@
+binAircrack="cryptools=include_lib(""/lib/crypto.so"")
+if not cryptools then exit(""Error: Missing crypto library"")
+if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""aircrack_usage""))
+pathFile=get_abs_path(params[0])
+file=File(host_computer(get_shell),pathFile)
+if not file then exit(""aircrack: file not found: ""+pathFile)
+if not is_binary(file) then exit(""aircrack: Can't process file. Not valid filecap."")
+if not has_permission(file,""r"") then exit(""aircrack: permission denied"")
+key=aircrack(cryptools,path(file))
+if key then print(""KEY FOUND! [""+key+""]"") else print(""aircrack: Unable to get the key"")"

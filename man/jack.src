@@ -1,0 +1,12 @@
+// Man page for jack
+manJack="JACK(1)                          X Shell Manual                          JACK(1)
+
+<b>NAME</b>
+    jack - initiates a local dictionary attack
+<b>DESCRIPTION</b>
+    Initiates a local dictionary attack to insert the root password
+    into the cache file. Pass in optional NICK[NAME].
+    
+    <b>REQUIREMENTS</b>
+    SSH or FTP must be available on the target for jack to be
+    successful. Without an available service, the attack will fail."

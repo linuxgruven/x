@@ -1,0 +1,681 @@
+// =============================================================================
+// SESSION
+// Session management library; virtual file system, session switching, and nickname mapping.
+// =============================================================================
+Session={}
+// Constants
+Session.MAIN_SESSION_ID=0
+Session.MIN_SESSIONS=1
+Session.ERROR_LAST_SESSION="Don't be a crashtest dummy, you're an X user...think."
+Session.ERROR_MAIN_SESSION="Cannot remove main session"
+Session.ERROR_SESSION_ID="Session id expected"
+Session.ERROR_INVALID_ID="Invalid session id"
+Session.ERROR_FILE_ID="File id expected"
+Session.ERROR_INVALID_FILE="Invalid file id"
+Session.ERROR_NOT_AVAILABLE="Session is not available for use"
+Session.ERROR_NO_NICKNAME="No session with that nickname found"
+Session.ERROR_INVALID_COMMAND="Invalid session command"
+// Dispatch Tables
+Session.LAYER_COLORS={
+  "main":@blue,
+  "proxy":@purple,
+  "pivot":@orange,
+  "computer":@yellow,
+  "file":@red,
+  "shell":@green,
+  "decoy":@liteblue
+}
+Session._nickMap={}
+Session._previousSession=0
+// Session._snapshotState - Save a standalone copy of session state for reinstantiation
+// Args: Obj - Session object to snapshot
+// Returns: Nothing (stores copy in _savedStates keyed by Obj.id)
+Session._snapshotState=function(Obj)
+  if Obj.layer=="decoy" then return
+  s={}
+  s.id=Obj.id
+  s.layer=Obj.layer
+  s.nick=Obj.nick
+  s.crp=Obj.crp
+  s.compName=Obj.compName
+  s.machineType=Obj.machineType
+  s.hw_unit=Obj.hw_unit
+  s.type=Obj.type
+  s.object=Obj.object
+  if Obj.history then s.history=Obj.history[:] else s.history=[]
+  if Obj.dir then
+    s.dir={"current":Obj.dir.current,"last":Obj.dir.last}
+    //Preserve proxy/pivot extra dir refs
+    if hasIndex(Obj.dir,"payload") then s.dir.payload=Obj.dir.payload
+    if hasIndex(Obj.dir,"data") then s.dir.data=Obj.dir.data
+  else
+    s.dir=null
+  end if
+  if Obj.meta then s.meta={"public_ip":Obj.meta.public_ip,"local_ip":Obj.meta.local_ip} else s.meta=null
+  if Obj.user then s.user=Obj.user
+  if Obj.pwa then s.pwa=Obj.pwa
+  //Preserve library refs for proxy/pivot (cannot reliably re-load after SCP)
+  if Obj.layer=="proxy" or Obj.layer=="pivot" then
+    if hasIndex(Obj,"aptclient") then s.aptclient=Obj.aptclient
+    if hasIndex(Obj,"metaxploit") then s.metaxploit=Obj.metaxploit
+    if hasIndex(Obj,"crypto") then s.crypto=Obj.crypto
+    if hasIndex(Obj,"blockchain") then s.blockchain=Obj.blockchain
+  end if
+  globals.G_savedStates[Obj.id]=s
+end function
+// Session.manage - Interactive session management with GUI choices
+// Args: Obj - Current session object
+// Returns: Nothing (interactive loop until user cancels)
+Session.manage=function(Obj)
+  // Check if only one session exists (nothing to switch to)
+  if len(globals.G_sessions)<=self.MIN_SESSIONS then return Info.info("You only have one session")
+  // Interactive loop for session management
+  while true
+    // Build choice list starting with header
+    CH=[green("You have the following sessions:")]
+    // Iterate through all sessions
+    for o in globals.G_sessions.values;if o.id isa number and o.id!=self.MAIN_SESSION_ID then continue;push(CH,self._formatSession(o,o.id==Obj.id));end for
+    // Add cancel option at end
+    push(CH,iyellow("Forget it"))
+    // Show GUI choice menu with cancel as default
+    UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+    // Exit if user chose cancel option
+    if UCH==len(CH)-1 then break
+    // Switch to selected session (subtract 1 for header offset)
+    self.use(Obj,UCH-1)
+  end while
+end function
+// Session.getColor - Get colored nickname based on session layer
+// Args: o - Session object with layer and nick properties
+// Returns: Colored nickname string
+Session.getColor=function(o)
+  if hasIndex(self.LAYER_COLORS,o.layer) then
+    colorFunc=self.LAYER_COLORS[o.layer]
+    return colorFunc(o.nick)
+  end if
+  return o.nick
+end function
+// Session._formatSession - Format session display string
+// Args: o - Session object, isActive - Whether this is the active session
+// Returns: Formatted string for display
+Session._formatSession=function(o,isActive=false)
+  prefix=""
+  if isActive then prefix=white("Active ")
+  line1=prefix+self.getColor(o)
+  userInfo=formatSessionUser(o.user.name)
+  dirLabel=green(" Current Directory:")
+  dirPath=white(path(o.dir.current))
+  line2="      "+userInfo+dirLabel+dirPath
+  machType=blue(o.machineType)
+  compInfo=white(":")+orange(o.compName)+white(":")
+  localIP=yellow(o.meta.local_ip)
+  publicIP=purple("@")+green(o.meta.public_ip)
+  line3="      "+machType+compInfo+localIP+publicIP
+  return line1+char(10)+line2+char(10)+line3
+end function
+// Session._getByIndex - Resolve session by array index with validation
+// Args: x - Session index, allowDecoy - whether decoy sessions are allowed
+// Returns: Session object or Error
+Session._getByIndex=function(x,allowDecoy=false)
+  // Validate numeric ID
+  if not x isa number then return Error.set(self.ERROR_SESSION_ID)
+  // Resolve sessions list
+  s=globals.G_sessions.values
+  // Validate session exists in list
+  if not hasIndex(s,x) then return Error.set(self.ERROR_INVALID_ID)
+  // Grab target session
+  t=s[x]
+  // Decoy sessions may be optionally blocked
+  if not allowDecoy and t.layer=="decoy" then return Error.set(self.ERROR_NOT_AVAILABLE)
+  return t
+end function
+// Session.view - Display all sessions with formatted output
+// Args: Obj - Current session object
+// Returns: Nothing (displays to stdout)
+Session.view=function(Obj)
+	// Initialize display list
+	l=[]
+	// Iterate through all sessions
+	for o in globals.G_sessions.values;push(l,self._formatSession(o,o.id==Obj.id));end for
+	// Display header message
+	Info.info("You have the following sessions:")
+	// Display list without header/numbers/color formatting
+	listNHNC(l)
+end function
+// Session.use - Switch to session by index
+// Args: Obj - Current session object, x - Session index
+// Returns: Nothing (switches session context)
+Session.use=function(Obj,x)
+  // Resolve target session (decoys not allowed)
+  e=self._getByIndex(x,false)
+  if e isa Error then return
+  // Use the G_sessions map KEY to identify the target — values may be shared references
+  targetId=globals.G_sessions.indexes[x]
+  // Already in target session, no action needed
+  if Obj.id==targetId then return
+  // Store current session as previous before switching (only allow 0 or md5 strings)
+  if Obj.id==self.MAIN_SESSION_ID or Obj.id isa string then self._previousSession=Obj.id
+  // Switch based on layer type
+  if indexOf(e.layer,"shell")!=null then
+    // Check for saved state — reinstantiate with fresh shell + saved data
+    if hasIndex(globals.G_savedStates,targetId) then
+      saved=globals.G_savedStates[targetId]
+      if hasIndex(saved,"object") and typeof(saved.object)=="shell" then return ShellObject.run(ShellObject,saved.object,false,[],false,null,saved)
+    end if
+    // No saved state — first launch or raw object, dispatch as-is
+    ShellObject.run(ShellObject,e)
+  else if e.layer=="computer" then
+    // Check for saved state — reinstantiate with fresh computer + saved data
+    if hasIndex(globals.G_savedStates,targetId) then
+      saved=globals.G_savedStates[targetId]
+      if hasIndex(saved,"object") and typeof(saved.object)=="computer" then return ComputerObject.run(ComputerObject,saved.object,false,saved)
+    end if
+    ComputerObject.run(ComputerObject,e)
+  else if e.layer=="file" then
+    // Check for saved state — reinstantiate with fresh file + saved data
+    if hasIndex(globals.G_savedStates,targetId) then
+      saved=globals.G_savedStates[targetId]
+      if hasIndex(saved,"object") and typeof(saved.object)=="file" then return FileObject.run(FileObject,saved.object,saved.meta,false,saved)
+    end if
+    FileObject.run(FileObject,e)
+  else if e.layer=="proxy" then
+    // Check for saved state — reinstantiate with fresh shell + saved data
+    if hasIndex(globals.G_savedStates,targetId) then
+      saved=globals.G_savedStates[targetId]
+      if hasIndex(saved,"object") and typeof(saved.object)=="shell" then return ProxyObject.run(ProxyObject,saved.object,saved)
+    end if
+    return Info.info("Session is already active. Use 'c' to return to it.")
+  else if e.layer=="pivot" then
+    // Check for saved state — reinstantiate with fresh shell + saved data
+    if hasIndex(globals.G_savedStates,targetId) then
+      saved=globals.G_savedStates[targetId]
+      if hasIndex(saved,"object") and typeof(saved.object)=="shell" then return PivotObject.run(PivotObject,saved.object,saved)
+    end if
+    return Info.info("Session is already active. Use 'c' to return to it.")
+  else if e.layer=="main" then    // Snapshot current session state BEFORE setting back flag
+    // This must happen here (not at end-while) for pivoted sessions (proxy/pivot)
+    // because their execution context from launch has a separate Session copy
+    self._snapshotState(Obj)    // Set back flag to break all intermediate loops and return to main
+    globals.G_attributes.back=true
+    Obj.running=false
+  end if
+end function
+// Session.back - Switch back to the previous session
+// Args: Obj - Current session object
+// Returns: Nothing (switches to previous session or errors)
+Session.back=function(Obj)
+	// Check if trying to go back to current session (no switch history)
+	if self._previousSession==Obj.id then return Info.info("No previous session to return to")
+	// Validate previous session still exists in the session map
+	if not hasIndex(globals.G_sessions,self._previousSession) then
+		self._previousSession=0
+		return Info.info("Previous session no longer exists")
+	end if
+	// Find array index by iterating G_sessions KEYS (not values)
+	// Values are shared references for shell types, so s.id may be stale
+	for k in globals.G_sessions.indexes;if k==self._previousSession then return self.use(Obj,__k_idx);end for
+	// Session was removed between the hasIndex check and the scan
+	self._previousSession=0
+	Info.info("Previous session no longer exists")
+end function
+// Session.goto - Switch to session by nickname (partial match)
+// Args: Obj - Current session object, argv - Arguments [nickname]
+// Returns: Nothing (switches session or errors)
+Session.goto=function(Obj,argv)
+  if not argv or not len(argv) then return Error.set("Missing arguments")
+  searchNick=lower(argv[0])
+  // Initialize index as null
+  i=null
+  // Search for session with matching nickname (case-insensitive partial match)
+  for z in globals.G_sessions.values
+    if indexOf(lower(z.nick),searchNick)!=null then
+      // Skip numeric IDs that aren't 0 (internal sessions)
+      if z.id isa number and z.id!=self.MAIN_SESSION_ID then return Error.set(self.ERROR_NOT_AVAILABLE)
+      // Store index and exit loop
+      i=__z_idx
+      break
+    end if
+  end for
+  // Error if no matching session found
+  if i==null then return Error.set(self.ERROR_NO_NICKNAME)
+	// Switch to found session
+	self.use(Obj,i)
+end function
+// Session.exec - Execute command in specific session by ID
+// Args: argv - Arguments [session_id, command, ...args]
+// Returns: Nothing (executes command in target session)
+Session.exec=function(argv)
+  if not argv or len(argv)<2 then return Error.set("Missing arguments")
+  // Parse session ID
+  i=to_int(argv[0])
+	// Resolve target session (decoys not allowed)
+	e=self._getByIndex(i,false)
+  if e isa Error then return
+	// Execute command if it exists in session's command map
+	if hasIndex(e.commands,argv[1]) then e.commands[argv[1]](argv[2:]) else return Error.set(self.ERROR_INVALID_COMMAND)
+end function
+// Session.nick - Set nickname for session
+// Args: x - Arguments [session_id, nickname_words...]
+// Returns: Nothing (updates session nickname)
+Session.nick=function(x)
+  // Validate arguments
+  if not x or len(x)<2 then return Error.set("Missing arguments")
+  // Parse session ID from first argument
+  i=to_int(x[0])
+	// Resolve target session (decoys not allowed)
+  s=self._getByIndex(i,false)
+  if s isa Error then return
+  // Remove old nickname from map
+  if s.nick and hasIndex(self._nickMap,lower(s.nick)) then self._nickMap.remove(lower(s.nick))
+  // Set nickname by joining remaining arguments with spaces
+  newNick=join(x[1:]," ")
+  colorFunc=self.LAYER_COLORS[s.layer]
+  s.nick=colorFunc(newNick)
+  // Add to nickname map
+  self._nickMap[lower(newNick)]=i
+end function
+// Session.pass - Transfer files between sessions
+// Args: Obj - Current session object, argv - Arguments [session_id, files...]
+// Returns: Nothing (transfers files to target session)
+Session.pass=function(Obj,argv)
+  if not argv then return Error.set("Missing arguments")
+  // Require at least session ID and one file
+  if not len(argv)>=2 then return Error.set("Usage: sess -p <session id> <file file file...>")
+  // Extract and parse session ID
+  i=to_int(pull(argv))
+  // Resolve target session (decoys not allowed)
+  s=self._getByIndex(i,false)
+  if s isa Error then return
+  // Resolve correct target data — G_sessions values are shared singleton refs
+  // so s.object/s.dir/etc may be stale. Use G_savedStates for the real data.
+  targetId=globals.G_sessions.indexes[i]
+  if targetId==Obj.id then
+    // Passing to current session — singleton is correct
+    t=s
+  else if hasIndex(globals.G_savedStates,targetId) then
+    // Build minimal target from saved state with correct object refs
+    saved=globals.G_savedStates[targetId]
+    t={}
+    t.type=saved.type
+    t.object=saved.object
+    t.dir=saved.dir
+    t.user=saved.user
+    // Derive computer from raw object by type
+    if saved.type=="shell" then
+      t.computer=host_computer(saved.object)
+    else if saved.type=="computer" then
+      t.computer=saved.object
+    end if
+  else
+    // No saved state and not current session — use singleton as fallback
+    t=s
+  end if
+	// Parse optional -p path argument
+	_p=ArgumentParser.init
+  _p.addArgument("path",true,"store")
+	argv=_p.parseArgs("session",argv)
+  // Default to target session's current directory
+  if not argv.path then argv.path=path(t.dir.current)
+  // Process each file in arguments
+  while argv.rest
+    // Get file object from current session
+    f=Io._getFile(Obj,pop(argv.rest))
+    // Skip if file not found
+    if f isa Error then return
+    // Binary/folder requires target to be shell (applies to all source types)
+    if (is_binary(f) or is_folder(f)) and t.type!="shell" then
+      Info.warning("Need a shell to pass "+name(f)+", you're trying to use a "+t.type+" object")
+      continue
+    end if
+    // Current session is shell — use scp for transfer
+    if Obj.type=="shell" then
+      if t.type=="shell" then
+        // Shell-to-shell: scp with target's raw shell
+        r=scp(Obj.object,path(f),argv.path,t.object)
+        if r isa string then Info.error(r)
+      else if t.type=="computer" then
+        // Shell-to-computer: scp needs a shell on target side, fall back to touch
+        if not has_permission(f,"r") then
+          Info.warning("You do not have read permissions for "+path(f))
+          continue
+        end if
+        r=Command.touch(t,[argv.path+"/"+name(f)])
+        if r isa Error then continue
+        set_content(r,get_content(f))
+      else
+        Info.warning("Cannot pass files to "+t.type+" objects from shell")
+      end if
+      continue
+    // Current session is computer — read/write via touch
+    else if Obj.type=="computer" then
+      if not has_permission(f,"r") then
+        Info.warning("You do not have read permissions for "+path(f))
+        continue
+      end if
+      r=Command.touch(t,[argv.path+"/"+name(f)])
+      if r isa Error then continue
+      set_content(r,get_content(f))
+    // Current session is file
+    else if Obj.type=="file" then
+      if t.type=="file" then
+        Info.warning("Cannot pass files to file objects")
+        continue
+      end if
+      if not has_permission(f,"r") then
+        Info.warning("You do not have read permissions for "+path(f))
+        continue
+      end if
+      r=Command.touch(t,[argv.path+"/"+name(f)])
+      if r isa Error then continue
+      set_content(r,get_content(f))
+    end if
+  end while
+end function
+// Session.remove - Remove session by ID
+// Args: Obj - Current session object, x - Session index, y - Show view after (default true)
+// Returns: Nothing (removes session from globals)
+Session.remove=function(Obj,x,y=true)
+	// Prevent removing last session
+	if len(globals.G_sessions)<=self.MIN_SESSIONS then return Info.info(self.ERROR_LAST_SESSION)
+	// Validate numeric ID
+	if not x isa number then return Error.set(self.ERROR_SESSION_ID)
+  // Cannot remove main session
+  if x==self.MAIN_SESSION_ID then return Error.set(self.ERROR_MAIN_SESSION)
+	// Resolve session (allow decoys for cleanup)
+  t=self._getByIndex(x,true)
+  if t isa Error then return
+  // Remove nickname from map
+  if t.nick and hasIndex(self._nickMap,lower(t.nick)) then self._nickMap.remove(lower(t.nick))
+  // Execute exit command in target session
+  t.commands["x"](["-y"])
+  // Clear any SIGBREAK set by the remote exit so the calling session is unaffected
+  globals.G_bash.SIGBREAK=false
+  globals.G_attributes.back=false
+  // Remove from global sessions map
+  globals.rmByKey(t.id)
+	// If removed current session, switch to main
+	if Obj.id==t.id then
+    Obj=globals.G_sessions[self.MAIN_SESSION_ID]
+    self.use(Obj,self.MAIN_SESSION_ID)
+  end if
+	// Show updated session list if requested
+	if y then self.view(Obj)
+end function
+// Session.removeByNick - Remove session by nickname
+// Args: Obj - Current session object, n - Nickname, y - Show view after (default true), e - Error suppress (default false)
+// Returns: Nothing (removes session from globals)
+Session.removeByNick=function(Obj,n,y=true,e=false)
+	// Prevent removing last session
+	if len(globals.G_sessions)<=self.MIN_SESSIONS then return Info.info(self.ERROR_LAST_SESSION)
+	// Validate nickname provided
+	if not n or not len(n) then return Error.set("Missing nickname")
+	// Initialize search result
+	s=null
+  // Search for session with matching nickname (case-insensitive partial match)
+  ln=lower(n)
+  for _ in globals.G_sessions.values
+    if indexOf(lower(_.nick),ln)!=null then
+      s=_
+      break
+    end if
+  end for
+  // Silent return if not found and error suppress enabled
+  if s==null and e then return
+  // Error if not found and error suppress disabled
+  if s==null then return Error.set(self.ERROR_NO_NICKNAME)
+  // Cannot remove main session
+  if s.id==self.MAIN_SESSION_ID then return Error.set(self.ERROR_MAIN_SESSION)
+  // Remove nickname from map
+  if s.nick and hasIndex(self._nickMap,lower(s.nick)) then self._nickMap.remove(lower(s.nick))
+  // Execute exit command in target session
+  s.commands["x"](["-y"])
+  // Clear any SIGBREAK set by the remote exit so the calling session is unaffected
+  globals.G_bash.SIGBREAK=false
+  globals.G_attributes.back=false
+  // Remove from global sessions map
+  globals.rmByKey(s.id)
+	// If removed current session, switch to main
+	if Obj.id==s.id then
+    Obj=globals.G_sessions[self.MAIN_SESSION_ID]
+    self.use(Obj,self.MAIN_SESSION_ID)
+  end if
+	// Show updated session list if requested
+	if y then self.view(Obj)
+end function
+// Session.clear - Remove all sessions except main
+// Args: Obj - Current session object
+// Returns: Nothing (clears all non-main sessions)
+Session.clear=function(Obj)
+  // Prevent clearing when only main session exists
+  if len(globals.G_sessions)<=self.MIN_SESSIONS then return Info.info(self.ERROR_LAST_SESSION)
+  // Set flag for main to handle the clearing
+  globals.G_clearAllSessions=true
+  // If in a launched context, persist flag via CO so main sees it
+  if globals.G_hasPivoted then get_custom_object.clearAllSessions=true
+  if Obj.id!=self.MAIN_SESSION_ID then self.use(Obj,self.MAIN_SESSION_ID)
+  // If already in main, the flag will be checked on next loop iteration
+end function
+// Session.check - Register new session in global map
+// Args: Obj - Session object to register, argv - Optional nickname words
+// Returns: true if registered, false if already exists
+Session.check=function(Obj,argv=[])
+  // Return false if session already registered
+  if hasIndex(globals.G_sessions,Obj.id) then return false
+  // Set colored nickname based on layer if arguments provided
+  if argv and len(argv) then
+    nickText=join(argv," ")
+    // Use dispatch table to apply color
+    if hasIndex(self.LAYER_COLORS,Obj.layer) then
+      colorFunc=self.LAYER_COLORS[Obj.layer]
+      Obj.nick=colorFunc(nickText)
+      // Add to nickname map
+      self._nickMap[lower(nickText)]=Obj.id
+    else
+      Obj.nick=nickText
+    end if
+  end if
+  // Register session in global map (by reference)
+  globals.G_sessions[Obj.id]=@Obj
+  // Initialize IPC safety counter
+  globals.G_IPCSafe[Obj.id]=0
+  // Return true to indicate new registration
+  return true
+end function
+// Session.fileView - Display all virtual files
+// Args: None
+// Returns: Nothing (displays to stdout)
+Session.fileView=function
+	// Exit if no virtual files exist
+	if not globals.G_virtualFiles or not len(globals.G_virtualFiles) then return Info.info("No virtual files found")
+	// Initialize display list
+	l=[]
+	// Build colored display entries
+	for a in globals.G_virtualFiles;push(l,yellow(a.name)+" "+blue(a.ip));end for
+	// Display header message
+	Info.info("You have the following virtual files:")
+	// Display list without header/numbers/color formatting
+	listNHNC(l)
+end function
+// Session.getFile - Retrieve virtual file to current session
+// Args: Obj - Current session object, argv - File indices
+// Returns: Nothing (transfers files to current directory)
+Session.getFile=function(Obj,argv)
+	// Exit if no virtual files exist
+	if not globals.G_virtualFiles or not len(globals.G_virtualFiles) then return Info.info("No virtual files found")
+  // Validate arguments
+  if not argv or not len(argv) then return Error.set("Missing arguments")
+  // Warn if no write permissions (but continue)
+  if not has_permission(Obj.dir.current,"w") then Info.warning("You do not have write permisions for "+path(Obj.dir.current))
+  // Nested function to process single file by index
+  file=function(x)
+    // Validate numeric index
+    if not x isa number then return Error.set(outer.ERROR_FILE_ID)
+    // Validate index exists in array
+    if not hasIndex(globals.G_virtualFiles,x) then return Error.set(outer.ERROR_INVALID_FILE)
+    // Get virtual file object
+    n=globals.G_virtualFiles[x]
+    // Shell-to-shell transfer uses scp
+    if indexOf(n.type,"shell")!=null and indexOf(Obj.type,"shell")!=null then
+      r=scp(n.object,path(n.file),path(Obj.dir.current),Obj.shell)
+      if r isa string then return Error.set(r)
+      return
+    end if
+    // Binary/folder requires shell on both sides
+    if is_binary(n.file) or is_folder(n.file) then
+      // Determine file type for error message
+      q=null
+      if is_binary(n.file) then q="binary file" else q="directory"
+      Info.warning("Need a shell to get a "+q+", you're trying to use a "+Obj.type+" object")
+    else
+      // Computer object uses direct touch and set_content
+      if Obj.type=="computer" then
+        r=touch(Obj.computer,path(Obj.dir.current),name(n.file))
+        if r isa string then return Error.set(r)
+        // Get File object and set content
+        return set_content(File(Obj.computer,path(Obj.dir.current)+"/"+name(n.file)),get_content(n.file))
+      end if
+      // Other object types use Command.touch
+      q=Command.touch(Obj,[name(n.file)])
+      if q isa Error then return
+      // Copy content from virtual file
+      set_content(q,get_content(n.file))
+    end if
+  end function
+  // Single file - process and return
+  if len(argv)==1 then return file(to_int(argv[0]))
+  // Multiple files - process each in loop
+  while argv;file(to_int(pop(argv)));end while
+end function
+// Session.filePeek - View virtual file content
+// Args: x - File index
+// Returns: Nothing (displays content to stdout)
+Session.filePeek=function(x)
+	// Exit if no virtual files exist
+	if not globals.G_virtualFiles or not len(globals.G_virtualFiles) then return Info.info("No virtual files found")
+	// Validate numeric index
+	if not x isa number then return Error.set(self.ERROR_FILE_ID)
+	// Validate index exists
+	if not hasIndex(globals.G_virtualFiles,x) then return Error.set(self.ERROR_INVALID_FILE)
+	// Get virtual file object
+	n=globals.G_virtualFiles[x]
+	// Display text file content line by line
+  if not is_binary(n.file) and not is_folder(n.file) then
+		// Split by newlines and print each line in white
+		for s in split(get_content(n.file),char(10));print white(s);end for
+	else
+		// Error for binary files or directories
+		q=null
+		if is_binary(n.file) then q="at binary files" else q="directories"
+		Info.error("Can't view "+q)
+	end if
+end function
+// Session.putFile - Add file to virtual file system
+// Args: Obj - Current session object, argv - File paths or objects
+// Returns: Nothing (adds files to globals.G_virtualFiles)
+Session.putFile=function(Obj,argv)
+  // Nested function to process single file
+  file=function(p)
+    // Get file object if string path provided
+    if p isa string then f=Io._getFile(Obj,p) else f=p
+    // Skip if file not found
+    if f isa Error then return
+    // Check read permissions
+    if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+    // File objects cannot handle binary/folders
+    if (is_binary(f) or is_folder(f)) and Obj.type=="file" then return Warning.set("Can't put binary files or directories with a file object")
+    // Computer objects cannot handle binary files
+    if is_binary(f) and Obj.type=="computer" then return Warning.set("Can't put binary files with a computer object")
+    // Create virtual file entry
+    s=new{}
+    // Binary files prefixed with *
+    if is_binary(f) then s.name="*"+name(f) else s.name=name(f)
+    // Store file reference
+    s.file=f
+    // Generate unique name with IP tracking and random suffix
+    s.name=s.name+"FP"+Obj.meta.public_ip+"L"+Obj.meta.local_ip+"S"+Crypt.genPassword(6)
+    // Store IP information
+    s.ip="@"+Obj.meta.public_ip+":"+Obj.meta.local_ip
+    // Store session type
+    s.type=Obj.type
+    // Store session object reference
+    s.object=Obj.object
+    // Add to global virtual files array
+    push(globals.G_virtualFiles,s)
+    // Display success message
+    Info.info("Added file: "+name(f))
+  end function
+  // Single file - process and return
+  if len(argv)==1 then return file(argv[0])
+  // Multiple files - process each in loop
+  while argv;file(pop(argv));end while
+end function
+// Session.toShare - Transfer all virtual files to share system
+// Args: Obj - Current session object
+// Returns: Nothing (transfers virtual files to share and clears them)
+Session.toShare=function(Obj)
+  Info.info("Transferring files to share...")
+  // Create transfer staging folder
+  r=create_folder(Obj.computer,path(Obj.dir.current),"transfer")
+  if r isa string then return Error.set(r)
+  // Transfer each virtual file to staging folder
+  for f in globals.G_virtualFiles
+    // Use scp to copy file to transfer folder
+    r=scp(f.object,path(f.file),path(Obj.dir.current)+"/transfer",Obj.object)
+    if r isa string then return Error.set(r)
+    // Get transferred file object
+    j=File(Obj.computer,path(Obj.dir.current)+"/transfer/"+name(f.file))
+    // Rename with unique virtual file name
+    if j then rename(j,name(f.file)+f.name)
+  end for
+  // Clear virtual files array after transfer
+  globals.G_virtualFiles=[]
+  // Get transfer folder object
+  t=File(Obj.computer,path(Obj.dir.current)+"/transfer")
+  // Add all files to share system
+  Share.putFileName(Obj,get_files(t)+get_folders(t))
+  // Delete transfer folder (quiet remove)
+  Command.qrm(Obj,[t])
+end function
+// Session.fileDel - Delete virtual file by index
+// Args: argv - File indices to delete
+// Returns: Nothing (removes files from globals.G_virtualFiles)
+Session.fileDel=function(argv)
+	// Exit if no virtual files exist
+	if not globals.G_virtualFiles or not len(globals.G_virtualFiles) then return Info.info("No virtual files found")
+  // Validate arguments
+  if not argv or not len(argv) then return Error.set("Missing arguments")
+  // Nested function to delete single file by index
+  file=function(x)
+    // Validate numeric index
+    if not x isa number then return Error.set(outer.ERROR_FILE_ID)
+    // Validate index exists
+    if not hasIndex(globals.G_virtualFiles,x) then return Error.set(outer.ERROR_INVALID_FILE)
+    // Store name for success message
+    w=globals.G_virtualFiles[x].name
+    // Remove from array
+    remove(globals.G_virtualFiles,x)
+    // Show updated list if files remain
+    if len(globals.G_virtualFiles) then self.fileView
+    // Display success message
+    Info.info("Removed file: "+w)
+  end function
+  // Single file - process and return
+  if len(argv)==1 then return file(to_int(argv[0]))
+  // Convert to ints and sort descending to avoid index shifting
+  ids=[]
+  for a in argv;push(ids,to_int(a));end for
+  sort(ids)
+  // Delete highest index first
+  while ids;file(pop(ids));end while
+end function
+// Session.fileClear - Clear all virtual files
+// Args: None
+// Returns: Nothing (clears globals.G_virtualFiles)
+Session.fileClear=function
+	// Exit if no virtual files exist
+	if not globals.G_virtualFiles or not len(globals.G_virtualFiles) then return Info.info("No virtual files found")
+  // Clear virtual files array
+  globals.G_virtualFiles=[]
+	// Display success message
+	Info.info("All virtual files cleared")
+end function

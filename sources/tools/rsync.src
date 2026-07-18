@@ -1,0 +1,144 @@
+toolRsync="if params and (params[0]==""-h"" or params[0]==""--help"") then
+	exit(""Usage: rsync [OPTIONS] src dst
+
+Options:
+  -r, -a    Recursive (directory sync)
+  -v        Verbose output
+  -n        Dry run (no changes made)
+  -p pass   SSH password
+  --delete  Delete source after transfer
+
+Formats:
+  local:    rsync src dst
+  download: rsync user@host:path dst
+  upload:   rsync src user@host:path"")
+end if
+flagR=false
+flagV=false
+flagN=false
+flagDelete=false
+flagP=null
+rest=[]
+i=0
+_len=len(params)
+while i<_len
+	arg=params[i]
+	if arg==""-r"" or arg==""-a"" then
+		flagR=true
+	else if arg==""-v"" then
+		flagV=true
+	else if arg==""-n"" then
+		flagN=true
+	else if arg==""--delete"" or arg==""-delete"" then
+		flagDelete=true
+	else if arg==""-p"" then
+		i=i+1
+		if i<_len then flagP=params[i]
+	else
+		push(rest,arg)
+	end if
+	i=i+1
+end while
+if len(rest)<2 then exit(""Usage: rsync [-ravn] [--delete] [-p pass] src dst"")
+src=rest[0]
+dst=rest[1]
+srcIsRemote=indexOf(src,"":"")!=null
+dstIsRemote=indexOf(dst,"":"")!=null
+if srcIsRemote and dstIsRemote then exit(""rsync: remote-to-remote not supported"")
+parseRemote=function(s)
+	p=split(s,"":"")
+	if len(p)!=2 then exit(""rsync: invalid remote path: ""+s)
+	return {""host"":p[0],""path"":p[1]}
+end function
+getSSHShell=function(hostStr,pw=null)
+	p=split(hostStr,""@"")
+	if len(p)==2 then
+		u=p[0]
+		ip=p[1]
+	else
+		u=""root""
+		ip=hostStr
+	end if
+	if not pw then
+		pw=user_input(""Password for ""+u+""@""+ip+"": "",1)
+		if not pw then exit(""rsync: password required"")
+	end if
+	if flagV then print(""Connecting to ""+u+""@""+ip)
+	sh=connect_service(get_shell,ip,22,u,pw,""ssh"")
+	if sh isa string then exit(""rsync: ""+sh)
+	if not sh then exit(""rsync: failed to connect to ""+ip)
+	return sh
+end function
+localComp=host_computer(get_shell)
+if not srcIsRemote and not dstIsRemote then
+	srcFile=File(localComp,src)
+	if not srcFile then exit(""rsync: no such file: ""+src)
+	isDir=is_folder(srcFile)
+	if isDir and not flagR then exit(""rsync: use -r to sync directories"")
+	if flagN then exit(""[DRY RUN] Would sync ""+src+"" to ""+dst)
+	if flagV then print(""Syncing ""+src+"" to ""+dst)
+	if isDir then
+		syncDir=function(srcDir,dstPath)
+			dstDir=File(localComp,dstPath)
+			if not dstDir then
+				parts=split(dstPath,""/"")
+				dname=pop(parts)
+				ppath=join(parts,""/"")
+				if not ppath then ppath=""/""
+				if not create_folder(localComp,ppath,dname) then exit(""rsync: failed to create dir: ""+dstPath)
+			end if
+			for f in get_files(srcDir)
+				r=copy(f,dstPath,name(f))
+				if r!=1 then exit(""rsync: copy failed: ""+r)
+			end for
+			for d in get_folders(srcDir)
+				syncDir(d,dstPath+""/""+name(d))
+			end for
+		end function
+		syncDir(srcFile,dst)
+	else
+		dstFile=File(localComp,dst)
+		if dstFile and is_folder(dstFile) then
+			r=copy(srcFile,dst,name(srcFile))
+		else
+			parts=split(dst,""/"")
+			dname=pop(parts)
+			ppath=join(parts,""/"")
+			if not ppath then ppath=""/""
+			r=copy(srcFile,ppath,dname)
+		end if
+		if r!=1 then exit(""rsync: copy failed: ""+r)
+	end if
+	if flagDelete then
+		delete(srcFile)
+		if flagV then print(""Source deleted"")
+	end if
+	if flagV then print(""Sync complete"")
+else if srcIsRemote then
+	remote=parseRemote(src)
+	remoteShell=getSSHShell(remote.host,flagP)
+	if flagN then exit(""[DRY RUN] Would download ""+remote.path+"" to ""+dst)
+	if flagV then print(""Downloading ""+remote.path)
+	result=scp(remoteShell,remote.path,dst,get_shell)
+	if result isa string then exit(""rsync: ""+result)
+	if flagDelete then
+		rf=File(host_computer(remoteShell),remote.path)
+		if rf then delete(rf)
+		if flagV then print(""Remote source deleted"")
+	end if
+	if flagV then print(""Download complete"")
+else
+	remote=parseRemote(dst)
+	remoteShell=getSSHShell(remote.host,flagP)
+	srcFile=File(localComp,src)
+	if not srcFile then exit(""rsync: no such file: ""+src)
+	if flagN then exit(""[DRY RUN] Would upload ""+src+"" to ""+remote.path)
+	if flagV then print(""Uploading ""+src)
+	result=scp(get_shell,src,remote.path,remoteShell)
+	if result isa string then exit(""rsync: ""+result)
+	if flagDelete then
+		delete(srcFile)
+		if flagV then print(""Source deleted"")
+	end if
+	if flagV then print(""Upload complete"")
+end if"

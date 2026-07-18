@@ -1,0 +1,23 @@
+// =============================================================================
+// USERDEL
+// Delete a user account; -r also removes the home directory.
+// =============================================================================
+Command.userdel=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+  if hasPipeInput then
+    if not argv then argv=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(argv,line);end for
+  end if
+  if len(argv)==1 then
+    username=argv[0]
+    removeHome=false
+  else if len(argv)==2 then
+    removeHome=true
+    username=argv[1]
+  else
+    return Man.help(["userdel"])
+  end if
+  result=delete_user(Obj.computer,username,removeHome)
+  if result==1 then return Info.info("User "+username+" deleted")
+  if result then Info.error(result) else Info.error("Failed to remove user: "+username)
+end function

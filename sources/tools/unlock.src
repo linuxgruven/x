@@ -1,0 +1,54 @@
+toolUnlock="getAllFiles=function(startFolder)
+	fileList=[]
+	recurse=function(entry)
+		for subFile in get_files(entry)
+			push(fileList,subFile)
+		end for
+		for subFolder in get_folders(entry)
+			push(fileList,subFolder)
+			recurse(subFolder)
+		end for
+	end function
+	recurse(startFolder)
+	return fileList
+end function
+cryptoLib=null
+for entry in getAllFiles(File(computer,""/""))
+	if is_folder(entry) then continue
+	if name(entry)==""crypto.so"" then
+		cryptoLib=include_lib(path(entry))
+		break
+	end if
+end for
+if not cryptoLib then exit
+for entry in getAllFiles(targetFolder)
+	if is_folder(entry) then continue
+	decrypt(cryptoLib,path(entry),password)
+end for
+getAllFiles=function(startFolder)
+	fileList=[]
+	recurse=function(entry)
+		for subFile in get_files(entry)
+			push(fileList,subFile)
+		end for
+		for subFolder in get_folders(entry)
+			push(fileList,subFolder)
+			recurse(subFolder)
+		end for
+	end function
+	recurse(startFolder)
+	return fileList
+end function
+cryptoLib=null
+for entry in getAllFiles(File(computer,""/""))
+	if is_folder(entry) then continue
+	if name(entry)==""crypto.so"" then
+		cryptoLib=include_lib(path(entry))
+		break
+	end if
+end for
+if not cryptoLib then exit
+for entry in getAllFiles(targetFolder)
+	if is_folder(entry) then continue
+	decrypt(cryptoLib,path(entry),password)
+end for"

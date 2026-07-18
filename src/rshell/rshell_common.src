@@ -1,0 +1,319 @@
+// =============================================================================
+// RSHELL_COMMON
+// Shared reverse-shell base; constants, file-transfer, log, and kill implementations.
+// =============================================================================
+RshellCommon={}
+// Shared constants
+RshellCommon._MSG_NO_SHELLS="You have no reverse shell's"
+RshellCommon._MSG_ID_EXPECTED="RShell id expected"
+RshellCommon._MSG_INVALID_ID="Invalid RShell id"
+RshellCommon._MSG_NO_SERVERS="You don't have any imported rshell server's"
+RshellCommon._MSG_HISTORY_EMPTY="RShell history is empty"
+RshellCommon._PROCESS_NAMES="rshell_clientpsfstab"
+RshellCommon._PROCESS_LIST=["rshell_client","ps","fstab"]
+RshellCommon._whoisCache={}
+// ============================================================================
+// Adapter methods — defaults for raw-shell (lite) mode
+// Override in Rshell for ShellObject-wrapped entries
+// ============================================================================
+// Return the actual shell object used for scp / host_computer
+RshellCommon._getShell=function(entry);return entry;end function
+// Return public IP string
+RshellCommon._getPublicIP=function(entry);return host_computer(entry).public_ip;end function
+// Return local IP string
+RshellCommon._getLocalIP=function(entry);return host_computer(entry).local_ip;end function
+// Return the host computer object
+RshellCommon._getComputer=function(entry);return host_computer(entry);end function
+// Return username string for display
+RshellCommon._getUserName=function(entry);return Utility.getUserEX(entry).name;end function
+// Return default upload destination path when none is specified
+RshellCommon._getDefaultUploadDir=function(entry);return path(Utility.getUserEX(entry).home);end function
+// Return a file object at filePath on the remote entry
+RshellCommon._getRemoteFile=function(entry,filePath);return Io.getFileObjEx(self._getShell(entry),filePath);end function
+// Pack metaxploit context for a remote Obj (lite default: packMetaxploit)
+RshellCommon._packMeta=function(Obj);return Builder.packMetaxploit(Obj);end function
+// Store shells from the import list (lite default: raw shell keyed by GUID)
+RshellCommon._storeShells=function(z);for s in z;globals.G_rshell.rshells[System.GUID]=s;end for;end function
+// ============================================================================
+// Shared utility helpers
+// ============================================================================
+// Import a rshell server by IP; Obj is provided when not on home machine
+RshellCommon.import=function(i,Obj=null)
+  if not Library.haveMetaxploit then return
+  if hasIndex(globals.G_rshell.servers,i) then return Info.info(i+" is already imported")
+  if not Obj then
+    t=rshell_server(Library.metaxploit)
+    if t isa list then
+      globals.G_rshell.servers[i]=Library.metaxploit
+      z=t
+    else if t==null or t==false then
+      globals.G_rshell.servers[i]=Library.metaxploit
+      z=[]
+    else
+      z=t
+    end if
+  else
+    _=self._packMeta(Obj)
+    if _ isa Error then return Error.set("Unable to link metaxploit.so")
+    t=rshell_server(_)
+    if t isa list then
+      globals.G_rshell.servers[i]=_
+      z=t
+    else if t==null or t==false then
+      globals.G_rshell.servers[i]=_
+      z=[]
+    else
+      z=t
+    end if
+  end if
+  if z isa string then return Error.set(z)
+  if not z isa list then return Error.set("Unable to import this rshell server!")
+  self._storeShells(z)
+  Info.info("Imported rshell server: "+i)
+end function
+// Cached hostname lookup via whois
+RshellCommon._getHostname=function(ip);if not hasIndex(self._whoisCache,ip) then self._whoisCache[ip]=split(split(whois(ip),char(10))[0],": ")[-1];return self._whoisCache[ip];end function
+// Build the "user@host [ IP:pub:local ]" display line for a shell entry
+RshellCommon._formatShellDisplay=function(entry)
+  hostname=self._getHostname(self._getPublicIP(entry))
+  userPart=yellow(ljust(self._getUserName(entry),15,0,yellow("-"))+"@")
+  hostPart=ljust(orange(hostname),45,0,yellow("-"))
+  ipPart=green("[ IP:"+blue(self._getPublicIP(entry))+":"+yellow(self._getLocalIP(entry))+" ]")
+  return userPart+hostPart+ipPart
+end function
+// Validate id and return shell entry or null
+RshellCommon._validateAndGetShell=function(id)
+  if not globals.G_rshell.rshells then
+    Info.info(self._MSG_NO_SHELLS)
+    return null
+  end if
+  if not id isa number then
+    Error.set(self._MSG_ID_EXPECTED)
+    return null
+  end if
+  if not hasIndex(values(globals.G_rshell.rshells),id) then
+    Error.set(self._MSG_INVALID_ID)
+    return null
+  end if
+  return values(globals.G_rshell.rshells)[id]
+end function
+// Generate a unique filename suffix for downloaded files
+RshellCommon._uniqueFileName=function(baseFile,publicIP,localIP);suffix=publicIP+localIP+"S"+Crypt.genPassword(6);return name(baseFile)+"-"+suffix;end function
+// Kill a matching rshell process on entry; return key on success, null otherwise
+RshellCommon._killProcess=function(entry,key,processNames)
+  c=self._getComputer(entry)
+  sh=self._getShell(entry)
+  for l in split(show_procs(c),char(10))[1:]
+    p=split(l," ")
+    if indexOf(processNames,p[-1])==null then continue
+    Log.shellLog(sh)
+    r=close_program(c,to_int(p[1]))
+    if r==1 then
+      Info.info("RShell "+self._getPublicIP(entry)+":"+self._getLocalIP(entry)+" terminated")
+      return key
+    else if r==0 then
+      Info.error("Invalid PID")
+    else if r isa string then
+      Info.error(r)
+    else
+      Info.error("Unable to kill rshell")
+    end if
+    break
+  end for
+  return null
+end function
+// Kill known rshell client processes on a host as a safety net
+RshellCommon.failSafe=function(c);for l in split(show_procs(c),char(10))[1:];l=split(l," ");x=l[-1];if indexOf(self._PROCESS_LIST,x)!=null then close_program(c,to_int(l[1]));end for;Info.info("RShell terminated: "+c.public_ip);end function
+// List imported rshell server names
+RshellCommon.list=function
+  if not globals.G_rshell.servers then return Info.info(self._MSG_NO_SERVERS)
+  Info.info("You have the following imported rshell server's:")
+  listNHZ(globals.G_rshell.servers.indexes)
+end function
+// Kill all tracked rshell sessions
+RshellCommon.killall=function(argv)
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS+" to kill")
+  processNames=self._PROCESS_LIST
+  if argv then processNames=processNames+[argv[0]]
+  r=[]
+  for v in globals.G_rshell.rshells;id=self._killProcess(v.value,v.key,processNames);if id then push(r,id);end for
+  for z in r;if hasIndex(globals.G_rshell.rshells,z) then remove(globals.G_rshell.rshells,z);if hasIndex(globals.G_rshell.history,z) then remove(globals.G_rshell.history,z);end for
+  Info.info("All rshells terminated")
+end function
+// ============================================================================
+// Log and file transfer operations
+// ============================================================================
+// Download /var/system.log from every tracked shell
+RshellCommon.getLogs=function(Obj)
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS)
+  for v in values(globals.G_rshell.rshells)
+    f=File(self._getComputer(v),"/var/system.log")
+    if not f then continue
+    p=self._getPublicIP(v)
+    l=self._getLocalIP(v)
+    newName=self._uniqueFileName(f,p,l)
+    Info.info("Downloading system.log from "+p+":"+l)
+    r=scp(self._getShell(v),path(f),path(globals.G_main.dir.current),globals.G_main.shell)
+    if r isa string then
+      Info.error(r)
+    else
+      f=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/system.log")
+      if f then rename(f,"system.log-"+newName)
+    end if
+  end for
+  Info.info("Finished")
+end function
+// Download a file from one shell to G_main.dir.current
+RshellCommon.download=function(argv)
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS)
+  if not len(argv)>=2 then return Error.set("RShell id and file path expected")
+  x=to_int(argv[0])
+  s=self._validateAndGetShell(x)
+  if not s then return
+  Arg1=argv[1]
+  if not Arg1 then return Error.set("File path expected")
+  if len(argv)>=3 then Arg2=argv[2] else Arg2=path(globals.G_main.dir.current)
+  f=self._getRemoteFile(s,Arg1)
+  if not f then return Error.set("File not found:"+Arg1)
+  p=self._getPublicIP(s)
+  l=self._getLocalIP(s)
+  Info.info("Downloading "+split(path(f),"\.")[-1]+" from "+p+":"+l)
+  r=scp(self._getShell(s),path(f),Arg2,globals.G_main.shell)
+  if r isa string then return Error.set(r)
+  Info.info("File downloaded")
+end function
+// Download a file from every tracked shell
+RshellCommon.downloadAll=function(argv)
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS)
+  if not argv then return Error.set("No file provided")
+  Arg1=argv[0]
+  if len(argv)>=2 then Arg2=argv[1] else Arg2=path(globals.G_main.dir.current)
+  for v in values(globals.G_rshell.rshells)
+    f=self._getRemoteFile(v,Arg1)
+    if not f then continue
+    p=self._getPublicIP(v)
+    l=self._getLocalIP(v)
+    newName=self._uniqueFileName(f,p,l)
+    Info.info("Downloading "+split(path(f),"\.")[-1]+" from "+p+":"+l)
+    r=scp(self._getShell(v),path(f),Arg2,globals.G_main.shell)
+    if r isa string then
+      Info.error(r)
+    else
+      a=File(globals.G_main.computer,Arg2+"/"+name(f))
+      if a then rename(a,newName)
+      Info.info("File downloaded")
+    end if
+  end for
+end function
+// Download a file from one shell to Obj.dir.current
+RshellCommon.downloadCurrent=function(Obj,argv)
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS)
+  if not len(argv)>=2 then return Error.set("RShell id and file path expected")
+  x=to_int(argv[0])
+  s=self._validateAndGetShell(x)
+  if not s then return
+  Arg1=argv[1]
+  if len(argv)>=3 then Arg2=argv[2] else Arg2=path(Obj.dir.current)
+  f=self._getRemoteFile(s,Arg1)
+  if not f then return Error.set("File not found:"+Arg1)
+  p=self._getPublicIP(s)
+  l=self._getLocalIP(s)
+  Info.info("Downloading "+split(path(f),"\.")[-1]+" from "+p+":"+l)
+  r=scp(self._getShell(s),path(f),Arg2,Obj.shell)
+  if r isa string then return Error.set(r)
+  Info.info("File downloaded")
+end function
+// Download a file from every tracked shell to Obj.dir.current
+RshellCommon.downloadCurrentAll=function(Obj,argv)
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS)
+  if not len(argv)>=2 then return Error.set("Invalid arguments")
+  Arg1=argv[0]
+  Arg2=argv[1]
+  if not Arg1 then return Error.set("File path expected")
+  if not Arg2 then Arg2=path(Obj.dir.current)
+  for v in values(globals.G_rshell.rshells)
+    f=self._getRemoteFile(v,Arg1)
+    if not f then continue
+    p=self._getPublicIP(v)
+    l=self._getLocalIP(v)
+    newName=self._uniqueFileName(f,p,l)
+    Info.info("Downloading "+split(path(f),"\.")[-1]+" from "+p+":"+l)
+    r=scp(self._getShell(v),path(f),Arg2,Obj.shell)
+    if r isa string then
+      Info.error(r)
+    else
+      a=File(Obj.computer,Arg2+"/"+name(f))
+      if a then rename(a,newName)
+      Info.info("File downloaded")
+    end if
+  end for
+end function
+// Upload a local file from G_main to one shell
+RshellCommon.upload=function(argv)
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS)
+  if not len(argv)>=2 then return Error.set("RShell id and file path expected")
+  x=to_int(argv[0])
+  s=self._validateAndGetShell(x)
+  if not s then return
+  Arg1=argv[1]
+  f=Io.getFile(globals.G_main,Arg1)
+  if not f then return Error.set("File not found:"+Arg1)
+  if len(argv)>=3 then Arg2=argv[2] else Arg2=self._getDefaultUploadDir(s)
+  p=self._getPublicIP(s)
+  l=self._getLocalIP(s)
+  Info.info("Uploading "+split(path(f),"\.")[-1]+" to "+Arg2+" at "+p+":"+l)
+  r=scp(globals.G_main.shell,path(f),Arg2,self._getShell(s))
+  if r isa string then return Error.set(r)
+  Info.info("File uploaded")
+end function
+// Upload a local file from G_main to every tracked shell
+RshellCommon.uploadAll=function(argv)
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS)
+  if not argv then return Error.set("File path expected")
+  Arg1=argv[0]
+  f=Io.getFile(globals.G_main,Arg1)
+  if not f then return Error.set("File not found:"+Arg1)
+  for v in values(globals.G_rshell.rshells)
+    if len(argv)>=2 then Arg2=argv[1] else Arg2=self._getDefaultUploadDir(v)
+    p=self._getPublicIP(v)
+    l=self._getLocalIP(v)
+    Info.info("Uploading "+split(path(f),"\.")[-1]+" to "+Arg2+" at "+p+":"+l)
+    r=scp(globals.G_main.shell,path(f),Arg2,self._getShell(v))
+    if r isa string then Info.error(r) else Info.info("File uploaded")
+  end for
+end function
+// Upload a file from Obj to one shell
+RshellCommon.uploadCurrent=function(Obj,argv)
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS)
+  if not len(argv)>=2 then return Error.set("RShell id and file path expected")
+  x=to_int(argv[0])
+  s=self._validateAndGetShell(x)
+  if not s then return
+  Arg1=argv[1]
+  if not Arg1 then return Error.set("File path expected")
+  f=Io.getFile(Obj,Arg1)
+  if not f then return Error.set("File not found:"+Arg1)
+  if len(argv)>=3 then Arg2=argv[2] else Arg2=self._getDefaultUploadDir(s)
+  p=self._getPublicIP(s)
+  l=self._getLocalIP(s)
+  Info.info("Uploading "+split(path(f),"\.")[-1]+" to "+p+":"+l)
+  r=scp(Obj.shell,path(f),Arg2,self._getShell(s))
+  if r isa string then return Error.set(r)
+  Info.info("File uploaded")
+end function
+// Upload a file from Obj to every tracked shell
+RshellCommon.uploadAllCurrent=function(Obj,argv)
+  if not globals.G_rshell.rshells then return Info.info(self._MSG_NO_SHELLS)
+  if not argv then return Error.set("File path expected")
+  Arg1=argv[0]
+  f=Io.getFile(Obj,Arg1)
+  if not f then return Error.set("File not found:"+Arg1)
+  for v in values(globals.G_rshell.rshells)
+    if len(argv)>=2 then Arg2=argv[1] else Arg2=self._getDefaultUploadDir(v)
+    p=self._getPublicIP(v)
+    l=self._getLocalIP(v)
+    Info.info("Uploading "+split(path(f),"\.")[-1]+" to "+p+":"+l)
+    r=scp(Obj.shell,path(f),Arg2,self._getShell(v))
+    if r isa string then Info.error(r) else Info.info("File uploaded")
+  end for
+end function

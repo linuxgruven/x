@@ -1,0 +1,27 @@
+binSudo="if not params or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""sudo_usage""))
+if params[0]==""-u"" and len(params)!=2 then exit(command_info(""sudo_usage""))
+inputPass=user_input(""Password: "",true)
+if params[0]==""-u"" then
+	shell=get_shell(params[1],inputPass)
+	if not shell then exit(""sudo: incorrect username or password"")
+else
+	shell=get_shell(""root"",inputPass)
+	if not shell then exit(""sudo: incorrect password"")
+end if
+if params[0]==""-s"" or params[0]==""-u"" then start_terminal(shell)
+computer=host_computer(shell)
+args=join(params[1:],"" "")
+if not indexOf(params[0],""/"") then
+	globalPath=[current_path,""/bin"",""/usr/bin""]
+	for p in globalPath
+		program=File(computer,p+""/""+params[0])
+		if program!=null then
+			launch(shell,path(program),args)
+			exit
+		end if
+	end for
+else
+	program=File(computer,params[0])
+	if not program then exit(params[0]+"" not found."")
+	launch(shell,path(program),args)
+end if"

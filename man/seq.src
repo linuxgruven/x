@@ -1,0 +1,77 @@
+// Man page for seq
+manSeq="SEQ(1)                           X Shell Manual                           SEQ(1)
+
+<b>NAME</b>
+    seq - Print a sequence of numbers
+<b>SYNOPSIS</b>
+    <b>seq</b> LAST
+    <b>seq</b> FIRST LAST
+    <b>seq</b> FIRST STEP LAST
+    <b>seq</b> [<b>-s</b> SEP] FIRST LAST
+<b>DESCRIPTION</b>
+    Generate a sequence of numbers from FIRST to LAST, incrementing by STEP.
+    Each number is printed on its own line. Pipe into xargs, sort, or other
+    commands to iterate over ranges, generate test data, or drive loops.
+<b>OPTIONS</b>
+    <b>LAST</b>
+    Print 1 to LAST (inclusive).
+
+    <b>FIRST LAST</b>
+    Print FIRST to LAST, step 1.
+
+    <b>FIRST STEP LAST</b>
+    Print FIRST to LAST, incrementing by STEP.
+    Use a negative STEP to count down.
+
+    <b>-s SEP</b>
+    Use SEP as separator instead of newline.
+
+    <b>> FILE</b>
+    Redirect output to FILE (overwrite).
+
+    <b>>> FILE</b>
+    Append output to FILE.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man seq</b>.
+
+    Step of zero is an error.
+
+    In pipelines, place options/operands after the command:
+    seq 1 10 | <b>sort</b> -n ...
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Sequences</color>
+    <b>seq 5</b>
+    Print 1 2 3 4 5
+
+    <b>seq 3 7</b>
+    Print 3 4 5 6 7
+
+    <b>seq 0 2 10</b>
+    Print 0 2 4 6 8 10 (step 2)
+
+    <b>seq 10 -1 1</b>
+    Count down 10 to 1
+
+    <color=#e4ff34># Pipeline Use</color>
+    <b>seq 1 5 | xargs -n1 echo Attempt</b>
+    Print Attempt 1 through Attempt 5
+
+    <b>seq 80 90 | xargs -n1 pingport 192.168.1.1</b>
+    Scan a port range
+
+    <b>seq 1 10 | xargs -n1 printf ""%03d_log.txt""</b>
+    Generate zero-padded filenames
+
+    <color=#e4ff34># Custom Separator</color>
+    <b>seq -s , 1 5</b>
+    Print 1,2,3,4,5
+
+    <color=#e4ff34># Redirect to File</color>
+    <b>seq 1 100 > numbers.txt</b>
+    Write 1-100 to file
+
+    <b>seq 1 5 >> log.txt</b>
+    Append sequence to file
+<b>SEE ALSO</b>
+    <b>printf</b>, <b>paste</b>, <b>bc</b>"

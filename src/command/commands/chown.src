@@ -1,0 +1,72 @@
+// =============================================================================
+// CHOWN
+// Change file or directory ownership; -R recurses.
+// =============================================================================
+Command.chown=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+  if not argv and not hasPipeInput then return Man.help(["chown"])
+	if argv and len(argv)<2 and not hasPipeInput then return Man.help(["chown"])
+	_p=ArgumentParser.init
+	_p.addArgument("R",false,"flag")  // Recursive mode
+	_p.addArgument("r",false,"flag")  // Recursive mode alias
+	argv=_p.parse("chown",argv,Obj)
+	if argv isa Error then return
+	if argv.r then argv.R=true
+	if hasPipeInput then
+		if not hasIndex(argv,"files") or not argv.files then argv.files=[]
+		for _line in globals.G_pipe.stdin.split(char(10))
+			_line=trim(_line)
+			if _line=="" then continue
+			_f=Io._getFile(Obj,_line)
+			if _f and not (_f isa Error) then push(argv.files,_f)
+		end for
+	end if
+	if hasIndex(argv,"useAI") then
+		target=null
+		recursive=false
+		if Gui.yesNo("Are we changing ownership of a file?") then
+			target=Io.file(Obj,Obj.dir.current,"Select a file to change the ownership of:")
+			if target isa Warning then return target
+		else
+			target=Io.folder(Obj,Obj.dir.current,"Select a directory to change the ownership of:")
+			if target isa Warning then return target
+			recursive=Gui.yesNo("Recursive?")
+		end if
+		username=Gui.input({"text":"User we are giving ownership of "+name(target)+" to"})
+		if username==null then return
+		// Validate username length constraint (GreyScript limitation)
+		if len(username)>15 then return Error.set("Username too long (max 15 characters)")
+		if recursive then
+			Io.walkApply(target,"owner",username,false)
+		else
+			result=set_owner(target,username,0)
+			if result then Info.error(result)
+		end if
+		return
+	end if
+	hasFiles=(hasIndex(argv,"files") and argv.files and len(argv.files)>0)
+	if len(argv.rest)<1 and not hasFiles then return Man.help(["chown"])
+	username=argv.rest[0]
+	username=clean(username)
+	// Validate username length constraint (GreyScript limitation)
+	if len(username)>15 then return Error.set("Username too long (max 15 characters)")
+	targets=[]
+	if hasFiles then
+		targets=argv.files
+	else if len(argv.rest)>=2 then
+		target=Io._getFile(Obj,argv.rest[-1])
+		if target isa Error then return target
+		targets=[target]
+	else
+		return Man.help(["chown"])
+	end if
+	for target in targets
+		if not target or target isa Error then continue
+		if argv.R then
+			Io.walkApply(target,"owner",username,false)
+		else
+			result=set_owner(target,username,0)
+			if result then Info.error(result)
+		end if
+	end for
+end function

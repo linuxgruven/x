@@ -1,0 +1,32 @@
+toolLfbounce="if not params or params[0]==""-h"" or params[0]==""--help"" then exit ""Usage: [command] [full_file_path] (time)""
+computer=host_computer(get_shell)
+if not is_network_active(computer) then exit ""Connect to the internet first!""
+if active_net_card(computer)==""WIFI"" then exit ""Can't use this with a wifi connection""
+filePath=pull(params)
+if not filePath then exit ""No file passed""
+file=File(computer,filePath)
+if not file then exit ""Unable to open file:""+filePath
+lines=split(get_content(file),char(10))
+if not lines then exit ""File is empty""
+entries=[]
+for line in lines
+	gateway=line
+	idx=gateway
+	filePath=split(idx,""\."")
+	pop(filePath)
+	idx=join(filePath,""."")
+	push(entries,{""router"":idx,""gateway"":gateway})
+end for
+waitTime=4
+parsed=val(pop(params))
+if parsed isa number then waitTime=parsed
+min=0
+max=len(lines)-1
+minr=2
+maxr=255
+print(""Use Ctrl+C to kill proccess"")
+while 1
+	idx=floor(rnd*(max-min+1)+min)
+	connect_ethernet(computer,""eth0"",entries[idx].router+"".""+floor(rnd*(maxr-minr+1)+minr),entries[idx].gateway)
+	wait waitTime
+end while"

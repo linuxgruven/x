@@ -1,0 +1,101 @@
+// Man page for vfile
+manVfile="VFILE(1)                         X Shell Manual                         VFILE(1)
+
+<b>NAME</b>
+    vfile - is x's virtual file framework
+<b>SYNOPSIS</b>
+    <b>vfile </b><b>-l</b>
+    <b>vfile </b><b>-a </b><b>FILE</b> <b>FILE</b>...
+    <b>vfile </b><b>-ap</b>
+    <b>vfile </b><b>-al</b>
+    <b>vfile </b><b>-ts</b>
+    <b>vfile </b><b>-v </b><b>ID</b>
+    <b>vfile </b><b>-g </b><b>ID </b><b>ID</b>...
+    <b>vfile </b><b>-r </b><b>ID </b><b>ID</b>...
+    <b>vfile </b><b>-x</b>
+<b>DESCRIPTION</b>
+    Manage the virtual file cache system. Store files with virtual IDs for temporary access,
+    transfer between objects, or download to local machine. Files are cached in memory with
+    unique identifiers and can be viewed, retrieved, or removed. Cache is cleared when x is
+    closed. Quick access to passwd and system.log files. Transfer files to persistent share.
+<b>OPTIONS</b>
+    <b>-l</b>
+    List virtual file cache files
+    Display all cached files with IDs
+
+    <b>-a FILE FILE...</b>
+    Add files to virtual cache
+    Cache one or more files by ID
+
+    <b>-ap</b>
+    Add passwd file to cache
+    Quick cache of passwd file
+
+    <b>-al</b>
+    Add system.log file to cache
+    Quick cache of system log
+
+    <b>-ts</b>
+    Transfer all vfile files to share
+    Move cache contents to persistent storage
+    <color=#e4ff34>*** Only valid for MAIN or SHELL objects ***</color>
+
+    <b>-v ID</b>
+    View file contents by ID
+    Display cached file content
+
+    <b>-g ID ID...</b>
+    Get virtual cache files by ID
+    Download cached files to current directory
+    <color=#e4ff34>*** MAIN and Shell only for binaries/directories ***</color>
+
+    <b>-r ID ID...</b>
+    Remove files from cache by ID
+    Delete one or more cached files
+
+    <b>-x</b>
+    Clear entire virtual cache
+    Remove all cached files
+<b>EXAMPLE:</b>
+    <color=#e4ff34># List and Add</color>
+    <b>vfile -l</b>
+    List all cached files
+
+    <b>vfile -a /etc/passwd</b>
+    Cache passwd file
+
+    <b>vfile -a file1.txt file2.txt</b>
+    Cache multiple files
+
+    <color=#e4ff34># Quick Access</color>
+    <b>vfile -ap</b>
+    Cache passwd file
+
+    <b>vfile -al</b>
+    Cache system.log
+
+    <color=#e4ff34># View and Get</color>
+    <b>vfile -v 1</b>
+    View file ID 1
+
+    <b>vfile -g 1</b>
+    Download file ID 1
+
+    <b>vfile -g 1 2 3</b>
+    Download multiple files
+
+    <color=#e4ff34># Remove and Clear</color>
+    <b>vfile -r 1</b>
+    Remove file ID 1
+
+    <b>vfile -r 2 3 4</b>
+    Remove multiple files
+
+    <b>vfile -x</b>
+    Clear entire cache
+
+    <color=#e4ff34># Transfer to Share</color>
+    <b>vfile -ts</b>
+    Move all cache to share
+<b>SEE ALSO</b>
+    <b>share</b>, <b>cp</b>, <b>mv</b>"

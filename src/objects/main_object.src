@@ -1,0 +1,1128 @@
+// =============================================================================
+// MAIN_OBJECT
+// Main session handler; central hub managing computer access, shells, and operations.
+// =============================================================================
+MainObject={}
+// Function: run
+// Purpose: Initialize and run main session with full framework setup
+// Args:
+//   this - Reference to return as session object
+//   ex - Shell object or existing main session object to restore
+//   fileMeta - File metadata map with directory paths (default: {})
+// Returns: null (runs infinitely until exit)
+MainObject.run=function(this,ex,fileMeta={})
+  //Function: logo - Display X shell logo with version
+  logo=function
+    print "<color=#FF1111>                .·´(</color>"
+    print "<color=#FF1111>   /(.·´(      )::..:`·.( `·.</color>"
+    print "<color=#DD4433>   )::..::`·._/;;  --  ' '\.::)  )\    ’'</color>"
+    print "<color=#DD4433>.·´;; --  ' '               \/.·´ .:(.·´(</color>"
+    print "<color=#BB8855>):/\                 ,..::´/):::..::::·´</color>"
+    print "<color=#BB8855>I/::::\...:´/\       \::::'/ /¯¯¯¯’/</color>"
+    print "<color=#99CC77>  \::::/:::'/:::\       \-´ '/    /'</color>"
+    print "<color=#99CC77>    \/;::-' \::::'\       \/     /::</color>"
+    print "<color=#77EE99>            \:::::\            /'</color>"
+    print "<color=#77EE99>              \:::/            \</color>"
+    print "<color=#5588BB>             )\'\/       /\      '\</color>"
+    print "<color=#5588BB>    )\    .·´.:/       /:::\       \</color>"
+    print "<color=#3344DD>.·´.::.`·.):.'/.. - ··  ´´       .·´/'</color>"
+    print "<color=#3344DD>`·::..;::-  '        ..-:::::'/::::/'    '</color>"
+    print "<color=#3344DD>   )/::`*..¸..-::::::::::::/:::·´’</color>"
+    print "<color=#3344DD>  /::::::::/::::::::::-·· ´´</color>"
+    print "<color=#3344DD>  `*-::;/::::-·· ´´'’</color>"
+    print "<color=#3f3e40><i><b>AwETux's X Version "+Kernel.version+"</b></i></color>"
+	end function
+	init=function(Obj)
+    //Display X logo
+    logo
+    //Set global reference to main session
+    globals.G_main=Obj
+    //Set payload directory permissions only when not already 755
+    needChmod755=function(f)
+      if not f then return false
+      o=Io.octal(permissions(f))
+      if not o or len(o)<3 then return true
+      return o[len(o)-3:]!="755"
+    end function
+    if needChmod755(Obj.dir.payload) then
+      Info.info("Setting payload permissions to 755...")
+      Command.chmod(Obj,["-r","755",path(Obj.dir.payload)])
+    end if
+    //Set x program permissions if running as root
+    if Obj.user.name=="root"then
+      progFile=File(Obj.computer,program_path)
+      if needChmod755(progFile) then
+        Info.info("Setting x permissions to 755...")
+        Command.chmod(Obj,["755",program_path])
+      end if
+    end if
+    //Load user configuration
+    Info.info("Loading configuration...")
+    Config.load(Obj)
+		//Load dirty IP monitoring if enabled
+		if globals.G_settings.monitorDirtyips then Dirty.loadDirty
+    //Clear shadow passwords if enabled
+    if globals.G_settings.shadow then Shadow.clear(["-q"])
+    //Load system cache
+    Cache.load
+		//Always load exploit cache
+		Exploit.loadCache
+		//Build rainbow table index if enabled (faster hash lookups)
+		if globals.G_settings.preloadRainbowIndex then Crack.buildRainbowIndex
+		//Load library database cache if library server connected (auto-loaded at boot via .ldrc)
+		if globals.G_libServer then LibServer.loadCache
+    //Check for metaxploit updates if enabled
+    if globals.G_settings.updateMetaOnStart then
+      //Require internet connection for updates
+      if Obj.net.hasInternet then
+        Info.info("Checking for a metaxploit update...")
+        //Load aptclient library for update checking
+        Obj.initAptclient=Io.getLib(Obj,"aptclient.so","aptclientLib")
+        if Obj.initAptclient then
+          //Register aptclient globally
+          Library.aptclient=Obj.initAptclient
+          globals.G_initAptClient=Obj.initAptclient
+          Info.info("AptClient loaded","+")
+          //Check if metaxploit exists in data directory
+          m=File(Obj.computer,path(Obj.dir.data)+"/metaxploit.so")
+          if not m then
+            //Search for local copy of metaxploit
+            z=Io.getFile(Obj,"metaxploit.so",false)
+            if z then
+              //Copy local metaxploit to data directory
+              Info.info("Found local copy of metaxploit.so, copying to data...")
+              copy(z,path(Obj.dir.data),"metaxploit.so")
+              m=File(Obj.computer,path(Obj.dir.data)+"/metaxploit.so")
+              //Check if update available
+              r=check_upgrade(Library.aptclient,path(m))
+              if r isa number then
+                if r==1 then
+                  //Install update
+                  Info.info("Updating...")
+                  install(Library.aptclient,"metaxploit.so",path(Obj.dir.data))
+                else
+                  //Already up to date
+                  Info.info("No update needed")
+                end if
+              else if r isa string then
+                //Update check error
+                Info.error(r)
+              else
+                //Unknown error
+                Info.error("Internal error")
+              end if
+            else
+              //No local copy, install from repository
+              if Obj.net.hasInternet then
+                //Add repository if not present
+                if not Utility.getRepos(Obj) then Command.pacman(Obj,["-Sr"])
+                Info.info("Installing Metaxploit...")
+                Command.pacman(Obj,["-Si","-m"])
+              end if
+            end if
+          else
+            //Metaxploit found, check for update
+            r=check_upgrade(Library.aptclient,path(m))
+            if r isa number then
+              if r==1 then
+                //Install update
+                Info.info("Updating...")
+                install(Library.aptclient,"metaxploit.so",path(Obj.dir.data))
+              else
+                //Already up to date
+                Info.info("No update needed")
+              end if
+            else if r isa string then
+              //Update check error
+              Info.error(r)
+            else
+              //Unknown error
+              Info.error("Internal error")
+              end if
+          end if
+        else
+          //Aptclient not found
+          Info.error("Unable to locate aptclient.so")
+        end if
+      else 
+        //No internet for updates
+        Info.warning("No internet connection, skipping metaxploit update")
+      end if
+    end if
+    //Load and initialize metaxploit library
+    if Obj.dir.data then
+      //Check for metaxploit in data directory
+      m=File(Obj.computer,path(Obj.dir.data)+"/metaxploit.so")
+      if not m then
+        //Search for local copy
+        m=Io.getFile(Obj,"metaxploit.so",false)
+        if m then
+          //Copy local metaxploit to data directory
+          Info.info("Found local copy of metaxploit.so, copying to data...")
+          copy(m,path(Obj.dir.data),"metaxploit.so")
+          m=File(Obj.computer,path(Obj.dir.data)+"/metaxploit.so")
+        end if
+      end if
+      //Load and link metaxploit if found
+      if m and not m isa Error then
+        //Include metaxploit library
+        Obj.initMetaxploit=include_lib(path(m))
+        //Register globally
+        Library.metaxploit=Obj.initMetaxploit
+        globals.G_initMetaxploit=Obj.initMetaxploit
+        Info.info("Metaxploit loaded","+")
+        //Link for active use
+        globals.G_metaxploit=globals.G_initMetaxploit
+        Info.info("Metaxploit is now linked")
+			else
+				//Metaxploit not found, try to install
+				if Obj.net.hasInternet then
+          //Add repository if needed
+          if not Utility.getRepos(Obj) then Command.pacman(Obj,["-Sr"])
+          Info.info("Installing Metaxploit...")
+					//Install via apt
+					Command.pacman(Obj,["-Si","-m"])
+					//Check if install succeeded
+					m=File(Obj.computer,path(Obj.dir.data)+"/metaxploit.so")
+					if m then
+            //Include and register metaxploit
+            Obj.initMetaxploit=include_lib(path(m))
+						Library.metaxploit=Obj.initMetaxploit
+            Info.info("Metaxploit loaded","+")
+            globals.G_initMetaxploit=Obj.initMetaxploit
+            //Link for active use
+            globals.G_metaxploit=globals.G_initMetaxploit
+            Info.info("Metaxploit is now linked")
+					else
+						//Install failed
+						Info.warning("Install Metaxploit and then we will be Good to go :-(")
+					end if
+				else
+					//No internet for installation
+					Info.warning("Need internet to install Metaxploit continuing with out it")
+				end if
+			end if
+      //Load and initialize crypto library
+      c=File(Obj.computer,path(Obj.dir.data)+"/crypto.so")
+      if not c then
+        //Search for local copy
+        c=Io.getFile(Obj,"crypto.so",false)
+        if not c isa Error then
+          //Copy local crypto to data directory
+          Info.info("Found local copy of crypto.so, copying to data...")
+          copy(c,path(Obj.dir.data)+"/","crypto.so")
+        end if
+      end if
+      //Load and link crypto if found
+      if c and not c isa Error then
+        //Include crypto library
+        Obj.initCrypto=include_lib(path(c))
+        //Register globally
+        Library.crypto=Obj.initCrypto
+        Info.info("Crypto loaded","+")
+        globals.G_initCrypto=Obj.initCrypto
+        //Link for active use
+        globals.G_crypto=globals.G_initCrypto
+        Info.info("Crypto is now linked")
+			else
+				//Crypto not found
+				Info.warning("Install Crypto and then we will be Good to go :-(")
+			end if
+    end if
+    //Load aptclient if not already loaded
+    if not Obj.initAptclient then
+      Obj.initAptclient=Io.getLib(Obj,"aptclient.so","aptclientLib")
+      if Obj.initAptclient then
+        //Register aptclient globally
+        Library.aptclient=Obj.initAptclient
+        Info.info("AptClient loaded","+")
+      end if
+    end if
+    //Load blockchain library if available
+    Obj.initBlockchain=Io.getLib(Obj,"blockchain.so","blockchainLib")
+    if Obj.initBlockchain then
+      //Register blockchain globally
+      Library.blockchain=Obj.initBlockchain
+      Info.info("Blockchain loaded","+")
+    end if
+    //Initialization complete
+    Info.info("X initialization complete hack on o7")
+	end function
+  //Restore existing main session from ex object
+  if typeof(ex)!="shell" then
+    //Properties that need special handling (skip in loop)
+    skipProps=["net","commands","gui"]
+    //Copy all properties from ex to self (except special ones)
+    for prop in indexes(ex);if skipProps.indexOf(prop)==null then self[prop]=ex[prop];end for
+    //Special handling: Reinitialize network with packed router
+    self.net=Net.initNetwork(self,Builder.packRouter(ex))
+    //Re-register libraries globally
+    if self.initAptclient then
+      globals.G_initAptClient=self.initAptclient
+      Library.aptclient=self.initAptclient
+    end if
+    if self.initMetaxploit then
+      globals.G_initMetaxploit=self.initMetaxploit
+      Library.metaxploit=self.initMetaxploit
+    end if
+    if self.initCrypto then
+      globals.G_initCrypto=self.initCrypto
+      Library.crypto=self.initCrypto
+    end if
+    if self.initBlockchain then
+      globals.G_initBlockchain=self.initBlockchain
+      Library.blockchain=self.initBlockchain
+    end if
+  else
+    //Create new main session from shell object
+    //Main session always has ID 0
+    self.id=0
+    self.object=ex
+    self.type="shell"
+    self.rootShell=null
+    //Get host computer from shell
+    self.computer=host_computer(ex)
+    self.shell=ex
+    //Store network metadata (public and local IPs)
+    self.meta={
+      "public_ip":public_ip_pc(self.computer),
+      "local_ip":self.computer.local_ip
+    }
+    //Get root directory File object
+    self.root=File(host_computer(ex),"/")
+    if is_network_active(self.computer) then self.net=Net.initNetwork(self,get_router) else self.net=Net.initNetwork(self)
+    //Detect machine type
+    self.machineType=System.getMachine(self,self.meta.local_ip)
+    //Detect current user with extended info
+    self.user=Utility.getUserX
+    self.pwa=Gui.pwAccess(self)
+    //Set current directory from fileMeta or default to home
+    if hasIndex(fileMeta,"current") then current=fileMeta.current else current=self.user.home
+    //Set last directory from fileMeta or default to null
+    if hasIndex(fileMeta,"last") then last=fileMeta.last else last=null
+    //Set up directory structure from fileMeta
+    self.dir={
+      "current":current,
+      "last":last,
+      "payload":fileMeta.payload,
+      "data":fileMeta.data,
+      "rainbow":fileMeta.rainbow,
+      "exploits":fileMeta.exploits,
+      "password":fileMeta.password,
+      "list":fileMeta.list,
+      "share":fileMeta.share,
+      "man":fileMeta.man,
+      "savedLibs":fileMeta.savedLibs,
+      "bash":fileMeta.bash,
+      "src":fileMeta.src,
+      "srcBin":fileMeta.srcBin,
+      "srcTools":fileMeta.srcTools,
+      "srcWeb":fileMeta.srcWeb
+    }
+    //Initialize service configuration map
+    self.services={
+      "ssh":{
+        "bin":null,
+        "lib":{"libssh.so":"libssh.so"}
+      },
+      "http":{
+        "bin":null,
+        "lib":{"libhttp.so":"libhttp.so"}
+      },
+      "ftp":{
+        "bin":null,
+        "lib":{"libftp.so":"libftp.so"}
+      },
+      "chat":{
+        "bin":null,
+        "lib":{"libchat.so":"libchat.so"}
+      },
+      "repo":{
+        "bin":null,
+        "lib":{"librepository.so":"librepository.so"}
+      },
+      "rshell":{
+        "bin":null,
+        "lib":{"librshell.so":"librshell.so"}
+      }
+    }
+    //Initialize empty command history
+    self.history=[]
+    //Set hardware unit label (blue MAIN indicator)
+    self.hw_unit=blue("MAIN")
+    //Set layer type as main
+    self.layer="main"
+    //Set session nickname
+    self.nick="Main Session"
+    //Initialize temporary storage map
+    self.temp={}
+    //Initialize log tracking array
+    self.logTracker=[]
+    //Initialize library references as null
+    self.initAptclient=null
+    self.initMetaxploit=null
+    self.initCrypto=null
+    self.initBlockchain=null
+    //Get computer hostname
+    self.compName=get_name(self.computer)
+    //Set pivot flag to false (starting fresh)
+    globals.G_hasPivoted=false
+    //Load services for main session
+    System.loadServices(self)
+    //Run initialization function
+    init(self)
+  end if
+  //Set anonymization
+  Io.anon(self,1)
+  //Set this reference to self
+  this=@self
+  //Function: gui - Update GUI display cache
+  gui=function;Gui.updateCP(this);end function
+	//Expose gui for bash macros that reference self.gui
+	self.gui=@gui
+	//Function: continueBash - Continue bash macro execution
+	continueBash=function
+		//Debug output for function call
+		if globals.G_bash.DEBUG then print orange("Function Call->_continueBash from (MAIN)")
+		//Update GUI display
+		gui
+		//Continue bash macro execution
+		Bash.continueMacro(this)
+  end function
+	//Function: runInit - Execute /data/init script on startup
+	runInit=function
+    //Check for internet connection
+    if Net.hasInternet(globals.G_main) isa Warning then return
+		//Get init file
+		f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/init")
+		//Exit if no init file
+		if not f then return
+		//Exit if init file is empty
+		if not len(get_content(f)) then return
+		//Update GUI
+		gui
+		//Process each line in init file
+		for l in split(get_content(f),char(10))
+			//Skip shadow commands if proxy file exists
+			if indexOf(l,"shadow")!=null and File(globals.G_main.computer,path(globals.G_main.dir.data)+"/proxy") then continue
+			//Skip empty lines
+			if len(l)==0 then continue
+			//Split line into command array
+			l=split(l," ")
+			//Check if run command (@ prefix)
+			if l[0][0]=="@" then
+				//Execute via __run
+				__run(l)
+			else
+				//Execute command directly if found
+				k=lower(l[0])
+				if hasIndex(this.commands,k) then this.commands[k](l[1:])
+			end if
+		end for
+	end function
+	//Function: runInite - Execute /data/inite script
+	runInite=function
+		//Get inite file
+		f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/inite")
+		//Exit if no inite file
+		if not f then return
+		//Exit if inite file is empty
+		if not len(get_content(f)) then return
+		//Update GUI
+		gui
+		//Process each line in inite file
+		for l in split(get_content(f),char(10))
+			//Skip shadow commands if proxy file exists
+			if indexOf(l,"shadow")!=null and File(globals.G_main.computer,path(globals.G_main.dir.data)+"/proxy") then continue
+			//Skip empty lines
+			if len(l)==0 then continue
+			//Split line into command array
+			l=split(l," ")
+			//Check if run command (@ prefix)
+			if l[0][0]=="@" then
+				//Execute via __run
+				__run(l)
+			else
+				//Execute command directly if found
+				k=lower(l[0])
+				if hasIndex(this.commands,k) then this.commands[k](l[1:])
+			end if
+		end for
+	end function
+	//Function: __stats - Display system and framework statistics
+	__stats=function(argv)
+    //Get outer this reference
+    this=outer.this
+    //Default to -s flag if no arguments
+    if not argv then argv=["-s"]
+    //Subfunction: stats - Display full statistics
+    stats=function(arg)
+      if not globals.G_rainbow then Crack.load(false)
+      print white("Info ")+orange("==>")
+      print orange(ljust("[X]",26,0,"-")+"["+white("version:"+Kernel.version)+"]")
+      if globals.G_attributes.anon then w=white("True") else w=white("False")
+      print orange("[Using anonymization]-----["+w+"]")
+      print orange("[Up time (HH:MM:SS)]------["+white(Io.getTime)+"]")
+      print white("Curent System ")+purple("==>")
+      print purple("[Host name]---------------["+white(get_name(this.computer))+"]")
+      print purple("[Active network card]-----["+white(this.net.active_net_card)+"]")
+      print purple("[Active user]-------------["+white(upper(this.user.name))+"]")
+      print purple("[Privelege set]-----------["+this.user.user+"]")
+      c=Io.count(File(this.computer,"/"),1)
+      print purple("[Total files]-------------["+white(str(c.f))+"]")
+      print purple("[Total directories]-------["+white(str(c.d))+"]")
+      print purple("[Total system file count]-["+c.t+"]")
+      if Library.metaxploit then
+        print white("/lib Folder ")+red("==>")
+        for f in get_files(File(this.computer,"/lib"));q=load(Library.metaxploit,path(f));if typeof(q)=="MetaLib" then print red(ljust("--> ["+name(f)+"]",21-len(name(f)),0,"-")+"["+white("version:"+q.version)+"]");end for
+      end if
+      print white("X Data ")+blue("==>")
+      BaseObject.printGlobalStats
+      print white("Local Data ")+green("==>")
+      if Library.metaxploit then
+        if Library.aptclient then print green("[AptClient]---------------["+white("version:"+Library.aptclientVersion(this))+"]")
+        if Library.blockchain then print green("[Blockchain]--------------["+white("version:"+Library.blockchainVersion(this))+"]")
+        if Library.crypto then print green("[crypto]------------------["+white("version:"+Library.cryptoVersion(this))+"]") else print green("[crypto]------------------["+red("CRYPTO NOT INSTALLED")+"]")
+        print green("[metaxploit]--------------["+white("version:"+Library.metaxploitVersion(this))+"]")
+      else
+        if not Library.crypto then print green("[crypto]------------------["+red("METAXPLOIT AND CRYPTO NOT INSTALLED")+"]") else print green("[crypto]------------------["+red("METAXPLOIT NOT INSTALLED")+"]")
+        print green("[metaxploit]--------------["+red("NOT INSTALLED")+"]")
+      end if
+      if globals.G_metaxploit then print green("[Metaxploit linked]-------["+white("True")+"]") else print green("[Metaxploit Linked]-------["+white("False")+"]")
+      if globals.G_crypto then print green("[Crypto linked]-----------["+white("True")+"]") else print green("[Crypto Linked]-----------["+white("False")+"]")
+      print white("Database ")+yellow("==>")
+      if globals.G_libServer then print yellow("[LMS library count]-------["+white(str(len(globals.G_libraryCache)))+"]")
+      if globals.G_server then print yellow("[Database location]-------["+white("Remote")+"]") else print yellow("[Database Location]-------["+white("Local")+"]")
+      if globals.G_server then print yellow("[Server encryption]-------["+white(globals.G_server.encryption)+"]")
+      z=Exploit.stats
+      print yellow("[Exploits in database]----["+white(z[0])+"]")
+      print yellow("[Payloads in database]----["+white(z[1])+"]")
+      print yellow("[B-Tree count (files)]----["+white(len(globals.G_exploitBtree))+"]")
+      print yellow("[M-Tree count (memory)]---["+white(len(globals.G_mtree))+"]")
+      print yellow("[S-Tree count (unsec)]----["+white(len(globals.G_stree))+"]")
+      print yellow("[R-Tree count (rqmts)]----["+white(len(globals.G_rtree))+"]")
+    end function
+    libs=function(arg)
+      if Library.metaxploit then
+        for f in get_files(File(this.computer,"/lib"))
+          if name(f)=="metaxploit.so" or name(f)=="crypto.so" then continue
+          q=load(Library.metaxploit,path(f))
+          if typeof(q)=="MetaLib" then print green(ljust("["+name(f)+"]",25-len(name(f)),0,"-")+"["+white("version:"+q.version)+"]")
+        end for
+        c=load(Library.metaxploit,path(Io.getFile(this,"crypto.so")))
+        if c then print yellow("[crypto]------------------["+white("version:"+c.version)+"]")
+        v=load(Library.metaxploit,path(Io.getFile(this,"metaxploit.so")))
+        if v then print yellow("[metaxploit]--------------["+white("version:"+v.version)+"]")
+      else
+        print yellow("[crypto]------------------["+red("METAXPLOIT NOT INSTALLED")+"]")
+        print yellow("[metaxploit]--------------["+red("NOT INSTALLED")+"]")
+      end if
+      end function
+    data=function(arg)
+      s=System.getSystem
+      for d in get_folders(s.dir.exploits)
+        l=[]
+        for f in get_files(d);l+=split(get_content(f),char(10));end for
+        print white(orange(name(d))+":")
+        print white(white("Records Total")+green(":"))+yellow(str(len(l)))
+      end for
+    end function
+    datalong=function(arg)
+      _p=ArgumentParser.init
+      _p.addArgument("s",false,"flag")
+      arg=_p.parseArgs("stats",arg)
+      s=System.getSystem
+      for d in get_folders(s.dir.exploits)
+        l=[]
+        for f in get_files(d);l+=split(get_content(f),char(10));end for
+        if arg.s then sort(l)
+        print white(orange(name(d))+":")
+        print white(white("Records Total")+green(":"))+yellow(str(len(l)))
+        if name(d)=="stree" or name(d)=="mtree" or name(d)=="rtree" then continue
+        for i in l
+          i=split(split(i,"Б")[0],"_")
+          if len(i)==2 then
+            if arg.s then print blue(i[0]+yellow(":")+green(i[1])) else print blue(i[0]+yellow(":")+green(i[1])+" index["+yellow(__i_idx)+"]")
+          else if len(i)==3 then
+            if arg.s then print blue(i[0]+"_"+i[1]+yellow(":")+green(i[2])) else print blue(i[0]+"_"+i[1]+yellow(":")+green(i[2])+" index["+yellow(__i_idx)+"]")
+          end if
+        end for
+      end for
+    end function
+		cmds={
+      "-d":@data,
+      "-l":@libs,
+      "-dl":@datalong,
+      "-s":@stats
+		}
+		if not hasIndex(cmds,argv[0]) then return Error.set(Text.msg.flag+argv[0]+" ]")
+		cmds[argv[0]](argv[1:])
+	end function
+	//Function: __reload - Hot-reload libraries and data
+	__reload=function(argv)
+    if not argv then return Man.help(["reload"])
+		//Get first argument (flag)
+		Arg1=lower(argv[0])
+		//Get outer this reference
+		this=outer.this
+		//Start timer
+		st=time
+		//Subfunction: info - Display elapsed time
+		info=function;print yellow("Proccess took: "+round(time-outer.st,2)+ " seconds");end function
+		//Subfunction: reloadMetaexploit - Reload metaxploit library
+		reloadMetaexploit=function(arg)
+			//Check if silent mode
+			if arg then s=true else s=false
+			//Exit if no data directory
+			if not this.dir.data then return
+			//Get metaxploit file
+			m=File(this.computer,path(this.dir.data)+"/metaxploit.so")
+			//Search for metaxploit if not found
+			if not m then
+				m=Io.getFile(this,"metaxploit.so")
+				//Copy to data directory
+				if m then copy(m,path(this.dir.data)+"/","metaxploit.so")
+			end if
+			//Exit if still not found
+			if not m then return
+			//Store old reference
+			globals.G_metaxploit=Library.metaxploit
+			//Include and register new library
+			Library.metaxploit=include_lib(path(m))
+			//Display elapsed time if not silent
+			if not s then info
+		end function
+		//Subfunction: reloadCrypto - Reload crypto library
+		reloadCrypto=function(arg)
+			//Check if silent mode
+			if arg then s=true else s=false
+			//Exit if no data directory
+			if not this.dir.data then return
+			//Get crypto file
+			c=File(this.computer,path(this.dir.data)+"/crypto.so")
+			//Search for crypto if not found
+			if not c then
+				c=Io.getFile(this,"crypto.so")
+				//Copy to data directory
+				if c then copy(c,path(this.dir.data)+"/","crypto.so")
+			end if
+			//Exit if still not found
+			if not c then return
+			//Include and register new library
+			Library.crypto=include_lib(path(c))
+			globals.G_crypto=Library.crypto
+			//Display elapsed time if not silent
+			if not s then info
+		end function
+		//Subfunction: rebuildRainbowIndex - Rebuild rainbow table index
+		rebuildRainbowIndex=function(arg)
+			//Check if silent mode
+			if arg then s=true else s=false
+			//Clear rainbow index and force rebuild from tables
+			globals.G_rainbowIndex=null
+			Crack.buildRainbowIndex(1)
+			//Display elapsed time if not silent
+			if not s then info
+		end function
+		//Subfunction: reloadExploits - Reload exploit cache
+		reloadExploits=function(arg)
+			//Check if silent mode
+			if arg then s=true else s=false
+			//Clear exploit cache
+			globals.G_exploitCache={}
+			//Load exploit cache
+			Exploit.loadCache
+			//Display elapsed time if not silent
+			if not s then info
+		end function
+		//Subfunction: reloadAll - Reload all libraries and data
+		reloadAll=function(arg)
+			//Reload metaxploit (silent)
+			reloadMetaexploit([1])
+			//Reload crypto (silent)
+			reloadCrypto([1])
+			//Rebuild rainbow index (silent)
+			rebuildRainbowIndex([1])
+			//Reload exploits (silent)
+			reloadExploits([1])
+			//Display elapsed time
+			info
+		end function
+		//Commands map for reload options
+		cmds={
+      "-a":@reloadAll,
+      "-m":@reloadMetaexploit,
+      "-c":@reloadCrypto,
+      "-P":@rebuildRainbowIndex,
+      "-d":@reloadExploits
+		}
+		//Check if flag is valid
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		//Execute reload command
+		cmds[Arg1](argv[1:])
+	end function
+  //Function: __pull - [Disabled] Upload payload to session
+  __pull=function(argv)
+    //This command is disabled for main session
+    return Error.set("Main should not have this command")
+		//Get payload directory
+		f=File(globals.G_main.computer,path(globals.G_main.dir.payload))
+		//SCP payload to target
+		x=scp(globals.G_main.shell,path(f),path(this.user.home),this.shell)
+		if x==1 then Info.info("Payload uploaded successfully") else return Error.set(x)
+  end function
+  //Function: __spawn - Spawn new terminal session
+  __spawn=function(argv)
+    _p=ArgumentParser.init
+    //Add argument: -p (prompt for password)
+    _p.addArgument("p",false,"flag")
+    //Add argument: -u <user> (specify user)
+    _p.addArgument("u",false,"store")
+    //Add argument: -pass <pw> (provide password)
+    _p.addArgument("pass",true,"store")
+    argv=_p.parseArgs("spawn",argv)
+    //Check for parsing errors
+    if argv isa Error then return argv
+    //Get program file
+    f=File(this.computer,globals.G_attributes.program_path)
+    //Check if spawn point valid
+    if not f then return Warning.set("This is not a spawn point")
+    //Default to root user
+    if not argv.u then argv.u="root"
+    //Handle password authentication
+    if argv.p or argv.pass then
+      //Use provided password or prompt
+      if argv.pass then
+        p=argv.pass
+      else
+        //Prompt for password
+        if argv.u=="root" then p=Gui.inputPassNS("Enter "+argv.u+" password") else p=Gui.inputPassNS("Enter "+argv.u+"'s password")
+        //Require password
+        if not p then return Error.set("Password required")
+      end if
+      //Find Terminal.exe in /usr/bin
+      t=File(this.computer,"/usr/bin/Terminal.exe")
+      //Launch with shell and terminal
+      if t then return launch(get_shell(argv.u,p),path(t),path(f))
+      //Search for Terminal.exe
+      t=Io.getExe(this.root,"Terminal.exe")
+      //Check if Terminal found
+      if t isa Error then return Error.set("Terminal not found")
+      //Launch terminal with shell
+      launch(get_shell(argv.u,p),path(t),path(f))
+    else
+      //Open without password (uses Command.open)
+      Command.open(this,["-t",path(f)])
+    end if
+  end function
+  //Function: __run - Execute bash scripts with various options
+  __run=function(argv)
+    //Check for internet connection
+    if Net.hasInternet(this) isa Warning then return
+    if not argv then return Man.help(["run"])
+		//Disable debug if active
+		if globals.G_bash.DEBUG then globals.G_bash.DEBUG=false
+    //Clear bash state if SIGSTOP set
+    if globals.G_bash.SIGSTOP then Bash.clear
+		_p=ArgumentParser.init
+    //Add argument: -n <name> (create new script)
+    _p.addArgument("n",false,"store")
+		//Add argument: -e <name> (edit script)
+		_p.addArgument("e",false,"store")
+    //Add argument: -o (list scripts)
+    _p.addArgument("o",false,"flag")
+		//Add argument: --list (list scripts)
+		_p.addArgument("list",true,"flag")
+    //Add argument: --DEBUG (enable debug mode)
+    _p.addArgument("DEBUG",true,"flag")
+    //Add argument: --SIGBREAK (set SIGBREAK flag)
+    _p.addArgument("SIGBREAK",true,"flag")
+    //Add argument: --SIGCONT (set SIGCONT flag)
+    _p.addArgument("SIGCONT",true,"flag")
+    //Add argument: --STARTOVER (set STARTOVER flag)
+    _p.addArgument("STARTOVER",true,"flag")
+    //Add argument: --ONERROR <mode> (error handling)
+    _p.addArgument("ONERROR",true,"store")
+    //Add argument: --FILE <path> (execute from file)
+    _p.addArgument("FILE",true,"store")
+    //Add argument: --ALLOWABS (allow absolute paths)
+    _p.addArgument("ALLOWABS",true,"flag")
+    _p.addArgument("reset",true,"flag")
+		argv=_p.parseArgs("run",argv)
+		//Check for parsing errors
+		if argv isa Error then return
+    //Handle -n: create new script in editor
+    if argv.n then return Command.vi(this,["-n",path(globals.G_main.dir.bash)+"/"+argv.n])
+    //Handle -e: edit existing script
+    if argv.e then return Command.vi(this,["-o",path(globals.G_main.dir.bash)+"/"+argv.e])
+    //Handle -o: list all scripts
+    if argv.o then return Command.vi(globals.G_main,["-l",path(globals.G_main.dir.bash)])
+    //Handle -FILE: execute commands from file
+    if argv.FILE then
+      //Get File object for specified path
+      f=Io._getFile(this,argv.FILE)
+      //Check if file exists
+      if f isa Error then return
+      //Process each line in file
+      for l in split(get_content(f),char(10))
+        //Clone argv for each line
+        a=clone(argv)
+        //Skip empty lines
+        if not l then continue
+        //Parse line by space delimiter
+        if indexOf(l," ")!=null then
+          a.rest+=split(l," ")
+        //Parse line by comma delimiter
+        else if indexOf(l,",")!=null then
+          a.rest+=split(l,",")
+        //Parse line by colon delimiter
+        else if indexOf(l,":")!=null then
+          a.rest+=split(l,":")
+        //Single argument line
+        else
+          push(a.rest,l)
+        end if
+        //Set ACTIVE flag for batch execution
+        globals.G_bash.ACTIVE=1
+        //Execute bash command
+        Bash.run(this,a)
+      end for
+      //Clear ACTIVE flag
+      globals.G_bash.ACTIVE=null
+      return
+    end if
+		//Handle -list: display script list
+		if argv.list then return Bash.listScripts
+    //Set ACTIVE flag for script execution
+    globals.G_bash.ACTIVE=1
+    //Execute bash script with arguments
+    Bash.run(this,argv)
+    //Clear ACTIVE flag
+    globals.G_bash.ACTIVE=null
+  end function
+	//Function: __exit - Exit X shell with confirmation
+	__exit=function(argv)
+    //Parse confirmation flags
+    _p=ArgumentParser.init
+    _p.addArgument("y",false,"flag")
+    _p.addArgument("n",false,"flag")
+    argv=_p.parseArgs("exit",argv)
+    if argv isa Error then return argv
+    //Check for active sessions
+    if len(globals.G_sessions.values)>1 then
+      //Skip prompt if -y or -n flag provided
+      if not argv.y and not argv.n then
+        if not Gui.yesNo("You have active sessions. Exit anyway?") then return
+      end if
+    end if
+    //Clear CO boot cache
+    Boot.clearCO
+    //Exit program
+    exit
+	end function
+  //Register all available commands with callbacks
+  self.commands={
+    "spawn":@__spawn,
+    "pull":@__pull,
+    "run":@__run,
+    "reload":@__reload,
+    "stats":@__stats,
+    "x":@__exit,
+    "exit":@__exit
+  }+Command.mainCallbacks(self)+Command.fileCallbacks(self)+Command.computerCallbacks(self)+Command.shellCallbacks(self)
+	Ipc.addObject(self)
+  //Run init
+	runInit
+  //Clear CO boot cache
+  Boot.clearCO
+  //Continue bash if RUN flag is set
+  if globals.G_bash.RUN then continueBash
+	//Initialize message buffer
+	z=null
+  //Add to session manager
+  Session.check(self)
+	//Main command loop (infinite)
+	while true
+    //Clear back navigation flag
+    globals.G_attributes.back=false
+    //Check CO for clearAllSessions flag set by launched proxy/pivot
+    co=get_custom_object
+    if hasIndex(co,"clearAllSessions") and co.clearAllSessions then
+      globals.G_clearAllSessions=true
+      co.clearAllSessions=false
+    end if
+    //Check if session clear was requested
+    if globals.G_clearAllSessions then
+      globals.G_clearAllSessions=false
+      //Only clear if we have more than just main session
+      if len(globals.G_sessions)>1 then
+        globals.killallSessions
+        Session._nickMap={}
+        Info.info("All sessions cleared")
+        //Clear any pending exit flag set by cleared sessions
+        globals.G_pendingExit=false
+        //Clear back flag set by killed sessions (e.g. proxy __exit)
+        globals.G_attributes.back=false
+      else
+        Info.info("Only main session exists, nothing to clear")
+      end if
+    end if
+    //Check if any session requested program exit
+    if globals.G_pendingExit then exit
+		//Check if bash execution is active
+		if globals.G_bash.RUN then
+			//Continue bash until RUN flag cleared
+			while globals.G_bash.RUN;continueBash;end while
+		end if
+    //Refresh dynamic LAN IPs if enabled
+    if globals.G_settings.dynamicLanIPS then self.commands["rnet"]
+		//Display buffered message if present
+		if z then print z
+		z=null
+		//Update GUI display cache
+		gui
+    //Get current directory path
+    P=path(self.dir.current)
+    //Format path for display
+    if P then
+      //Use short path format if enabled (~ for home)
+      if globals.G_settings.shortPath then P=P.replace(path(self.user.home),"~")
+    else
+      //Show hidden directory message
+      P="hidden {type cd /}"
+    end if
+    //Adjust path size for display
+    P=adjustSize(P)
+    //Build prompt string
+    promptStr=Gui.cmdPrompt(P)
+		//Get user input and split into command array (quote-aware)
+		_rawInput=trim(user_input(promptStr,0,0,1))
+		c=Pipe._parseArgs(_rawInput)
+		if c then c=c.removeSpace
+		//Skip empty input
+		if not c then continue
+    //Check for chain operators first (&&, ;) before pipes
+    //This ensures "a | b && c | d" is parsed as "(a | b) && (c | d)"
+    cmdStr=join(c," ")
+    if BaseObject.hasChainOutsideQuotes(_rawInput) then
+      //Build full command string for history
+      k=_rawInput
+      if self.history.hasAny(k) then remove(self.history,indexOf(self.history,k))
+      push(self.history,k)
+      //Execute command chain
+      Bash.chain(self,c)
+      continue
+    end if
+    //Check for pipe character in command - if found, use Pipe.run
+    //Quote-aware: check raw input so quoted | is not treated as pipe
+    if BaseObject.hasPipeOutsideQuotes(_rawInput) then
+      //Build full command string for history
+      k=_rawInput
+      if self.history.hasAny(k) then remove(self.history,indexOf(self.history,k))
+      push(self.history,k)
+      //Execute pipe chain
+      z=Pipe.run(self,c)
+      //Display result if not empty
+      if z isa Error then
+        //Don't print error object - error already displayed by Error.set or is IPC error
+        z=null
+      else if z isa list then
+        if len(z)>0 then
+          for line in z;print line;end for
+        end if
+      else if z isa string then
+        if len(z)>0 then print z
+      else if z then
+        print z
+      end if
+      z=null
+      continue
+    end if
+    //Cache lower command token for reuse
+    cmdKey=lower(c[0])
+    //Cache raw token and first char to reduce repeated indexing
+    firstToken=c[0]
+    firstChar=firstToken[0]
+    //Check if history operator used without history
+    if (cmdKey=="!" or cmdKey=="!!" or cmdKey=="!!!") and not self.history then
+      Info.error("No command history")
+      continue
+    end if
+    //Handle ! operator: execute last command
+    if cmdKey=="!" then
+			//Get last command from history
+			c=pop(self.history)
+			//Split into command array
+			c=split(trim(c)," ")
+      //Re-cache command tokens after history recall
+      firstToken=c[0]
+      firstChar=firstToken[0]
+      cmdKey=lower(firstToken)
+      //Re-check for pipe/chain in recalled command
+      cmdStr=join(c," ")
+      if indexOf(cmdStr,";")!=null or indexOf(cmdStr,"&&")!=null then
+        Bash.chain(self,c)
+        continue
+      end if
+      if BaseObject.hasPipeOutsideQuotes(cmdStr) then
+        z=Pipe.run(self,c)
+        if z isa Error then
+          z=null
+        else if z isa list then
+          if len(z)>0 then
+            for line in z;print line;end for
+          end if
+        else if z isa string then
+          if len(z)>0 then print z
+        else if z then
+          print z
+        end if
+        z=null
+        continue
+      end if
+    //Handle !! operator: interactive history selection
+    else if cmdKey=="!!" then
+      c=null
+      //Use choice menu if history has 10+ entries
+      if len(this.history)>9 then
+        while true
+          //Build history menu
+          CH=[green("Command History:")]
+          for h in this.history;if __h_idx!=len(this.history)-1 then push(CH,white(h)) else push(CH,green(h)+white(" !"));end for
+          push(CH,iyellow("Forget it"))
+          //Display choice menu
+          UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+          //Cancel if "Forget it" selected
+          if UCH==len(CH)-1 then break
+          //Get selected command
+          c=self.history[UCH-1]
+          //Remove from history
+          remove(self.history,UCH-1)
+          //Split into command array
+          c=split(trim(c)," ")
+          break
+        end while
+      else
+        //Use anykey menu for smaller history
+        while true
+          //Build history menu
+          CH=[green("Command History:")]
+          for h in this.history;if __h_idx!=len(this.history)-1 then push(CH,white(h)) else push(CH,green(h)+white(" !"));end for
+          push(CH,iyellow("Forget it"))
+          //Display anykey menu
+          UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true)
+          //Cancel if "Forget it" selected
+          if UCH==len(CH)-1 then break
+          //Get selected command
+          c=self.history[UCH-1]
+          //Remove from history
+          remove(self.history,UCH-1)
+          //Split into command array
+          c=split(trim(c)," ")
+          break
+        end while
+      end if
+      //Skip if no command selected
+      if not c then continue
+      //Re-cache command tokens after history selection
+      firstToken=c[0]
+      firstChar=firstToken[0]
+      cmdKey=lower(firstToken)
+      //Re-check for pipe/chain in recalled command
+      cmdStr=join(c," ")
+      if indexOf(cmdStr,";")!=null or indexOf(cmdStr,"&&")!=null then
+        Bash.chain(self,c)
+        continue
+      end if
+      if BaseObject.hasPipeOutsideQuotes(cmdStr) then
+        z=Pipe.run(self,c)
+        if z isa Error then
+          z=null
+        else if z isa list then
+          if len(z)>0 then
+            for line in z;print line;end for
+          end if
+        else if z isa string then
+          if len(z)>0 then print z
+        else if z then
+          print z
+        end if
+        z=null
+        continue
+      end if
+    //Handle !!! operator: display last command
+    else if cmdKey=="!!!" then
+      //Print last command in yellow
+      print yellow(self.history[-1])
+      continue
+    //Handle * operator: wildcard command search
+    else if indexOf(firstToken,"*")!=null then
+      //Remove * from search term
+      t=firstToken.replace("\*","")
+      a=[]
+      //Search all commands for matches
+      for v in self.commands;if indexOf(v.key,t)!=null then push(a,white(v.key));end for
+      //Display matches or no matches message
+      if not a then Info.info("Found 0 matches for "+t) else z=join(a,char(10))
+      continue
+    //Handle @ operator: execute bash script
+    else if firstChar=="@" then
+      //Call run function
+      __run(c)
+      continue
+    end if
+    //Expand alias if present
+    _aliasApplied=false
+    if hasIndex(globals.G_settings.alias,cmdKey) then
+      origArgs=c[1:]
+      c=globals.G_settings.alias[cmdKey]
+      if origArgs then c=c+origArgs
+      if c then cmdKey=lower(c[0]);_aliasApplied=true
+    end if
+    //Handle pipe/chain in alias-expanded command (only if alias changed the command)
+    if _aliasApplied then
+      cmdStr=join(c," ")
+      if indexOf(cmdStr,";")!=null or indexOf(cmdStr,"&&")!=null then
+        Bash.chain(self,c)
+        continue
+      end if
+      if BaseObject.hasPipeOutsideQuotes(cmdStr) then
+        z=Pipe.run(self,c)
+        if z isa Error then
+          z=null
+        else if z isa list then
+          if len(z)>0 then
+            for line in z;print line;end for
+          end if
+        else if z isa string then
+          if len(z)>0 then print z
+        else if z then
+          print z
+        end if
+        z=null
+        continue
+      end if
+    end if
+    //Handle @ in alias-expanded command
+    if cmdKey[0]=="@" then
+      __run(c)
+      continue
+    end if
+    //Execute command if found
+    if hasIndex(self.commands,cmdKey) then
+      //Get command function
+      f=self.commands[cmdKey]
+      //Join command for history
+      k=join(c," ")
+      //Remove duplicate from history if present
+      if self.history.hasAny(k) then remove(self.history,indexOf(self.history,k))
+      push(self.history,k)
+      //Execute command with arguments
+      f(c[1:])
+    else
+      //Display command not found error
+      Info.error(Text.msg.command+c[0]+" ]")
+    end if
+	//End main loop (infinite)
+	end while
+end function

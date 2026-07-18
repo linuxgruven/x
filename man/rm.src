@@ -1,0 +1,68 @@
+// Man page for rm
+manRm="RM(1)                            X Shell Manual                            RM(1)
+
+<b>NAME</b>
+    rm - used to remove files|folders
+<b>SYNOPSIS</b>
+    <b>rm </b>(<b>-r|-R</b>) (<b>-i</b>) (<b>-v</b>) <b>FILE</b> [FILE...]
+    <b>rm </b>(<b>-r|-R</b>) (<b>-i</b>) (<b>-v</b>) <b>-z </b><b>DIRECTORY</b>
+    <b>rm </b>(<b>-r|-R</b>) (<b>-i</b>) (<b>-v</b>) <b>-l </b><b>FILE FILE...</b>
+<b>DESCRIPTION</b>
+    Permanently delete files and directories with appropriate permissions. No trash recovery.
+    Use -i for interactive confirmation before deletion. Use -v for verbose output.
+    Supports glob patterns: <b>rm *.junk</b>, <b>rm logs/*.log</b>, <b>rm temp_*</b>
+    Supports piped input: <b>find -n *.jpg | rm</b>
+    <color=#e4ff34>WARNING: rm directory* can break system - use with caution</color>
+<b>OPTIONS</b>
+    <b>-r, -R</b>
+    Recursive deletion
+    Remove directories and contents
+
+    <b>-i</b>
+    Interactive mode
+    Prompt before removal
+
+    <b>-v</b>
+    Verbose mode
+    Print each file as it is removed
+
+    <b>-z DIRECTORY</b>
+    Remove directory range
+    Batch directory deletion
+
+    <b>-n PATTERN</b>
+    Named pattern removal
+    Batch remove by name pattern
+
+    <b>-l FILES</b>
+    Remove file list
+    Multiple files at once
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Single File</color>
+    <b>rm test.txt</b>
+    Delete file
+
+    <color=#e4ff34># Interactive</color>
+    <b>rm -i important.dat</b>
+    Confirm before delete
+
+    <color=#e4ff34># Verbose</color>
+    <b>rm -v *.tmp</b>
+    Print each removed file
+
+    <color=#e4ff34># Piped input</color>
+    <b>find -n *.jpg | rm</b>
+    Remove all files found by find
+
+    <color=#e4ff34># Directory</color>
+    <b>rm -r /root/cache</b>
+    Remove directory tree
+
+    <b>rm -z /home/tux/Desktop/someFolder</b>
+    Remove directory range
+
+    <color=#e4ff34># Multiple Files</color>
+    <b>rm -l file1 file2 file3</b>
+    Batch removal
+<b>SEE ALSO</b>
+    <b>qrm</b>, <b>rmdir</b>, <b>mv</b>"

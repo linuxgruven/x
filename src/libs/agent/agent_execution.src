@@ -1,0 +1,489 @@
+// =============================================================================
+// AGENT_EXECUTION
+// Agent execution engine; plan execution, step sequencing, and progress tracking.
+// =============================================================================
+AgentExecution={}
+//Step handler registry - maps step types to handler functions
+AgentExecution._stepHandlers={}
+AgentExecution._SIMPLE_COMMANDS=["networkCmd","buildExec","fileOp","fileContent","permissions","transfer","process","userMgmt","wifiAttack","networkTool","advancedAttack","netConfig","compression","navigation"]
+AgentExecution._FLAG_KEYWORDS={"randomIP":["random","rip"],"localhost":["localhost","local"],"publicIP":["public"],"recursive":["recursive","recurse","all"],"force":["force","forced"],"verbose":["verbose","detailed"],"quiet":["quiet","silent"],"all":["all","everything"]}
+AgentExecution._NO_ARG_COMMANDS=["home","clear","exit","help"]
+//Execute the plan step by step
+AgentExecution._executePlan=function(Obj,plan,context=null)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  if debug then
+    if hasIndex(Obj,"computer") then
+      print green("[DEBUG] _executePlan received Obj with computer.local_ip: "+Obj.computer.local_ip)
+    else if typeof(Obj)=="computer" then
+      print green("[DEBUG] _executePlan received raw computer with local_ip: "+Obj.local_ip)
+    else
+      print green("[DEBUG] _executePlan received Obj type: "+typeof(Obj))
+    end if
+  end if
+  if not context then context={}
+  if outLvl>=1 then print skyblue("Agent: Executing plan...")
+  results={}
+  results.stepsCompleted=0
+  results.stepsFailed=0
+  results.success=false
+  results.details=[]
+  stepsCount=len(plan.steps)
+  i=0
+  currentObj=Obj  //Track the current working object - updates as we obtain new objects
+  while i<stepsCount
+    step=plan.steps[i]
+    //Skip fallback steps if previous primary step succeeded
+    if hasIndex(step,"isFallback") and step.isFallback and i>0 then
+      prevStep=plan.steps[i-1]
+      if hasIndex(prevStep,"hasFallback") and prevStep.hasFallback then
+        //Check if primary step succeeded
+        if len(results.details)>0 then
+          lastResult=results.details[len(results.details)-1]
+          if hasIndex(lastResult,"success") and lastResult.success then
+            if outLvl>=2 then print yellow("[VERBOSE] Agent: Skipping fallback step - primary succeeded")
+            i+=1
+            continue
+          end if
+        end if
+      end if
+    end if
+    if outLvl>=2 then print yellow("[VERBOSE] Agent: Step "+str(i+1)+"/"+str(len(plan.steps))+": "+step.description)
+    stepResult=globals.G_agent._executeStep(currentObj,step,context)
+    //Check if stepResult is valid
+    if not stepResult or typeof(stepResult)!="map" then
+      if outLvl>=1 then print skyblue("Agent: Step returned invalid result, continuing...")
+      continue
+    end if
+    push(results.details,stepResult)
+    if stepResult.success then
+      results.stepsCompleted+=1
+      //Update currentObj if step obtained a new object (prefer wrappedObj over rawObject)
+      if hasIndex(stepResult,"wrappedObj") then
+        //Use the wrapped object which has commands and proper structure
+        currentObj=stepResult.wrappedObj
+        if outLvl>=2 then
+          objType="unknown"
+          if hasIndex(currentObj,"type") then objType=currentObj.type
+          print green("[VERBOSE] Agent: Updated working object to wrapped "+objType)
+        end if
+      else if hasIndex(stepResult,"rawObject") then
+        //Fallback to raw object
+        objType=typeof(stepResult.rawObject)
+        if outLvl>=2 then print yellow("[DEBUG] Step returned rawObject of type: "+objType)
+        if objType=="computer" then
+          if outLvl>=2 then print yellow("[DEBUG] Computer local_ip: "+stepResult.rawObject.local_ip)
+          currentObj={"computer":stepResult.rawObject}
+          if outLvl>=2 then print green("[VERBOSE] Agent: Updated working object to computer")
+        else if objType=="shell" then
+          currentObj={"shell":stepResult.rawObject,"computer":host_computer(stepResult.rawObject)}
+          if outLvl>=2 then print green("[VERBOSE] Agent: Updated working object to shell")
+        else if objType=="file" then
+          currentObj={"file":stepResult.rawObject}
+          if outLvl>=2 then print green("[VERBOSE] Agent: Updated working object to file")
+        end if
+      else
+        //No rawObject/wrappedObj - shell may be stored in context directly (e.g. fetchShell interactive)
+        if debug and not hasIndex(context,"shell") and not hasIndex(context,"rootShell") then print yellow("[DEBUG] Step did not return rawObject or wrappedObj")
+      end if
+      //Check if we need to inject escalation step
+      if hasIndex(results,"needsEscalation") and results.needsEscalation then
+        if outLvl>=2 then print yellow("[VERBOSE] Agent: Injecting escalation step into plan")
+        escalateStep={"type":"escalate","description":"Escalate privileges to meet requirements","autonomous":true}
+        if hasIndex(step,"requirements") then escalateStep.requirements=step.requirements
+        //Insert escalation step after current step
+        insert(plan.steps,i+1,escalateStep)
+        stepsCount+=1
+        results.needsEscalation=false
+      end if
+    else
+      results.stepsFailed+=1
+      errorMsg="Unknown error"
+      if hasIndex(stepResult,"error") then errorMsg=stepResult.error
+      if outLvl>=1 then print skyblue("Agent: Step failed - "+errorMsg)
+      //Decide whether to continue or abort
+      isCritical=false
+      if hasIndex(stepResult,"critical") then isCritical=stepResult.critical
+      if isCritical then
+        //Attempt dynamic replanning
+        if outLvl>=2 then print yellow("[VERBOSE] Agent: Critical failure detected, attempting to replan...")
+        alternativePlan=globals.G_agent._createAlternativePlan(currentObj,step,results)
+        if alternativePlan and len(alternativePlan.steps)>0 then
+          if outLvl>=2 then
+            print yellow("[VERBOSE] Agent: Alternative plan created with "+str(len(alternativePlan.steps))+" steps")
+            for altStep in alternativePlan.steps;print white("  - "+altStep.description);end for
+          end if
+          //Insert alternative steps into plan
+          for altStep in alternativePlan.steps;stepsCount+=1;push(plan.steps,altStep);end for
+          if outLvl>=2 then print yellow("[VERBOSE] Agent: Continuing with alternative approach")
+        else
+          results.message="Critical step failed, no alternative found"
+          return results
+        end if
+      end if
+    end if
+    i+=1
+  end while
+  //Check if overall goal achieved
+  if results.stepsFailed==0 then
+    results.success=true
+  else
+    results.success=results.stepsCompleted>results.stepsFailed
+    if outLvl>=1 then print skyblue("Agent: Partial success - "+results.stepsCompleted+"/"+len(plan.steps)+" steps completed")
+  end if
+  return results
+end function
+//Register step handlers
+AgentExecution._registerHandlers=function
+  //Register execution handlers (from agent_handlers.src)
+  globals.G_agent._stepHandlers.knowledge=@globals.G_agent._handleKnowledge
+  globals.G_agent._stepHandlers.getObject=@globals.G_agent._handleGetObject
+  globals.G_agent._stepHandlers.dataExtraction=@globals.G_agent._handleDataExtraction
+  globals.G_agent._stepHandlers.dataExtractionFallback=@globals.G_agent._handleDataExtraction
+  globals.G_agent._stepHandlers.scan=@globals.G_agent._handleScan
+  globals.G_agent._stepHandlers.findExploits=@globals.G_agent._handleFindExploits
+  globals.G_agent._stepHandlers.exploit=@globals.G_agent._handleExploit
+  globals.G_agent._stepHandlers.escalate=@globals.G_agent._handleEscalate
+  globals.G_agent._stepHandlers.crackPassword=@globals.G_agent._handleCrackPassword
+  globals.G_agent._stepHandlers.crack=@globals.G_agent._handleCrackPassword
+  globals.G_agent._stepHandlers.crackShell=@globals.G_agent._handleCrackShell
+  globals.G_agent._stepHandlers.recon=@globals.G_agent._handleRecon
+  globals.G_agent._stepHandlers.backdoor=@globals.G_agent._handleBackdoor
+  globals.G_agent._stepHandlers.analyze=@globals.G_agent._handleAnalyze
+  globals.G_agent._stepHandlers.checkAccess=@globals.G_agent._handleCheckAccess
+  globals.G_agent._stepHandlers.verify=@globals.G_agent._handleVerify
+  globals.G_agent._stepHandlers.checkPrivs=@globals.G_agent._handleCheckPrivs
+  globals.G_agent._stepHandlers.findEscalation=@globals.G_agent._handleFindEscalation
+  globals.G_agent._stepHandlers.directCommand=@globals.G_agent._handleDirectCommand
+  globals.G_agent._stepHandlers.openFile=@globals.G_agent._handleOpenFile
+  globals.G_agent._stepHandlers.view=@globals.G_agent._handleOpenFile
+  globals.G_agent._stepHandlers.fileOp=@globals.G_agent._handleSimpleCommand
+  globals.G_agent._stepHandlers.fileContent=@globals.G_agent._handleSimpleCommand
+  globals.G_agent._stepHandlers.permissions=@globals.G_agent._handleSimpleCommand
+  globals.G_agent._stepHandlers.openBrowser=@globals.G_agent._handleOpenBrowser
+  globals.G_agent._stepHandlers.fetchShell=@globals.G_agent._handleFetchShell
+  globals.G_agent._stepHandlers.proxy=@globals.G_agent._handleProxySession
+  globals.G_agent._stepHandlers.runBash=@globals.G_agent._handleRunBash
+  globals.G_agent._stepHandlers.launch=@globals.G_agent._handleLaunch
+  globals.G_agent._stepHandlers.checkPrivilege=@globals.G_agent._handleCheckPrivilege
+  globals.G_agent._stepHandlers.suIfNeeded=@globals.G_agent._handleSuIfNeeded
+  globals.G_agent._stepHandlers.runSu=@globals.G_agent._handleRunSu
+  globals.G_agent._stepHandlers.proxySession=@globals.G_agent._handleProxySession
+  globals.G_agent._stepHandlers.pivotSession=@globals.G_agent._handlePivotSession
+  globals.G_agent._stepHandlers.encryption=@globals.G_agent._handleEncryption
+  globals.G_agent._stepHandlers.tux=@globals.G_agent._handleTux
+  globals.G_agent._stepHandlers.attackOP=@globals.G_agent._handleAttackOP
+  globals.G_agent._stepHandlers.email=@globals.G_agent._handleEmail
+  globals.G_agent._stepHandlers.decipher=@globals.G_agent._handleDecipher
+  globals.G_agent._stepHandlers.systemOP=@globals.G_agent._handleSystemOP
+  globals.G_agent._stepHandlers.promptUser=@globals.G_agent._handlePromptUser
+  globals.G_agent._stepHandlers.hunt=@globals.G_agent._handleHunt
+  globals.G_agent._stepHandlers.setConfig=@globals.G_agent._handleSetConfig
+  globals.G_agent._stepHandlers.showConfig=@globals.G_agent._handleShowConfig
+  globals.G_agent._stepHandlers.resetConfig=@globals.G_agent._handleResetConfig
+  globals.G_agent._stepHandlers.showMyIp=@globals.G_agent._handleShowMyIp
+  globals.G_agent._stepHandlers.test=@globals.G_agent._handleTest
+  globals.G_agent._stepHandlers.multiTargetStep=@globals.G_agent._handleMultiTargetStep
+  //Simple command pass-through handlers (shared with planning)
+  simpleCommands=self._SIMPLE_COMMANDS
+  for cmdType in simpleCommands;globals.G_agent._stepHandlers[cmdType]=@globals.G_agent._handleSimpleCommand;end for
+end function
+//Helper: Check if target is directory and prompt for recursive flag
+AgentExecution._checkRecursiveFlag=function(Obj,command,target,argv)
+  debug=globals.G_agent.config.debug
+  targetFile=Obj.computer.File(target)
+  if targetFile and targetFile.is_folder then
+    if argv.indexOf("-r")==null and argv.indexOf("-R")==null then
+      if typeof(Gui)=="map" and hasIndex(Gui,"yesNo") then
+        recursive=Gui.yesNo("Apply "+command+" recursively to all contents of "+target+"?",true)
+        if recursive then
+          if debug then print green("[DEBUG] Executor: User confirmed -r flag for "+command)
+          return true
+        else
+          if debug then print green("[DEBUG] Executor: User declined -r flag for "+command)
+          return false
+        end if
+      else
+        //No GUI available, default to recursive
+        if debug then print green("[DEBUG] Executor: Auto-added -r flag (no GUI)")
+        return true
+      end if
+    end if
+  end if
+  return false
+end function
+//Execute a single step of the plan
+AgentExecution._executeStep=function(Obj,step,context)
+  result={"success":false,"step":step.type}
+  //Initialize handlers if not already done
+  if not hasIndex(self,"_stepHandlers") or len(globals.G_agent._stepHandlers)==0 then globals.G_agent._registerHandlers
+  //Dynamic dispatch via registry
+  if hasIndex(globals.G_agent._stepHandlers,step.type) then
+    handler=globals.G_agent._stepHandlers[step.type]
+    result=handler(Obj,step,context)
+  else if step.type=="error" then
+    //Special case: error steps
+    result={"success":false,"step":"error","critical":true}
+    if hasIndex(step,"description") then result.error=step.description else result.error="Unknown error"
+  else
+    result.error="Unknown step type: "+step.type
+  end if
+  return result
+end function
+//Handler implementations below
+//Handler: Simple command pass-through
+AgentExecution._handleSimpleCommand=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  if debug then print green("[DEBUG] _handleSimpleCommand called for: "+step.command)
+  if debug and hasIndex(step,"pattern") then print green("[DEBUG] Step has pattern: "+step.pattern)
+  if debug and hasIndex(step,"target") then print green("[DEBUG] Step has target: "+step.target)
+  if debug and hasIndex(step,"source") then print green("[DEBUG] Step has source: "+step.source)
+  if debug and hasIndex(step,"destination") then print green("[DEBUG] Step has destination: "+step.destination)
+  if debug and hasIndex(step,"content") then print green("[DEBUG] Step has content: "+step.content)
+  result={"success":false,"step":step.type}
+  if not hasIndex(step,"command") then
+    result.error="No command specified"
+    return result
+  end if
+  argv=[]
+  //Check command registry for proper argument format
+  cmdInfo=AgentCommandRegistry.get(step.command)
+  //Special handling for commands with content field (like write)
+  if hasIndex(step,"content") and hasIndex(step,"target") then
+    push(argv,step.content)
+    push(argv,step.target)
+    if debug then print green("[DEBUG] Built argv with content and target")
+    return globals.G_agent._execCommand(Obj,step.command,argv,context)
+  end if
+  //Special handling for commands with source and destination (like ln, mv, cp)
+  if hasIndex(step,"source") and hasIndex(step,"destination") then
+    push(argv,step.source)
+    push(argv,step.destination)
+    if debug then print green("[DEBUG] Built argv with source='"+step.source+"' and destination='"+step.destination+"'")
+    return globals.G_agent._execCommand(Obj,step.command,argv,context)
+  end if
+  //Special handling for commands with pattern and target (like grep, find)
+  if hasIndex(step,"pattern") and hasIndex(step,"target") then
+    push(argv,step.pattern)
+    push(argv,step.target)
+    if debug then print green("[DEBUG] Built argv with pattern='"+step.pattern+"' and target='"+step.target+"'")
+    return globals.G_agent._execCommand(Obj,step.command,argv,context)
+  end if
+  //Special handling for find with pattern only (searches current directory)
+  if step.command=="find" and hasIndex(step,"pattern") and not hasIndex(step,"target") then
+    push(argv,"-a")  //find requires -a flag for name pattern
+    push(argv,step.pattern)
+    if debug then print green("[DEBUG] Built argv with -a and pattern='"+step.pattern+"' (searching current dir)")
+    return globals.G_agent._execCommand(Obj,step.command,argv,context)
+  end if
+  //Special handling for commands with flags only (like nmap -r)
+  if hasIndex(step,"flags") and not hasIndex(step,"target") then
+    push(argv,step.flags)
+    if debug then print green("[DEBUG] Built argv with flags='"+step.flags+"'")
+    return globals.G_agent._execCommand(Obj,step.command,argv,context)
+  end if
+  //Special handling for chmod (permValue + target)
+  if step.command=="chmod" and hasIndex(step,"permValue") and hasIndex(step,"target") then
+    push(argv,step.permValue)
+    push(argv,step.target)
+    if debug then print green("[DEBUG] Built argv with permValue='"+step.permValue+"' and target='"+step.target+"'")
+    //Check if target is a directory and prompt for -r
+    if globals.G_agent._checkRecursiveFlag(Obj,"chmod",step.target,argv) then argv=[step.permValue,"-r",step.target]  //Reorder: permValue, -r, target
+    return globals.G_agent._execCommand(Obj,step.command,argv,context)
+  end if
+  //Special handling for chown (user + target)
+  if step.command=="chown" and hasIndex(step,"user") and hasIndex(step,"target") then
+    push(argv,step.user)
+    push(argv,step.target)
+    if debug then print green("[DEBUG] Built argv with user='"+step.user+"' and target='"+step.target+"'")
+    //Check if target is a directory and prompt for -r
+    if globals.G_agent._checkRecursiveFlag(Obj,"chown",step.target,argv) then argv=["-r",step.user,step.target]  //Reorder: -r, user, target
+    return globals.G_agent._execCommand(Obj,step.command,argv,context)
+  end if
+  //Special handling for chgrp (group + target)
+  if step.command=="chgrp" and hasIndex(step,"group") and hasIndex(step,"target") then
+    push(argv,step.group)
+    push(argv,step.target)
+    if debug then print green("[DEBUG] Built argv with group='"+step.group+"' and target='"+step.target+"'")
+    //Check if target is a directory and prompt for -r
+    if globals.G_agent._checkRecursiveFlag(Obj,"chgrp",step.target,argv) then argv=["-r",step.group,step.target]  //Reorder: -r, group, target
+    return globals.G_agent._execCommand(Obj,step.command,argv,context)
+  end if
+  //Special handling for chog (user + target)
+  if step.command=="chog" and hasIndex(step,"user") and hasIndex(step,"target") then
+    push(argv,step.user)
+    push(argv,step.target)
+    if debug then print green("[DEBUG] Built argv with user='"+step.user+"' and target='"+step.target+"'")
+    //Check if target is a directory and prompt for -r
+    if globals.G_agent._checkRecursiveFlag(Obj,"chog",step.target,argv) then argv=["-r",step.user,step.target]  //Reorder: -r, user, target
+    return globals.G_agent._execCommand(Obj,step.command,argv,context)
+  end if
+  //Special handling for es (IP + port or library) - show man page since it's interactive
+  if step.command=="es" then
+    if hasIndex(step,"target") and hasIndex(step,"port") then
+      //es IP PORT format
+      push(argv,step.target)
+      push(argv,step.port)
+      if debug then print green("[DEBUG] Built argv with target='"+step.target+"' and port='"+step.port+"'")
+    else if hasIndex(step,"library") then
+      //es LIBRARY format
+      push(argv,step.library)
+      if debug then print green("[DEBUG] Built argv with library='"+step.library+"'")
+    end if
+    //Show man page instead of executing (es is interactive)
+    if hasIndex(Obj.commands,"man") then
+      manResult=Obj.commands.man(["es"])
+      result.success=true
+      result.data=manResult
+      result.message="Showing es manual - this is an interactive command. Run 'es "+join(argv," ")+"' when ready."
+      if outLvl>=1 then print skyblue("Agent: Run 'es "+join(argv," ")+"' to execute")
+      return result
+    end if
+  end if
+  //Special handling for iwlist (wireless network commands)
+  if step.command=="iwlist" then
+    if hasIndex(step,"flag") then
+      push(argv,step.flag)
+      if debug then print green("[DEBUG] Built argv with flag='"+step.flag+"'")
+    end if
+    return globals.G_agent._execCommand(Obj,step.command,argv,context)
+  end if
+  if cmdInfo and hasIndex(cmdInfo,"argvFormat") and cmdInfo.argvFormat then
+    //Check if command has flag mappings (learned from man pages)
+    if hasIndex(cmdInfo,"flagMappings") then
+      //Build argv using flag mappings
+      mappings=cmdInfo.flagMappings
+      //First check if any semantic flags match query keywords
+      if hasIndex(context,"originalCommand") then
+        origCmd=lower(context.originalCommand)
+        //Check for all semantic flag types via data table
+        flagKeywords=self._FLAG_KEYWORDS
+        for flag in indexes(flagKeywords)
+          if not hasIndex(mappings,flag) then continue
+          for kw in flagKeywords[flag]
+            if indexOf(origCmd,kw)!=null then
+              push(argv,"-"+mappings[flag])
+              if debug then print green("[DEBUG] Detected '"+kw+"' in query, using -"+mappings[flag])
+              break
+            end if
+          end for
+        end for
+      end if
+      //Then add any explicit field mappings from step
+      for fieldName in mappings.indexes
+        flagName=mappings[fieldName]
+        if hasIndex(step,fieldName) then
+          if flagName=="rest" then
+            //Positional argument
+            push(argv,step[fieldName])
+          else
+            //Flag argument: add -flag value
+            push(argv,"-"+flagName)
+            push(argv,step[fieldName])
+          end if
+          if debug then print green("[DEBUG] Executor: Mapped "+fieldName+"="+step[fieldName]+" to flag -"+flagName)
+        end if
+      end for
+    else
+      //Fallback to format-based building if no flag mappings
+      format=cmdInfo.argvFormat
+      if debug then print green("[DEBUG] Executor: Using format='"+format+"' for "+step.command)
+      if format=="path" then
+        if hasIndex(step,"target") then push(argv,step.target)
+      else if format=="content,path" then
+        //write format: content first, then file path
+        if hasIndex(step,"content") then push(argv,step.content)
+        if hasIndex(step,"target") then push(argv,step.target)
+      else if format=="path,content" then
+        //format: file path, then content
+        if hasIndex(step,"target") then push(argv,step.target)
+        if hasIndex(step,"content") then push(argv,step.content)
+      else if format=="perms,path" then
+        //chmod format: permission value, then path
+        if hasIndex(step,"permValue") then push(argv,step.permValue)
+        if hasIndex(step,"target") then push(argv,step.target)
+      else if format=="user,path" then
+        //chown format: user, then path
+        if hasIndex(step,"user") then 
+          push(argv,step.user)
+          if debug then print green("[DEBUG] Executor: Added user='"+step.user+"' to argv")
+        end if
+        if hasIndex(step,"target") then 
+          push(argv,step.target)
+          if debug then print green("[DEBUG] Executor: Added target='"+step.target+"' to argv")
+        end if
+        if debug then print green("[DEBUG] Executor: Built user,path argv="+argv+" for chown")
+      else if format=="group,path" then
+        //chgrp format: group, then path
+        if hasIndex(step,"group") then push(argv,step.group)
+        if hasIndex(step,"target") then push(argv,step.target)
+      else if format=="user,group" then
+        //groupadd/groupdel format: user, then group
+        if hasIndex(step,"user") then push(argv,step.user)
+        if hasIndex(step,"group") then push(argv,step.group)
+      else if format=="pattern,path" then
+        //find/grep/awk/sed format: pattern, then path
+        if hasIndex(step,"pattern") then push(argv,step.pattern)
+        if hasIndex(step,"target") then push(argv,step.target)
+        if debug then print green("[DEBUG] Executor: Built pattern,path argv="+argv+" for "+step.command)
+      else if format=="path,path" then
+        //Commands like cp, mv, ln need source and dest
+        if hasIndex(step,"source") then push(argv,step.source)
+        if not hasIndex(step,"source") and hasIndex(step,"target") then push(argv,step.target)
+        if hasIndex(step,"destination") then push(argv,step.destination)
+        if not hasIndex(step,"destination") and hasIndex(step,"dest") then push(argv,step.dest)
+      else if format=="path+flags" then
+        //Commands like ls, rm can have path and flags
+        if hasIndex(step,"target") then push(argv,step.target)
+        if hasIndex(step,"flags") then push(argv,step.flags)
+      else
+        //Default: just add target if present
+        if hasIndex(step,"target") then push(argv,step.target)
+      end if
+    end if
+  else
+    //Fallback to old logic if not in registry
+    noArgCommands=self._NO_ARG_COMMANDS
+    if hasIndex(step,"target") and indexOf(noArgCommands,step.command)==null then push(argv,step.target)
+  end if
+  //Smart flag detection: Check if rm needs -r for directories
+  if step.command=="rm" and hasIndex(step,"target") and step.target then
+    targetPath=step.target
+    //Check if target is a folder
+    targetFile=Obj.computer.File(targetPath)
+    if targetFile and targetFile.is_folder then
+      //Need recursive flag for directories
+      if argv.indexOf("-r")==null and argv.indexOf("-R")==null then
+        argv.push("-r")
+        if debug then print green("[DEBUG] Executor: Auto-added -r flag for directory")
+      end if
+    end if
+  end if
+  //Smart flag detection: Prompt for -r on chown/chgrp/chmod directories
+  if (step.command=="chown" or step.command=="chgrp" or step.command=="chmod") and hasIndex(step,"target") and step.target then
+    targetPath=step.target
+    //Check if target is a folder
+    targetFile=Obj.computer.File(targetPath)
+    if targetFile and targetFile.is_folder then
+      //Prompt user for recursive flag
+      if argv.indexOf("-r")==null and argv.indexOf("-R")==null then
+        //Check if we have Gui available
+        if typeof(Gui)=="map" and hasIndex(Gui,"yesNo") then
+          recursive=Gui.yesNo("Apply "+step.command+" recursively to all contents of "+step.target+"?",true)
+          if recursive then
+            argv.push("-r")
+            if debug then print green("[DEBUG] Executor: User confirmed -r flag for "+step.command)
+          else
+            if debug then print green("[DEBUG] Executor: User declined -r flag for "+step.command)
+          end if
+        else
+          //No GUI available, default to recursive
+          argv.push("-r")
+          if debug then print green("[DEBUG] Executor: Auto-added -r flag (no GUI)")
+        end if
+      end if
+    end if
+  end if
+  return globals.G_agent._execCommand(Obj,step.command,argv,context)
+end function

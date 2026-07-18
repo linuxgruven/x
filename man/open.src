@@ -1,0 +1,189 @@
+// Man page for open
+manOpen="OPEN(1)                          X Shell Manual                          OPEN(1)
+
+<b>NAME</b>
+    open - Open GUI applications and executables
+<b>SYNOPSIS</b>
+    <b>open </b><b>-t</b>|<b>term</b> [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-b</b>|<b>web</b> [<b>--l</b>] [<b>-f</b> [<b>INDEX</b>] [<b>PARAMS</b>)
+    <b>open </b><b>-e</b>|<b>email</b> [<b>--login</b>] [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-s</b>|<b>set</b> [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-f</b>|<b>file</b> [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-c</b>|<b>code</b> [<b>--code</b> [<b>PARAM</b>] [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-n</b>|<b>note</b> [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-l</b>|<b>log</b> [<b>--l</b>] [<b>PARAMS</b>]
+    <b>find</b> PATTERN | <b>open</b> APP [<b>--l</b>]
+    <b>open </b><b>-w</b>|<b>scan</b> [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-g</b>|<b>config</b> [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-m</b>|<b>map</b> [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-d</b>|<b>pdf</b> [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-i</b>|<b>image</b> [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-a</b>|<b>admin</b> [<b>--l</b>]
+    <b>open </b><b>-k</b>|<b>stocks</b> [<b>--l</b>]
+    <b>open </b><b>-x</b>|<b>exploit</b> [<b>--l</b>]
+    <b>open </b><b>-y</b>|<b>employee</b> [<b>--l</b>]
+    <b>open </b><b>-r</b>|<b>traffic</b> [<b>--l</b>]
+    <b>open </b><b>-p</b>|<b>police</b> [<b>--l</b>]
+    <b>open </b><b>-u</b>|<b>student</b> [<b>--l</b>]
+    <b>open </b><b>-h</b>|<b>hire</b> [<b>--l</b>]
+    <b>open </b><b>-j</b>|<b>chat</b> [<b>--l</b>]
+<b>DESCRIPTION</b>
+    The open command provides quick access to GUI and executable applications.
+    When an application is not in the normal location, open will attempt to
+    locate and launch it automatically. Use the --l flag to open applications
+    from the main system. The --l flag is optional for computer and file objects.
+
+    Use --deploy to SCP an application from your local /usr/bin to the target
+    system, launch it, then clean up. Useful on shells where apps are missing.
+
+    Accepts filenames/paths from stdin via pipe. Piped lines are appended as
+    arguments to the chosen application (e.g. file paths for log, code, note,
+    pdf, image, file apps).
+
+<b>OPTIONS</b>
+    <b>-t</b>|<b>term</b> - Terminal Application
+      Open the Terminal application for command-line access.
+
+    <b>-b</b>|<b>web</b> - Browser Application
+      Open the Browser application. Use -f flag to specify favorite index.
+
+    <b>-e</b>|<b>email</b> - Mail Application
+      Open the Mail application with optional auto-login.
+
+    <b>-s</b>|<b>set</b> - Settings Application
+      Open the Settings application for system configuration.
+
+    <b>-f</b>|<b>file</b> - File Explorer
+      Open the File Explorer for browsing directories.
+
+    <b>-c</b>|<b>code</b> - Code Editor
+      Open the Code Editor application with optional code parameter.
+
+    <b>-n</b>|<b>note</b> - Notepad
+      Open the Notepad application for quick text editing.
+
+    <b>-l</b>|<b>log</b> - Log Viewer
+      Open the Log Viewer to inspect system logs.
+
+    <b>-w</b>|<b>scan</b> - Scan LAN
+      Open the Scan LAN application for network discovery.
+
+    <b>-g</b>|<b>config</b> - Config LAN
+      Open the Config LAN application for network configuration.
+
+    <b>-m</b>|<b>map</b> - Map Application
+      Open the Map application for network topology visualization.
+
+    <b>-d</b>|<b>pdf</b> - PDF Reader
+      Open the PDF Reader for viewing documents.
+
+    <b>-i</b>|<b>image</b> - Image Viewer
+      Open the Image Viewer for viewing pictures.
+
+    <b>-a</b>|<b>admin</b> - Admin Monitor
+      Open the Admin Monitor for system administration.
+
+    <b>-k</b>|<b>stocks</b> - Stocks Application
+      Open the Stocks application for market monitoring.
+
+    <b>-x</b>|<b>exploit</b> - Exploit Report
+      Open the Exploit Report viewer for vulnerability data.
+
+    <b>-y</b>|<b>employee</b> - Employee Viewer
+      Open the Employee Viewer for personnel information.
+
+    <b>-r</b>|<b>traffic</b> - Traffic Network
+      Open the Traffic Network monitor for packet analysis.
+
+    <b>-p</b>|<b>police</b> - Police Records
+      Open the Police Record database viewer.
+
+    <b>-u</b>|<b>student</b> - Student Viewer
+      Open the Student Viewer for academic records.
+
+    <b>-h</b>|<b>hire</b> - Hire Viewer
+      Open the Hire Viewer for employment records.
+
+    <b>-j</b>|<b>chat</b> - Chat Client
+      Open the Chat client application for messaging.
+
+    <b>--deploy</b> - Deploy Application
+      SCP the application from local /usr/bin to the target, launch it,
+      then remove the copy. Works with any app flag above.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Application Launch</color>
+    <b>open -t</b>
+    Open terminal
+
+    <b>open -b</b>
+    Open browser
+
+    <b>open -e --login</b>
+    Open email with auto-login
+
+    <color=#e4ff34># Launch from Main</color>
+    <b>open -f --l</b>
+    Open file explorer from main
+
+    <b>open -c --l</b>
+    Open code editor from main
+
+    <color=#e4ff34># Browser with Favorites</color>
+    <b>open -b -f 0</b>
+    Open browser to first favorite
+
+    <b>open -b -f 3</b>
+    Open browser to fourth favorite
+
+    <color=#e4ff34># Code Editor</color>
+    <b>open -c --code /etc/passwd</b>
+    Open code editor with file
+
+    <color=#e4ff34># System Tools</color>
+    <b>open -w</b>
+    Open LAN scanner
+
+    <b>open -m</b>
+    Open network map
+
+    <b>open -l</b>
+    Open log viewer
+
+    <color=#e4ff34># Pipe Support</color>
+    <b>find *.log | open -l</b>
+    Open all matched log files in Log Viewer
+
+    <b>find *.txt | open -n</b>
+    Open matched files in Notepad
+
+    <b>find *.src | open -c</b>
+    Open matched files in Code Editor
+
+    <b>echo ""/var/log/auth.log"" | open -l --l</b>
+    Open a specific log file locally
+
+    <color=#e4ff34># Data Viewers</color>
+    <b>open -x</b>
+    View exploit reports
+
+    <b>open -y</b>
+    View employee records
+
+    <b>open -p</b>
+    View police records
+
+    <color=#e4ff34># Communication</color>
+    <b>open -j</b>
+    Open chat client
+
+    <b>open chat</b>
+    Open chat client
+
+    <color=#e4ff34># Deploy to Remote</color>
+    <b>open -b --deploy</b>
+    Deploy and open browser on target
+
+    <b>open -c --deploy</b>
+    Deploy and open code editor on target
+<b>SEE ALSO</b>
+    <b>exec</b>, <b>cd</b>"

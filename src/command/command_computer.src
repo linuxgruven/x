@@ -1,0 +1,235 @@
+// =============================================================================
+// COMMAND_COMPUTER
+// Computer session callbacks: system administration, process management.
+// =============================================================================
+//ComputerSessionCallbacks
+Command.computerCallbacks=function(Obj)
+	Command=@self
+	__htop=function(argv);Command.htop(Obj,argv);end function
+	__cron=function(argv);Command.cron(Obj,argv);end function
+	__groupadd=function(argv);Command.groupadd(Obj,argv);end function
+	__groupdel=function(argv);Command.groupdel(Obj,argv);end function
+	__groups=function(argv);Command.groups(Obj,argv);end function
+	__ifconfig=function(argv);Command.ifconfig(Obj,argv);end function
+	__iwconfig=function(argv);Command.iwconfig(Obj,argv);end function
+	__kill=function(argv);Command.kill(Obj,argv);end function
+	__passwd=function(argv);Command.passwd(Obj,argv);end function
+	__ps=function(argv);Command.ps(Obj,argv);end function
+	__useradd=function(argv);Command.useradd(Obj,argv);end function
+	__userdel=function(argv);Command.userdel(Obj,argv);end function
+	__airmon=function(argv);Command.airmon(Obj,argv);end function
+	__ports=function(argv);if Net.hasInternet(Obj) isa Warning then return;Net.localPorts(Obj);end function
+	__jump=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+		if Command.jump(Obj,argv) then Obj.meta={
+      "public_ip":public_ip_pc(Obj.computer),
+      "local_ip":Obj.computer.local_ip
+      }
+	end function
+	__rec=function(argv);Recover.start(Obj,argv);end function
+	__lsof=function(argv);Command.lsof(Obj);end function
+  __devices=function(argv)
+    if Obj.net.active_net_card=="ETHERNET" then c="eth0" else c="wlan0"
+    for d in Obj.net.devices
+      if d.value.name==c then
+        print orange("Active Card")
+        print white("Name   :")+green(d.value.name)
+        print white("Chipset:")+green(d.value.chipset)
+        print white("Mon Sup:")+green(d.value.supportMonitorMode)
+      else
+        print white("Name   :")+red(d.value.name)
+        print white("Chipset:")+red(d.value.chipset)
+        print white("Mon Sup:")+red(d.value.supportMonitorMode)
+      end if
+      if (__d_idx+1)!=len(Obj.net.devices) then print yellow("--------------------")
+    end for
+  end function
+	__iwlist=function(argv)
+    if not argv then return Man.help(["iwlist"])
+    if Obj.net.active_net_card=="ETHERNET" then
+      if hasIndex(Obj.net.devices,"wlan0") then return Error.set("wlan0 is not active") else return Error.set("No wifi card installed on this machine")
+    end if
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		viewWifi=function(arg);Net.viewWifi(Obj);end function
+		wifiDict=function(arg);if not arg then return Man.help(["iwlist"]);if Net.wifiDict(Obj,to_int(arg[0])) then Net.checkChange(Obj);end function
+		wifiBrute=function(arg);if not arg then return Man.help(["iwlist"]);if Net.wifiBrute(Obj,to_int(arg[0])) then Obj.net=Net.initNetwork(Obj);end function
+		wifiConnect=function(arg);if Net.wifiConnect(Obj,arg) then Obj.net=Net.initNetwork(Obj);end function
+		wifiCrack=function(arg);if Net.wifiCrack(Obj,arg) then Obj.net=Net.initNetwork(Obj);end function
+		wifiHop=function(arg)
+      if not arg then return Net.wifiHop(Obj)
+      a0=lower(arg[0])
+      if a0=="init" then
+        Net.wifiHopInit(Obj)
+        return
+      end if
+      if a0=="list" then return Net.wifiHopList(Obj)
+      if a0=="burn" then
+        if len(arg)>=2 then return Net.wifiHopBurn(Obj,arg[1])
+        return Net.wifiHopBurn(Obj)
+      end if
+      if a0=="revive" then
+        if len(arg)>=2 then return Net.wifiHopRevive(Obj,arg[1])
+        return Net.wifiHopRevive(Obj)
+      end if
+      //Parse -t flag for wait time
+      _p=ArgumentParser.init
+      _p.addArgument("t",false,"store")
+      arg=_p.parseArgs("iwlist",arg)
+      if arg isa Error then return
+      w=3
+      if arg.t then w=to_int(arg.t)
+      if not w isa number or w<1 then w=3
+      Net.wifiHop(Obj,w)
+		end function
+		cmds={
+			"-b":@wifiBrute,
+			"-l":@viewWifi,
+			"-d":@wifiDict,
+			"-c":@wifiConnect,
+			"hop":@wifiHop
+		}
+		if Utility.checkValid(Obj) then cmds["-k"]=@wifiCrack
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__hostname=function(argv);print yellow(get_name(Obj.computer));end function
+	__reboot=function(argv);if Command.reboot(Obj,argv) isa Error then return;Ipc.killAll;end function
+	__active=function(argv);print green("Active Net Device: ")+yellow(Obj.net.active_net_card);end function
+  __lock=function(argv)
+    if not argv then return Man.help(["lock"])
+		Arg1=lower(argv[0])
+    if len(argv)==2 then Arg2=argv[1] else Arg2=Obj.user.name
+		Obj=outer.Obj
+    if Obj.user.name!="root" then return Error.set("You must be root to run this command")
+    set=function(f)
+      set_content(f,"")
+      chmod(f,"u-wrx")
+      chmod(f,"g-wrx")
+      chmod(f,"o-wrx")
+      set_owner(f,"root")
+      set_group(f,"root")
+    end function
+    bank=function
+      d=File(Obj.computer,"/home/"+Arg2+"/Config")
+      if not d then return Error.set("Config directory not found")
+      f=File(Obj.computer,path(d)+"/Bank.txt")
+      if not f then f=Command.touch(Obj,[path(d)+"/Bank.txt"])
+      set(f)
+      Info.info("Bank config file locked")
+    end function
+    email=function
+      d=File(Obj.computer,"/home/"+Arg2+"/Config")
+      if not d then return Error.set("Config directory not found")
+      f=File(Obj.computer,path(d)+"/Mail.txt")
+      if not f then f=Command.touch(Obj,[path(d)+"/Mail.txt"])
+      set(f)
+      Info.info("Email config file locked")
+    end function
+    web=function
+      d=File(Obj.computer,"/home/"+Arg2+"/Config")
+      if not d then return Error.set("Config directory not found")
+      f=File(Obj.computer,path(d)+"/Browser.txt")
+      if not f then f=Command.touch(Obj,[path(d)+"/Browser.txt"])
+      set(f)
+      Info.info("Browser config file locked")
+    end function
+    all=function
+      bank
+      email
+      web
+      Info.info("Complete")
+    end function
+    cmds={
+      "-b":@bank,
+      "-e":@email,
+      "-w":@web,
+      "-a":@all
+    }
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1]
+  end function
+	__check=function(argv)
+		_cp=Io.safePath(Obj.dir.current)
+		if not _cp then
+			Obj.user=Utility.getUser(Obj)
+			Obj.dir.current=Obj.user.home
+			return
+		end if
+		f=Command.touch(Obj,[_cp+"/.check"])
+    if not f or f isa Error then 
+      Obj.user={
+        "name":"hobo",
+        "user":red("HOBO"),
+        "home":Obj.root
+      }
+      Obj.dir.current=Obj.root
+      return
+    end if
+    o=owner(f)
+    Command.qrm(Obj,[f])
+    if o!=Obj.user.name then
+      if len(get_folders(Obj.root))<=3 then return {
+        "name":"Unstable|file structure",
+        "user":red("UNSTABLE"),
+        "home":Obj.root
+      }
+      if o=="root" then
+        Obj.user={
+          "name":"root",
+          "user":green("ROOT"),
+          "home":File(Obj.computer,"/root")
+        }
+      else if o=="guest" and File(Obj.computer,"/home/guest") then
+        _={
+          "name":"guest",
+          "user":red("GUEST"),
+          "home":File(Obj.computer,"/home/guest")
+        }
+        Obj.user=_
+      else if File(Obj.computer,"/home/"+o) then
+        _={
+          "name":o,
+          "user":blue("USER"),
+          "home":File(Obj.computer,"/home/"+o)
+        }
+        Obj.user=_
+      else
+        Obj.user={
+          "name":"hobo",
+          "user":red("HOBO"),
+          "home":Obj.root
+          }
+      end if
+      Obj.dir.current=Obj.user.home
+    end if
+	end function
+  __audit=function(argv);Command.audit(Obj,argv);end function
+  return {
+    "lock":@__lock,
+    "active":@__active,
+    "reboot":@__reboot,
+    "hostname":@__hostname,
+    "iwlist":@__iwlist,
+    "devices":@__devices,
+    "lsof":@__lsof,
+    "rec":@__rec,
+    "jump":@__jump,
+    "ports":@__ports,
+    "airmon":@__airmon,
+    "userdel":@__userdel,
+    "useradd":@__useradd,
+    "ps":@__ps,
+    "passwd":@__passwd,
+    "kill":@__kill,
+    "iwconfig":@__iwconfig,
+    "ifconfig":@__ifconfig,
+    "groups":@__groups,
+    "groupdel":@__groupdel,
+    "groupadd":@__groupadd,
+    "htop":@__htop,
+    "cron":@__cron,
+    "audit":@__audit,
+    "check":@__check
+  }
+end function

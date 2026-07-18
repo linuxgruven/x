@@ -1,0 +1,52 @@
+testTryCatch="_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  TRY/CATCH TEST SCRIPT</color>
+_print <color=#eb0cc6>========================================</color>
+_print
+
+_print <color=#00bfff>[Test 1]</color> Try block with no error...
+try
+  _print green(  Step 1: OK)
+  _print green(  Step 2: OK)
+  _print green(  Step 3: OK)
+catch err
+  _print red(  CAUGHT: $err)
+end try
+_print <color=#00ff00>  Expected: all 3 steps, no catch</color>
+_print
+
+_print <color=#00bfff>[Test 2]</color> _throw triggers catch with message...
+try
+  _print green(  Step 1: OK)
+  _throw Something went wrong
+  _print red(  Step 3: SHOULD NOT SEE THIS)
+catch err
+  _print yellow(  CAUGHT: _getvar(err))
+end try
+_print <color=#00ff00>  Expected: step 1, then caught 'Something went wrong'</color>
+_print
+
+_print <color=#00bfff>[Test 3]</color> Catch without variable...
+try
+  _throw Oops
+catch
+  _print yellow(  CAUGHT an error without variable)
+end try
+_print <color=#00ff00>  Expected: caught message, no variable</color>
+_print
+
+_print <color=#00bfff>[Test 4]</color> Real Error.set caught (wipe on bad path)...
+try
+  wipe /nonexistent/path
+catch err
+  _print yellow(  CAUGHT: _getvar(err))
+end try
+_print <color=#00ff00>  Expected: caught error from wipe</color>
+_print
+
+_print <color=#00bfff>[Test 5]</color> Execution continues after try/catch...
+_print green(  This line runs after all try/catch blocks)
+
+_print
+_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  TESTS COMPLETE</color>
+_print <color=#eb0cc6>========================================</color>"

@@ -1,0 +1,20 @@
+// self_launch_test.src
+// Launches itself and counts each launch via params[0]
+// Run with no args to start from launch #0
+
+maxLaunches = 50
+
+count = 0
+if params and len(params) > 0 then
+    count = to_int(params[0])
+end if
+
+print "Launch #" + count
+
+if count >= maxLaunches then
+    print "Done after " + maxLaunches + " launches."
+else
+    s = get_shell
+    p = program_path
+    s.launch(p, "" + (count + 1))
+end if

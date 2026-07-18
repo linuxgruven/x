@@ -1,0 +1,41 @@
+// Man page for sort
+manSort="SORT(1)                          X Shell Manual                          SORT(1)
+
+<b>NAME</b>
+    sort - Sort file contents alphabetically or numerically
+<b>SYNOPSIS</b>
+    <b>sort</b> FILE
+    <b>sort</b> [<b>-r</b>] [<b>-n</b>] FILE
+<b>DESCRIPTION</b>
+    Sort file contents in alphabetical or numerical order. Useful for
+    organizing word lists, numeric data, log files, and any line-based
+    data. Modifies file in-place with sorted content.
+<b>OPTIONS</b>
+    <b>-r</b> - Reverse Sort
+      Sort in descending order (Z-A or 9-1).
+
+    <b>-n</b> - Numeric Sort
+      Sort numerically instead of alphabetically. Without this flag,
+      '10' would come before '2' in alphabetical order.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man sort</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>sort</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <b>sort wordlist.txt</b>
+    Sort alphabetically (A-Z)
+
+    <b>sort -r users.txt</b>
+    Sort in reverse order (Z-A)
+
+    <b>sort -n scores.txt</b>
+    Sort numeric values (1, 2, 10, 20)
+
+    <b>sort -n -r scores.txt</b>
+    Sort numeric values descending (20, 10, 2, 1)
+<b>SEE ALSO</b>
+    <b>uniq</b>, <b>grep</b>, <b>wc</b>"

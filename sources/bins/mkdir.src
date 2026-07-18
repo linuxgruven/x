@@ -1,0 +1,13 @@
+binMkdir="if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""mkdir_usage""))
+computer=host_computer(get_shell)
+pathFile=get_abs_path(params[0])
+pathParent=parent_path(pathFile)
+existFile=File(computer,pathFile)
+if pathParent==pathFile then pathParent=current_path
+parentDir=File(computer,pathParent)
+if parentDir==null then exit(""mkdir: ""+pathParent+"" not found"")
+if existFile!=null then exit(""mkdir: ""+path(existFile)+"" file exists"")
+if not has_permission(parentDir,""w"") then exit(""mkdir: permission denied"")
+arrayPath=pathFile.split(""/"")
+output=create_folder(computer,path(parentDir),arrayPath[len(arrayPath)-1])
+if output!=null and output!=1 then print(output)"

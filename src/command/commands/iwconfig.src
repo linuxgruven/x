@@ -1,0 +1,53 @@
+// =============================================================================
+// IWCONFIG
+// Display or configure the WiFi (wlan0) network interface.
+// =============================================================================
+Command.iwconfig=function(Obj,argv)
+  computer=Obj.computer
+  if active_net_card(computer)!="WIFI" then return Warning.set("Wifi is not active")
+  if not Obj.net.hasInternet then
+    print blue("Hostname: - "+get_name(Obj.computer))
+    print red("Public IP: - 0.0.0.0")
+    print red("Local IP : - 0.0.0.0")
+    print red("Gateway  : - 0.0.0.0")
+    return Error.set("Not connected to a wifi network")
+  end if
+  if not len(argv) then
+    router=Obj.net.router
+    isPipe=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+    if isPipe then
+      push(globals.G_pipe.stdout,"card: wlan0")
+      if Obj.net.router.public_ip==Obj.meta.public_ip then
+        push(globals.G_pipe.stdout,"essid: "+essid_name(router))
+        push(globals.G_pipe.stdout,"bssid: "+bssid_name(router))
+      end if
+      push(globals.G_pipe.stdout,"hostname: "+get_name(Obj.computer))
+      push(globals.G_pipe.stdout,"public_ip: "+computer.public_ip)
+      push(globals.G_pipe.stdout,"local_ip: "+computer.local_ip)
+      push(globals.G_pipe.stdout,"gateway: "+network_gateway(computer))
+      return
+    end if
+    print blue("Active card: wlan0")
+    // Show ESSID/BSSID only when connected to same router (public IPs match)
+    if Obj.net.router.public_ip==Obj.meta.public_ip then
+      print blue("Essid: ----- "+essid_name(router))
+      print blue("Bssid: ----- "+bssid_name(router))
+      print orange("--------------------------")
+    end if
+    print blue("Hostname : - "+get_name(Obj.computer))
+    print blue("Public IP: - "+computer.public_ip)
+    print blue("Local IP : - "+computer.local_ip)
+    print blue("Gateway  : - "+network_gateway(computer))
+    return
+  end if
+  if len(argv)<3 then return Man.help(["iwconfig"])
+  interface=argv[0]
+  if interface!="wlan0" then return Error.set("Invalid network card")
+  essid=argv[1]
+  bssid=argv[2]
+  if len(argv)>=4 then password=argv[3] else password=Gui.inputPassNS("Wi-Fi password for "+bssid+": ")
+  result=connect_wifi(computer,interface,essid,bssid,password)
+  if result!=1 then return Error.set(result)
+  Obj.net=Net.initNetwork(Obj)
+  return true
+end function

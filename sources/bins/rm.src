@@ -1,0 +1,14 @@
+binRm="if len(params)<1 or len(params)>2 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""rm_usage""))
+pathFile=get_abs_path(params[0])
+isRecursive=0
+if params[0]==""-r"" then
+	if len(params)==1 then exit(command_info(""rm_usage""))
+	isRecursive=1
+	pathFile=params[1]
+end if
+file=File(host_computer(get_shell),pathFile)
+if not file then exit(""rm: file not found: ""+pathFile)
+if not has_permission(file,""w"") then exit(""rm: permission denied"")
+if is_folder(file)==1 and isRecursive==0 and is_symlink(file)==0 then exit(""rm: ""+name(file)+"" is a directory"")
+output=delete(file)
+if len(output)>0 then print(output)"

@@ -1,0 +1,35 @@
+// Man page for batch
+manBatch="BATCH(1)                         X Shell Manual                         BATCH(1)
+
+<b>NAME</b>
+    batch - Execute batch command file
+<b>SYNOPSIS</b>
+    <b>batch</b> FILE
+<b>DESCRIPTION</b>
+    Batch script executor for automating command sequences. Processes files
+    containing one command per line. Supports both framework commands and
+    bash scripts in the same file. Essential for repeatable operations and
+    automated workflows.
+<b>OPTIONS</b>
+    <b>batch FILE</b>
+    Execute commands from file
+    One command per line
+<b>EXAMPLE:</b>
+    <color=#e4ff34># File Format</color>
+    <b>mark</b>
+    Command line 1
+
+    <b>@auto 105.145.194.135 192.168.9.2</b>
+    Command line 2
+
+    <b>mark</b>
+    Command line 3
+
+    <color=#e4ff34># Execution</color>
+    <b>batch commands.txt</b>
+    Run batch file
+
+    <b>batch /root/auto.bat</b>
+    Execute automation script
+<b>SEE ALSO</b>
+    <b>run</b>, <b>exec</b>"

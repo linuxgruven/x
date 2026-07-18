@@ -1,0 +1,20 @@
+// Man page for x
+manX="X(1)                             X Shell Manual                             X(1)
+
+<b>NAME</b>
+    x - hints and tricks that have no other place to document
+<b>DESCRIPTION</b>
+    <b>•</b> If you need to execute a command|macro when launching x, you can do so by
+      placing the command(s) in a file called 'init' in the /payload/data folder.
+    <b>•</b> If you need to execute a command|macro when exiting x, you can do so by
+      placing the command(s) in a file called 'inite' in the /payload/data folder.
+    <b>•</b> You can search for commands using a wildcard (*). Place the asterisk at the
+      beginning, end, or both sides of a search term. For example, *iff finds
+      'sniff', sca* finds 'scan' and 'scanlan', and *erv* finds 'service'.
+      All matching commands are listed.
+    <b>•</b> If you add librshell.so and aptclient.so (with libs -a) to the saved
+      libraries, X will be able to utilize these libraries when needed. This can be
+      done automatically by calling 'sys check'.
+    <b>•</b> When a prompt shows <b>(enter to use: VALUE)</b>, pressing Enter accepts the
+      default value. Typing <b>!</b> cancels the prompt. If no default is shown,
+      pressing Enter or <b>!</b> both cancel the prompt."

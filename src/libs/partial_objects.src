@@ -1,0 +1,1791 @@
+// =============================================================================
+// PARTIAL_OBJECTS
+// Partial objects library; exploit and 0day management with lifecycle tracking.
+// =============================================================================
+PartialObject={}
+PartialObject._PERM_ROOT="root"
+PartialObject._PERM_USER="user"
+PartialObject._PERM_GUEST="guest"
+PartialObject._PERM_NORMAL_USER="normal_user"
+PartialObject._ERROR_PREFIX="error"
+PartialObject._TEST_PREFIX="Test "
+PartialObject._ERROR_BAD_SIG="Bad signature"
+PartialObject._ERROR_INVALID_FILE="Invalid file:"
+PartialObject._ERROR_FILE_NOT_FOUND="Unable to find path|file:"
+PartialObject._ERROR_FAILED_GET_FILE="Failed to get a file"
+PartialObject._MSG_SUCCESS_FOLDER="Folder created successfully"
+PartialObject._MSG_SUCCESS_FILE="File created successfully"
+PartialObject._MSG_SUCCESS_CHMOD="Permissions changed successfully"
+PartialObject._MSG_SUCCESS_COPY="File copied successfully"
+PartialObject._MSG_SUCCESS_MOVE="File moved successfully"
+PartialObject._MSG_SUCCESS_RENAME="File renamed successfully"
+PartialObject._MSG_SUCCESS_DELETE=" deleted successfully"
+PartialObject._MSG_SUCCESS_OWNER="Owner changed successfully"
+PartialObject._MSG_SUCCESS_GROUP="Group changed successfully"
+PartialObject._SCAN_POTENTIAL="A potential"
+PartialObject._SCAN_VULN_FOUND="New vulnerability found:"
+PartialObject._SCAN_COMPUTER="* Computer"
+PartialObject._SCAN_FILE="* File"
+PartialObject._HTML_BOLD_OPEN="<b>"
+PartialObject._HTML_BOLD_CLOSE="</b>"
+// SERVICE REGISTRY - Unified library/port mapping
+PartialObject._serviceRegistry={
+  "router":{"port":0,"path":"/lib/kernel_router.so"},
+  "kernel_router.so":{"port":0,"path":"/lib/kernel_router.so"},
+  "ssh":{"port":22,"path":"/lib/libssh.so"},
+  "libssh.so":{"port":22,"path":"/lib/libssh.so"},
+  "ftp":{"port":21,"path":"/lib/libftp.so"},
+  "libftp.so":{"port":21,"path":"/lib/libftp.so"},
+  "http":{"port":80,"path":"/lib/libhttp.so"},
+  "libhttp.so":{"port":80,"path":"/lib/libhttp.so"},
+  "chat":{"port":6667,"path":"/lib/libchat.so"},
+  "libchat.so":{"port":6667,"path":"/lib/libchat.so"},
+  "rshell":{"port":1222,"path":"/lib/librshell.so"},
+  "librshell.so":{"port":1222,"path":"/lib/librshell.so"},
+  "repo":{"port":1542,"path":"/lib/librepository.so"},
+  "librepository.so":{"port":1542,"path":"/lib/librepository.so"},
+  "cam":{"port":37777,"path":"/lib/libcam.so"},
+  "libcam.so":{"port":37777,"path":"/lib/libcam.so"},
+  "sql":{"port":3306,"path":"/lib/libsql.so"},
+  "libsql.so":{"port":3306,"path":"/lib/libsql.so"},
+  "smtp":{"port":25,"path":"/lib/libsmtp.so"},
+  "libsmtp.so":{"port":25,"path":"/lib/libsmtp.so"},
+  "init":{"port":null,"path":"/lib/init.so"},
+  "init.so":{"port":null,"path":"/lib/init.so"},
+  "kernel":{"port":null,"path":"/lib/kernel_module.so"},
+  "kernel_module.so":{"port":null,"path":"/lib/kernel_module.so"},
+  "net":{"port":null,"path":"/lib/net.so"},
+  "net.so":{"port":null,"path":"/lib/net.so"},
+  "apt":{"port":null,"path":"/lib/aptclient.so"},
+  "aptclient.so":{"port":null,"path":"/lib/aptclient.so"},
+  "cry":{"port":null,"path":"/lib/crypto.so"},
+  "crypto.so":{"port":null,"path":"/lib/crypto.so"},
+  "meta":{"port":null,"path":"/lib/metaxploit.so"},
+  "metaxploit.so":{"port":null,"path":"/lib/metaxploit.so"}
+}
+// HELPER FUNCTIONS
+//Color text by permission level
+PartialObject._colorByPerm=function(text,level)
+  if level==PartialObject._PERM_ROOT then return green(text)
+  if level==PartialObject._PERM_USER or level==PartialObject._PERM_NORMAL_USER then return blue(text)
+  if level==PartialObject._PERM_GUEST then return error(text)
+  return white(text)
+end function
+//Parse recursive flag from arguments
+PartialObject._parseRecursiveFlag=function(cmd,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("R",false,"flag")
+  _p.addArgument("r",false,"flag")
+  parsed=_p.parseArgs(cmd,argv)
+  if parsed isa Error then return parsed
+  if parsed.r then parsed.R=true
+  result={"flag":0,"rest":parsed.rest}
+  if parsed.r or parsed.R then result.flag=1
+  return result
+end function
+//Validate arguments count
+PartialObject._validateArgs=function(argv,count,usage,cmd)
+  if not argv then return Info.man(usage,cmd)
+  if len(argv)!=count then return Info.man(usage,cmd)
+  return true
+end function
+//Validate file operation
+PartialObject._validateFileOp=function(f,method)
+  if not f or f isa Error then return false
+  if not hasIndex(f.__isa,method) then
+    Error.set(PartialObject._ERROR_BAD_SIG)
+    return false
+  end if
+  return true
+end function
+//Handle operation result and fire metaxploit
+PartialObject._handleResult=function(r,successMsg,fireMeta)
+  if r==null then return
+  if r isa number then return Error.set("Invalid name")
+  if r isa string and len(r)>0 then return Error.set(r)
+  fireMeta
+  Info.info(successMsg)
+end function
+//Parse permission level from scan line
+PartialObject._parsePerm=function(l)
+  if indexOf(l,"["+PartialObject._PERM_ROOT+"]")!=null then return PartialObject._PERM_ROOT
+  if indexOf(l,"["+PartialObject._PERM_NORMAL_USER+"]")!=null then return PartialObject._PERM_USER
+  if indexOf(l,"["+PartialObject._PERM_GUEST+"]")!=null then return PartialObject._PERM_GUEST
+  return PartialObject._PERM_GUEST
+end function
+//Format line number with highlighting for incorrect lines
+PartialObject._formatPatchLine=function(lineIdx,lineContent,incorrectLines)
+	idx=lineIdx+1
+	if not lineContent then return idx+":"
+	isIncorrect=indexOf(incorrectLines,idx)!=null
+	prefix=idx+":  "
+	if lineIdx<9 then prefix="0"+prefix
+	if isIncorrect then return yellow(prefix+lineContent)
+	return prefix+lineContent
+end function
+//Command hub and router for 0day operations
+PartialObject.hub=function(Obj,argv,l,s=false)
+	//Validate arguments
+	if not argv then return Man.help(["0day"])
+	//Get first argument (command)
+	Arg1=lower(argv[0])
+	//Add credential command handler
+	add=function(arg);PartialObject.addCred(arg);end function
+	//View credentials command handler
+	view=function(arg);PartialObject.viewCred;end function
+	//Check patch status command handler
+	checkPatch=function(arg)
+		//Validate arguments
+		if not arg then return Man.help(["0day"])
+		//Handle remote service (IP:port)
+		if is_valid_ip(arg[0]) then
+			i=arg[0]
+      //Validate port provided
+      if not len(arg)>=2 then return Error.set("Invalid arguments: "+i+":<port>")
+			//Convert port to integer
+			p=to_int(arg[1])
+			//Try to resolve service name to port if conversion failed
+			if not p isa number then p=PartialObject.getPort(p)
+			//Validate port is valid
+			if not p isa number then return Error.set("Invalid port: "+p)
+			//Connect and dump library from remote service
+			m=dump_lib(net_use(Library.metaxploit,i,p))
+			//Check for null result
+			if m==null then return Error.set("Null result was returned for: "+i+":"+p)
+			//Check for error string
+			if m isa string then return Error.set(metaLib)
+		//Handle local library path
+		else
+			//Get library target
+			t=arg[0]
+			//Get library path from target name
+			l=PartialObject.getLibraryPath(t)
+			//Load library (safe mode or standard)
+			if s and Obj.packMetaxploit then m=load(Obj.packMetaxploit,l) else m=load(Library.metaxploit,l)
+			//Validate library loaded
+			if not m then return Error.set("Invalid library path:"+t)
+		end if
+		//Check patch status (with memory verification if arg provided)
+		if len(arg)>=2 then r=is_patched(m,1) else r=is_patched(m)
+		//Display result as info if string
+		if r isa string then return Info.info(r)
+		//Display True/False result
+		if r then Info.info("True") else Info.warning("False")
+	end function
+	//Patch single service command handler
+	doPatch=function(arg)
+		//Validate arguments
+		if not arg then return Error.set("Invalid params")
+		//Clear screen if not in safe mode
+		if not s then l([])
+		//Execute patch scan
+		PartialObject.patchScan(Obj,arg,s)
+		//Clear screen if not in safe mode
+		if not s then l([])
+	end function
+	//Patch all services command handler
+	patchAll=function(arg)
+		//Clear screen if not in safe mode
+		if not s then l([])
+		//Execute patch all
+		PartialObject.patchAll(Obj,arg,s)
+		//Clear screen if not in safe mode
+		if not s then l([])
+	end function
+	//Manage credentials command handler
+	manage=function(arg);PartialObject.manageCreds;end function
+	//Purge all 0day data command handler
+	purge=function(arg)
+		//Purge partial objects from exploit database
+		Exploit.purgePObjects
+		//Clear credentials array
+		globals.G_pobjcreds=[]
+		//Save empty credentials
+		PartialObject.saveCreds
+		//Display confirmation
+		Info.info("0day data purged")
+    //Ask about database defragmentation
+    if Gui.yesNo("Do you want to defrag then database?") then Exploit.defrag
+	end function
+	//Remove credential command handler
+	removeCred=function(arg)
+		//Validate index provided
+		if not arg then return Error.set("Missing index")
+		//Remove credential at index
+		PartialObject.removeCred(to_int(arg[0]))
+	end function
+  //Toggle 0day mode command handler
+  mode=function(arg)
+    //Argument provided (IP for rshell)
+    if arg then
+      //Already in 0day mode
+      if globals.G_Zday["0day"] then
+        //Set rshell IP if valid
+        if is_valid_ip(arg[0]) then globals.G_Zday["rshell"]=arg[0]
+      //Enable 0day mode
+      else
+        //Set 0day flag
+        globals.G_Zday["0day"]=true
+        //Set rshell IP if valid
+        if is_valid_ip(arg[0]) then globals.G_Zday["rshell"]=arg[0]
+        //Update password access icon
+        Obj.pwa=Gui.pwAccess(Obj)
+      end if
+    //No argument - toggle mode
+    else
+      //Toggle 0day mode
+      globals.G_Zday["0day"]=not globals.G_Zday["0day"]
+      //Clear rshell IP if disabling
+      if not globals.G_Zday["0day"] then globals.G_Zday["rshell"]=false
+      //Update password access icon
+      Obj.pwa=Gui.pwAccess(Obj)
+    end if
+  end function
+  //Neural network mass scanning command handler
+  // Note: Linear scanning is used here instead of random. Random order
+  // does not improve average scan time — the target is equally likely
+  // to be at any position, so expected hits remain N/2 either way.
+  // Random also adds overhead from dedup tracking visited IPs.
+  // XFIX1.0: REMOVE entire neuro() + cmds["neuro"] — whois dropped "[Neurobox Network]";
+  // XFIX1.0: no script API exposes TipoRed.Neurobox; email-probe-all is too expensive with MetaMail cooldown.
+  neuro=function(arg)
+    // Make Obj available in this scope for helper functions
+    Obj=outer.Obj
+    //Check internet connectivity
+    if Net.hasInternet(Obj) isa Warning then return
+    //Initialize email object
+    E=null
+    //Initialize multi-octet flag
+    M=false
+    //Create argument parser
+    _p=ArgumentParser.init
+    //Add email argument
+    _p.addArgument("e",false,"store")
+    //Add password argument
+    _p.addArgument("p",false,"store")
+    //Add target name argument
+    _p.addArgument("t",false,"store")
+    //Add IP pattern argument
+    _p.addArgument("i",false,"store")
+    //Add starting octet argument
+    _p.addArgument("l",false,"storeNumber")
+    //Add skip-after-N-misses argument
+    _p.addArgument("s",false,"storeNumber")
+    //Add random-order flag (shuffles both XXX and YYY octets)
+    _p.addArgument("r",false,"flag")
+    //Add bash script argument
+    _p.addArgument("bash",true,"store")
+    arg=_p.parseArgs("oday",arg)
+    //Check for parsing errors
+    if arg isa Error then return
+    //Check if required arguments missing
+    if (not arg.e) or (not arg.p) or (not arg.t) or (not arg.i) then
+      //Prompt for email if not provided
+      if not arg.e then arg.e=Gui.input({"text":"Email to send from"})
+      //Validate email provided
+      if not arg.e then return Error.set("Email account can not be blank")
+      //Prompt for password if not provided
+      if not arg.p then arg.p=Gui.inputPassNS("Email password")
+      //Validate password provided
+      if not len(arg.p) then return Error.set("Email password can not be blank")
+      //Prompt for target name if not provided
+      if not arg.t then arg.t=Gui.input({"text":"Name obtained from first Chat Log"})
+      //Validate target name provided
+      if not arg.t then return Error.set("Target name can not be blank")
+      //Prompt for IP pattern if not provided
+      if not arg.i then arg.i=Gui.input({"text":"Partial IP need minimum 2 octets (e.g. 1.XXX.YYY.1)"})
+      //Validate IP pattern provided
+      if not arg.i then return Error.set("Partial IP can not be blank")
+      //Prompt for starting octet if not provided
+      if not arg.l then
+        //Ask if user wants custom starting point
+        if Gui.yesNo("Do you want to start the YYY octet at a specific number?") then
+          //Get starting octet number
+          arg.l=Gui.inputInt({"text":"Enter a number between 1 and 255"})
+          //Validate octet range
+          if not arg.l isa number or arg.l<1 or arg.l>255 then
+            //Reset to null if invalid
+            arg.l=null
+            //Display warning
+            Info.warning("Invalid number, starting at 1")
+          end if
+        end if
+      end if
+      //Prompt for bash script if not provided
+      if not arg.bash then
+        //Ask if user wants to run bash script
+        if Gui.yesNo("Do you want to run a bash script if found?") then arg.bash=Gui.input({"text":"Bash script to run"})
+      end if
+    end if
+    //Auto-convert second XXX to YYY so user can enter 233.XXX.667.XXX
+    fi=indexOf(arg.i,"XXX")
+    if fi!=null and indexOf(arg.i,"XXX",fi+3)!=null then arg.i=arg.i[:fi+3]+arg.i[fi+3:].replace("XXX","YYY")
+    //Login to email account
+    E=mail_login(arg.e,arg.p)
+    //Check for login error
+    if E isa string then return Error.set(E)
+    //Add @ prefix to bash script if missing
+    if arg.bash then
+      if arg.bash[0]!="@" then arg.bash="@"+arg.bash
+    end if
+    //Check if multi-octet replacement needed (YYY pattern)
+    M=indexOf(arg.i,"YYY")!=null
+    //Start timer (named distinctly from arg.t target name)
+    startTime=time
+    //Default YYY start to 1 if not provided
+    if not arg.l then arg.l=1
+    //Default skip to 10 if not provided (0=off)
+    skipN=10
+    if arg.s isa number then skipN=arg.s
+    //Helper: whois check + email send with retry; returns 0=no neurobox, 1=neurobox wrong person, 2=found
+    // XFIX1.0: REMOVE — filter relies on whois "[Neurobox Network]" (gone in 1.0)
+    scanCount=0
+    tryHit=function(ip)
+      outer.scanCount+=1
+      d=whois(ip)
+      // XFIX1.0: REMOVE — indexOf(d,"Neurobox") always misses on Grey Hack 1.0
+      if not d or indexOf(d,"Neurobox")==null then return 0
+      Info.info(outer.scanCount+" / "+outer.total)
+      Info.info("Potential Neurobox found: "+ip)
+      d=split(d,char(10))[0].replace("Domain name: www.","@")
+      //Shotgun retry: rate-limit reply returns ~instantly, just spin — the
+      //server itself holds the gate; next call lands the moment it opens.
+      // XFIX1.0: MetaMail send has a 2s global cooldown
+      // XFIX1.0: System.tryWait(2)
+      r=send(E,arg.t+d,arg.t,arg.t)
+      while r==Text.emailError
+        // XFIX1.0: System.tryWait(2)
+        r=send(E,arg.t+d,arg.t,arg.t)
+      end while
+      if r!=1 then return 1
+      Info.info("Network Found: "+ip)
+      elapsed=round(time-outer.startTime,2)
+      mins=floor(elapsed/60)
+      secs=round(elapsed%60,2)
+      Info.info("Process Took: "+str(mins)+"m "+str(secs)+"s")
+      if arg.bash then Obj.commands["run"]([arg.bash,ip])
+      //Confirm after bash script output so user can verify via its results
+      if not Gui.yesNo("Is "+ip+" the correct target network?") then
+        Info.warning("Continuing scan...")
+        return 1
+      end if
+      return 2
+    end function
+    //Scan inline — no pre-built list, exits on first hit
+    //Calculate and display total networks to scan
+    total=255
+    if M then total=(256-arg.l)*255
+    Info.info("Potential Networks to scan: "+total)
+    Info.info("Scanning...")
+    //Helper: Fisher-Yates shuffle of a range [lo..255]
+    _shuf=function(lo)
+      out=[];k=lo;while k<=255;out.push(k);k+=1;end while
+      k=out.len-1;while k>0;j2=floor(rnd*(k+1));tmp=out[k];out[k]=out[j2];out[j2]=tmp;k-=1;end while
+      return out
+    end function
+    if M then
+      if arg.r then xList=_shuf(1) else xList=range(1,255)
+      xIdx=0;while xIdx<len(xList)
+        i=xList[xIdx];xIdx+=1
+        if poll_input=="q" then return
+        x=arg.i.replace("XXX",str(i))
+        yList=range(arg.l,255)
+        ms=0
+        yIdx=0;while yIdx<len(yList)
+          j=yList[yIdx];yIdx+=1
+          if poll_input=="q" then return
+          h=tryHit(x.replace("YYY",str(j)))
+          if h==2 then return
+          if h==1 then
+            ms+=1
+            if skipN>0 and ms>=skipN then
+              Info.warning("Skipping XXX="+str(i)+" ("+str(skipN)+"+ misses)")
+              break
+            end if
+          else
+            ms=0
+          end if
+        end while
+      end while
+    else
+      if arg.r then xList=_shuf(1) else xList=range(1,255)
+      xIdx=0;while xIdx<len(xList);i=xList[xIdx];xIdx+=1;if poll_input=="q" then return;if tryHit(arg.i.replace("XXX",str(i)))==2 then return;end while
+    end if
+    //No networks found
+    Info.warning("No networks found")
+  end function
+  //Display time left in 0day cycle command handler
+  left=function(arg)
+    d=Date.remaining0day(current_date)
+    if d then print yellow("Real World Time Remaining for this 0day cycle:") else return Info.info("0day cycle not active")
+    print white("Days   : ")+orange(str(d.days))
+    print white("Hours  : ")+orange(str(d.hours))
+    print white("Minutes: ")+orange(str(d.minutes))
+    print white("Seconds: ")+orange(str(d.seconds))
+  end function
+  //Display time until next 0day cycle command handler
+  next=function(arg)
+    //Calculate time until next cycle
+    d=Date.calculate0day(current_date)
+    print yellow("Real World Time until the next 0day cycle:")
+    //Display days
+    print white("Days   : ")+orange(str(d.days))
+    //Display hours
+    print white("Hours  : ")+orange(str(d.hours))
+    //Display minutes
+    print white("Minutes: ")+orange(str(d.minutes))
+    //Display seconds
+    print white("Seconds: ")+orange(str(d.seconds))
+  end function
+	// 0day claim for claiming your 0day credentials
+  claim=function(arg)
+		//Creds come from args
+		if not arg or len(arg)<2 then return Info.info("Missing credentials.")
+		u=arg[0]
+		pw=arg[1]
+		//Load metaxploit library locally
+    if not Library.metaxploit then return Error.set("Metaxploit library not found or loaded")
+		metax=Library.metaxploit
+		target="/lib/init.so"
+		//Obtain metaLib
+		metaLib=load(metax,target)
+		if metaLib isa string then return metaLib
+		if not metaLib then return metaLib
+		//Claim debug library and verify type
+		debugLib=debug_tools(metaLib,u,pw)
+		if debugLib==null then return Error.set("Null result returned from debug_tools")
+		if debugLib isa string then return Error.set(debugLib)
+		if typeof(debugLib)=="debugLibrary" then
+			print("Successfully claimed")
+			if Gui.yesNo("Do you want to save these credentials?") then PartialObject.addCred([u,pw])
+		end if
+  end function
+	//Map of command flags to handler functions
+	cmds={
+    // XFIX1.0: REMOVE "neuro" entry with neuro() above
+    "neuro":@neuro,
+    "mode":@mode,
+    "purge":@purge,
+    "left":@left,
+    "next":@next,
+    "-r":@removeCred,
+    "-m":@manage,
+    "-c":@checkPatch,
+    "-a":@add,
+    "-v":@view,
+    "-p":@doPatch,
+    "-pa":@patchAll,
+    "claim":@claim
+  }
+	//Validate command flag exists
+	if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+	//Execute command handler with remaining arguments
+	cmds[Arg1](argv[1:])
+end function
+//Patch all libraries in directory
+PartialObject.patchAll=function(Obj,argv,s=false)
+	//Get library path from arguments or default to /lib
+	if argv then p=argv[-1] else p="/lib"
+	//Iterate through all files in directory
+	for l in get_files(File(Obj.computer,p));self.patchScan(Obj,[path(l)],s);end for
+end function
+// EXTRACTED FILE OPERATION HANDLERS - Used by PartialObject.run
+//Split path into parent directory and name
+PartialObject._splitPath=function(fullPath)
+  p=split(fullPath,"/")
+  n=p[-1]
+  p=join(p[:-1],"/")
+  if p and p[-1]!="/" then p=p+"/"
+  if not p then p="/"
+  p=p.replace("//","/")
+  return {"dir":p,"name":n}
+end function
+//Create folder on partial computer
+PartialObject._opCreateFolder=function(pcomputer,fireMeta,argv)
+  if not hasIndex(pcomputer.__isa,"create_folder") then return Info.error(PartialObject._ERROR_BAD_SIG)
+  if not argv then return Info.man("mkdir [PATH/TO/NEW_FOLDER]","mkdir")
+  s=PartialObject._splitPath(argv[0])
+  r=pcomputer.create_folder(s.dir,s.name)
+  if r isa string then return Error.set(r)
+  fireMeta
+  Info.info(PartialObject._MSG_SUCCESS_FOLDER)
+end function
+//Create file on partial computer
+PartialObject._opTouch=function(pcomputer,fireMeta,argv)
+  if not hasIndex(pcomputer.__isa,"touch") then return Info.error(PartialObject._ERROR_BAD_SIG)
+  if not argv then return Info.man("touch [PATH/TO/NEW_FILE]","touch")
+  s=PartialObject._splitPath(argv[0])
+  r=pcomputer.touch(s.dir,s.name)
+  if r isa string then return Error.set(r)
+  fireMeta
+  Info.info(PartialObject._MSG_SUCCESS_FILE)
+end function
+//Show processes on partial computer
+PartialObject._opShowProcs=function(pcomputer);if not hasIndex(pcomputer.__isa,"show_procs") then return Info.error(PartialObject._ERROR_BAD_SIG);print(format_columns(pcomputer.show_procs));end function
+//Change user password on partial computer
+PartialObject._opChangePassword=function(pcomputer,fireMeta,argv)
+  if not hasIndex(pcomputer.__isa,"change_password") then return Info.error(PartialObject._ERROR_BAD_SIG)
+  if not argv or not len(argv)>=2 then return Info.man("passwd [USER] [NEW_PASSWORD]","passwd")
+  u=argv[0]
+  p=argv[1]
+  r=pcomputer.change_password(u,p)
+  if r isa string then return Error.set(r)
+  fireMeta
+  Info.info(u+" password changed successfully")
+end function
+//Create user on partial computer
+PartialObject._opCreateUser=function(pcomputer,fireMeta,argv)
+  if not hasIndex(pcomputer.__isa,"create_user") then return Info.error(PartialObject._ERROR_BAD_SIG)
+  if not argv or not len(argv)>=2 then return Info.man("useradd [USER] [PASSWORD]","useradd")
+  u=argv[0]
+  p=argv[1]
+  r=pcomputer.create_user(u,p)
+  if r isa string then return Error.set(r)
+  fireMeta
+  Info.info("User "+u+" created successfully")
+end function
+//Delete user on partial computer
+PartialObject._opDeleteUser=function(pcomputer,fireMeta,argv)
+  if not hasIndex(pcomputer.__isa,"delete_user") then return Info.error(PartialObject._ERROR_BAD_SIG)
+  if not argv then return Info.man("userdel [USER]","userdel")
+  u=argv[0]
+  r=pcomputer.delete_user(u)
+  if r isa string then return Error.set(r)
+  fireMeta
+  Info.info("User "+u+" deleted successfully")
+end function
+//Create group on partial computer
+PartialObject._opCreateGroup=function(pcomputer,fireMeta,argv)
+  if not hasIndex(pcomputer.__isa,"create_group") then return Info.error(PartialObject._ERROR_BAD_SIG)
+  if not argv then return Info.man("groupadd [GROUP]","groupadd")
+  g=argv[0]
+  r=pcomputer.create_group(g)
+  if r isa string then return Error.set(r)
+  fireMeta
+  Info.info("Group "+g+" created successfully")
+end function
+//Delete group on partial computer
+PartialObject._opDeleteGroup=function(pcomputer,fireMeta,argv)
+  if not hasIndex(pcomputer.__isa,"delete_group") then return Info.error(PartialObject._ERROR_BAD_SIG)
+  if not argv then return Info.man("groupdel [GROUP]","groupdel")
+  g=argv[0]
+  r=pcomputer.delete_group(g)
+  if r isa string then return Error.set(r)
+  fireMeta
+  Info.info("Group "+g+" deleted successfully")
+end function
+//Close program on partial computer
+PartialObject._opCloseProgram=function(pcomputer,fireMeta,argv)
+  if not hasIndex(pcomputer.__isa,"close_program") then return Info.error(PartialObject._ERROR_BAD_SIG)
+  if not argv then return Info.man("kill [PID]","kill")
+  pid=argv[0]
+  r=pcomputer.close_program(pid)
+  if r isa string then return Error.set(r)
+  fireMeta
+  Info.info("Process "+pid+" killed successfully")
+end function
+//Change permissions on partial computer file
+PartialObject._opChmod=function(getFile,fireMeta,argv)
+  parsed=PartialObject._parseRecursiveFlag("chmod",argv)
+  if parsed isa Error then return
+  if len(parsed.rest)!=2 then return Info.man("Usage:chmod (opt:-r|-R) [u,g,o+|-wrx]|[octal:0-7:xxx] [path file/folder]","chmod")
+  perm=parsed.rest[0]
+  p=parsed.rest[1]
+  f=getFile(p)
+  if not PartialObject._validateFileOp(f,"chmod") then return
+  // Handle octal format if numeric
+  if to_int(perm) isa number then
+    // Validate octal format must be exactly 3 digits
+    if len(perm)!=3 then return Error.set("Invalid octal mode (must be 3 digits: ugo)")
+    // Validate each digit is 0-7
+    for digit in perm;d=to_int(digit);if d<0 or d>7 then return Error.set("Invalid octal permission: "+perm+" (must be 0-7)");end for
+    // Apply permissions for user, group, other - iterate through each digit
+    for owner in [[to_int(perm[0]),"u"],[to_int(perm[1]),"g"],[to_int(perm[2]),"o"]]
+      value=owner[0]
+      who=owner[1]
+      // Clear all permissions first to ensure clean state
+      r=f.chmod(who+"-rwx",parsed.flag)
+      if r isa string and len(r)>0 then return Error.set(r)
+      // Set permissions based on octal value using bitwise operations
+      // Check each bit: 4=read, 2=write, 1=execute
+      if bitAnd(value,4) then
+        r=f.chmod(who+"+r",parsed.flag)
+        if r isa string and len(r)>0 then return Error.set(r)
+      end if
+      if bitAnd(value,2) then
+        r=f.chmod(who+"+w",parsed.flag)
+        if r isa string and len(r)>0 then return Error.set(r)
+      end if
+      if bitAnd(value,1) then
+        r=f.chmod(who+"+x",parsed.flag)
+        if r isa string and len(r)>0 then return Error.set(r)
+      end if
+    end for
+    fireMeta
+    Info.info(PartialObject._MSG_SUCCESS_CHMOD)
+  else
+    // Handle symbolic format
+    if parsed.flag then r=f.chmod(perm,parsed.flag) else r=f.chmod(perm)
+    PartialObject._handleResult(r,PartialObject._MSG_SUCCESS_CHMOD,fireMeta)
+  end if
+end function
+//Copy file on partial computer
+PartialObject._opCopy=function(getFile,fireMeta,argv)
+  v=PartialObject._validateArgs(argv,2,"cp [File] [Destination]","cp")
+  if v!=true then return v
+  src=argv[0]
+  dst=argv[1]
+  f=getFile(src)
+  if not PartialObject._validateFileOp(f,"copy") then return
+  dstPath=dst
+  if dstPath[-1]!="/" then dstPath=dstPath+"/"
+  r=f.copy(dstPath,split(src,"/")[-1])
+  if r isa string then return Error.set(r)
+  if r==null then return Error.set(PartialObject._ERROR_FAILED_GET_FILE)
+  fireMeta
+  Info.info(PartialObject._MSG_SUCCESS_COPY)
+end function
+//Move file on partial computer
+PartialObject._opMove=function(getFile,fireMeta,argv)
+  v=PartialObject._validateArgs(argv,2,"mv [File] [Destination]","mv")
+  if v!=true then return v
+  src=argv[0]
+  dst=argv[1]
+  f=getFile(src)
+  if not PartialObject._validateFileOp(f,"move") then return
+  dstPath=dst
+  if dstPath[-1]!="/" then dstPath=dstPath+"/"
+  r=f.move(dstPath,split(src,"/")[-1])
+  if r isa string then return Error.set(r)
+  if r==null then return Error.set(PartialObject._ERROR_FAILED_GET_FILE)
+  fireMeta
+  Info.info(PartialObject._MSG_SUCCESS_MOVE)
+end function
+//Rename file on partial computer
+PartialObject._opRename=function(getFile,fireMeta,argv)
+  v=PartialObject._validateArgs(argv,2,"rn [File] [Name]","rn")
+  if v!=true then return v
+  p=argv[0]
+  n=argv[1]
+  f=getFile(p)
+  if not PartialObject._validateFileOp(f,"rename") then return
+  r=f.rename(n)
+  PartialObject._handleResult(r,PartialObject._MSG_SUCCESS_RENAME,fireMeta)
+end function
+//Delete file on partial computer
+PartialObject._opDelete=function(getFile,fireMeta,argv)
+  if not argv then return Info.man("Usage:rm [file]","rm")
+  p=argv[0]
+  f=getFile(p)
+  if not PartialObject._validateFileOp(f,"delete") then return
+  r=f.delete
+  if r=="" then
+    fireMeta
+    Info.info(p+PartialObject._MSG_SUCCESS_DELETE)
+  else
+    Info.error(r)
+  end if
+end function
+//Change file owner on partial computer
+PartialObject._opSetOwner=function(getFile,fireMeta,argv)
+  parsed=PartialObject._parseRecursiveFlag("chown",argv)
+  if parsed isa Error then return
+  if len(parsed.rest)!=2 then return Info.man("Usage:chown (opt:-r|-R) [owner] [path file/folder]","chown")
+  o=parsed.rest[0]
+  p=parsed.rest[1]
+  f=getFile(p)
+  if not PartialObject._validateFileOp(f,"set_owner") then return
+  // XFIX1.0: recursive via Io.walkApply (method) — report per-child denials
+  if parsed.flag then
+    res=Io.walkApply(f,"owner",o,true)
+    if res.ok>0 then fireMeta
+    if not res.fails then Info.info(PartialObject._MSG_SUCCESS_OWNER)
+    return
+  end if
+  r=f.set_owner(o)
+  if r==null then return
+  if r isa string and len(r)>0 then return Error.set(r)
+  fireMeta
+  Info.info(PartialObject._MSG_SUCCESS_OWNER)
+end function
+//Change file group on partial computer
+PartialObject._opSetGroup=function(getFile,fireMeta,argv)
+  parsed=PartialObject._parseRecursiveFlag("chgrp",argv)
+  if parsed isa Error then return
+  if len(parsed.rest)!=2 then return Info.man("Usage:chgrp (opt:-r|-R) [new group] [path file/folder]","chgrp")
+  g=parsed.rest[0]
+  p=parsed.rest[1]
+  f=getFile(p)
+  if not PartialObject._validateFileOp(f,"set_group") then return
+  // XFIX1.0: recursive via Io.walkApply (method) — report per-child denials
+  if parsed.flag then
+    res=Io.walkApply(f,"group",g,true)
+    if res.ok>0 then fireMeta
+    if not res.fails then Info.info(PartialObject._MSG_SUCCESS_GROUP)
+    return
+  end if
+  r=f.set_group(g)
+  if r==null then return Error.set(PartialObject._ERROR_FAILED_GET_FILE)
+  if r isa string and len(r)>0 then return Error.set(r)
+  fireMeta
+  Info.info(PartialObject._MSG_SUCCESS_GROUP)
+end function
+//Execute exploit operations on partial object
+PartialObject.run=function(metx,data)
+	//Initialize partial object data
+	pdata=null
+	//Initialize debug mode flag
+	debug=null
+	//Initialize network connection
+	net=null
+	//Initialize metaxploit library
+	metaLib=null
+	//Initialize partial file object
+	pfile=null
+	//Initialize partial computer object
+	pcomputer=null
+	//Initialize router object
+	router=null
+	//Set active flag
+	X=true
+  //Initialize result variable
+  _=null
+  //Initialize methods list
+  methods=null
+	//Initialize active libraries map
+	activeLibs={}
+	//Debug print helper - only called when G_poDebug is true
+	dbg=function(msg);print msg;end function
+  //Create folder wrapper
+  create_folder=function(argv);return PartialObject._opCreateFolder(pcomputer,@fireMeta,argv);end function
+  //Create file wrapper
+  touch=function(argv);return PartialObject._opTouch(pcomputer,@fireMeta,argv);end function
+  //Show processes wrapper
+  show_procs=function(argv);return PartialObject._opShowProcs(pcomputer);end function
+  //Change password wrapper
+  change_password=function(argv);return PartialObject._opChangePassword(pcomputer,@fireMeta,argv);end function
+  //Create user wrapper
+  create_user=function(argv);return PartialObject._opCreateUser(pcomputer,@fireMeta,argv);end function
+  //Delete user wrapper
+  delete_user=function(argv);return PartialObject._opDeleteUser(pcomputer,@fireMeta,argv);end function
+  //Create group wrapper
+  create_group=function(argv);return PartialObject._opCreateGroup(pcomputer,@fireMeta,argv);end function
+  //Delete group wrapper
+  delete_group=function(argv);return PartialObject._opDeleteGroup(pcomputer,@fireMeta,argv);end function
+  //Close program wrapper
+  close_program=function(argv);return PartialObject._opCloseProgram(pcomputer,@fireMeta,argv);end function
+  //Change permissions wrapper
+  chmod=function(argv);return PartialObject._opChmod(@getFile,@fireMeta,argv);end function
+  //Copy file wrapper
+  copy=function(argv);return PartialObject._opCopy(@getFile,@fireMeta,argv);end function
+  //Move file wrapper
+  move=function(argv);return PartialObject._opMove(@getFile,@fireMeta,argv);end function
+  //Rename file wrapper
+  rename=function(argv);return PartialObject._opRename(@getFile,@fireMeta,argv);end function
+  //Delete file wrapper
+  delete=function(argv);return PartialObject._opDelete(@getFile,@fireMeta,argv);end function
+  //Set owner wrapper
+  set_owner=function(argv);return PartialObject._opSetOwner(@getFile,@fireMeta,argv);end function
+  //Set group wrapper
+  set_group=function(argv);return PartialObject._opSetGroup(@getFile,@fireMeta,argv);end function
+	//Build command and methods lists from partial object capabilities
+	buildMethodList=function
+		outer._=["cls","debug","exit","help","libs","main","meta","ports","probe","scan"]
+		outer.methods=[white("scan"),white("probe"),white("ports"),white("meta"),white("main"),white("libs"),white("help"),white("exit"),white("debug"),white("cls")]
+		ref={"file":"file","create_folder":"mkdir","touch":"touch","show_procs":"ps","change_password":"passwd","create_user":"useradd","delete_user":"userdel","create_group":"groupadd","delete_group":"groupdel","close_program":"kill","chmod":"chmod","copy":"cp","move":"mv","rename":"rn","delete":"rm","set_owner":"chown","set_group":"chgrp"}
+		for idx in outer.pcomputer.__isa.indexes
+			if hasIndex(ref,idx) then
+				push(outer._,ref[idx])
+				push(outer.methods,PartialObject._colorByPerm(ref[idx],outer.pdata.computer))
+			end if
+		end for
+		if outer.pfile then
+			for idx in outer.pfile.__isa.indexes
+				if hasIndex(ref,idx) then
+					push(outer._,ref[idx])
+					push(outer.methods,PartialObject._colorByPerm(ref[idx],outer.pdata.file))
+				end if
+			end for
+		end if
+		outer.methods.reverse
+	end function
+	//Get file object from partial computer path
+	getFile=function(p)
+		//Execute payload to get file object
+		r=payload(debug,pdata.memory,p)
+		//Check if result is null
+		if not r then return Error.set(PartialObject._ERROR_INVALID_FILE+p)
+		//Check for file not found error message
+		if r isa string and indexOf(r,"Error acquiring partial object file.")!=null then return Error.set(PartialObject._ERROR_FILE_NOT_FOUND+p)
+		//Validate result is a list
+		if not r isa list then return Error.set(PartialObject._ERROR_FAILED_GET_FILE)
+		//Extract and return pfile object from result
+		if len(r)>=2 and typeof(r[1])=="pfile" then return r[1] else return Error.set(PartialObject._ERROR_FAILED_GET_FILE)
+	end function
+	//Try exploits for a library: get exploits, try each with overflowArg
+	//Returns: true=success, false=all failed, null=no exploits found
+	tryLibExploits=function(lib,overflowArg,label)
+		e=Exploit.get(lib)
+		if not e then
+			Exploit.headless(lib)
+			e=Exploit._ex(Exploit.getCacheKey(lib))
+		end if
+		if not e then
+			if globals.G_poDebug then dbg(orange("DEBUG: No exploits found for ")+white(label))
+			return null
+		end if
+		if globals.G_poDebug then dbg(green("DEBUG: Found ")+white(str(len(e)))+green(" exploits for ")+white(label))
+		for x in e
+			if globals.G_poDebug then dbg(yellow("DEBUG: Trying exploit on ")+white(label)+yellow(" with arg: ")+white(overflowArg))
+			result=Exploit.overflow(lib,x.m,x.s,overflowArg,"partial_objects")
+			if globals.G_poDebug then dbg(yellow("DEBUG: Result: ")+white(str(result))+yellow(" Type: ")+white(typeof(result)))
+			resultType=typeof(result)
+			if result and resultType!="string" then
+				if globals.G_poDebug then dbg(green("DEBUG: SUCCESS with ")+white(label))
+				return true
+			end if
+		end for
+		return false
+	end function
+	//Trigger metaxploit exploit after file operation
+	fireMeta=function
+		//Ensure libraries are loaded
+		if not outer.activeLibs or len(outer.activeLibs)==0 then packLibs
+		//Determine overflow argument: use LAN IP if router, otherwise "x" for password
+		overflowArg="x"
+		if hasIndex(outer.libCache,"kernel_router.so") then
+			if hasIndex(outer.net,"local_ip") and outer.net.local_ip then
+				overflowArg=outer.net.local_ip
+				if globals.G_poDebug then dbg(cyan("DEBUG: Router detected - using LAN IP: ")+white(overflowArg))
+			end if
+		end if
+		//Check if we have cached libraries to try
+		hasCachedLibs=false
+		if outer.libCache and len(outer.libCache)>0 then hasCachedLibs=true
+		if globals.G_poDebug then dbg(orange("DEBUG fireMeta: hasCachedLibs=")+white(str(hasCachedLibs))+orange(" (count: ")+white(str(len(outer.libCache)))+orange(")"))
+		//Try exploits from all cached libraries
+		if hasCachedLibs then
+			if globals.G_poDebug then dbg(cyan("DEBUG: Trying exploits from ")+white(str(len(outer.libCache)))+cyan(" cached libraries"))
+			for libName in outer.libCache
+				lib=outer.libCache[libName.key]
+				if globals.G_poDebug then dbg(cyan("DEBUG: Processing library: ")+white(libName.key))
+				if len(lib)!=3 then
+					if globals.G_poDebug then dbg(orange("DEBUG: Skipping ")+white(libName.key)+orange(" - invalid length: ")+white(str(len(lib))))
+					continue
+				end if
+				libMeta=lib[2]
+				if globals.G_poDebug then dbg(cyan("DEBUG: MetaLib for ")+white(libName.key)+cyan(": ")+white(lib_name(libMeta)+":"+version(libMeta)))
+				if tryLibExploits(libMeta,overflowArg,libName.key) then return
+			end for
+		else
+			//Fallback: try single metaLib if no cached libraries
+			if globals.G_poDebug then dbg(orange("DEBUG: No cached libraries, trying single metaLib"))
+			r=tryLibExploits(metaLib,overflowArg,lib_name(metaLib))
+			if r==null then return Info.info("You need to run meta and take an exploit")
+			if r then return
+		end if
+		//If all exploits failed, launch meta interactive mode
+		Info.info("You need to use meta and use a exploit")
+		meta([])
+	end function
+	//Pack all available libraries from partial computer
+	packLibs=function
+		if globals.G_poDebug then dbg(purple("DEBUG packLibs: Called"))
+		//Initialize if needed
+		if not outer.activeLibs then outer.activeLibs={}
+		if not outer.libCache then outer.libCache={}
+		if globals.G_poDebug then dbg(purple("DEBUG packLibs: Current libCache.len = ")+white(str(len(outer.libCache))))
+		//Check if already cached to avoid re-scanning same system
+		if len(outer.libCache)>0 then
+			if globals.G_poDebug then dbg(green("DEBUG packLibs: Cache HIT - reusing ")+white(str(len(outer.libCache)))+green(" cached libraries"))
+			if globals.G_poDebug then dbg(green("DEBUG packLibs: (Scanning different library on same system)"))
+			return
+		end if
+		if globals.G_poDebug then dbg(yellow("DEBUG packLibs: Cache MISS - performing fresh scan"))
+		if globals.G_poDebug then dbg(yellow("DEBUG packLibs: (New system or first library scan)"))
+		//Iterate through known library names
+		for l in Library.librarys
+			//Get library from partial computer (returns [pcomputer, pfile, pmlib])
+			r=payload(outer.debug,outer.pdata.memory,"/lib/"+l)
+			//Check if library exists
+			if r isa list then
+				//Add library metalib to active map if valid
+				if len(r)==3 then
+					outer.activeLibs[l]=r[-1]
+					//Cache the full partial object for reuse
+					outer.libCache[l]=r
+					if globals.G_poDebug then dbg(purple("  -> Cached ")+white(l))
+				end if
+			end if
+		end for
+		if globals.G_poDebug then dbg(green("DEBUG packLibs: Scan complete. Total cached: ")+white(str(len(outer.libCache))))
+	end function
+	//List available libraries on partial computer
+	libs=function(argv);if not outer.activeLibs then packLibs;for l in outer.activeLibs;print white(l.key);end for;end function
+	meta=function(argv)
+    f=false
+		e=Exploit.get(outer.metaLib)
+		key=Exploit.getCacheKey(outer.metaLib)
+		if not e then
+			Exploit.headless(outer.metaLib)
+			e=Exploit._ex(key)
+		end if
+		e=Exploit._ex(key)
+		if hasIndex(net,"public_ip") then p=purple("•"+white("["+blue(lib_name(outer.metaLib)+orange(":")+version(outer.metaLib))+"]")+"•")+orange(net.public_ip+yellow(":")+net.local_ip)+purple("•") else p=purple("•"+white("["+blue(lib_name(outer.metaLib)+orange(":")+version(outer.metaLib))+"]")+"•")
+		if argv then
+      if argv[0]=="-u" then
+        for x in e
+          if x.e=="?" or x.e=="t" then
+            print yellow("+++============================================================================+++")
+            Exploit.run(x,{"metaLib":outer.metaLib,"public_ip":net.public_ip,"local_ip":net.local_ip})
+          end if
+        end for
+        f=true
+      else if argv[0]=="-o" then
+        f=true
+      end if
+		end if
+		net["metaLib"]=outer.metaLib
+    globals.G_attributes.back=false
+		Attack.getExploitPO(p,e,net,f)
+	end function
+  //Scan port or library for vulnerabilities
+  pscan=function(argv)
+		//Check for partial object errors
+		if globals.G_errors.pobject then return Error.set("PObjects are in an error state, please check the log")
+		if not argv then return Info.man("scan port|(optional path)lib","scan")
+		//Check if scanning by port number
+		if to_int(argv[0]) isa number then
+			//Add public IP to arguments
+			argv.insert(0,net.public_ip)
+			//Target network service by port
+			o=PartialObject.target(argv,true,true,metx)
+			//Check for error
+			if o isa Error then return
+			//Check if no target found
+			if not o then return
+			//Initialize with target data
+			init(o)
+		else
+			//Load libraries if not already loaded
+			if not activeLibs then packLibs
+			//Get library name from arguments
+			l=argv[-1]
+			//Try to find matching library
+			if not hasIndex(activeLibs,l) then
+				//Check if any active library contains this string
+				found=false
+				for lib in activeLibs
+					if indexOf(lib.key,l)!=null then
+						l=lib.key
+						found=true
+						break
+					end if
+				end for
+				//If still not found, try with .so extension
+				if not found then
+					//Add .so if missing
+					if indexOf(l,".so")==null then l=l+".so"
+					//Try again with .so added
+					if not hasIndex(activeLibs,l) then l="lib"+l //Try with lib prefix too
+				end if
+			end if
+			//Validate library exists
+			if not hasIndex(activeLibs,l) then return Error.set("Mismatch lib name:"+l)
+      //Check if library already patched
+      if is_patched(activeLibs[l]) then return Info.info("Library is already patched")
+			//Get credentials for debugger
+			c=PartialObject.getCred
+      //Check for credential error
+      if c isa Error then return
+			//Get debugger for library
+			d=debug_tools(activeLibs[l],c.user,c.password)
+      //Check for permission denied error (need root)
+      if d=="Permission denied. Only root user can execute this command locally." then
+        //Fall back to network targeting
+        o=PartialObject.target(argv,true,true,metx)
+        //Check for error
+        if o isa Error then return
+        //Check if no target found
+        if not o then return
+        //Initialize with network target data
+        return init(o)
+      end if
+      //Validate debugger obtained
+      if not d then return Error.set("Failed to get a debugger")
+      //Check for debugger error
+      if d isa string then return Error.set(d)
+      //Analyze library for vulnerabilities
+      r=PartialObject.trySolve(d,activeLibs[l])
+      //Check for solver error
+      if r.result isa Error then return r.result
+			//Check if no vulnerabilities found
+			if r.result=="No potential issues have been found" then return Info.info("No potential issues have been found")
+			//Parse vulnerability data
+			p=PartialObject.getPData(r.result,activeLibs[l])
+      //Ensure library path is absolute
+      if indexOf(l,"/")==null then l="/lib/"+l
+			//Get partial object from library
+			j=payload(d,p.memory,l)
+			//Validate partial object obtained
+			if not j isa list then return Error.set("Sum ting wong")
+			//Save metaxploit library to database if found
+			if len(j)==3 then PartialObject.saveToDatabase(j[2],p)
+			//Update current session without clearing cache (local library scan)
+			if globals.G_poDebug then dbg(green("DEBUG: LOCAL LIBRARY SCAN - Preserving cache"))
+			if globals.G_poDebug then dbg(green("DEBUG: Keeping ")+white(str(len(outer.libCache)))+green(" cached libraries"))
+			outer.pdata=p
+			outer.debug=d
+			outer.pcomputer=j[0]
+			outer.pfile=j[1]
+			if len(j)==3 then outer.metaLib=j[2] else outer.metaLib=null
+			//Rebuild methods list without clearing cache
+			buildMethodList
+		end if
+  end function
+	//Display open ports on edge router
+	getPorts=function(argv)
+		//Display kernel router info
+		print yellow("0:")+green(outer.router.local_ip)+" "+white("kernel_router "+kernel_version(outer.router))
+		if ping_port(outer.router,8080) then print yellow("8080:")+green(outer.router.local_ip)+" "+white("http "+kernel_version(outer.router))
+		//Iterate through all used ports
+		for p in used_ports(outer.router);if is_closed(p) then continue;print yellow(str(port_number(p)))+":"+green(get_lan_ip(p))+" "+white(port_info(outer.router,p));end for
+	end function
+  //Clear screen command
+  cs=function(argv)
+    //Clear terminal screen
+    clear_screen
+  end function
+  //Exit partial object shell
+  back=function(argv)
+    //Set exit flag
+    outer.X=false
+  end function
+	//Check if file or path exists
+	probe=function(argv)
+		//Validate path provided
+		if not argv then return Info.man("probe path","probe")
+		//Get path from arguments
+		p=argv[0]
+		//Try to get file object
+		t=getFile(p)
+		//Display success if file exists
+		if t and not t isa Error then Info.info("File|Path exists:"+p)
+	end function
+	//Display partial object shell help
+	help=function(argv)
+		print green("                 -PObject Commands-")
+		//Print clear screen help
+		print white("   cls --------- Clears the screen")
+		//Print exit help
+		print white("  exit --------- Exits the current pobject")
+		//Print help command help
+		print white("  help --------- Prints this screen")
+		//Print libs command help
+		print white("  libs --------- prints found libs")
+		//Print meta command help
+		print white("  meta (-u|-o) - Exploits the current library also has a -u flag to update")
+    //Print meta flag details
+    print white("                 and a -o flag to only show found objects")
+		//Print ports command help
+		print white(" ports --------- List all the open ports from the edge router")
+		//Print scan command help
+		print white("  scan [p|l] --- Scan a new port [p] or (optional path)/library [l]")
+		//Print probe command help
+		print white(" probe [p] ----- Probe if a path|file [p] exists")
+    //Print main command help
+    print white("  main [c](p) -- Execute a command [c] with params (p) from main")
+    //Print debug mode info
+    print white(" debug [on|off|status] Toggle debug output or show cache status")
+    //Print general help note
+    print white("*** Most commands will show help if called with no arguments ***")
+	end function
+  //Execute command from main shell namespace
+  main=function(argv)
+    if not argv then return Info.man("Usage:main [command] (params)","main")
+    //Check if command exists and execute, otherwise show warning
+    k=lower(argv[0])
+    if hasIndex(globals.G_main.commands,k) then globals.G_main.commands[k](argv[1:]) else Info.Warning("Invalid command: "+argv[0])
+  end function
+  //Toggle debug mode
+  debugMode=function(argv)
+    if not argv or len(argv)==0 then
+      //Show current status
+      if globals.G_poDebug then Info.info("Debug mode is currently: "+green("ENABLED")) else Info.info("Debug mode is currently: "+red("DISABLED"))
+      Info.info("Usage: debug [on|off|true|false|1|0|status]")
+      return
+    end if
+    //Toggle based on argument
+    arg=lower(argv[0])
+    if arg=="on" or arg=="true" or arg=="1" then
+      globals.G_poDebug=true
+      Info.info("Debug mode "+green("ENABLED"))
+    else if arg=="off" or arg=="false" or arg=="0" then
+      globals.G_poDebug=false
+      Info.info("Debug mode "+red("DISABLED"))
+    else if arg=="status" then
+      //Show debug status
+      if globals.G_poDebug then Info.info("Debug mode: "+green("ENABLED")) else Info.info("Debug mode: "+red("DISABLED"))
+      //Show cached libraries
+      if outer.libCache and len(outer.libCache)>0 then
+        Info.info("Cached libraries: "+cyan(str(len(outer.libCache))))
+        for libName in outer.libCache
+          lib=outer.libCache[libName.key]
+          if len(lib)==3 then
+            libMeta=lib[2]
+            print "  "+yellow(libName.key)+" -> "+white(lib_name(libMeta)+":"+version(libMeta))
+          else
+            print "  "+yellow(libName.key)+" -> "+red("invalid")
+          end if
+        end for
+      else
+        Info.info("Cached libraries: "+red("none"))
+      end if
+      //Show overflow argument
+      if outer.net then
+        if hasIndex(outer.libCache,"kernel_router.so") then
+          if hasIndex(outer.net,"local_ip") and outer.net.local_ip then Info.info("Overflow mode: "+cyan("router")+" (using LAN IP: "+white(outer.net.local_ip)+" for bounce overflow)") else Info.info("Overflow mode: "+cyan("router")+" (no LAN IP available)")
+        else
+          Info.info("Overflow mode: "+cyan("standard")+" (using 'x' for password overflow)")
+        end if
+      end if
+    else
+      Info.warning("Invalid argument. Use: on|off|true|false|1|0|status")
+    end if
+  end function
+	//Initialize partial object shell environment
+	init=function(data)
+		if globals.G_poDebug then dbg(red("========================================"+char(10)+"DEBUG init: NEW PARTIAL OBJECT SESSION"+char(10)+"DEBUG init: Clearing all caches"+char(10)+"========================================"))
+		//Initialize cache structures
+		outer.activeLibs={}
+		outer.libCache={}
+		//Set partial object data
+		outer.pdata=data.pdata
+		//Set debugger
+		outer.debug=data.debug
+		//Set network data
+		outer.net=data.net
+		if globals.G_poDebug then dbg(red("DEBUG init: Network - ")+white(data.net.public_ip+":"+data.net.local_ip))
+		//Get edge router
+		outer.router=get_router(data.net.public_ip)
+    //Set partial computer object
+    outer.pcomputer=data.pobj[0]
+    //Set partial file object
+    outer.pfile=data.pobj[1]
+		//Set metaxploit library if available
+		if len(data.pobj)==3 then outer.metaLib=data.pobj[2] else outer.metaLib=null
+		//Build command and method lists from partial object capabilities
+		buildMethodList
+		//Load available libraries
+		packLibs
+	end function
+	//Initialize partial object shell with data
+	init(data)
+	//Map command names to handler functions
+	cmds={
+    "main":@main,
+    "debug":@debugMode,
+    "probe":@probe,
+    "help":@help,
+    "libs":@libs,
+    "ports":@getPorts,
+    "scan":@pscan,
+    "meta":@meta,
+    "exit":@back,
+    "cls":@cs,
+    "mkdir":@create_folder,
+    "touch":@touch,
+    "ps":@show_procs,
+    "passwd":@change_password,
+    "useradd":@create_user,
+    "userdel":@delete_user,
+    "groupadd":@create_group,
+    "groupdel":@delete_group,
+    "kill":@close_program,
+    "chmod":@chmod,
+    "cp":@copy,
+    "mv":@move,
+    "rn":@rename,
+    "rm":@delete,
+    "chown":@set_owner,
+    "chgrp":@set_group
+  }
+  while X
+    Info.info("Available methods")
+		info=""
+		if pdata.computer==PartialObject._PERM_ROOT then
+			info+=green("Computer ["+PartialObject._PERM_ROOT+"]")
+		else if pdata.computer==PartialObject._PERM_USER then
+			info+=blue("Computer ["+PartialObject._PERM_USER+"]")
+		else if pdata.computer==PartialObject._PERM_GUEST then
+			info+=red("Computer ["+PartialObject._PERM_GUEST+"]")
+		end if
+		if pdata.file==PartialObject._PERM_ROOT then
+			info+=" and "+green("File ["+PartialObject._PERM_ROOT+"]")
+		else if pdata.file==PartialObject._PERM_USER then
+			info+=" and "+blue("File ["+PartialObject._PERM_USER+"]")
+		else if pdata.file==PartialObject._PERM_GUEST then
+			info+=" and "+red("File ["+PartialObject._PERM_GUEST+"]")
+		end if
+		Info.info(info)
+    //Display methods with decorative dashes instead of numbers
+    for m in methods;print purple("["+yellow("-")+"]")+"   "+m;end for
+		if hasIndex(net,"public_ip") then prompt=split(user_input(purple("•"+white("["+blue(lib_name(metaLib)+orange(":")+version(metaLib))+"]")+"•")+orange(net.public_ip+yellow(":")+net.local_ip)+purple("•")+char(10)+purple(" PObject Interpreter "+white(":~$ ")),0,0,1)," ") else prompt=split(user_input(purple("•"+white("["+blue(lib_name(metaLib)+orange(":")+version(metaLib))+"]")+"•"))+purple("•local•")+char(10)+purple(" PObject Interpreter "+white(":~$ "),0,0,1)," ")
+    if not prompt then continue
+    Arg1=lower(prompt[0])
+    if indexOf(_,Arg1)==null then
+      Info.warning(Arg1+" is not available, see the above list.")
+      continue
+    end if
+    if not hasIndex(cmds,Arg1) then continue
+    cmds[Arg1](prompt[1:])
+  end while
+end function
+//Get metaxploit library from IP or file path
+PartialObject.getMetalib=function(Obj,argv,s=false)
+	if not argv then return Error.set("Invalid params")
+	//Get target (IP or path)
+	t=argv[0]
+	//Get metaxploit library (packed or standard)
+	if s then m=Obj.packMetaxploit else m=Library.metaxploit
+	//Check if targeting by IP address
+	if is_valid_ip(t) then
+    //Initialize library result
+    l=null
+    //Validate port provided
+    if not len(argv)==2 then return Error.set("Invalid arguments: "+t+":<port>")
+		//Convert port to integer
+		p=to_int(argv[1])
+		//Resolve service name to port number if needed
+		if not p isa number then p=PartialObject.getPort(p)
+		//Validate port is numeric
+		if not p isa number then return Error.set("Invalid port: "+p)
+		//Connect to network service and dump library
+		if s then l=dump_lib(net_use(m,t,p))
+		//Validate library obtained
+		if l==null then return Error.set("Null result was returned for: "+t+":"+p)
+		//Check for error message
+		if l isa string then return Error.set(l)
+	//Targeting by file path
+	else
+		//Get full library path
+		b=self.getLibraryPath(t)
+		//Load library from file
+		l=load(m,b)
+		//Validate library loaded
+		if l==null then return Error.set("Null result was returned for: "+b)
+		//Check for error message
+		if l isa string then return Error.set(l)
+	end if
+	//Return library
+	return l
+end function
+//Scan library and apply patch if vulnerabilities found
+PartialObject.patchScan=function(Obj,argv,s=false)
+	//Get metaxploit library
+	m=self.getMetalib(Obj,argv,s)
+	//Validate library obtained
+	if not m then return
+  //Check if library already patched
+  if is_patched(m) then return Info.info(lib_name(m)+":"+version(m)+":> Library is already patched to : "+is_patched(m,true))
+	//Load debugger for library
+	d=self.loadDebugger(m)
+	//Check for debugger error
+	if d isa Error then return
+  //Analyze library for vulnerabilities
+  v=self.trySolve(d,m)
+  //Check for solver error
+  if v isa Error then return v
+  //Check for result error
+  if v.result isa Error then return v.result
+  //Check if no vulnerabilities found
+  if v.result=="No potential issues have been found" then return Info.info(lib_name(m)+":"+version(m)+":> "+v.result)
+  //Extract patch code from result
+  if v.patch then p=join(v.patch,char(10)) else p=null
+	//Validate patch code obtained
+	if not p isa string then return Error.set("Sum ting went wong")
+	//Check for permission denied error
+	if indexOf(p,"Permission denied.") then return Error.set(p)
+	//Get patch file in home directory
+	h=File(Obj.computer,path(Obj.user.home)+"/_patch_")
+	//Create patch file if doesn't exist
+	if not h then h=Command.touch(Obj,[path(Obj.user.home)+"/_patch_"])
+	//Check for file creation error
+	if h isa Error then return
+	//Check if manual review required
+	if not globals.G_settings.autoSolve then
+		//Print blank line
+		print
+		//Print separator
+		print green("-")*60
+		//Print scan result header
+		Info.info("Debug Scan Result")
+		//Print separator
+		print green("-")*60
+		//Display scan results
+		print v.scan_result
+		//Print separator
+		print green("-")*60
+		//Print patch code header
+		Info.info("Patch Code")
+		//Print separator
+		print green("-")*60
+		//Display patch code
+		print p
+		//Prompt user to confirm patch
+		if Gui.yesNo("If the above patch looks right then press enter",true) then
+			//Write patch to file
+			set_content(h,p)
+		else
+			//Inform user to manually edit patch
+			Info.info("Copy the above patch code to the file _patch_ in your home directory.")
+			//Inform user about root path
+			Info.info("If your are root then look in /root for a _patch_ file.")
+			//Wait for user to edit file
+			user_input(yellow("Press enter when you have made your changes"))
+		end if
+	//Auto-solve mode
+	else
+		//Write patch to file automatically
+		set_content(h,p)
+	end if
+	//Apply patch to library
+	r=apply_patch(d,path(h))
+	//Check for permission denied error
+	if indexOf(r,"Permission denied.")!=null then return Error.set(r)
+	//Validate patch applied
+	if not r then return Error.set("Sum ting went wong")
+	//Display patch result
+	Info.info(lib_name(m)+":"+version(m)+":> "+r)
+	//Wait briefly if silent mode
+	if s then wait .5
+	//Delete patch file
+	Command.qrm(Obj,[h])
+end function
+PartialObject.loadDebugger=function(m,i=null)
+	c=self.getCred
+	if c isa Error then return c
+	d=debug_tools(m,c.user,c.password)
+	if d isa string then return Error.set(d)
+	if not d then return Error.set("Unable to get a debugLibrary object")
+	if i and c.ip=="None" then self.checkip(c,i)
+	return d
+end function
+PartialObject.checkDatabase=function(m)
+	if not m then return
+	n=m.lib_name+"_"+m.version
+	if not hasIndex(globals.G_exploitCache,n) then return
+  e=Exploit._ex(n)[-1]
+  if not hasIndex(e,"ю") then return
+  _s0=split(e.ю,"Ш")[0];if _s0=="x" or _s0=="0" then return true
+end function
+PartialObject.saveToDatabase=function(m,d)
+	if not m then return
+	if not d.memory then return
+	if not d.vuln then return
+	if self.checkDatabase(m) then return
+  n=m.lib_name+"_"+m.version
+	e=null
+  if hasIndex(globals.G_exploitCache,n) then
+		e=globals.G_exploitCache[n]
+	else
+		e=Exploit.get(m)
+		if not e then Exploit.headless(m)
+		e=globals.G_exploitCache[n]
+	end if
+	for l in split(get_content(e.file))
+    if indexOf(l,n)!=null then
+      if indexOf(l,Exploit.getrtree(0))!=null then return
+    end if
+	end for
+	push(Exploit._ex(n),{
+    "e":"x",
+    "m":Exploit.setmtree(d.memory),
+    "s":Exploit.setstree(d.vuln),
+    "u":"?",
+    "ю":join(d.req,"Ш")
+	})
+	Exploit.write(m)
+end function
+PartialObject.writeLog=function(p)
+	n="/pobjectError.log"
+	l=Io._getFile(globals.G_main,path(globals.G_main.user.home)+n,true)
+	if l isa Error then
+    Info.info("Creating log file...")
+    l=Command.touch(globals.G_main,["-x",path(globals.G_main.user.home)+n])
+  end if
+	if l isa Error then return
+	Info.info("Writing to the log...")
+	r=["Test Output:"]
+	r+=split(p.testOutput,char(10))
+	r+=[""]
+	r+=["Scan Result:"]
+	r+=split(p.scanResult,char(10))
+	r+=[""]
+	r+=["Patch Code:"]
+	r+=split(p.patch,char(10))
+	r+=[""]
+	r+=["Errors: "]
+	r+=["["+join(p.errors,",")+"]"]
+	_ct=get_content(l);if _ct then set_content(l,_ct+char(10)+r.join(char(10))) else set_content(l,r.join(char(10)))
+end function
+PartialObject.getPData=function(p,z)
+	c=null
+	f=null
+	m=null
+	v=null
+	r=[0]
+	for l in split(p,char(10))
+		if indexOf(l,PartialObject._SCAN_POTENTIAL)!=null then
+			m=split(l," ")[-1]
+			continue
+		end if
+		if indexOf(l,PartialObject._SCAN_VULN_FOUND)!=null then
+			s=indexOf(l,PartialObject._HTML_BOLD_OPEN)+3
+			e=indexOf(l,PartialObject._HTML_BOLD_CLOSE)
+			v=l[s:e]
+			continue
+		end if
+		if indexOf(l,"*")!=null then
+			if indexOf(l,PartialObject._SCAN_COMPUTER)!=null then
+				c=PartialObject._parsePerm(l)
+				continue
+			end if
+			if indexOf(l,PartialObject._SCAN_FILE)!=null then
+				f=PartialObject._parsePerm(l)
+				continue
+			end if
+			push(r,Exploit.setrtree(l))
+		end if
+	end for
+	return {
+    "memory":m,
+    "vuln":v,
+    "req":r,
+    "computer":c,
+    "file":f
+  }
+end function
+PartialObject.target=function(argv,o=false,t=true,metx,n=null)
+	if not argv then return Man.help(["scan"])
+	if is_valid_ip(argv[0]) then
+    i=argv[0]
+    if len(argv)<2 then return Error.set("Invalid arguments: "+i+":<port>")
+		p=to_int(argv[1])
+		if not p isa number then p=PartialObject.getPort(p)
+		if not p isa number then return Error.set("Invalid port: "+p)
+		m=dump_lib(net_use(metx,i,p))
+		if m==null then return Error.set("Null result was returned for: "+i+":"+p)
+		if m isa string then return Error.set(m)
+    if is_patched(m) then return Info.info(lib_name(m)+":"+version(m)+":> Library is already patched to : "+is_patched(m,true))
+		if p==0 then
+			e={
+        "public_ip":i,
+        "local_ip":get_router(i).local_ip,
+        "metaLib":m
+      }
+		else
+			e=null
+			for _ in used_ports(get_router(i))
+				if port_number(_)==p then
+					e={
+            "public_ip":i,
+            "local_ip":get_lan_ip(_),
+            "metaLib":m
+          }
+					break
+				end if
+			end for
+			// Port not forwarded — served by the router itself (e.g. port 8080 HTTP)
+			if not e then e={
+        "public_ip":i,
+        "local_ip":get_router(i).local_ip,
+        "metaLib":m
+      }
+		end if
+		d=self.loadDebugger(m,i)
+		if d isa Error then return
+    r=self.trySolve(d,m)
+		if r.result isa Error then return r.result
+		a=self.getPData(r.result,m)
+		if a isa Error then return a
+		if t then self.saveToDatabase(m,a)
+		l="/lib/"+lib_name(m)
+		if len(argv)>=3 then l=self.getLibraryPath(split(argv[2],"/"))[-1]
+		j=payload(d,a.memory,l)
+		if j isa list then
+			if o then return {
+        "pobj":j,
+        "debug":d,
+        "pdata":a,
+        "net":e
+      } else return self.run(metx,{
+        "pobj":j,
+        "debug":d,
+        "pdata":a,
+        "net":e
+      })
+		end if
+	else
+		l=self.getLibraryPath(argv[-1])
+		if indexOf(l,"/")==null then l="/lib/"+l
+    m=load(metx,l)
+    if is_patched(m) then return Info.info(lib_name(m)+":"+version(m)+":> Library is already patched to : "+is_patched(m,true))
+		d=self.loadDebugger(m)
+		if d isa Error then return
+    r=self.trySolve(d,m)
+    if r.result isa Error then return r.result
+		a=self.getPData(r.result,m)
+		j=payload(d,a.memory,l)
+		if j isa list then
+			if j[2].lib_name==null then return Warning.set("Sum ting wong you need to restart x and try again!")
+			if t then self.saveToDatabase(j[2],a)
+			if n then e=n else e={
+        "public_ip":globals.G_main.meta.public_ip,
+        "local_ip":globals.G_main.meta.local_ip,
+        "metaLib":j[2]
+      }
+			if o then return {
+        "pobj":j,
+        "debug":d,
+        "pdata":a,
+        "net":e
+      } else return self.run(metx,{
+        "pobj":j,
+        "debug":d,
+        "pdata":a,
+        "net":e
+      })
+		end if
+	end if
+end function
+PartialObject.checkip=function(c,i)
+	if not globals.G_pobjcreds then return
+	for z in globals.G_pobjcreds
+		if z.user==c.user and z.password==c.password then
+			z.ip=i
+			self.saveCreds
+			break
+		end if
+	end for
+end function
+PartialObject.removeCred=function(i)
+	if not i isa number then i=to_int(i)
+	if not i isa number then return Error.set("NAN")
+	if not hasIndex(globals.G_pobjcreds,i) then return Error.set("Invalid index")
+	globals.G_pobjcreds.remove(i)
+	self.saveCreds
+end function
+PartialObject.loadCreds=function
+  if not Date.remaining0day(current_date) then
+    globals.G_pobjcreds=[]
+		PartialObject.saveCreds
+    return Error.set("There is no active zero day cycle")
+  end if
+	s=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.orc")
+	if not s then return
+	for l in split(get_content(s),char(10))
+		c=split(Encryption.encrypt(l,Kernel.key,false),"@")
+    if len(c)!=4 then continue
+		push(globals.G_pobjcreds,{
+      "date":c[3],
+      "ip":c[2],
+      "password":c[1],
+      "user":c[0]
+    })
+	end for
+end function
+PartialObject.manageCreds=function
+	if not globals.G_pobjcreds then self.loadCreds
+	while true
+		if not globals.G_pobjcreds then return Info.info("You have no stored credentials")
+		CH=[green("You have the following credentials:")]
+		for c in globals.G_pobjcreds;push(CH,c.user+" "+c.password+" "+c.ip+" "+c.date);end for
+		push(CH,yellow("Add..."))
+		push(CH,yellow("Edit..."))
+		push(CH,yellow("Remove..."))
+		push(CH,yellow("Purge database 0day exploits and creditals"))
+		push(CH,iyellow("Forget it"))
+		UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+		if UCH==len(CH)-1 then break
+		if UCH==len(CH)-2 then
+			Exploit.purgePObjects
+			globals.G_pobjcreds=[]
+			self.saveCreds
+			Info.info("0day data purged")
+		else if UCH==len(CH)-3 then
+			i=Gui.inputInt({"text":"Enter the index you would like to remove"})
+			if not i isa number then continue
+			self.removeCred(i-1)
+		else if UCH==len(CH)-4 then
+			i=Gui.inputInt({"text":"Enter the index you would like to edit"})
+			if not i isa number then
+				Info.error("not a valid index")
+				continue
+			end if
+			if not hasIndex(globals.G_pobjcreds,i-1) then
+				Info.error("not a valid index")
+				continue
+			end if
+			c=globals.G_pobjcreds[i-1]
+			n=Gui.input({"text":"What new name should the engineer have?","default":c.user})
+			if n!=c.user then globals.G_pobjcreds[i-1]["user"]=n
+			p=Gui.inputPassNS("What new password should the engineer have? (default is "+c.password+")")
+			if p!=c.password then globals.G_pobjcreds[i-1]["password"]=p
+			z=Gui.input({"text":"What ip is this record tied to?","default":c.ip})
+			if z!=c.ip then globals.G_pobjcreds[i-1]["ip"]=z
+			self.saveCreds
+		else if UCH==len(CH)-5 then
+			self.addCred([])
+		end if
+	end while
+end function
+PartialObject.saveCreds=function
+	if not globals.G_pobjcreds then
+		s=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.orc")
+		if s then delete(s)
+	else
+		s=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.orc")
+		if not s then s=Command.touch(globals.G_main,[path(globals.G_main.dir.data)+"/.orc"])
+		if s isa Error then return
+		w=[]
+		for c in globals.G_pobjcreds;push(w,Encryption.encrypt(c.user+"@"+c.password+"@"+c.ip+"@"+c.date,Kernel.key));end for
+		set_content(s,join(w,char(10)))
+		Info.info("Saved")
+	end if
+end function
+PartialObject.addCred=function(argv)
+	u=null
+	p=null
+	i=null
+	d=current_date
+	if not argv then
+    u=Gui.input({"text":"Engineer name"})
+    if u==null then return Error.set("Invalid Engineer name")
+    p=Gui.inputPassNS("Engineer password")
+    if not p then return Error.set("Invalid Engineer password")
+		i=Gui.input({"text":"Locked|targeted ip"})
+    if i==null then i="None"
+	else
+    if len(argv)<2 then return Error.set("Invalid params")
+		u=argv[0]
+		p=argv[1]
+		if len(argv)==3 then i=argv[2] else i="None"
+	end if
+	push(globals.G_pobjcreds,{
+    "user":u,
+    "password":p,
+    "ip":i,
+    "date":d
+  })
+  self.saveCreds
+end function
+PartialObject.viewCred=function
+  r=null
+	if not globals.G_pobjcreds then r=self.loadCreds
+  if r isa Error then return r
+  if not globals.G_pobjcreds then return Info.info("You have no stored credentials")
+  i=0
+	for c in globals.G_pobjcreds
+    print yellow("Credential ID     ")+purple(": ")+green(str(i))
+		print yellow("Engineer name     ")+purple(": ")+green(c.user)
+		print yellow("Engineer password ")+purple(": ")+green(c.password)
+		print yellow("Tied to public ip ")+purple(": ")+green(c.ip)
+		print yellow("Date obtained     ")+purple(": ")+green(c.date)
+    i+=1
+	end for
+end function
+//Choose credential interactively from list
+PartialObject._chooseCredential=function(creds)
+	while true
+		CH=[green("You have the following credentials choose one to use:")]
+		for c in creds;push(CH,c.user+" "+c.password+" "+c.ip+" "+c.date);end for
+		push(CH,iyellow("Forget it"))
+		UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+		if UCH==len(CH)-1 then return Error.set("No creds aborting")
+		return creds[UCH-1]
+	end while
+end function
+PartialObject.getCred=function
+	// Load credentials if not cached
+	if not globals.G_pobjcreds then
+    if self.loadCreds isa Error then return Error.set("","",true)
+  end if
+	// Return single credential
+	if len(globals.G_pobjcreds)==1 then return globals.G_pobjcreds[0]
+	// Choose from multiple credentials
+	if len(globals.G_pobjcreds)>1 then return self._chooseCredential(globals.G_pobjcreds)
+	// No credentials - try to add one
+	if self.addCred([]) isa Error then return Error.set("","",true)
+	if len(globals.G_pobjcreds)==1 then return globals.G_pobjcreds[0]
+	return Error.set("No creds aborting")
+end function
+//Lookup service entry from registry by name
+PartialObject._lookupService=function(p)
+	if indexOf(p,"/")!=null then return null
+	if hasIndex(self._serviceRegistry,p) then return self._serviceRegistry[p]
+	if indexOf(p,".so")==null then p=p+".so"
+	if hasIndex(self._serviceRegistry,p) then return self._serviceRegistry[p]
+	if p[:3]!="lib" then
+		libP="lib"+p
+		if hasIndex(self._serviceRegistry,libP) then return self._serviceRegistry[libP]
+	end if
+	return null
+end function
+//Get library path from service name or path
+PartialObject.getLibraryPath=function(p)
+	if indexOf(p,"/")!=null then return p
+	svc=self._lookupService(p)
+	if svc then return svc.path
+	return "/lib/"+p
+end function
+//Get port number from service name
+PartialObject.getPort=function(p)
+	if indexOf(p,"/")!=null then return p
+	svc=self._lookupService(p)
+	if svc then return svc.port
+	return null
+end function
+PartialObject.trySolve=function(d,metalib)
+  _={"patch":null,"incorrect_lines":null,"solve_result":null,"debug":d,"result":Error.set("","",true)}
+  s=Solver.New
+  _.scan_result=_.debug.scan
+  if not _.scan_result then return _
+  _.solve_result=s.solve(_.scan_result)
+  _.patch=_.solve_result[1]
+  _.incorrect_lines=_.solve_result[0]
+  if not globals.G_settings.autoSolve then
+    showNumbers(_.scan_result,_.incorrect_lines)
+		Info.info("Patch Code")
+		print
+		t=split(_.patch.join(char(10)),char(10))
+		for l in t;print self._formatPatchLine(__l_idx,l,_.incorrect_lines);end for
+		print
+		Info.info("If the solution is correct type !, if not make any corrections")
+		Info.info("in the following format:1 2 3. If you are unsure then type skip.")
+    Info.info("Default errors are: "+_.incorrect_lines)
+		c=Gui.input({"text":"Is this correct?","default":_.incorrect_lines})
+    if c=="skip" then
+			Info.info("You have chosen to skip this vector.")
+			self.writeLog({
+        "patch":_.patch.join(char(10)),
+        "testOutput":"Skipped "+lib_name(metalib)+"@"+version(metalib),
+        "scanResult":_.scan_result,
+        "errors":_.incorrect_lines
+      })
+			return _
+		end if
+    if c!=_.incorrect_lines then
+      if c isa string then c=split(trim(c)," ")
+      if not c isa list then return Error.set("Invalid input")
+      _.incorrect_lines=[]
+      for r in c;push(_.incorrect_lines,to_int(r));end for
+    end if
+  end if
+  _.result=unit_testing(_.debug,_.incorrect_lines)
+  if _.result[:5]==PartialObject._ERROR_PREFIX or _.result[:5]==PartialObject._TEST_PREFIX then
+    globals.G_errors.pobject=true
+    return Error.set(_.result)
+  end if
+  return _
+end function

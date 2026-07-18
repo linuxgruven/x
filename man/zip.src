@@ -1,0 +1,53 @@
+// Man page for zip
+manZip="ZIP(1)                           X Shell Manual                           ZIP(1)
+
+<b>NAME</b>
+    zip - Archive creator, unpacker, and viewer
+<b>SYNOPSIS</b>
+    <b>zip -z</b> [--force] (-n NAME) FILE
+    <b>zip -u</b> [--force] (-n NAME) ARCHIVE
+    <b>zip -v</b> [--force] ARCHIVE
+<b>DESCRIPTION</b>
+    <b>zip</b> is used to create zip files from text files. Can also view inside
+    of zip archive files. X will throw a fit if the file being uncompressed or viewed
+    does not have the suffix .zip, to get around this use the --force flag. Use
+    force with caution as it will not check if the file is a zip archive or not.
+
+    <color=#e4ff34>*** USE ON SMALL FILES, LARGE FILES WILL RUN OUT OF RAM ***</color>
+<b>OPTIONS</b>
+    <b>-z FILE</b> - Create Archive
+      Create a zip archive from a text file.
+      -n NAME: Specify custom archive name
+      --force: Skip .zip extension check
+
+    <b>-u ARCHIVE</b> - Unpack Archive
+      Extract and unzip a zip archive.
+      -n NAME: Specify custom output name
+      --force: Skip .zip extension check
+
+    <b>-v ARCHIVE</b> - View Archive
+      View contents of a zip archive.
+      --force: Skip .zip extension check
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Create Archives</color>
+    <b>zip -z config.txt</b>
+    Create config.txt.zip
+
+    <b>zip -z -n backup config.txt</b>
+    Create backup.zip from config.txt
+
+    <color=#e4ff34># Extract Archives</color>
+    <b>zip -u data.zip</b>
+    Extract data.zip
+
+    <b>zip -u -n output archive.zip</b>
+    Extract to output file
+
+    <color=#e4ff34># View Archives</color>
+    <b>zip -v backup.zip</b>
+    View contents of backup.zip
+
+    <b>zip -v --force myfile</b>
+    View without .zip extension check
+<b>SEE ALSO</b>
+    <b>tar</b>, <b>gzip</b>, <b>pzip</b>"

@@ -1,0 +1,135 @@
+// Man page for pacman
+manPacman="PACMAN(1)                        X Shell Manual                        PACMAN(1)
+
+<b>NAME</b>
+    pacman - package management system (Arch-style)
+<b>SYNOPSIS</b>
+    <b>pacman -Si</b> (<b>-p</b> PATH) (<b>-i</b> INSTALLPATH) PROGRAM...
+    <b>pacman -Si -m</b>
+    <b>pacman -Si -c</b>
+    <b>pacman -Si -b</b>
+    <b>pacman -Ss</b> PROGRAM
+    <b>pacman -Sv</b> (REPO_IP)
+    <b>pacman -Sl</b>
+    <b>pacman -Sr</b> (<b>-r</b> REPO_IP) (<b>-p</b> PORT)
+    <b>pacman -Sd</b> REPO_IP
+    <b>pacman -Sy</b>
+    <b>pacman -Sy -e</b> (<b>-f</b>|<b>--force</b>) (<b>-c</b> COUNT)
+    <b>pacman -Sy -l</b> (<b>-c</b> COUNT)
+    <b>pacman -Su</b> (<b>-y</b>) (<b>-p</b> PATH) (<b>-i</b> INSTALLPATH) (<b>-a</b> PROGRAM)
+    <b>pacman setup</b>
+<b>DESCRIPTION</b>
+    Install new programs hosted in remote repositories and manage updates to any
+    installed programs from these repositories. Supports installing multiple
+    packages in a single command. You can update the Operating System libraries
+    by setting the official_server option to true in the /etc/apt/sources.txt
+    file. After modifying the sources.txt file, launch <b>pacman -Sy</b> to sync
+    the cache with available packages.
+    Can auto add repo ips to the sources.txt using the -r flag. The -Sy -e
+    flag will sync the exploit database, main target is public ports. The
+    -Sy -e -f flag will do a force rescan of every exploit. Any library that
+    you come across that is flagged to be scanned will get scanned. The
+    -Sy -e --force flag will force a rescan of any library or service found. The
+    -Sy -e -l flag will sync the exploit database and target local libraries.
+    You will need to run update from the scan menu to reassign the password
+    changes and bounce exploits. If you need a default sources.txt generated
+    then issue the command make -r. This will generate a default
+    /etc/apt/sources.txt file.
+    <color=#e4ff34>*** All rescans will remove pobjects and any exploit that is not a object ***</color>
+    <color=#e4ff34>*** -m, -c and -b installs into /payload/data and not /lib ***</color>
+<b>OPTIONS</b>
+    <b>-Si PROGRAM...</b> - Install Program(s)
+      Installs one or more programs with optional path and install path.
+      Syntax: pacman -Si [-p PATH] [-i INSTALLPATH] package1 package2 ...
+      All flags must come before package names.
+
+    <b>-Si -m</b> - Install Metaxploit
+      Installs or upgrades metaxploit.so.
+
+    <b>-Si -c</b> - Install Crypto
+      Installs or upgrades crypto.so.
+
+    <b>-Si -b</b> - Install Both
+      Installs or upgrades metaxploit.so and crypto.so.
+
+    <b>-Ss PROGRAM</b> - Search Programs
+      Searches for a program in repositories.
+
+    <b>-Sv (REPO_IP)</b> - Show Packages
+      Shows items from repository or first repository.
+
+    <b>-Sl</b> - List Repositories
+      List all configured repositories.
+
+    <b>-Sr</b> (<b>-r</b> REPO_IP) (<b>-p</b> PORT) - Add Repository
+      Adds a new repository. Provide -r IP to specify a repo and -p PORT
+      to set the port (default 1542). Omit all flags to auto-fetch a random repo.
+
+    <b>-Sd REPO_IP</b> - Delete Repository
+      Delete a repository from sources.
+
+    <b>-Sy</b> - Sync Package Databases
+      Synchronize the package databases.
+
+    <b>-Sy -e</b> - Sync Exploits
+      Sync exploit database, targets public ports.
+
+    <b>-Sy -l</b> - Sync Local Exploits
+      Sync exploit database, targets local libraries.
+
+    <b>-Su</b> - System Upgrade
+      Upgrade system by installing or upgrading to latest versions.
+
+    <b>setup</b> - Setup Pacman
+      Setup default apt directory and offer to find random repository.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Sync and Exploit Management</color>
+    <b>pacman -Sy</b>
+    Synchronize package databases
+
+    <b>pacman -Sy -e -c 100</b>
+    Sync exploits with 100 count
+
+    <b>pacman -Sy -e --force</b>
+    Force rescan all exploits
+
+    <color=#e4ff34># Install Programs</color>
+    <b>pacman -Si -p /payload/data/ -i /lib/ metaxploit.so</b>
+    Install metaxploit with custom paths
+
+    <b>pacman -Si -p /home/user x exploits bash man passwords</b>
+    Install multiple packages to custom path
+
+    <b>pacman -Si x exploits bash</b>
+    Install multiple packages (auto-detect paths)
+
+    <b>pacman -Si -m</b>
+    Install or upgrade metaxploit
+
+    <b>pacman -Si -b</b>
+    Install metaxploit and crypto
+
+    <color=#e4ff34># Repository Management</color>
+    <b>pacman -Sr</b>
+    Add random repository (auto-fetch)
+
+    <b>pacman -Sr -r 192.168.1.1</b>
+    Add specific repository at default port
+
+    <b>pacman -Sr -r 192.168.1.1 -p 1542</b>
+    Add specific repository at custom port
+
+    <b>pacman -Sl</b>
+    List all repositories
+
+    <b>pacman -Sv</b>
+    Show packages from default repo
+
+    <color=#e4ff34># Search and Upgrade</color>
+    <b>pacman -Ss aptclient.so</b>
+    Search for package
+
+    <b>pacman -Su -y -p lib -i lib</b>
+    Upgrade with yes flag
+<b>SEE ALSO</b>
+    <b>make</b>, <b>build</b>, <b>scan</b>"

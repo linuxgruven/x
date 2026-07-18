@@ -1,0 +1,60 @@
+toolGmon="if params then
+	if params[0]==""-h"" or params[0]==""--help"" then exit(split(program_path,""/"")[-1]+"" ( -h | --help | MONITOR_PATH )\n\nThis program monitors the guest home directory for new files and moves them to /root/quarantine.\nIf a MONITOR_PATH is specified, it will instead monitor that path."")
+	monitorPath=params[0]
+else
+	monitorPath=""/home/guest""
+end if
+getAll=function(startFolder)
+	fileMap={}
+	recurse=function(monitorFolder)
+		for subFile in get_files(monitorFolder)
+			fileMap[path(subFile)]=subFile
+		end for
+		for subFolder in get_folders(monitorFolder)
+			fileMap[path(subFolder)]=subFolder
+			recurse(subFolder)
+		end for
+	end function
+	recurse(startFolder)
+	return fileMap
+end function
+computer=host_computer(get_shell(""root"",user_input(""Enter root password: "",1,0)))
+if not computer then exit(""<color=red>Invalid root password"")
+monitorFolder=File(computer,monitorPath)
+if not monitorFolder then exit(""<color=red>Guest home not found"")
+quarantineFolder=File(computer,""/root/quarantine"")
+if not quarantineFolder then
+	print ""<color=green>Quarantine folder not found, creating it now""
+	create_folder(computer,""/root"",""quarantine"")
+	quarantineFolder=File(computer,""/root/quarantine"")
+	if not quarantineFolder then exit(""<color=red>Failed to create quarantine folder"")
+end if
+snapshot=getAll(monitorFolder)
+print ""<color=white>Monitoring for new files in ""+name(monitorFolder)+""...""
+while 1
+	currentFiles=getAll(monitorFolder)
+	if len(currentFiles)==len(snapshot) then continue
+	if len(currentFiles)>len(snapshot) then
+		print ""<color=green>[+] ""+""<color=white>New File Added""
+		for entry in currentFiles
+			if hasIndex(snapshot,entry.key) then continue
+			print ""<color=green>[+] ""+""<color=white>New File Found :""+name(entry.value)
+			chmod(entry.value,""o-wrx"")
+			chmod(entry.value,""g-wrx"")
+			chmod(entry.value,""u-wrx"")
+			print ""<color=green>[+] ""+""<color=white>Moved to quarantine""
+			isFolder=is_folder(entry.value)
+			move(entry.value,path(quarantineFolder),name(entry.value))
+			if isFolder then break
+		end for
+		print ""<color=white>Monitoring for new files in ""+name(monitorFolder)+""...""
+	else
+		print ""<color=green>[-] ""+""<color=white>File Removed""
+		for entry in snapshot
+			if hasIndex(currentFiles,entry.key) then continue
+			print ""<color=green>[-] ""+""<color=white>File Removed :""+split(entry.key,""/"")[-1]
+			remove(snapshot,entry.key)
+		end for
+		print ""<color=white>Monitoring for new files in ""+name(monitorFolder)+""...""
+	end if
+end while"

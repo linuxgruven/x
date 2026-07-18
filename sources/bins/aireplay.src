@@ -1,0 +1,5 @@
+binAireplay="cryptools=include_lib(""/lib/crypto.so"")
+if not cryptools then exit(""Error: Missing crypto library"")
+if len(params)!=4 or params[0]==""-h"" or params[0]==""--help"" or params[0]!=""-b"" or params[2]!=""-e"" then exit(command_info(""aireplay_usage""))
+result=aireplay(cryptools,params[1],params[3])
+if typeof(result)==""string"" then exit(result)"

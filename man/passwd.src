@@ -1,0 +1,30 @@
+// Man page for passwd
+manPasswd="PASSWD(8)                        X Shell Manual                        PASSWD(8)
+
+<b>NAME</b>
+    passwd - used to modify user passwords
+<b>SYNOPSIS</b>
+    <b>passwd </b><b>USER</b> [PASSWORD]
+<b>DESCRIPTION</b>
+    Modify user account passwords. Must be root to change other user passwords.
+    First su to root, then run passwd with target username. If PASSWORD is omitted,
+    prompts interactively.
+<b>OPTIONS</b>
+    <b>USER</b>
+    Target username
+    Account to modify
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Change User Password</color>
+    <b>su</b>
+    <b>passwd tux</b>
+    Change tux password
+
+    <b>passwd guest</b>
+    Change guest password
+
+    <color=#e4ff34># Admin Workflow</color>
+    <b>su root</b>
+    <b>passwd hacker</b>
+    Reset user password
+<b>SEE ALSO</b>
+    <b>useradd</b>, <b>userdel</b>, <b>su</b>"

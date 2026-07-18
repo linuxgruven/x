@@ -1,0 +1,518 @@
+// =============================================================================
+// ATTACK
+// Attack library; exploit launching, network compromisation, and offensive security operations.
+// =============================================================================
+Attack={
+  "buffer":"",
+  "bool1":false,
+  "bool2":false
+}
+// Create hidden root user account for persistence
+// Default: username "tux", password "h4ck"
+// Args: [username], [username, password]
+Attack.tux=function(Obj,argv)
+  n="tux"
+  p="h4ck"
+  // Parse username and password from arguments
+  if len(argv)==1 then
+    n=argv[0]
+  else if len(argv)==2 then
+    n=argv[0]
+    p=argv[1]
+  end if
+	c=Obj.computer
+	// Create user account
+	r=create_user(c,n,p)
+	if r isa string then return Error.set(r)
+	// Add user to root group for privilege escalation
+	create_group(c,n,"root")
+	// Remove home directory to stay hidden
+	h=File(c,"/home/"+n)
+  if h then Command.qrm(Obj,[h])
+	Info.info("shhh "+n+" account successfully created :-)")
+end function
+// File bomb attack - create many files to fill directory/system
+// Modes: -d (default random names), -n (named pattern), -m (message content)
+// Args: -d [count, length, path] | -n [name, count, path] | -m [count, length, path]
+Attack.bomb=function(Obj,argv)
+  if not argv then return Info.info("Missing flag")
+  // Named file bombing - create numbered files with custom name
+  doName=function(arg)
+    n="h4cked"
+    z=25
+    p=path(Obj.dir.current)
+    // Parse name, count, and path arguments
+    if len(argv)==3 then
+      n=argv[1]
+      z=to_int(argv[2])
+      if not z isa number then z=25
+      p=argv[3]
+    end if
+    // If working with file object, copy it multiple times
+    if Obj.type=="file" then
+      f=FileHelper.useFile(Obj)
+      if f isa Error then return
+      if not z>0 then return Error.set("Bomb count has to be higher then 0")
+      i=1
+      Info.info("Bombing "+p+" with "+z+" files...")
+      while i<=z;r=copy(f,p,n+i);if r!=1 then return Error.set(r);i+=1;end while
+      return Info.info(p+" has been BOMBED :-)")
+    end if
+    // Create empty files with numbered names
+    c=Obj.computer
+    f=File(c,p)
+    if not f then return Error.set("Unable to find the location: "+p)
+    i=1
+    Info.info("Bombing "+path(f)+" with "+z+" files...")
+    while i<=z;touch(c,path(f),n+i);i+=1;end while
+    Info.info(path(f)+" has been BOMBED :-)")
+  end function
+  // Message bombing - create files with custom content and random names
+  doMessage=function(arg)
+    // Get message content from user
+    g=Gui.input({"text":"Enter a message"})
+    if g==null then return Error.set("Failed to enter a message")
+    z=25
+    l=20
+    p=path(Obj.dir.current)
+    // Parse count, name length, and path arguments
+    if len(argv)==3 then
+      z=to_int(argv[0])
+      if not z isa number then z=25
+      l=to_int(argv[1])
+      if not l isa number then l=20
+      p=argv[2]
+    end if
+    // If working with file object, copy it with message content
+    if Obj.type=="file" then
+      f=FileHelper.useFile(Obj)
+      if f isa Error then return
+      if not z>0 then return Error.set("Bomb count has to be higher then 0")
+      i=1
+      Info.info("Bombing "+p+" with "+z+" files...")
+      set_content(f,g)
+      while i<=z;r=copy(f,p,Crypt.genPassword(l));if r!=1 then return Error.set(r);i+=1;end while
+      return Info.info(p+" has been BOMBED :-)")
+    end if
+    // Create files with random names containing message
+    c=Obj.computer
+    f=File(c,p)
+    if not f then return Error.set("Unable to find the location: "+p)
+    i=1
+    Info.info("Bombing "+path(f)+" with "+z+" files...")
+    while i<=z
+      j=Command.touch(Obj,[path(f)+"/"+Crypt.genPassword(l)])
+			if j isa Error then return
+      set_content(j,g)
+      i+=1
+    end while
+    Info.info(path(f)+" has been BOMBED :-)")
+  end function
+  // Default bombing - create files with random names
+  default=function(arg)
+    z=25
+    l=20
+    p=path(Obj.dir.current)
+    // Parse count, name length, and path arguments
+    if len(argv)==3 then
+      z=to_int(argv[0])
+      if not z isa number then z=25
+      l=to_int(argv[1])
+      if not l isa number then l=20
+      p=argv[2]
+    end if
+    // If working with file object, copy it multiple times
+    if Obj.type=="file" then
+      f=FileHelper.useFile(Obj)
+      if f isa Error then return
+      if not z>0 then return Error.set("Bomb count has to be higher then 0")
+      i=1
+      Info.info("Bombing "+p+" with "+z+" files...")
+      while i<=z;r=copy(f,p,Crypt.genPassword(l));if r!=1 then return Error.set(r);i+=1;end while
+      return Info.info(p+" has been BOMBED :-)")
+    end if
+    // Create empty files with random names
+    c=Obj.computer
+    f=File(c,p)
+    if not f then return Error.set("Unable to find the location: "+p)
+    i=1
+    Info.info("Bombing "+path(f)+" with "+z+" files...")
+    while i<=z;touch(c,path(f),Crypt.genPassword(l));i+=1;end while
+    Info.info(path(f)+" has been BOMBED :-)")
+  end function
+	// Command mode dispatcher
+	cmds={
+    "-d":@default,
+    "-n":@doName,
+    "-m":@doMessage
+    }
+	if not hasIndex(cmds,argv[0]) then return Error.set(Text.msg.flag+argv[0]+" ]")
+	cmds[argv[0]](argv[1:])
+end function
+// Hide/unhide files and folders by adding/removing dot prefix
+// Modes: -s (system folders), -t (trash), file/folder modes
+// Args: -s [-c char, -n count] | -t | file [path] | folder [path]
+Attack.hide=function(Obj,argv)
+  if not argv then return Man.help(["hide"])
+	Arg1=lower(argv[0])
+	// Hide/unhide system folders with custom prefix
+	system=function(arg)
+    // Parse character and repetition arguments
+    _p=ArgumentParser.init
+    _p.addArgument("c",false,"store")
+    _p.addArgument("n",false,"storeNumber")
+    arg=_p.parseArgs("hide",arg)
+    if arg isa Error then return
+    if not arg.c then arg.c="."
+    if not arg.n then arg.n=1
+    // Build prefix string by repeating character
+    p=arg.c*arg.n
+    h=false
+    // Toggle prefix on all system folders
+    for d in get_folders(Obj.root)
+      if indexOf(name(d),p)!=null then
+        r=rename(d,remove(name(d),p))
+        if r then return Error.set(name(d)+": "+r)
+      else
+        h=true
+        r=rename(d,p+name(d))
+        if r then return Error.set(name(d)+": "+r)
+      end if
+    end for
+    if h then Info.info("System hidden") else Info.info("System un-hidden")
+	end function
+	// Hide/unhide individual file by toggling dot prefix
+	file=function(arg)
+    if not arg then return Error.set("No file to hide")
+    // Get file object from path
+    f=Io._getFile(Obj,arg[0])
+    if f isa Error then return
+    // Toggle dot prefix on filename
+    if indexOf(name(f),".")!=null then r=rename(f,remove(name(f),".")) else r=rename(f,"."+name(f))
+    if r then Info.error(name(f)+": "+r)
+	end function
+	// Hide/unhide Trash folder by toggling dot prefix
+	trash=function(arg)
+    a=Io.getAll(Obj.root)
+    if a isa Error then return
+    // Find and toggle Trash folder visibility
+    for f in a
+      if name(f)==".Trash" then
+        r=rename(f,"Trash")
+        if r then Info.warning(name(f)+": "+r)
+      end if
+      if name(f)=="Trash" then
+        r=rename(f,".Trash")
+        if r then Info.error(name(f)+": "+r)
+      end if
+    end for
+	end function
+	// Command mode dispatcher
+	cmds={
+    "-s":@system,
+    "-t":@trash,
+    "-f":@file
+  }
+	if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+	cmds[Arg1](argv[1:])
+end function
+// Wipe all system folders with write permissions and clear logs
+// Args: Obj (context), o (override confirmation prompt)
+Attack.system=function(Obj,o=false)
+  // Collect all writable folders
+  z=[]
+  for d in get_folders(Obj.root);if has_permission(d,"w") then push(z,d);end for
+  if not z then return Error.set("No files to remove or lacking permissions to remove root files")
+	// Show confirmation prompt unless overridden
+	if not o then
+		p=[]
+		for f in z;push(p,white("Remove "+name(f)));end for
+		push(p,white("Clear system.log"))
+		Info.info("The following actions will be performed:")
+		attackList(p)
+		if not Gui.yesNo("Perform these actions?") then return
+	end if
+  // Delete all folders
+  for f in z;delete(f);end for
+	Info.info("The system has been wiped ;-)")
+  // Clear system logs
+  if Log.log(Obj,0) then Info.info("The log has also been cleared ;-)")
+	// Reset directory pointers
+	Obj.user.home=Obj.root
+  Obj.dir.current=Obj.root
+end function
+// Wipe system folders via exploit shell object
+// Args: ex (exploit shell object)
+Attack.systemEX=function(ex)
+  // Delete all root folders from exploit shell
+  z=0
+  for f in get_folders(File(ex,"/"));r=delete(f);if not r then z+=1;end for
+  if z==0 then return Error.set("No folders deleted (permission denied)")
+end function
+// Wipe FTP system folders and clear FTP logs
+// Args: Obj (FTP context)
+Attack.ftpSystem=function(Obj)
+  // Collect all writable folders
+  z=[]
+  for d in get_folders(Obj.root);if has_permission(d,"w") then push(z,d);end for
+  if not z then return Error.set("No files to remove or lacking permissions to remove root files")
+  // Delete all folders
+  for f in z;delete(f);end for
+  // Clear FTP logs
+  Log.ftp(Obj)
+  Info.info("The system has been wiped ;-)")
+	// Reset directory pointers
+	Obj.user.home=Obj.root
+  Obj.dir.current=Obj.root
+end function
+// Clear Trash folder
+// Args: Obj (context)
+Attack.trash=function(Obj)
+	// Handle computer/shell objects
+	if Obj.type=="computer" or indexOf(Obj.type,"shell")!=null then
+		f=File(Obj.computer,path(Obj.user.home)+"/.Trash")
+		if f then delete(f)
+	else
+		// Handle other object types
+		for f in get_folders(Obj.user.home);if name(f)!=".Trash" then continue;delete(f);end for
+	end if
+	Info.info("Trash has been cleared")
+end function
+// Delete boot folder and clear logs
+// Args: Obj (context), o (override confirmation)
+Attack.boot=function(Obj,o=false)
+	// Find and delete boot folder
+	for f in get_folders(Obj.root);if name(f)!="boot" then continue;Gui.delPrompt(f,o);end for
+  Info.info("Boot has been wiped ;-)")
+  // Clear system logs
+  if Log.log(Obj,false) then Info.info("The log has also been cleared ;-)")
+end function
+// Leave attack note/message file in directory
+// Args: Obj (context), argv (message text or use default)
+Attack.note=function(Obj,argv)
+  // Join message arguments or use default log message
+  Arg1=join(argv," ")
+  if not Arg1 then Arg1=join(Text.logMSG,char(10))
+	// If working with file, copy it as note template
+	if Obj.type=="file" then
+		f=FileHelper.useFile(Obj)
+		if f isa Error then return
+		r=copy(f,path(Obj.dir.current),"watching_you")
+		if not r==1 then return Error.set(r)
+		f=Io.getFileObj(Obj,path(Obj.dir.current)+"/watching_you")
+		if f isa Error then return
+		set_content(f,Arg1)
+		return Info.info("Note placed in "+path(Obj.dir.current))
+	end if
+	// Create new note file with message
+	f=Command.touch(Obj,[path(Obj.dir.current)+"/watching_you"])
+	if f isa Error then return
+	set_content(f,Arg1)
+	Info.info("Note placed in "+path(Obj.dir.current))
+end function
+// Place scriptkiddy defacement website in directory
+// Args: Obj (context)
+Attack.scriptOut=function(Obj)
+	// Create website.html with defacement page
+	w=Command.touch(Obj,[path(Obj.dir.current)+"/website.html"])
+	if w isa Error then return
+	_sys=System.getSystem
+	_sf=File(_sys.computer,path(_sys.dir.srcWeb)+"/website")
+	if not _sf then return Error.set("Missing website source")
+	set_content(w,get_content(_sf))
+	Info.info("scriptkiddy placed in "+path(Obj.dir.current))
+end function
+// Deploy X shell to remote system via exploit shell
+// Args: Obj (local context), s (remote shell)
+Attack.push=function(Obj,s)
+	// Get remote user info and home path
+	u=Utility.getUserEX(s)
+  p=path(u.home)
+	// Check for existing X installation
+	if File(host_computer(s),p+"/x") then
+		if File(host_computer(s),p+"/payload") then
+      if Gui.yesNo("There is a copy of x already installed on this host, launch it?") then return launch(s,path(u.home)+"/x",Kernel.key)
+    end if
+    // Remove old/rogue installation
+    Info.info("Removing a posable rogue copy of x...")
+    Crack.qrm(host_computer(s),p,File(host_computer(s),p+"/x"))
+    Crack.qrm(host_computer(s),p,File(host_computer(s),p+"/payload"))
+	end if
+  // Create payload directory structure
+  create_folder(host_computer(s),p,"payload")
+  create_folder(host_computer(s),p+"/payload/","data")
+	// Copy X shell binary
+	x=scp(Obj.shell,path(File(Obj.computer,globals.G_attributes.program_path)),p,s)
+  if x isa string then return Error.set(x)
+  // Copy metaxploit library if available
+  m=File(Obj.computer,path(Obj.dir.data)+"/metaxploit.so")
+  if m then
+    x=scp(Obj.shell,path(m),p+"/payload/data/",s)
+    if x isa string then return Error.set(x)
+  end if
+  // Copy crypto library if available
+  c=File(Obj.computer,path(Obj.dir.data)+"/crypto.so")
+  if c then
+    x=scp(Obj.shell,path(c),p+"/payload/data/",s)
+    if x isa string then return Error.set(x)
+  end if
+  // Launch X shell on remote system
+  launch(s,p+"/x",Kernel.key)
+end function
+// Interactive exploit selection menu
+// Args: x (exploit list), m (target metadata)
+Attack.getExploit=function(x,m)
+  // Save GUI state
+  globals.G_gui=Gui.cp
+	// Exploit selection loop
+	while true
+    // Check for back navigation
+    if globals.G_attributes.back then
+      Gui.cp=globals.G_gui
+      return
+    end if
+		// Display buffered messages
+		if self.buffer then
+			print self.buffer
+			self.buffer=""
+		end if
+		// Build exploit choice menu
+		CH=Exploit.showData(x,green("Choose which "+white("attack vector")+" you would like to use:"))
+		push(CH,iyellow("I'm scared. Get me out of here!"))
+		UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+    // Exit menu if user chooses to leave
+    if UCH==len(CH)-1 then break
+		// Execute selected exploit
+		e=x[UCH-1]
+		ex=Exploit.run(e,m)
+    // Handle exploit errors
+    if ex isa string then
+      Info.error(ex)
+      continue
+		// Handle success result
+		else if ex isa number and ex==1 then
+      if hasIndex(m,"port_number") then
+        if m.port_number==0 or e.e=="d" then self.buffer=green(Text.buffer.SF) else self.buffer=green(Text.buffer.SP)
+      else
+        self.buffer=green(Text.buffer.SP)
+      end if
+      continue
+		// Handle failure result
+		else if ex isa number and ex==0 then
+			if e.e=="d" then self.buffer=red(Text.buffer.FF) else self.buffer=red(Text.buffer.FP)
+      continue
+		end if
+    // Process exploit object (shell/computer/file)
+    self.getObject(typeof(ex),ex,m)
+    // Restore GUI state
+    Gui.cp=globals.G_gui
+	end while
+end function
+// Interactive exploit selection for partial objects
+// Args: p (parent object), x (exploit list), n (target), f (filter flag)
+Attack.getExploitPO=function(p,x,n,f)
+	// Exploit selection loop for partial objects
+	while true
+    // Check for back navigation
+    if globals.G_attributes.back then return
+		// Display buffered messages
+		if self.buffer then
+			print self.buffer
+			self.buffer=""
+		end if
+		// Build exploit menu (filtered or unfiltered)
+		if not f then
+      CH=Exploit.showData(x,"Choose which "+white("attack vector")+" you would like to use:")
+    else
+      d=Exploit.showData(@x,"Choose which "+white("attack vector")+" you would like to use:",true)
+      CH=d.CH
+      x=d.x
+    end if
+    push(CH,iyellow("I'm scared. Get me out of here!"))
+		// Get user choice from partial object menu
+		UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,false,p)
+    if UCH==len(CH)-1 then break
+		// Execute selected exploit
+		e=x[UCH-1]
+		ex=Exploit.run(e,n)
+    // Handle exploit results
+    if ex isa string then
+      Info.error(ex)
+      continue
+		else if ex isa number and ex==1 then
+			if e.e=="d" then self.buffer=green(Text.buffer.SF) else self.buffer=green(Text.buffer.SP)
+      continue
+		else if ex isa number and ex==0 then
+			if e.e=="d" then self.buffer=red(Text.buffer.FF) else self.buffer=red(Text.buffer.FP)
+      continue
+		end if
+    // Process exploit object
+    self.getObject(typeof(ex),ex,n)
+	end while
+end function
+// Dispatch exploit object to appropriate handler
+// Args: Obj (object type), ex (exploit object), m (metadata)
+Attack.getObject=function(Obj,ex,m=null)
+	// Route to appropriate exploit handler based on type
+	if indexOf(Obj,"shell")!=null then
+    return Exploit.getShell(ex,false,[],false)
+	else if Obj=="computer" then
+    return Exploit.getComputer(ex)
+	else if Obj=="file" then
+    return Exploit.getFile(ex,m)
+	end if
+end function
+// Scan and exploit target IP address
+// Args: Obj (context), w (IP/domain), t (test mode flag)
+Attack.scan=function(Obj,w,t=false)
+	// Resolve IP address
+	i=Net.lookup(w)
+  if not i then return Error.set("Invalid ip: "+i)
+	// Validate IP format
+	if indexOf(i,".")==null then return Error.set("[ "+i+" ] is not a valid ip")
+	// Track dirty IP if monitoring enabled
+	if not t then
+    if globals.G_settings.monitorDirtyips then Dirty.add(i)
+  end if
+  // If LAN IP, use dedicated LAN target scanner
+  // Use packMetaxploit (shell obj) or metaxploit (proxy/pivot obj) when in remote context
+  if is_lan_ip(i) then
+    _mx=Library.metaxploit
+    if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then
+      _mx=Obj.packMetaxploit
+    else if hasIndex(Obj,"metaxploit") and Obj.metaxploit then
+      _mx=Obj.metaxploit
+    end if
+    return Net.lanTarget(Obj,_mx,i)
+  end if
+  // Save GUI state and begin scan
+	globals.G_gui=Gui.cp
+  while true
+    // Get router and extract exploits
+    r=get_router(i)
+    if not r then return Warning.set("IP down")
+    m=Exploit.extract(r,i)
+    if m isa Error then return Warning.set("No attack vectors found")
+    // Exploit selection loop
+    while true
+      // Choose exploit entry point
+      l=Exploit.choose(Obj,m,r)
+      if not l then break
+      if l=="x" then return
+      if l isa string then return Error.set(l)
+      // Get exploits from cache
+      x=Exploit._ex(Exploit.getCacheKey(l.metaLib))
+      if not len(x) then
+        Info.warning("Sorry, there are no attack vectors for the entry point - run [ scan -s/-a ] to update data")
+        continue
+      end if
+      // Launch exploit selection menu
+      self.getExploit(x,l)
+      Gui.cp=globals.G_gui
+      // Check for back navigation
+      if globals.G_attributes.back then return
+    end while
+	end while
+end function
+// Deep vulnerability scan with multiple modes
+// Args: Obj (context), argv (command arguments with flags)

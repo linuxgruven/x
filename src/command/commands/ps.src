@@ -1,0 +1,170 @@
+// =============================================================================
+// PS
+// List running processes with CPU/memory stats; -k kills by name.
+// =============================================================================
+Command.ps=function(Obj,argv)
+  argv=ArgumentParser.check(argv)
+  _p=ArgumentParser.init
+  _p.addArgument("u",false,"store")      // Filter by user
+  _p.addArgument("user",true,"store")    // Filter by user (long)
+  _p.addArgument("c",false,"store")      // Filter by command
+  _p.addArgument("command",true,"store") // Filter by command (long)
+  _p.addArgument("m",false,"flag")       // Management mode
+  _p.addArgument("w",false,"flag")       // Watch mode
+  _p.addArgument("l",false,"flag")       // Lock mode
+  _p.addArgument("post",true,"flag")     // Post processing flag
+  argv=_p.parseArgs("ps",argv)
+  if argv isa Error then return
+  if (argv.m and argv.w) or (argv.m and argv.l) or (argv.w and argv.l) then return Error.set("Flags -m, -w, and -l are mutually exclusive")
+  argv=_p.checkRedirect(Obj,"ps",argv)
+  if argv isa Error then return
+  filterUser=null
+  filterCommand=null
+  if argv.u then filterUser=argv.u
+  if argv.c then filterCommand=argv.c
+  mode=null
+  if argv.m then mode="-m"
+  if argv.w then mode="-w"
+  if argv.l then mode="-l"
+  // Helper function to color-code username (root=red, others=grey)
+  colorUser=function(username);if username=="root" then return red(username);return liteGrey(username);end function
+  // Usage bar generator function (33 chars width for default mode)
+  bar=function(percent,width=33)
+    // Critical usage level (100% or more)
+    if percent>=100 then return(red("#"*33))
+    filled=ceil(percent/width*10)
+    empty=width-filled
+    filledBar="#"*filled
+    emptyBar="-"*empty
+    // High usage level (79% or more)
+    if percent>=79 then return(yellow(filledBar)+black(emptyBar))
+    // Normal usage level (below 79%)
+    return(blue(filledBar)+black(emptyBar))
+  end function
+  if mode then
+    if mode=="-m" then
+      while true
+        computer=Obj.computer
+        procLines=split(show_procs(computer),char(10))
+        if len(procLines)==1 then return Info.info("No running processes found")
+        bar2=function(percent,width=35)
+          filled=ceil(percent/width*10)
+          empty=width-filled
+          // Critical usage level
+          if filled>29 then
+            return(red("#"*29))
+          else if filled>23 then
+            // High usage level
+            filledBar="#"*filled
+            emptyBar="-"*empty
+            return(yellow(filledBar)+black(emptyBar))
+          else
+            // Normal usage level
+            filledBar="#"*filled
+            emptyBar="-"*empty
+            return(blue(filledBar)+black(emptyBar))
+          end if
+        end function
+        processes={}
+        totalCpu=0.0
+        totalMem=0.0
+        pidList=[]
+        index=0
+        for line in procLines
+          parts=split(line," ")
+          user=parts[0]
+          command=parts[4]
+          if filterUser and user!=filterUser then continue
+          if filterCommand and indexOf(command,filterCommand)==null then continue
+          proc={"user":colorUser(parts[0]),"pid":green(str(parts[1])),"cpu":blue(str(parts[2])),"mem":blue(str(parts[3])),"command":lime(parts[4])}
+          totalCpu+=val(parts[2][:-1])
+          totalMem+=val(parts[3][:-1])
+          push(pidList,parts[1])
+          processes[index]=proc
+          index+=1
+        end for
+        header=[]
+        push(header,liteGrey("    tasks: "+len(processes)))
+        push(header,liteGrey("cpu_usage: ["+bar2(totalCpu)+"]==["+blue(totalCpu+"%")+"]"))
+        push(header,liteGrey("mem_usage: ["+bar2(totalMem)+"]==["+blue(totalMem+"%")+"]"))
+        rows=[]
+        push(rows,join([grey("USER"),grey("PID"),grey("CPU"),grey("MEM"),grey("COMMAND")],"  "))
+        for proc in processes;procData=proc.value;push(rows,join([procData.user,procData.pid,procData.cpu,procData.mem,procData.command],"  "));end for
+        headerText=join(header,char(10))
+        tableText=join(rows,char(10))
+        Info.info("The following processes have been detected on the machine:")
+        print headerText
+        print format_columns(tableText)
+        Info.info("Choose a pid or enter a pid you would like to kill")
+        input=lower(to_int(user_input(Gui.closeNR)))
+        if input=="x" then break
+        // Validate PID is a number
+        if not input isa number then
+          Info.error("Not a valid PID")
+          continue
+        end if
+        // Determine target PID (direct PID or list index)
+        inputInt=to_int(input)
+        targetPid=inputInt
+        if inputInt<=len(pidList)-1 then targetPid=to_int(pidList[inputInt])
+        print blue("Attempting to kill process ID: ")+green(str(targetPid))
+        result=close_program(computer,targetPid)
+        if result==1 then
+          Info.info("SUCCESS! You really showed that process you can murder it")
+          continue
+        end if
+        if result==0 then
+          Info.error("Could not find the process")
+          continue
+        end if
+        Info.error(result)
+      end while
+      return
+    end if
+    if mode=="-w" then return self.psMon(Obj,argv)
+    if mode=="-l" then return self.psLock(Obj,argv)
+  end if
+  procOutput=show_procs(Obj.computer)
+  procLines=split(procOutput,char(10))[1:]
+  if len(procLines)==0 then return Info.info("No running processes found")
+  processes={}
+  totalCpu=0.0
+  totalMem=0.0
+  index=0
+  for line in procLines
+    parts=split(line," ")
+    user=parts[0]
+    command=parts[4]
+    if filterUser and user!=filterUser then continue
+    if filterCommand and indexOf(command,filterCommand)==null then continue
+    proc={}
+    isPipe=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+    if _p.write or isPipe then proc={"user":parts[0],"pid":parts[1],"cpu":parts[2],"mem":parts[3],"command":parts[4]} else proc={"user":colorUser(parts[0]),"pid":green(str(parts[1])),"cpu":blue(str(parts[2])),"mem":blue(str(parts[3])),"command":lime(parts[4])}
+    totalCpu+=val(parts[2][:-1])
+    totalMem+=val(parts[3][:-1])
+    processes[index]=proc
+    index+=1
+  end for
+  if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+    for proc in processes;procData=proc.value;push(globals.G_pipe.stdout,join([procData.user,procData.pid,procData.cpu,procData.mem,procData.command]," "));end for
+    return
+  end if
+  if not _p.write then print liteGrey("    tasks: "+len(processes))
+  if not _p.write then
+    if totalCpu>=100 then print ("cpu_usage: ["+bar(totalCpu)+"]==["+blue("100%")+"]") else print liteGrey("cpu_usage: ["+bar(totalCpu)+"]==["+blue(totalCpu+"%")+"]")
+    if totalMem>=100 then print ("mem_usage: ["+bar(totalMem)+"]==["+blue("100%")+"]") else print liteGrey("mem_usage: ["+bar(totalMem)+"]==["+blue(totalMem+"%")+"]")
+  end if
+  rows=[]
+  if _p.write then push(rows,join(["USER","PID","CPU","MEM","COMMAND"],"    ")) else push(rows,join([grey("USER"),grey("PID"),grey("CPU"),grey("MEM"),grey("COMMAND")],"  "))
+  for proc in processes;procData=proc.value;if _p.write then push(rows,join([procData.user,procData.pid,procData.cpu,procData.mem,procData.command],"    ")) else push(rows,join([procData.user,procData.pid,procData.cpu,procData.mem,procData.command],"  "));end for
+  if _p.write then
+    plainLines=[]
+    push(plainLines,"    tasks: "+len(processes))
+    push(plainLines,"cpu_usage: ["+("-"*33)+"]==["+totalCpu+"%]")
+    push(plainLines,"mem_usage: ["+("-"*33)+"]==["+totalMem+"%]")
+    for row in rows;push(plainLines,row);end for
+    argv.data=join(plainLines,char(10))
+    return _p.out(Obj,argv)
+  end if
+  print format_columns(join(rows,char(10)))
+end function

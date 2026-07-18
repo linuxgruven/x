@@ -1,0 +1,75 @@
+// Man page for main
+manMain="MAIN(1)                          X Shell Manual                          MAIN(1)
+
+<b>NAME</b>
+    main - x's main object control loop
+<b>SYNOPSIS</b>
+    <b>main</b><b> COMMAND</b>
+    <b>main -u</b> (<b>-p</b> [<b>GET_FROM_PATH</b>]) <b>FILE(S)</b>
+    <b>main -d</b> (<b>-p</b> [<b>SAVE_TO_PATH</b>]) <b>FILE(S)</b>
+    <b>main -u --log</b> (<b>-p</b> [<b>GET_FROM_PATH</b>])
+    <b>main -d --log</b> (<b>-p</b> [<b>SAVE_TO_PATH</b>])
+    <b>[pipe] | main -u</b>
+    <b>[pipe] | main -d</b>
+<b>DESCRIPTION</b>
+    <b>main</b> will run a command or macro from your initial launched x instance.
+    Can also be used to upload or download files to or from the target to <b>main</b>.
+    Can only be called from a <b>main</b> object after a pivot.
+
+    <color=#e4ff34>*** not a valid choice for MAIN ***</color>
+<b>OPTIONS</b>
+    <b>COMMAND</b> - Run Command
+      Run a command from main.
+
+    <b>-u FILE(S)</b> - Upload Files
+      Upload files from main to the target.
+      Use -p to specify source path.
+
+    <b>-d FILE(S)</b> - Download Files
+      Download files from the target to main.
+      Use -p to specify destination path.
+
+    <b>-u --log</b> - Upload Log
+      Upload system.log file from main to target.
+      If no path specified, uses current directory.
+
+    <b>-d --log</b> - Download Log
+      Download system.log file from target to main.
+      If no path specified, uses current directory.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Upload Files</color>
+    <b>main -u file1 file2 file3</b>
+    Upload multiple files to target
+
+    <b>main -u -p /home/user/tools exploit.src</b>
+    Upload from specific path
+
+    <color=#e4ff34># Download Files</color>
+    <b>main -d file1 file2 file3</b>
+    Download multiple files from target
+
+    <b>main -d -p /home/user/Downloads data.txt</b>
+    Download to specific path
+
+    <color=#e4ff34># Log Management</color>
+    <b>main -u --log</b>
+    Upload system.log to target
+
+    <b>main -d --log -p /home/tux/logs</b>
+    Download system.log to specific directory
+
+    <color=#e4ff34># Pipe Input</color>
+    <b>find *.log | main -d</b>
+    Download all matched files from target
+
+    <b>find *.log | xargs | main -d</b>
+    Download files using xargs to pass names
+
+    <b>find /home/user | main -d -p /tmp</b>
+    Download matched files to specific path
+
+    <color=#e4ff34># Run Commands</color>
+    <b>main ls</b>
+    Execute command on main instance
+<b>SEE ALSO</b>
+    <b>pivot</b>, <b>proxy</b>"

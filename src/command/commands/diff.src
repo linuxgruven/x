@@ -1,0 +1,79 @@
+// =============================================================================
+// DIFF
+// Compare two files or directories line-by-line with color-coded output.
+// =============================================================================
+Command.diff=function(Obj,argv)
+	if not argv or len(argv)<2 then return Man.help(["diff"])
+	_p=ArgumentParser.init
+	_p.addArgument("post",true,"flag")  // Long flag: --post (redirect output to file)
+	argv=_p.parseArgs("diff",argv)
+	if argv isa Error then return
+	argv=_p.checkRedirect(Obj,"diff",argv)
+	if argv isa Error then return
+	argv=_p.parsePath(Obj,argv)
+	if argv isa Error then return
+	if not argv.rest or len(argv.rest)<2 then return Error.set("diff requires two files or directories")
+	file1=Io._getFile(Obj,argv.rest[0])
+	if file1 isa Error then return file1
+	file2=Io._getFile(Obj,argv.rest[1])
+	if file2 isa Error then return file2
+	name1=name(file1)
+	name2=name(file2)
+	lines1=[]
+	lines2=[]
+	if is_folder(file1) and is_folder(file2) then
+		// Build metadata lines for first directory (permissions name owner group size)
+		for file in get_files(file1)+get_folders(file1);info=permissions(file)+" "+name(file)+" "+owner(file)+" "+group(file)+" "+Io.size(to_int(size(file)));push(lines1,info);end for
+		// Build metadata lines for second directory (permissions name owner group size)
+		for file in get_files(file2)+get_folders(file2);info=permissions(file)+" "+name(file)+" "+owner(file)+" "+group(file)+" "+Io.size(to_int(size(file)));push(lines2,info);end for
+	else if is_folder(file1) or is_folder(file2) then
+		return Error.set("Cannot compare directory with file")
+	else
+		content1=get_content(file1)
+		content2=get_content(file2)
+		if not content1 then content1=""
+		if not content2 then content2=""
+		lines1=content1.split(char(10))
+		lines2=content2.split(char(10))
+	end if
+	diffResult=lines1.diff(lines2)
+	if not diffResult or len(diffResult)==0 then return Info.info("Files are identical")
+	if _p.write then
+		output=["--- "+name1,"+++ "+name2]
+		for line in diffResult;push(output,line);end for
+		argv.data=output
+		return _p.out(Obj,argv)
+	end if
+	if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+		for line in diffResult;if line then push(globals.G_pipe.stdout,line);end for
+		return
+	end if
+	Info.info("Comparing: "+cyan(name1)+" vs "+cyan(name2))
+	for line in diffResult
+		if not line then continue
+		// Check first character to determine line type
+		if line[0]=="<" then
+			// Line only in first file (deletion) - show in red
+			print red(line)
+		else if line[0]==">" then
+			// Line only in second file (addition) - show in green
+			print green(line)
+		else if line=="---" then
+			// Separator between change groups - show in yellow
+			print yellow(line)
+		else
+			// Parse header lines (e.g. "1c", "2a", "3d") for readability
+			op=line[-1]
+			lineNum=line[:-1]
+			if op=="c" then
+				print liteGrey("Line "+lineNum+" changed:")
+			else if op=="a" then
+				print liteGrey("Line "+lineNum+" [added]:")
+			else if op=="d" then
+				print liteGrey("Line "+lineNum+" [deleted]:")
+			else
+				print white(line)
+			end if
+		end if
+	end for
+end function

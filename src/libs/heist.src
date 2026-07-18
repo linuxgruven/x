@@ -1,0 +1,208 @@
+// =============================================================================
+// HEIST
+// Bank heist library; automated dual-target operations for coordinated fund transfers.
+// =============================================================================
+Heist={
+  "obj1":null,
+  "obj2":null
+}
+//promptBank - Prompt for bank host and port (! cancels, same as Gui)
+//Args: label (prompt text for host, e.g. "Your bank")
+//Returns: map {host, port} or null if user quits
+Heist.promptBank=function(label)
+  host=Gui.input({"text":label+" ip|domain: "})
+  if not host then return null
+  port=Gui.inputInt({"text":label+" port: ","default":141})
+  if port==null then return null
+  if typeof(port)!="number" then port=to_int(port)
+  if typeof(port)!="number" or port<1 then return Error.set("Invalid port")
+  return {"host":host,"port":port}
+end function
+//requireRootShell - Exploit bank and require a root shell
+//Args: host (ip|domain), port (number)
+//Returns: shell or Error
+Heist.requireRootShell=function(host,port)
+  s=self.getObject(host,port)
+  if typeof(s)!="shell" then
+    if s isa Error then return s
+    return Error.set("Failed to get shell on "+host)
+  end if
+  u=Utility.getUserEX(s)
+  if not u or u.user!="root" then return Error.set("Need root on "+host+" (got "+str(u.user)+")")
+  return s
+end function
+//doWait - Display status, wait for manual heist, and corrupt logs
+//Returns: nothing (displays info and corrupts logs)
+Heist.doWait=function
+  print green("Target bank shell privilege : ")+white(Utility.getUserEX(self.obj1).user)
+  print green("Your bank shell privilege   : ")+white(Utility.getUserEX(self.obj2).user)
+  user_input(white("Press enter after you perform your heist..."))
+  self.corrupt(self.obj1)
+  self.corrupt(self.obj2)
+  Info.info("Heist completed")
+end function
+//corrupt - Corrupt transaction logs by replacing with dummy file
+//Args: s (shell object)
+//Returns: Error if corruption fails, nothing otherwise
+Heist.corrupt=function(s)
+  //Get computer object from shell
+  c=host_computer(s)
+  //Create dummy file in /server directory
+  touch(c,"/server","x")
+  //Get file object for dummy file
+  f=File(c,"/server/x")
+  //Check if file creation failed
+  if not f then return Error.set("Failed to corrupt logs...BUSTED!!!")
+  //Replace transactions.log with dummy file
+  move(f,"/server","transactions.log")
+end function
+//getObject - Exploit bank server and obtain root shell
+//Args: i (IP or domain), p (port number)
+//Returns: shell object or Error
+Heist.getObject=function(i,p)
+  //Resolve domain to IP if needed
+  if not is_valid_ip(i) then i=nslookup(i)
+  //Validate IP address
+  if not is_valid_ip(i) then return Error.set("Invalid bank ip|domain provided")
+  //Get router for target IP
+  r=get_router(i)
+  //Initialize local IP variable
+  a=null
+  //Find local IP for specified port
+  for m in Exploit.extract(r,i)
+    //Check if port matches target
+    if m.port_number==p then
+      //Store local IP
+      a=m.local_ip
+      break
+    end if
+  end for
+  //Check if exploit was found for port
+  if not a then return Error.set("No exploit found for bank ip "+i+" with port "+p)
+  //Iterate through all exploits for target IP
+  for m in Exploit.extract(r,i)
+    if m.local_ip==a then
+			//Check if exploit library already cached
+			if Exploit.haveAlready(m.metaLib) then
+        //Scan library if needed
+        if Exploit.canScan(m.metaLib) then Exploit.headless(m.metaLib)
+				//Iterate through cached exploits
+				for ez in Exploit._ex(Exploit.getCacheKey(m.metaLib))
+					//Check if exploit type is shell ("s")
+					if ez.e=="s" then
+						//Attempt overflow exploit
+						ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"heist")
+						//Skip if overflow didn't return shell
+						if typeof(ex)!="shell" then continue
+            //Try to get root shell
+            e=Exploit.tryShellEX(ex,true)
+            //Return shell if successful
+            if not e isa Error then
+              return e
+            else
+              //Skip if can't pack computer object
+              if Builder.packCOEX(ex) isa Error then continue
+            end if
+            //Display root targeting message
+            Info.info("Targeting root...","+")
+						//Attempt log wipe for root access
+						//Return shell if log wipe successful
+						if Log.trylogwipe(ex,false) then return ex
+          end if
+				end for
+			else
+				//Exploit library not cached, try to get it
+				z=Exploit.get(m.metaLib)
+				//Check if exploit needs to be added
+				if not z then
+					//Display library being added
+					Info.info("Adding "+lib_name(m.metaLib)+":"+version(m.metaLib))
+					//Scan library and add to cache
+					Exploit.headless(m.metaLib)
+					//Iterate through newly cached exploits
+					for ez in Exploit._ex(Exploit.getCacheKey(m.metaLib))
+						//Check if exploit type is shell
+						if ez.e=="s" then
+							//Attempt overflow exploit
+							ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"heist")
+							//Skip if overflow didn't return shell
+							if typeof(ex)!="shell" then continue
+              //Try to get root shell
+              e=Exploit.tryShellEX(ex,true)
+              //Return shell if successful
+              if not e isa Error then
+                return e
+              else
+                //Skip if can't pack computer object
+                if Builder.packCOEX(ex) isa Error then continue
+              end if
+              //Display root targeting message
+              Info.info("Targeting root...","+")
+							//Attempt log wipe for root access
+							//Return shell if log wipe successful
+              if Log.trylogwipe(ex) then return ex
+            end if
+					end for
+				else
+					//Exploit already in cache, iterate through exploits
+					for ez in Exploit._ex(Exploit.getCacheKey(m.metaLib))
+						//Check if exploit type is shell
+						if ez.e=="s" then
+							//Attempt overflow exploit
+							ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"heist")
+							//Skip if overflow didn't return shell
+							if typeof(ex)!="shell" then continue
+              //Try to get root shell
+              e=Exploit.tryShellEX(ex,true)
+              //Return shell if successful
+              if not e isa Error then
+                return e
+              else
+                //Skip if can't pack computer object
+                if Builder.packCOEX(ex) isa Error then continue
+              end if
+              //Display root targeting message
+              Info.info("Targeting root...","+")
+							//Attempt log wipe for root access
+							//Return shell if log wipe successful
+							if Log.trylogwipe(ex) then return ex
+						end if
+					end for
+				end if
+			end if
+    end if
+  end for
+end function
+//init - Interactive heist loop: your bank once, then targets until ! cancel
+//Args: Obj (unused), argv (unused; bare heist starts the loop)
+//Returns: nothing
+Heist.init=function(Obj,argv)
+  Info.info("Heist loop — enter ! to cancel")
+  //Acquire root on your bank (re-prompt until success or quit)
+  while true
+    bank=self.promptBank("Your bank")
+    if bank isa Error then continue
+    if not bank then
+      Info.info("Heist cancelled")
+      return
+    end if
+    s=self.requireRootShell(bank.host,bank.port)
+    if s isa Error then continue
+    self.obj2=s
+    Info.info("Your bank ready (root)")
+    break
+  end while
+  //Repeatedly heist targets until quit
+  while true
+    bank=self.promptBank("Target bank")
+    if bank isa Error then continue
+    if not bank then
+      Info.info("Heist loop ended")
+      return
+    end if
+    s=self.requireRootShell(bank.host,bank.port)
+    if s isa Error then continue
+    self.obj1=s
+    self.doWait
+  end while
+end function

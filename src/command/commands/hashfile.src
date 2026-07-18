@@ -1,0 +1,30 @@
+// =============================================================================
+// HASHFILE
+// Crack hashes from a file; -p targets /etc/passwd (user:hash format).
+// =============================================================================
+Command.hashfile=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("d",false,"flag")  // Dictionary mode (legacy, unused)
+  _p.addArgument("p",false,"flag")  // /etc/passwd shortcut
+  argv=_p.parse("hf",argv,Obj)
+  if argv isa Error then return
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+  if not argv.rest and not argv.p and not hasPipeInput then return Man.help(["hf"])
+  if hasPipeInput then
+    if not argv.rest then argv.rest=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(argv.rest,line);end for
+  end if
+  if argv.p then targetPath="/etc/passwd" else targetPath=argv.rest[0]
+  hashFile=Io._getFile(Obj,targetPath)
+  if hashFile isa Error then return hashFile
+  if not has_permission(hashFile,"r") then return Error.set("Permission denied")
+  if not globals.G_rainbow then Crack.loading
+  results=[]
+  for line in split(get_content(hashFile),char(10));if not len(line) then continue;if indexOf(line,":")!=null then push(results,line+" => "+Crack.hash(split(line,":")[-1])) else push(results,line+" => "+Crack.hash(line));end for
+  Info.info("Hashes successfully cracked")
+  if has_permission(hashFile,"w") then
+    set_content(hashFile,join(results,char(10)))
+  else
+    for result in results;if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,result) else print white(result);end for
+  end if
+end function

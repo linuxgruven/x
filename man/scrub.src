@@ -1,0 +1,34 @@
+// Man page for scrub
+manScrub="SCRUB(1)                         X Shell Manual                         SCRUB(1)
+
+<b>NAME</b>    scrub - Wipe config files or zero out piped file paths
+<b>SYNOPSIS</b>
+    <b>scrub</b>
+    <b>find PATTERN | scrub</b>
+<b>DESCRIPTION</b>
+    Without pipe input, removes all files from the ~/Config directory.
+    Preserves Theme.conf and prompts before removing Map.conf and Browser.txt.
+
+    When file paths are piped in, scrub zeroes out the contents of each file
+    instead of operating on the Config directory.
+<b>OPTIONS</b>
+    <b>scrub</b>
+    Wipe all config files (except Theme.conf)
+    Prompts for Map.conf and Browser.txt
+
+    <b>find PATTERN | scrub</b>
+    Zero out each piped file path
+    File remains on disk, contents cleared
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Config Wipe</color>
+    <b>scrub</b>
+    Remove all config files
+
+    <color=#e4ff34># Pipe Input</color>
+    <b>find *.log | scrub</b>
+    Zero out all matched log files
+
+    <b>find sensitive.txt | scrub</b>
+    Wipe a specific file via pipe
+<b>SEE ALSO</b>
+    <b>clean</b>, <b>lock</b>"

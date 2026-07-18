@@ -1,0 +1,20 @@
+// Man page for whatami
+manWhatami="WHATAMI(1)                       X Shell Manual                       WHATAMI(1)
+
+<b>NAME</b>
+    whatami - Display current object type
+<b>SYNOPSIS</b>
+    <b>whatami</b>
+<b>DESCRIPTION</b>
+    Display the current object type or return the type string.
+<b>OPTIONS</b>
+    <b>whatami</b>
+    Display object type message
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Display Object Type</color>
+    <b>whatami</b>
+    Show current object type
+
+<b>SEE ALSO</b>
+    <b>whoami</b>, <b>stat</b>, <b>file</b>"

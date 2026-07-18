@@ -1,0 +1,137 @@
+// =============================================================================
+// FOLDERWATCHER
+// Monitor a directory in real-time for file additions, deletions, changes.
+// =============================================================================
+Command.folderWatcher=function(Obj,argv)
+	if not argv then return Man.help(["fw"])
+	targetDir=Io._getFile(Obj,argv[0],true)
+	if targetDir isa Error then return targetDir
+	if not is_folder(targetDir) then return Error.set("Can only use fw on a directory")
+	if not has_permission(targetDir,"r") then return Error.set("No read permission on directory: "+path(targetDir))
+	if not has_permission(targetDir,"x") then return Error.set("No execute permission on directory: "+path(targetDir))
+	if len(argv)>=2 then interval=to_int(argv[1]) else interval=10
+	if not interval isa number then interval=10
+	dirName=name(targetDir)
+	dirPath=path(targetDir)
+	// Ensure path ends with / for consistent string replacement
+	if dirPath[-1]!="/" then dirPath=dirPath+"/"
+	baseline={}
+	allFiles=Io.getAll(targetDir)
+	if not allFiles or allFiles isa Error then
+		// Try to get files directly without recursion as fallback
+		allFiles=get_files(targetDir)
+		if not allFiles then allFiles=[]
+		Info.info("Using non-recursive mode for "+dirName+" ("+len(allFiles)+" files)")
+	end if
+	for file in allFiles
+		filePath=path(file)
+		relativePath=filePath.replace(dirPath,"")
+		metadata={}
+		metadata.size=size(file)
+		// For text files, store content for change detection
+		isBinary=is_binary(file)
+		isFolder=is_folder(file)
+		hasRead=has_permission(file,"r")
+		if not isBinary and not isFolder and hasRead then
+			content=get_content(file)
+			if content!=null then metadata.content=content else metadata.content=""
+		end if
+		baseline[relativePath]=metadata
+	end for
+	Info.info("Starting monitoring of "+dirName+" (interval: "+interval+"s, files: "+len(baseline)+")")
+	Utility.pressQ
+	while poll_input!="q"
+		current={}
+		allFiles=Io.getAll(targetDir)
+		if not allFiles or allFiles isa Error then
+			// Try to get files directly without recursion as fallback
+			allFiles=get_files(targetDir)
+			if not allFiles then allFiles=[]
+		end if
+		for file in allFiles
+			filePath=path(file)
+			relativePath=filePath.replace(dirPath,"")
+			metadata={}
+			metadata.size=size(file)
+			// For text files, store content for change detection
+			isBinary=is_binary(file)
+			isFolder=is_folder(file)
+			hasRead=has_permission(file,"r")
+			if not isBinary and not isFolder and hasRead then
+				content=get_content(file)
+				if content!=null then metadata.content=content else metadata.content=""
+			end if
+			current[relativePath]=metadata
+		end for
+		hasChanges=false
+		for filePath in indexes(current)
+			if not hasIndex(baseline,filePath) then
+				hasChanges=true
+				Info.info("File Created [ "+filePath+" ]","(+++)")
+				baseline[filePath]=current[filePath]
+			else
+				baseSize=baseline[filePath].size
+				currSize=current[filePath].size
+				if baseSize!=currSize then
+					hasChanges=true
+					Info.info("File Modified [ "+filePath+" ] (size changed)","(***)")
+					baseline[filePath]=current[filePath]
+				else if hasIndex(current[filePath],"content") or hasIndex(baseline[filePath],"content") then
+					// Check if content exists in both or changed from text to binary
+					currHasContent=hasIndex(current[filePath],"content")
+					baseHasContent=hasIndex(baseline[filePath],"content")
+					if currHasContent and baseHasContent then
+						if current[filePath].content!=baseline[filePath].content then
+							hasChanges=true
+							Info.info("File Modified [ "+filePath+" ] (content changed)","(***)")
+							oldLines=split(baseline[filePath].content,char(10))
+							newLines=split(current[filePath].content,char(10))
+							maxLines=len(oldLines)
+							if len(newLines)>maxLines then maxLines=len(newLines)
+							print white("  Changes in "+cyan(filePath)+":")
+							lineNum=0
+							while lineNum<maxLines
+								oldLine=""
+								newLine=""
+								if lineNum<len(oldLines) then oldLine=oldLines[lineNum]
+								if lineNum<len(newLines) then newLine=newLines[lineNum]
+								if oldLine!=newLine then
+									if lineNum<len(oldLines) and lineNum<len(newLines) then
+										// Line modified
+                    // Show old version if it had text
+										if len(oldLine)>0 then print "    "+yellow("Line "+(lineNum+1)+": ")+red("- ")+white(oldLine)
+										print "    "+yellow("Line "+(lineNum+1)+": ")+green("+ ")+white(newLine)
+									else if lineNum>=len(oldLines) then
+										// Line added
+										print "    "+yellow("Line "+(lineNum+1)+": ")+green("+ ")+white(newLine)
+									else
+										// Line removed
+										print "    "+yellow("Line "+(lineNum+1)+": ")+red("- ")+white(oldLine)
+									end if
+								end if
+							lineNum+=1
+							end while
+							baseline[filePath]=current[filePath]
+						end if
+					else if currHasContent!=baseHasContent then
+						hasChanges=true
+						Info.info("File Modified [ "+filePath+" ] (type or permission changed)","(***)")
+						baseline[filePath]=current[filePath]
+					end if
+				end if
+			end if
+		end for
+		for filePath in indexes(baseline)
+			if not hasIndex(current,filePath) then
+				hasChanges=true
+				Info.warning("File Removed [ "+filePath+" ]","(---)")
+				remove(baseline,filePath)
+			end if
+		end for
+		if not hasChanges then Info.info("No file changes to "+dirName)
+		if poll_input=="q" then return Info.info("Folder watcher stopped")
+		waitCount=0
+		while waitCount<interval;if poll_input=="q" then return Info.info("Folder watcher stopped");wait(1);waitCount+=1;end while
+	end while
+	Info.info("Folder watcher stopped")
+end function

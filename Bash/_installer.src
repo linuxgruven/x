@@ -1,0 +1,227 @@
+print "<color=#20ff98>Installing X's bash scripts...</color>"
+c=host_computer(get_shell)
+_findAll=function(dir,fName,results)
+  for sub in get_folders(dir)
+    if name(sub)==fName then push(results,sub)
+    _findAll(sub,fName,results)
+  end for
+end function
+payloadDir=File(c,home_dir+"/payload")
+if not payloadDir then
+  print "<color=#ffff00>Locating payload...</color>"
+  _found=[]
+  _findAll(File(c,"/"),"payload",_found)
+  if not _found then exit("<color=red>payload folder not found. Please run X at least once to set up X's file structure.</color>")
+  if len(_found)==1 then
+    payloadDir=_found[0]
+    print "<color=#20ff98>Found payload at: "+path(payloadDir)+"</color>"
+  else
+    print "<color=#ffff00>Multiple payload folders found:</color>"
+    _i=0
+    _len=len(_found)
+    while _i<_len
+      print "<color=#ffffff>  ["+(_i+1)+"] "+path(_found[_i])+"</color>"
+      _i=_i+1
+    end while
+    print "<color=#ffffff>  [0] Cancel</color>"
+    _choice=to_int(user_input("<color=#87ceeb>Select payload (0 to cancel, 1-"+_len+"): </color>"))
+    if _choice==0 then exit("<color=#ffff00>Cancelled.</color>")
+    if _choice<1 or _choice>_len then exit("<color=red>Invalid selection.</color>")
+    payloadDir=_found[_choice-1]
+    print "<color=#20ff98>Using payload at: "+path(payloadDir)+"</color>"
+  end if
+end if
+payload=path(payloadDir)
+if not File(c,payload+"/data/bash") then create_folder(c,payload+"/data","bash")
+p=File(c,payload+"/data/bash")
+print ("<color=#20ff98>Installing bash scripts in "+path(p)+"</color>")
+touch(c,path(p),"digr")
+f=File(c,path(p)+"/digr")
+set_content(f,"scan --c $1 router s;dig -r -i $2;home")
+print "<color=#aaaaaa>  Installed digr</color>"
+touch(c,path(p),"dige")
+f=File(c,path(p)+"/dige")
+dige="// Will run the dig command and filter the results
+scan --c $1 router s;dig -e --filter;home"
+set_content(f,dige)
+print "<color=#aaaaaa>  Installed dige</color>"
+touch(c,path(p),"digs")
+f=File(c,path(p)+"/digs")
+set_content(f,"scan --c $1 router s;dig search;home")
+print "<color=#aaaaaa>  Installed digs</color>"
+touch(c,path(p),"digu")
+f=File(c,path(p)+"/digu")
+set_content(f,"scan --c $1 router s;dig -u --filter;home")
+print "<color=#aaaaaa>  Installed digu</color>"
+touch(c,path(p),"digur")
+f=File(c,path(p)+"/digur")
+set_content(f,"scan --c $1 router s;dig search -f $2 -p /home;home")
+print "<color=#aaaaaa>  Installed digur</color>"
+touch(c,path(p),"digc")
+f=File(c,path(p)+"/digc")
+set_content(f,"scan --c $1 router s;dig search -c /etc/apt/sources.txt;home")
+print "<color=#aaaaaa>  Installed digc</color>"
+touch(c,path(p),"rs")
+f=File(c,path(p)+"/rs")
+rs="// Will return the last obtained rshell
+rshell refresh;rshell -u -1"
+set_content(f,rs)
+print "<color=#aaaaaa>  Installed rs</color>"
+touch(c,path(p),"proxy")
+f=File(c,path(p)+"/proxy")
+proxy="_printnow <color=#eb0cc6>========================================</color>
+_printnow <color=#eb0cc6>  AUTOMATED PROXY DEPLOYMENT</color>
+_printnow <color=#eb0cc6>========================================</color>
+_printnow
+
+_setvar(use_decoy, get_yesno(Use a decoy? (default: no)))
+_setvar(install_rshell, get_yesno(Install rshell server? (default: no)))
+
+_printnow
+_printnow <color=#00ff00>Configuration:</color>
+_printnow <color=#ffffff>  Install decoy: <color=#ffff00>to_yesno(_getvar(use_decoy))</color>
+_printnow <color=#ffffff>  Install rshell: <color=#ffff00>to_yesno(_getvar(install_rshell))</color>
+_printnow
+
+if _getvar(use_decoy) == 1
+  _print <color=#00bfff>[1/4]</color> Deploying proxy with decoy...
+  proxy -d
+else
+  _print <color=#ffff00>[1/4] Skipping decoy deployment...</color>
+endif
+
+_print <color=#00bfff>[2/4]</color> Querying proxy status...
+proxy -q
+
+_print <color=#00bfff>[3/4]</color> Wiping system logs...
+wipe -l
+
+if _getvar(install_rshell) == 1
+  _print <color=#00bfff>[4/4]</color> Installing rshell library...
+  libs -i rshell
+  _print <color=#00ff00> rshell library installed</color>
+else
+  _print <color=#ffff00>[4/4] Skipping rshell installation...</color>
+endif
+
+_print
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>   PROXY DEPLOYMENT COMPLETE</color>
+_print <color=#00ff00>========================================</color>
+"
+set_content(f,proxy)
+print "<color=#aaaaaa>  Installed proxy</color>"
+touch(c,path(p),"recon")
+f=File(c,path(p)+"/recon")
+set_content(f,"recon -u --filter $1")
+print "<color=#aaaaaa>  Installed recon</color>"
+f=File(c,path(p)+"/de")
+set_content(f,"proxy -q;wipe -l;libs -i rshell;proxy -d -n rs")
+print "<color=#aaaaaa>  Installed de</color>"
+touch(c,path(p),"auto")
+f=File(c,path(p)+"/auto")
+auto="_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  AUTOMATED CORRUPTION MISSION</color>
+_print <color=#eb0cc6>========================================</color>
+_print
+
+_setvar(pub, get_string(Enter target public IP:))
+if _isValidIP(_getvar(pub)) == 0
+  _print <color=#ff0000>[X] Error: Not a valid IP</color>
+  _home
+end if
+
+_setvar(lan, get_string(Enter target LAN IP:))
+if _isLanIP(_getvar(lan)) == 0
+  _print <color=#ff0000>[X] Error: Not a valid LAN ip</color>
+  _home
+end if
+
+_print
+_print <color=#00ff00>Target Information:</color>
+_print <color=#ffffff>  Public IP: <color=#ffff00>_getvar(pub)</color>
+_print <color=#ffffff>     LAN IP: <color=#ffff00>_getvar(lan)</color>
+_print
+
+_print <color=#00bfff>[1/7]</color> Connecting to router...
+scan --c _getvar(pub) router s
+
+if not _File(/lib/kernel_router.so)
+  _print <color=#ff0000>[X] Error: Not connected to a router!</color>
+  _home
+end if
+
+_print <color=#00ff00> Successfully connected to router</color>
+_print
+_print <color=#00bfff>[2/7]</color> Escalating privileges to root...
+su root
+_print <color=#00bfff>[3/7]</color> Uploading init library...
+libs -g init
+_print <color=#00bfff>[4/7]</color> Scanning local for exploitation vectors...
+scan --l init 4 _getvar(lan)
+_print <color=#00bfff>[5/7]</color> Corrupting system files...
+rn /boot boots
+_print <color=#00bfff>[6/7]</color> Wiping system logs...
+wipe -l
+_print <color=#00bfff>[7/7]</color> Returning to home...
+_print
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>   MISSION COMPLETE</color>
+_print <color=#00ff00>========================================</color>
+_print <color=#ffff00>Please reply to the mission email.</color>
+_print
+_home"
+set_content(f,auto)
+print "<color=#aaaaaa>  Installed auto</color>"
+touch(c,path(p),"menu_test")
+f=File(c,path(p)+"/menu_test")
+menu_test="// Small menu() builtin test for Bash scripts
+
+_print bold(=== MENU SMALL TEST ===)
+_print
+
+_setvar(main_items, [Status, Logs, Exit])
+_setvar(main_choice, menu(_getvar(main_items), numbers, cyan))
+_print Main index: _getvar(main_choice)
+
+_setvar(env_items, [Dev, Test, Prod])
+_setvar(env_choice, menu(_getvar(env_items), letters, #00bfff))
+_print Env index: _getvar(env_choice)
+
+if _getvar(main_choice) == 0
+  _print green(Status selected)
+endif
+if _getvar(main_choice) == 1
+  _print yellow(Logs selected)
+endif
+if _getvar(main_choice) == 2
+  _print red(Exit selected)
+endif
+
+_print
+_print bold(=== MENU SMALL TEST COMPLETE ===)"
+set_content(f,menu_test)
+print "<color=#aaaaaa>  Installed menu_test</color>"
+p=File(c,payload+"/data")
+print ("<color=#20ff98>Creating ascii file in "+path(p)+"</color>")
+touch(c,path(p),"ascii")
+f=File(c,path(p)+"/ascii")
+set_content(f," ________________
+< Tux was here!! >
+ ----------------
+   \
+    \
+        .--.
+       |o_o |
+       |:_/ |
+      //   \ \
+     (|     | )
+    /'\_   _/`\
+    \___)=(___/")
+print "<color=#aaaaaa>  Installed ascii</color>"
+print "<color=#20ff98>Finished installing bash scripts</color>"
+if params.indexOf("--delete") != null then
+  f=File(c,program_path)
+  if f then delete(f)
+  print "<color=#20ff98>Installer deleted.</color>"
+end if

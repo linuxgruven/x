@@ -1,0 +1,1779 @@
+// =============================================================================
+// ATTACK_RECON
+// Reconnaissance, bouncing, network mapping, and advanced attack operations.
+// =============================================================================
+// Find LAN bounce exploits for pivoting through router
+// Args: o (options object with exploit/router info)
+// Returns: bounce exploit data or null
+Attack.getBounces=function(o)
+	k={}
+	d={}
+  // Handle object-based bounce discovery
+  if hasIndex(o,"Obj") then
+    b=false
+    // Get LAN IP for bounce target
+    i=devices_lan_ip(o.c.router)[0]
+    if not i then i=o.c.router.local_ip
+		// Search for LAN bounce exploits in libraries
+		for l in get_files(File(o.Obj.computer,"/lib"))
+			if b then break
+			z=load(o.c.metaxploit,path(l))
+      if not z then continue
+			n=z.lib_name+"_"+z.version
+			if not hasIndex(globals.G_exploitCache,n) then Exploit.headless(z)
+			x=Exploit._ex(n)
+			if not len(x) then continue
+			for eType in ["l","c"]
+				if b then break
+				if eType=="c" and k then continue
+				for e in x
+					if e.e!=eType then continue
+					ex=Exploit.overflow(z,e.m,e.s,i,"attack_recon")
+					if typeof(ex)!="computer" then continue
+					u=Utility.getUserEX(ex)
+					if u.user=="root" then
+						k["root"]={"memory":Exploit.getmtree(e.m),"unsec":Exploit.getstree(e.s),"lib":z}
+						b=true
+						break
+					else if u.user=="user" then
+						if hasIndex(k,"user") then continue
+						k["user"]={"memory":Exploit.getmtree(e.m),"unsec":Exploit.getstree(e.s),"lib":z}
+					else if u.user=="guest" then
+						if hasIndex(k,"guest") then continue
+						k["guest"]={"memory":Exploit.getmtree(e.m),"unsec":Exploit.getstree(e.s),"lib":z}
+					end if
+				end for
+			end for
+		end for
+  else
+    j=Net.getRouters(get_router(o.ex[0].public_ip))
+    if not j then return
+    d["j"]=j
+    x=devices_lan_ip(get_router(o.ex[0].public_ip))[0]
+    if not x then x=o.ex[0].local_ip
+    for eType in ["l","c"]
+      if k then break
+      for e in o.q
+        if e.e!=eType then continue
+        if eType=="l" then
+          if typeof(Exploit.overflow(o.m,e.m,e.s,x,"attack_recon"))!="computer" then continue
+          uKey=e.u
+        else
+          ex=Exploit.overflow(o.m,e.m,e.s,x,"attack_recon")
+          if typeof(ex)!="computer" then continue
+          uKey=Utility.getUserEX(ex).user
+        end if
+        if uKey=="r" or uKey=="root" then
+          k["root"]={"memory":Exploit.getmtree(e.m),"unsec":Exploit.getstree(e.s),"lib":o.m}
+          break
+        else if uKey=="u" or uKey=="user" then
+          if hasIndex(k,"user") then continue
+          k["user"]={"memory":Exploit.getmtree(e.m),"unsec":Exploit.getstree(e.s),"lib":o.m}
+        else if uKey=="g" or uKey=="guest" then
+          if hasIndex(k,"guest") then continue
+          k["guest"]={"memory":Exploit.getmtree(e.m),"unsec":Exploit.getstree(e.s),"lib":o.m}
+        end if
+      end for
+    end for
+  end if
+  if not k then return Info.info("Failed to find a lan bounce exploit","i",null)
+  for p in ["root","user","guest"]
+    if hasIndex(k,p) then
+      pn={"root":"Root","user":"User","guest":"Guest"}
+      Info.info("Using "+pn[p])
+      d["memory"]=k[p]["memory"]
+      d["unsec"]=k[p]["unsec"]
+      d["lib"]=k[p]["lib"]
+      d["user"]=p
+      break
+    end if
+  end for
+	return d
+end function
+// Deep reconnaissance with OSINT data gathering
+// Args: rt (router), ex (exploits), argv (options including -a for email attack)
+// Returns: comprehensive recon data
+Attack.recon=function(rt,ex,argv)
+  if not ex then return Warning.set("Not enough attack vectors to use this option at this time")
+  _PIPE=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  // Initialize recon data structures
+  C={}
+  U={}
+  E={}
+  SUBJ={}
+  G=[]
+  S={}
+  F=[]
+  PIP=public_ip(rt)
+  // Gather company/target information from whois
+  fillCompany=function(e)
+    C["ip"]=PIP
+    C["BSSID"]=bssid_name(rt)
+    C["ESSID"]=essid_name(rt)
+    // Parse whois data
+    a=split(whois(PIP).replace("Domain name: ","").replace("Administrative contact: ","").replace("Email address: ","").replace("Phone: ",""),char(10))
+    C["web"]=a[0]
+		C["domain"]=a[0].replace("www.","")
+    C["admin"]=a[1]
+		C["email"]=a[2]
+		C["company"]=split(C["web"],"\.")[1]
+    // Optionally attack admin email
+    if argv.a then
+      Info.info("Attacking the admin email account...")
+      y=Crack.dictEmail({"start":0,"stop":null,"rest":[a[2]]},true)
+      if not y isa Warning then
+        C["emailPass"]=y
+      else
+        Info.warning("Email attack failed, disabling email attack")
+        argv.a=false
+      end if
+		end if
+  end function
+  getExploits=function(q,r=false)
+    trySort=function(x,m,i)
+      for uFilter in ["r","u",null]
+        for e in x
+          if not (e.e=="s" or e.e=="c" or e.e=="f") then continue
+          if uFilter and e.u!=uFilter then continue
+          _=Exploit.overflow(m,e.m,e.s,null,"attack_recon")
+          if not _ then continue
+          if _ isa number or _ isa string then continue
+          o=typeof(_)
+          if indexOf(o,"shell")==null and o!="computer" and o!="file" then continue
+          Info.info("Found a "+Exploit.getItem[e.u]+" "+o+" exploit")
+          return {"type":o,"user":Exploit.getItem[e.u],"ip":i,"object":_}
+        end for
+      end for
+    end function
+    for m in q
+      if __m_idx==0 then continue
+      if not hasIndex(globals.G_exploitCache,lib_name(m.metaLib)+"_"+version(m.metaLib)) then
+        Info.warning("Database is out of date, updateing database...")
+				Exploit.headless(m.metaLib)
+			end if
+      if argv.i and not m.local_ip==argv.i then continue
+      w=Exploit._ex(Exploit.getCacheKey(m.metaLib))
+      if r then return trySort(w,m.metaLib,m.local_ip) else populateUser(trySort(w,m.metaLib,m.local_ip))
+    end for
+  end function
+  tryBounce=function(e)
+    m=e[0].metaLib
+    if not hasIndex(globals.G_exploitCache,lib_name(m)+"_"+version(m)) then
+      Info.warning("Database is out of date, updateing database...")
+      Exploit.headless(m)
+    end if
+    key=Exploit.getCacheKey(m)
+    q=Exploit._ex(key)
+    if not q then
+      Exploit.headless(m)
+      q=Exploit._ex(key)
+    end if
+    d=Attack.getBounces({"m":m,"q":q,"ex":e})
+    if not d then return
+    seen={}
+		for i in d.j
+			v=split(i,"\.")
+			x=join(v[:-1],".")+"."
+			r=0
+      if argv.extreme then
+        a=0;while a<=255
+          t=x+a
+          if argv.i and t!=argv.i then
+            a+=1
+            continue
+          end if
+          _=overflow(d.lib,d.memory,d.unsec,t)
+          if _==null then
+            r+=1
+            a+=1;continue
+          end if
+          if _==null or _ isa number or _ isa string then
+            a+=1
+            continue
+          end if
+          if _ then
+            lip=_.local_ip
+            if hasIndex(seen,lip) then
+              a+=1
+              continue
+            end if
+            seen[lip]=1
+            if (argv.s or argv.r or argv.filter) and not argv.u then getEmail({"type":"Lan Bounce","user":d.user,"ip":lip,"object":_}) else populateUser({"type":"Lan Bounce","user":d.user,"ip":lip,"object":_})
+          end if
+        a+=1;end while
+      else
+        a=0;while a<=50
+          t=x+a
+          if argv.i and t!=argv.i then
+            a+=1
+            continue
+          end if
+          _=overflow(d.lib,d.memory,d.unsec,t)
+          if _==null then
+            if r>=10 then break
+            r+=1
+          end if
+          if _==null or _ isa number or _ isa string then
+            a+=1
+            continue
+          end if
+          if _ then
+            lip=_.local_ip
+            if hasIndex(seen,lip) then
+              a+=1
+              continue
+            end if
+            seen[lip]=1
+            if (argv.s or argv.r or argv.filter) and not argv.u then getEmail({"type":"Lan Bounce","user":d.user,"ip":lip,"object":_}) else populateUser({"type":"Lan Bounce","user":d.user,"ip":lip,"object":_})
+          end if
+        a+=1;end while
+      end if
+		end for
+    return len(U)
+  end function
+  getFile=function(e,o,f)
+    if o=="computer" then return File(e,f)
+    if o=="Lan Bounce" then return File(e,f)
+    if indexOf(o,"shell")!=null then return File(host_computer(e),f)
+  end function
+  getFileData=function(z)
+    if argv.s then
+      f=Io.getAll(FileHelper.toRootEx(z.object))
+      if f isa Error then return
+      for w in f
+        if name(w)!=argv.f or indexOf(name(w),argv.f)==null then
+          continue
+        else
+          Info.info("Found: "+name(w)+" on "+z.object.local_ip)
+          return getFileEmail(z)
+        end if
+      end for
+      return
+    end if
+    for d in get_folders(FileHelper.toRootEx(z.object))
+      if name(d)!="etc" then continue
+      for h in get_files(d)
+        if name(h)!="passwd" then continue
+        if has_permission(h,"r") then
+          for q in split(get_content(h),char(10))
+            if not q then continue
+            q=split(trim(q),":")
+            if not len(q)==2 then continue
+            t=q[0]
+            if not hasIndex(U,t) then
+              U[t]={
+                "type":z.type,
+                "ip":z.ip,
+                "passwd":Crack.hash(q[1])
+              }
+            else if not hasIndex(U[t],"passwd") then
+              U[t]+={
+                "passwd":Crack.hash(q[1])
+              }
+            end if
+          end for
+        end if
+      end for
+    end for
+    for d in get_folders(FileHelper.toRootEx(z.object))
+      if name(d)!="home" then continue
+      for h in get_folders(d)
+        if name(h)=="guest" then continue
+        if not hasIndex(U,name(h)) then U[name(h)]={
+          "type":z.type,
+          "ip":z.ip
+        }
+        if hasIndex(U[name(h)],"bank") and hasIndex(U[name(h)],"email") then
+          if not z.user=="root" then continue
+        end if
+        for c in get_folders(h)
+          if name(c)!="Config" then continue
+          for f in get_files(c)
+            if name(f)=="Mail.txt" or name(f)=="Bank.txt" then
+              if not has_permission(f,"r") then
+                if name(f)=="Mail.txt" then
+                  U[name(h)]+={
+                    "email":"Permission Denied"
+                  }
+                  U[name(h)]+={
+                    "emailPass":"Permission Denied"
+                  }
+                else if name(f)=="Bank.txt" then
+                  U[name(h)]+={
+                    "bank":"Permission Denied"
+                  }
+                  U[name(h)]+={
+                    "bankPass":"Permission Denied"
+                  }
+                end if
+              else
+                content=get_content(f)
+                if not content then content=""
+                s=split(content,":")
+                if not len(s)==2 then
+                  if name(f)=="Mail.txt" then
+                    U[name(h)]+={
+                      "email":"Bad MD5"
+                    }
+                    U[name(h)]+={
+                      "emailPass":"Bad MD5"
+                    }
+                  else if name(f)=="Bank.txt" then
+                    U[name(h)]+={
+                      "bank":"Bad MD5"
+                    }
+                    U[name(h)]+={
+                      "bankPass":"Bad MD5"
+                    }
+                  end if
+                else
+                  t=Crack.hash(s[1])
+                  if name(f)=="Mail.txt" then
+                    U[name(h)]+={
+                      "email":s[0]
+                    }
+                    t=Crack.hash(s[1])
+                    if t then U[name(h)]+={
+                      "emailPass":t
+                    } else U[name(h)]+={
+                      "emailPass":"Bad MD5"
+                    }
+                  else if name(f)=="Bank.txt" then
+                    U[name(h)]+={
+                      "bank":s[0]
+                    }
+                    t=Crack.hash(s[1])
+                    if t then U[name(h)]+={
+                      "bankPass":t
+                    } else U[name(h)]+={
+                      "bankPass":"Bad MD5"
+                    }
+                  end if
+                end if
+              end if
+            end if
+          end for
+        end for
+      end for
+    end for
+  end function
+  getFileEmail=function(z)
+    e=FileHelper.toRootEx(z.object)
+    for d in get_folders(e)
+      if name(d)!="home" then continue
+      for h in get_folders(d)
+        if not get_folders(d)>1 then continue
+        if name(h)=="guest" then continue
+        if not hasIndex(U,name(h)) then U[name(h)]={
+          "type":z.type,
+          "ip":z.ip
+        }
+        if not hasIndex(E,name(h)) then E[name(h)]={"type":z.type,"ip":z.ip}
+        if hasIndex(E[name(h)],"email") then continue
+        for c in get_folders(h)
+          if name(c)!="Config" then continue
+          for f in get_files(c)
+            if name(f)!="Mail.txt" then continue
+            if not has_permission(f,"r") then
+              E[name(h)]+={
+                "email":"Permission Denied"
+              }
+              E[name(h)]+={
+                "emailPass":"Permission Denied"
+              }
+              continue
+            end if
+            content=get_content(f)
+            if not content then content=""
+            s=split(content,":")
+            if not len(s)==2 then
+              if name(f)=="Mail.txt" then
+                E[name(h)]+={
+                  "email":"Bad MD5"
+                }
+                E[name(h)]+={
+                  "emailPass":"Bad MD5"
+                }
+              else if name(f)=="Bank.txt" then
+                E[name(h)]+={
+                  "bank":"Bad MD5"
+                }
+                E[name(h)]+={
+                  "bankPass":"Bad MD5"
+                }
+              end if
+              continue
+            end if
+            t=Crack.hash(s[1])
+            if name(f)=="Mail.txt" then
+              E[name(h)]+={
+                "email":s[0]
+              }
+              t=Crack.hash(s[1])
+              if t then E[name(h)]+={
+                "emailPass":t
+              } else E[name(h)]+={
+                "emailPass":"Bad MD5"
+              }
+            else if name(f)=="Bank.txt" then
+              E[name(h)]+={
+                "bank":s[0]
+              }
+              t=Crack.hash(s[1])
+              if t then E[name(h)]+={
+                "bankPass":t
+              } else E[name(h)]+={
+                "bankPass":"Bad MD5"
+              }
+            end if
+          end for
+        end for
+      end for
+    end for
+  end function
+  getFileSearch=function(z)
+    if argv.r then return getFileEmail(z)
+    e=Io.getAll(FileHelper.toRootEx(z.object))
+    for f in e
+      if name(f)==argv.f then
+        Info.info("Found: "+name(f)+" on "+z.ip)
+        return getFileEmail(z)
+      end if
+    end for
+    if e==null then return
+  end function
+  getData=function(z)
+    if argv.r then
+      if z.type=="file" then return getFileEmail(z)
+      return getEmail(z)
+    end if
+    if argv.s then
+      f=Io.getAll(File(z.object,argv.p))
+      if f isa Error then return
+      for w in f
+        if name(w)!=argv.f or indexOf(name(w),argv.f)==null then
+          continue
+        else
+          Info.info("Found: "+name(w)+" on "+z.object.local_ip)
+          return getEmail(z)
+        end if
+      end for
+      return Info.info("File not found: "+argv.f)
+    end if
+		x=getFile(z.object,z.type,"/etc/passwd")
+		if x then
+      if has_permission(x,"r") then
+        for q in split(get_content(x),char(10))
+          if not q then continue
+          q=split(trim(q),":")
+          if len(q)==2 then
+            t=q[0]
+            if not hasIndex(U,t) then
+              U[t]={
+                "type":z.type,
+                "ip":z.ip,
+                "passwd":Crack.hash(q[1])
+              }
+            else if not hasIndex(U[t],"passwd") then
+              U[t]+={
+                "passwd":Crack.hash(q[1])
+              }
+            end if
+          else
+            Info.warning("Bad /etc/passwd MD5")
+          end if
+        end for
+      else
+        Info.warning("Permission Denied for /etc/passwd")
+      end if
+    else
+      Info.warning("No /etc/passwd file found")
+    end if
+		x=get_folders(getFile(z.object,z.type,"/home"))
+		if not x then return
+		if not len(x) then return
+		for h in x
+      if name(h)=="guest" then continue
+      if not hasIndex(U,name(h)) then U[name(h)]={
+        "type":z.type,
+        "ip":z.ip
+      }
+      if hasIndex(U[name(h)],"bank") and hasIndex(U[name(h)],"email") then
+        if not z.user=="root" then continue
+      end if
+			f=getFile(z.object,z.type,"/home/"+name(h)+"/Config/Mail.txt")
+      if f then
+        if not has_permission(f,"r") then
+          U[name(h)]+={
+            "email":"Permission Denied"
+          }
+          U[name(h)]+={
+            "emailPass":"Permission Denied"
+          }
+        else
+          content=get_content(f)
+          if not content then content=""
+          s=split(content,":")
+          if not len(s)==2 then
+          else
+            U[name(h)]+={
+              "email":s[0]
+            }
+            t=Crack.hash(s[1])
+            if t then U[name(h)]+={
+              "emailPass":t
+            } else U[name(h)]+={
+              "emailPass":"Bad MD5"
+            }
+          end if
+        end if
+      else
+        U[name(h)]+={
+          "email":"Missing"
+        }
+        U[name(h)]+={
+          "emailPass":"Missing"
+        }
+      end if
+      f=getFile(z.object,z.type,"/home/"+name(h)+"/Config/Bank.txt")
+      if f then
+        if not has_permission(f,"r") then
+            U[name(h)]+={
+              "bank":"Permission Denied"
+            }
+            U[name(h)]+={
+              "bankPass":"Permission Denied"
+            }
+        else
+          content=get_content(f)
+          if not content then content=""
+          s=split(content,":")
+          if not len(s)==2 then
+          else
+            U[name(h)]+={
+              "bank":s[0]
+            }
+            t=Crack.hash(s[1])
+            if t then U[name(h)]+={
+              "bankPass":t
+            } else U[name(h)]+={
+              "bankPass":"Bad MD5"
+            }
+          end if
+        end if
+      else
+        U[name(h)]+={
+          "bank":"Missing"
+        }
+        U[name(h)]+={
+          "bankPass":"Missing"
+        }
+      end if
+      bins=[]
+      binContents={}
+      for hf in get_files(h)
+        n=name(hf)
+        if is_binary(hf) then
+          push(bins,n)
+        else if n!="Bank.txt" and n!="Mail.txt" then
+          push(bins,n)
+          if argv.view then
+            c=get_content(hf)
+            if c then binContents[n]=c
+          end if
+        end if
+      end for
+      if bins then U[name(h)]+={"bins":bins}
+      if len(binContents) then U[name(h)]+={"binContents":binContents}
+		end for
+    if argv.g then _extractGrab(z)
+  end function
+  getEmail=function(z)
+		x=get_folders(getFile(z.object,z.type,"/home"))
+		if not x then return
+		for h in x
+      if name(h)=="guest" then continue
+      if not hasIndex(E,name(h)) then E[name(h)]={"type":z.type}
+      if hasIndex(E[name(h)],"email") then continue
+			f=getFile(z.object,z.type,"/home/"+name(h)+"/Config/Mail.txt")
+      if not f then
+        E[name(h)]+={
+          "user":name(h)
+        }
+        E[name(h)]+={
+          "email":"Missing"
+        }
+        E[name(h)]+={
+          "emailPass":"Missing"
+        }
+        E[name(h)]+={
+          "ip":z.ip
+        }
+        Info.warning("No Mail.txt found for "+name(h))
+        continue
+      end if
+			if not has_permission(f,"r") then
+        E[name(h)]+={
+          "user":name(h)
+        }
+        E[name(h)]+={
+          "email":"Permission Denied"
+        }
+        E[name(h)]+={
+          "emailPass":"Permission Denied"
+        }
+        E[name(h)]+={
+          "ip":z.ip
+        }
+      else
+        content=get_content(f)
+        if not content then content=""
+        s=split(content,":")
+        if not len(s)==2 then
+          E[name(h)]+={
+            "user":name(h)
+          }
+          E[name(h)]+={
+            "email":"Bad MD5"
+          }
+          E[name(h)]+={
+            "emailPass":"Bad MD5"
+          }
+          E[name(h)]+={
+            "ip":z.ip
+          }
+          Info.warning("Bad Mail.txt MD5 for "+name(h))
+        else
+          E[name(h)]+={
+            "user":name(h)
+          }
+          E[name(h)]+={
+            "email":s[0]
+          }
+          E[name(h)]+={
+            "ip":z.ip
+          }
+          t=Crack.hash(s[1])
+          if t then E[name(h)]+={
+            "emailPass":t
+          } else E[name(h)]+={
+            "emailPass":"Bad MD5"
+          }
+        end if
+      end if
+      bins=[]
+      binContents={}
+      for hf in get_files(h)
+        n=name(hf)
+        if is_binary(hf) then
+          push(bins,n)
+        else if n!="Bank.txt" and n!="Mail.txt" then
+          push(bins,n)
+          if argv.view then
+            c=get_content(hf)
+            if c then binContents[n]=c
+          end if
+        end if
+      end for
+      if bins then E[name(h)]+={"bins":bins}
+      if len(binContents) then E[name(h)]+={"binContents":binContents}
+    end for
+  end function
+  _fetchSubjects=function
+    Info.info("Reading emails...")
+    // XFIX1.0: MetaMail 2s cooldown; packMailLogin not needed (use mail_login).
+    // XFIX1.0: _firstLogin=true
+    _src=E
+    if not _src then _src=U
+    for i in _src
+      _addr=i.value["email"]
+      _pass=i.value["emailPass"]
+      if not _addr or _addr=="MISSING" or _addr=="Missing" or _addr=="Permission Denied" or _addr=="Bad MD5" then continue
+      if not _pass or _pass=="MISSING" or _pass=="Missing" or _pass=="Permission Denied" or _pass=="Bad MD5" then continue
+      // XFIX1.0: if not _firstLogin then System.tryWait(2)
+      // XFIX1.0: _firstLogin=false
+      // XFIX1.0: mm=mail_login(_addr,_pass)
+      mm=Builder.packMailLogin(Obj,_addr,_pass)
+      if not mm or mm isa Error then continue
+      // XFIX1.0: System.tryWait(2)
+      mails=fetch(mm)
+      if not mails isa list then continue
+      _subjects=[]
+      for mail in mails
+        segs=split(mail,char(10))
+        if len(segs)>=5 then push(_subjects,segs[4][9:])
+      end for
+      if len(_subjects)>0 then SUBJ[i.key]=_subjects
+    end for
+  end function
+  _extractGrab=function(z)
+    _userHomes={}
+    _userFiles={}
+    _sysFiles=[]
+    _homeRoot=getFile(z.object,z.type,"/home")
+    if not _homeRoot then return
+    for h in get_folders(_homeRoot)
+      uname=name(h)
+      if uname=="guest" then continue
+      _userHomes[path(h)]=uname
+    end for
+    allFiles=Io.getAll(getFile(z.object,z.type,"/"))
+    if allFiles isa Error then return
+    for w in allFiles
+      if is_folder(w) then continue
+      _wpath=path(w)
+      _owner=null
+      for hPath in _userHomes.indexes
+        if indexOf(_wpath,hPath)==0 then
+          _owner=_userHomes[hPath]
+          break
+        end if
+      end for
+      ct=get_content(w)
+      if not ct or matches(ct,"Binary file\.") then
+        if _owner then
+          if not hasIndex(_userFiles,_owner) then _userFiles[_owner]=[]
+          push(_userFiles[_owner],_wpath)
+        else
+          push(_sysFiles,_wpath)
+        end if
+        continue
+      end if
+      if matches(ct,"Permission denied\.") then ct="Permission denied."
+      if _owner then
+        if not hasIndex(_userFiles,_owner) then _userFiles[_owner]=[]
+        push(_userFiles[_owner],_wpath)
+        push(outer.G,{"name":name(w),"ip":z.ip,"path":_wpath,"content":ct,"user":_owner})
+      else
+        push(_sysFiles,_wpath)
+        outer.S[z.ip+":"+_wpath]={"name":name(w),"ip":z.ip,"path":_wpath,"content":ct}
+      end if
+    end for
+    for uname in _userFiles.indexes
+      _flist=_userFiles[uname]
+      if len(_flist)>0 then push(outer.F,{"ip":z.ip,"user":uname,"files":_flist})
+    end for
+    if len(_sysFiles)>0 then push(outer.F,{"ip":z.ip,"user":"[system]","files":_sysFiles})
+  end function
+  populateUser=function(z)
+    if not z then return
+    if z.type=="file" then return getFileData(z)
+    if z.type=="computer" or z.type=="shell" or z.type=="Lan Bounce" then return getData(z)
+  end function
+  trySearch=function(e)
+		tryBounce(e)
+    if E then
+      if argv.subjects then _fetchSubjects
+      printSearchData
+      return
+    end if
+    z=getExploits(e,true)
+    if not z then return Info.warning("No exploits found")
+    if z.type=="file" then getFileSearch(z) else getData(z)
+    if E then
+      if argv.subjects then _fetchSubjects
+      printSearchData
+    end if
+  end function
+  tryReverse=function(e)
+		tryBounce(e)
+    if E then
+      if argv.subjects then _fetchSubjects
+      printSearchData
+      return
+    end if
+    z=getExploits(e,true)
+    if not z then return Info.warning("No exploits found")
+    if z.type=="file" then getFileSearch(z) else getData(z)
+    if E then
+      if argv.subjects then _fetchSubjects
+      printSearchData
+    end if
+  end function
+  formatSearchData=function
+    y=[]
+    push(y,"-"*45)
+    push(y,"COMPANY:")
+    push(y,"-"*45)
+    push(y,"COMPANY PUBLIC IP - : "+PIP)
+    if hasIndex(C,"BSSID") then push(y,"BSSID ------------- : "+C.BSSID)
+    if hasIndex(C,"ESSID") then push(y,"ESSID ------------- : "+C.ESSID)
+    if hasIndex(C,"company") then push(y,"COMPANY NAME ------ : "+C.company)
+    if hasIndex(C,"web") then push(y,"COMPANY WEBSITE --- : "+C.web)
+    if hasIndex(C,"domain") then push(y,"COMPANY DOMAIN ---- : "+C.domain)
+    if hasIndex(C,"admin") then push(y,"ADMIN NAME -------- : "+C.admin)
+    if hasIndex(C,"email") then push(y,"ADMIN EMAIL ------- : "+C.email)
+    if hasIndex(C,"emailPass") then push(y,"ADMIN EMAIL PASS -- : "+C.emailPass)
+    if E then
+      push(y,"-"*45)
+      push(y,"EMAIL DATASET:")
+      for i in E
+        push(y,"-"*45)
+        push(y,"USER ------------- : "+i.key)
+        if hasIndex(i.value,"email") then push(y,"EMAIL ------------ : "+i.value.email)
+        if hasIndex(i.value,"emailPass") then push(y,"EMAIL PASSWORD --- : "+i.value.emailPass)
+        if hasIndex(i.value,"ip") then push(y,"LOCAL IP --------- : "+i.value.ip)
+        if hasIndex(i.value,"bins") then
+          push(y,"FILES FOUND ------ :")
+          for b in i.value.bins;push(y,"  "+b);end for
+        end if
+      end for
+      push(y,"-"*45)
+    end if
+    return y
+  end function
+  printGrabData=function
+    _f=null
+    if argv.grep and len(argv.grep)>0 then _f=argv.grep[0]
+    while true
+      if not U then
+        print red("No data found.")
+      else
+        print white("-"*45)
+        print orange("GRAB RESULTS:")
+        _anyPrinted=false
+        for i in U
+          uname=i.key
+          _cip=i.value["ip"]
+          if _f then
+            _hit=false
+            _chk=uname+" "+str(i.value["passwd"])+" "+str(i.value["email"])+" "+_cip
+            if indexOf(_chk,_f)!=null then _hit=true
+            if not _hit then
+              for gRec in G
+                if gRec["ip"]!=_cip then continue
+                if gRec["user"]!=uname then continue
+                if indexOf(gRec["name"],_f)!=null then _hit=true
+                if not _hit then
+                  for line in split(gRec["content"],char(10));if indexOf(line,_f)!=null then _hit=true;end for
+                end if
+              end for
+            end if
+            if not _hit then continue
+          end if
+          if _anyPrinted then print white("="*45)
+          _anyPrinted=true
+          print green("USER NAME -------- : "+uname)
+          if hasIndex(i.value,"passwd") then print yellow("USER PASSWD ------ : "+i.value.passwd)
+          if hasIndex(i.value,"email") then print yellow("USER EMAIL ------- : "+i.value.email)
+          if hasIndex(i.value,"emailPass") then print yellow("USER EMAIL PASSWD  : "+i.value.emailPass)
+          if hasIndex(i.value,"bank") then print blue("USER BANK # ------ : "+i.value.bank)
+          if hasIndex(i.value,"bankPass") then print blue("USER BANK PASSWD   : "+i.value.bankPass)
+          print cyan("LAN IP ----------- : "+_cip)
+          for gRec in G
+            if gRec["ip"]!=_cip then continue
+            if gRec["user"]!=uname then continue
+            if _f then
+              _fhit=false
+              if indexOf(gRec["name"],_f)!=null then _fhit=true
+              if not _fhit then
+                for line in split(gRec["content"],char(10));if indexOf(line,_f)!=null then _fhit=true;end for
+              end if
+              if not _fhit then continue
+            end if
+            print blue("  FILE: "+gRec["path"])
+            print white("  CONTENT:")
+            if _f then
+              for line in split(gRec["content"],char(10));if indexOf(line,_f)!=null then print cyan("    "+line);end for
+            else
+              for line in split(gRec["content"],char(10));print white("    "+line);end for
+            end if
+          end for
+          print green("-"*45)
+        end for
+        if S then
+          for sRec in S
+            if _f then
+              _fhit=false
+              if indexOf(sRec.value["name"],_f)!=null then _fhit=true
+              if not _fhit then
+                for line in split(sRec.value["content"],char(10));if indexOf(line,_f)!=null then _fhit=true;end for
+              end if
+              if not _fhit then continue
+            end if
+            if _anyPrinted then print white("="*45)
+            _anyPrinted=true
+            print orange("SYSTEM FILE ("+sRec.value["ip"]+"):")
+            print blue("  FILE: "+sRec.value["path"])
+            print white("  CONTENT:")
+            if _f then
+              for line in split(sRec.value["content"],char(10));if indexOf(line,_f)!=null then print cyan("    "+line);end for
+            else
+              for line in split(sRec.value["content"],char(10));print white("    "+line);end for
+            end if
+          end for
+        end if
+      end if
+      if not argv.filter then break
+      _f=Gui.input({"text":"Enter some filter data (type '!' to stop filtering)"})
+      if _f==null then break
+    end while
+  end function
+  printSearchData=function
+    if _PIPE then
+      for line in formatSearchData;push(globals.G_pipe.stdout,line);end for
+      return
+    end if
+    if argv.filter then
+      f=""
+      while true
+        print white("-"*45)
+        print orange("COMPANY:")
+        print white("-"*45)
+        print blue("COMPANY PUBLIC IP - : ")+yellow(PIP)
+        if hasIndex(C,"BSSID") then print blue("BSSID ------------- : ")+yellow(C.BSSID)
+        if hasIndex(C,"ESSID") then print blue("ESSID ------------- : ")+yellow(C.ESSID)
+        if hasIndex(C,"company") then print blue("COMPANY NAME ------ : ")+yellow(C.company)
+        if hasIndex(C,"web") then print blue("COMPANY WEBSITE --- : ")+yellow(C.web)
+        if hasIndex(C,"domain") then print blue("COMPANY DOMAIN ---- : ")+yellow(C.domain)
+        if hasIndex(C,"admin") then print blue("ADMIN NAME -------- : ")+yellow(C.admin)
+        if hasIndex(C,"email") then print blue("ADMIN EMAIL ------- : ")+yellow(C.email)
+        if hasIndex(C,"emailPass") then print blue("ADMIN EMAIL PASS -- : ")+yellow(C.emailPass)
+        if not E then return Info.info("No email data found")
+        print white("-"*45)
+        print orange("EMAIL DATASET:")
+        if globals.G_Zday["rshell"] then print blue("RSHELL SERVER IP - : "+globals.G_Zday["rshell"])
+        for i in E
+          if f then
+            _vs=[i.key]
+            for _v in i.value;push(_vs,str(_v.value));end for
+            if indexOf(join(_vs," "),f)==null then continue
+          end if
+          print white("-"*45)
+          print blue("USER ------------- : ")+yellow(i.key)
+          if hasIndex(i.value,"email") then print blue("EMAIL ------------ : ")+yellow(i.value.email)
+          if hasIndex(i.value,"emailPass") then print blue("EMAIL PASSWORD --- : ")+yellow(i.value.emailPass)
+          if hasIndex(SUBJ,i.key) then
+            print blue("EMAIL SUBJECTS --- :")
+            for _subj in SUBJ[i.key]
+              if indexOf(lower(_subj),"re:")!=null then print yellow("  ~ ")+blue(_subj) else print blue("  "+_subj)
+            end for
+          end if
+          if hasIndex(i.value,"ip") then print blue("LOCAL IP --------- : ")+green(i.value.ip)
+          if hasIndex(i.value,"bins") then
+            print blue("FILES FOUND ------ :")
+            for b in i.value.bins;print blue("  ")+yellow(b);end for
+            if hasIndex(i.value,"binContents") then
+              for bc in i.value.binContents
+                print white("  --- "+bc.key+" ---")
+                print white(bc.value)
+              end for
+            end if
+          end if
+          if __i_idx!=len(E)-1 then print green("-")*45
+        end for
+        print white("-"*45)
+        f=Gui.input({"text":"Enter some filter data (type '!' to stop filtering)"})
+        if f==null then break
+      end while
+    else
+      if not E then return Info.info("No email data found")
+      print orange("EMAIL DATASET:")
+      if globals.G_Zday["rshell"] then print blue("RSHELL SERVER IP - : "+globals.G_Zday["rshell"])
+      for i in E
+        print white("-"*45)
+        print blue("USER ------------- : ")+yellow(i.key)
+        if hasIndex(i.value,"email") then print blue("EMAIL ------------ : ")+yellow(i.value.email)
+        if hasIndex(i.value,"emailPass") then print blue("EMAIL PASSWORD --- : ")+yellow(i.value.emailPass)
+        if hasIndex(SUBJ,i.key) then
+          print blue("EMAIL SUBJECTS --- :")
+          for _subj in SUBJ[i.key]
+            if indexOf(lower(_subj),"re:")!=null then print yellow("  ~ ")+blue(_subj) else print blue("  "+_subj)
+          end for
+        end if
+        if hasIndex(i.value,"ip") then print blue("LOCAL IP --------- : ")+green(i.value.ip)
+        if hasIndex(i.value,"bins") then
+          print blue("FILES FOUND ------ :")
+          for b in i.value.bins;print blue("  ")+yellow(b);end for
+          if hasIndex(i.value,"binContents") then
+            for bc in i.value.binContents
+              print white("  --- "+bc.key+" ---")
+              print white(bc.value)
+            end for
+          end if
+        end if
+      end for
+      print white("-"*45)
+    end if
+  end function
+  printData=function
+    if _PIPE then
+      for line in formatData;push(globals.G_pipe.stdout,line);end for
+      return
+    end if
+    if argv.filter then
+      f=""
+      while true
+        print white("-"*45)
+        print orange("COMPANY:")
+        print white("-"*45)
+        print blue("COMPANY PUBLIC IP - : ")+yellow(PIP)
+        if hasIndex(C,"BSSID") then print blue("BSSID ------------- : ")+yellow(C.BSSID)
+        if hasIndex(C,"ESSID") then print blue("ESSID ------------- : ")+yellow(C.ESSID)
+        if hasIndex(C,"company") then print blue("COMPANY NAME ------ : ")+yellow(C.company)
+        if hasIndex(C,"web") then print blue("COMPANY WEBSITE --- : ")+yellow(C.web)
+        if hasIndex(C,"domain") then print blue("COMPANY DOMAIN ---- : ")+yellow(C.domain)
+        if hasIndex(C,"admin") then print blue("ADMIN NAME -------- : ")+yellow(C.admin)
+        if hasIndex(C,"email") then print blue("ADMIN EMAIL ------- : ")+yellow(C.email)
+        if hasIndex(C,"emailPass") then print blue("ADMIN EMAIL PASS -- : ")+yellow(C.emailPass)
+        if not U then return Info.info("No user data found")
+        print white("-"*45)
+        print orange("USER DATASET:")
+        for i in U
+          if f then
+            _vs=[i.key]
+            for _v in i.value;push(_vs,str(_v.value));end for
+            if indexOf(join(_vs," "),f)==null then continue
+          end if
+          print white("-"*45)
+          print blue("USER ------------- : ")+yellow(i.key)
+          if hasIndex(i.value,"passwd") then print blue("PASSWORD --------- : ")+yellow(i.value.passwd)
+          if hasIndex(i.value,"email") then print blue("EMAIL ------------ : ")+yellow(i.value.email)
+          if hasIndex(i.value,"emailPass") then print blue("EMAIL PASSWORD --- : ")+yellow(i.value.emailPass)
+          if hasIndex(SUBJ,i.key) then
+            print blue("EMAIL SUBJECTS --- :")
+            for _subj in SUBJ[i.key]
+              if indexOf(lower(_subj),"re:")!=null then print yellow("  ~ ")+blue(_subj) else print blue("  "+_subj)
+            end for
+          end if
+          if hasIndex(i.value,"bank") then print blue("BANK ACCOUNT ----- : ")+green(i.value.bank)
+          if hasIndex(i.value,"bankPass") then print blue("BANK PASSWORD ---- : ")+green(i.value.bankPass)
+          if hasIndex(i.value,"ip") then print blue("LOCAL IP --------- : ")+yellow(i.value.ip)
+          if hasIndex(i.value,"type") then print blue("OBJECT USED ------ : ")+yellow(i.value.type)
+          if hasIndex(i.value,"bins") then
+            print blue("FILES FOUND ------ :")
+            for b in i.value.bins;print blue("  ")+yellow(b);end for
+            if hasIndex(i.value,"binContents") then
+              for bc in i.value.binContents
+                print white("  --- "+bc.key+" ---")
+                print white(bc.value)
+              end for
+            end if
+          end if
+        end for
+        print white("-"*45)
+        print white("-"*45)
+        f=Gui.input({"text":"Enter some filter data (type '!' to stop filtering)"})
+        if f==null then break
+      end while
+    else
+      print white("-"*45)
+      print orange("COMPANY:")
+      print white("-"*45)
+      print blue("COMPANY PUBLIC IP - : ")+yellow(PIP)
+      if hasIndex(C,"BSSID") then print blue("BSSID ------------- : ")+yellow(C.BSSID)
+      if hasIndex(C,"ESSID") then print blue("ESSID ------------- : ")+yellow(C.ESSID)
+      if hasIndex(C,"company") then print blue("COMPANY NAME ------ : ")+yellow(C.company)
+      if hasIndex(C,"web") then print blue("COMPANY WEBSITE --- : ")+yellow(C.web)
+      if hasIndex(C,"domain") then print blue("COMPANY DOMAIN ---- : ")+yellow(C.domain)
+      if hasIndex(C,"admin") then print blue("ADMIN NAME -------- : ")+yellow(C.admin)
+      if hasIndex(C,"email") then print blue("ADMIN EMAIL ------- : ")+yellow(C.email)
+      if hasIndex(C,"emailPass") then print blue("ADMIN EMAIL PASS -- : ")+yellow(C.emailPass)
+      if not U then return Info.info("No user data found")
+      print white("-"*45)
+      print orange("USER DATASET:")
+      for i in U
+        print white("-"*45)
+        print blue("USER ------------- : ")+yellow(i.key)
+        if hasIndex(i.value,"passwd") then print blue("PASSWORD --------- : ")+yellow(i.value.passwd)
+        if hasIndex(i.value,"email") then print blue("EMAIL ------------ : ")+yellow(i.value.email)
+        if hasIndex(i.value,"emailPass") then print blue("EMAIL PASSWORD --- : ")+yellow(i.value.emailPass)
+        if hasIndex(SUBJ,i.key) then
+          print blue("EMAIL SUBJECTS --- :")
+          for _subj in SUBJ[i.key]
+            if indexOf(lower(_subj),"re:")!=null then print yellow("  ~ ")+blue(_subj) else print blue("  "+_subj)
+          end for
+        end if
+        if hasIndex(i.value,"bank") then print blue("BANK ACCOUNT ----- : ")+green(i.value.bank)
+        if hasIndex(i.value,"bankPass") then print blue("BANK PASSWORD ---- : ")+green(i.value.bankPass)
+        if hasIndex(i.value,"ip") then print blue("LOCAL IP --------- : ")+yellow(i.value.ip)
+        if hasIndex(i.value,"type") then print blue("OBJECT USED ------ : ")+yellow(i.value.type)
+        if hasIndex(i.value,"bins") then
+          print blue("FILES FOUND ------ :")
+          for b in i.value.bins;print blue("  ")+yellow(b);end for
+          if hasIndex(i.value,"binContents") then
+            for bc in i.value.binContents
+              print white("  --- "+bc.key+" ---")
+              print white(bc.value)
+            end for
+          end if
+        end if
+      end for
+      print white("-"*45)
+      end if
+    if argv.save then return saveData
+  end function
+  formatData=function
+		y=[]
+		push(y,"/"*45)
+		push(y,"/"*45)
+		push(y,"/"*45)
+		push(y,"-"*45)
+		push(y,"COMPANY:")
+		push(y,"-"*45)
+    push(y,"COMPANY PUBLIC IP - : "+PIP)
+    if hasIndex(C,"BSSID") then push(y,"BSSID ------------- : "+C.BSSID)
+    if hasIndex(C,"ESSID") then push(y,"ESSID ------------- : "+C.ESSID)
+    if hasIndex(C,"company") then push(y,"COMPANY NAME ------ : "+C.company)
+    if hasIndex(C,"web") then push(y,"COMPANY WEBSITE --- : "+C.web)
+    if hasIndex(C,"domain") then push(y,"COMPANY DOMAIN ---- : "+C.domain)
+    if hasIndex(C,"admin") then push(y,"ADMIN NAME -------- : "+C.admin)
+    if hasIndex(C,"email") then push(y,"ADMIN EMAIL ------- : "+C.email)
+    if hasIndex(C,"emailPass") then push(y,"ADMIN EMAIL PASS -- : "+C.emailPass)
+    if U then
+      push(y,"-"*45)
+      push(y,"USER DATASET:")
+      for i in U
+        push(y,"-"*45)
+        push(y,"USER ------------- : "+i.key)
+        if hasIndex(i.value,"passwd") then push(y,"PASSWORD --------- : "+i.value.passwd)
+        if hasIndex(i.value,"email") then push(y,"EMAIL ------------ : "+i.value.email)
+        if hasIndex(i.value,"emailPass") then push(y,"EMAIL PASSWORD --- : "+i.value.emailPass)
+        if hasIndex(i.value,"bank") then push(y,"BANK ACCOUNT ----- : "+i.value.bank)
+        if hasIndex(i.value,"bankPass") then push(y,"BANK PASSWORD ---- : "+i.value.bankPass)
+        if hasIndex(i.value,"ip") then push(y,"LOCAL IP --------- : "+i.value.ip)
+        if hasIndex(i.value,"type") then push(y,"OBJECT USED ------ : "+i.value.type)
+        if hasIndex(i.value,"bins") then
+          push(y,"FILES FOUND ------ :")
+          for b in i.value.bins;push(y,"  "+b);end for
+        end if
+      end for
+      push(y,"-"*45)
+    end if
+		return y
+  end function
+  saveData=function
+    d=formatData
+		f=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/reconData.txt")
+		if not f then f=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/reconData.txt"])
+		if f isa Error then return
+		_ct=get_content(f);if not _ct then set_content(f,join(d,char(10))) else set_content(f,_ct+char(10)+join(d,char(10)))
+		Info.info("Save complete")
+  end function
+  fillCompany(ex)
+  if argv.s then
+    trySearch(ex)
+  else if argv.r then
+    tryReverse(ex)
+  else if argv.g then
+    if tryBounce(ex) then
+      printGrabData
+    else
+      Info.warning("No bounces found, trying exploits...")
+      getExploits(ex)
+      printGrabData
+    end if
+  else
+    if tryBounce(ex) then
+      if argv.subjects then _fetchSubjects
+      if argv.filter and not argv.u then printSearchData else printData
+    else
+      Info.warning("No bounces found, trying exploits...")
+      getExploits(ex)
+      if argv.subjects then _fetchSubjects
+      if argv.filter and not argv.u then printSearchData else printData
+    end if
+  end if
+end function
+Attack.script=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("f",false,"store")
+  _p.addArgument("w",false,"flag")
+  _p.addArgument("p",false,"store")
+  _p.addArgument("n",false,"store")
+  argv=_p.parseArgs("sk",argv)
+  if argv isa Error then return
+  if argv.w then
+    if not argv.n then argv.n="sk"
+    if not argv.p then argv.p=path(globals.G_main.dir.bash)
+    f=Command.touch(globals.G_main,["-x",argv.p+"/"+argv.n])
+    if f isa Error then return
+    _sys=System.getSystem
+    _sf=File(_sys.computer,path(_sys.dir.srcWeb)+"/store")
+    if not _sf then return Error.set("Missing store source")
+    r=set_content(f,get_content(_sf))
+    if r==1 then return Info.info(argv.n+" written") else return Error.set(x)
+  end if
+	if Obj.type=="computer" or indexOf(Obj.type,"shell")!=null then
+		e=Obj.computer
+		y=File(e,"/Public/htdocs/website.html")
+		if y then
+			if not has_permission(y,"w") then return Error.set("You do not have write permissions to [ website.html ]")
+			Info.info("Defacing the web site...")
+      if argv.f then
+        f=File(globals.G_main.computer,argv.f)
+        if not f then return Error.set("File not found: "+argv.f)
+        x=set_content(y,get_content(f))
+        if x==1 then return Info.info("Defacing complete") else return Error.set(x)
+      else
+        _sys=System.getSystem
+        _sf=File(_sys.computer,path(_sys.dir.srcWeb)+"/website")
+        if not _sf then return Error.set("Missing website source")
+        x=set_content(y,get_content(_sf))
+        if x==1 then return Info.info("Defacing complete") else return Error.set(x)
+      end if
+		else
+			Info.warning("Missing website.html")
+		end if
+	else
+		for f in get_folders(Obj.root)
+			if name(f)!="Public" then continue
+			for j in get_folders(f)
+				if name(j)!="htdocs" then continue
+				for h in get_files(j)
+					if name(h)!="website.html" then continue
+					if not has_permission(h,"w") then return Error.set("You do not have write permissions to [ website.html ]")
+					Info.info("Defacing the web site...")
+					_sys=System.getSystem
+					_sf=File(_sys.computer,path(_sys.dir.srcWeb)+"/website")
+					if not _sf then return Error.set("Missing website source")
+					x=set_content(h,get_content(_sf))
+					if x==1 then return Info.info("Defacing complete") else return Error.set(x)
+				end for
+			end for
+			Info.warning("Missing website.html")
+		end for
+	end if
+end function
+Attack.scanCustom=function(argv,returnEx=false,Obj=null)
+  routerFlag=false
+  pos=[]
+  for arg in argv;if arg=="--router" then routerFlag=true else push(pos,arg);end for
+  _findMode=len(pos)>=2 and lower(pos[1])=="find"
+  if len(pos)<2 or (not _findMode and len(pos)<3) then return Error.set("Missing ip|library|target params")
+  // Resolve metaxploit: prefer shell's packMetaxploit, then pivot/proxy metaxploit, then global
+  _mx=Library.metaxploit
+  if Obj!=null then
+    if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then
+      _mx=Obj.packMetaxploit
+    else if hasIndex(Obj,"metaxploit") and Obj.metaxploit then
+      _mx=Obj.metaxploit
+    end if
+  end if
+	y=0
+	while y!=16
+		y+=1
+    i=pos[0]
+		if not i then return Error.set("No ip specified")
+		if i=="-r" then i=Net.rip
+    i=Net.nslookup(i)
+		if is_lan_ip(i) then r=get_router else r=get_router(i)
+		if not r then
+      if pos[0]=="-r" then
+				Info.warning("Router not found")
+				continue
+			else
+				return Warning.set("IP down")
+			end if
+		end if
+    L=pos[1]
+		if not L then return Error.set("No library specified")
+    L=lower(L)
+    T=null
+    if len(pos)>=3 then T=pos[2]
+    if L!="find" then
+      if not T then return Error.set("No target object specified")
+      T=Exploit.convertToCode(T)
+      // Validate object type is one of the expected values
+      validTypes=["s","c","f","l","i","d","p","w"]
+      if validTypes.indexOf(T)==null then return Error.set("Invalid object type '"+T+"'. Expected: s|c|f|l|i|d|p|w")
+    else if T then
+      T=Exploit.convertToCode(T)
+    end if
+		if globals.G_settings.monitorDirtyips then Dirty.add(i)
+		z=Exploit.extract(r,i,_mx)
+    if z isa Error then return
+		if not z then
+			Info.error("No attack vectors found")
+			continue
+		end if
+    if L=="find" then
+      findArgs=[]
+      if T=="s" then push(findArgs,"--shell")
+      if T=="c" then push(findArgs,"--computer")
+      if T=="f" then push(findArgs,"--file")
+      if T=="l" then push(findArgs,"--bounce")
+      if routerFlag then push(findArgs,"--router")
+      if len(pos)>3 then
+        for arg in pos[3:];push(findArgs,arg);end for
+      end if
+      _prevActive=globals.G_bash.ACTIVE
+      globals.G_bash.ACTIVE=true
+      if len(findArgs) then
+        _r=Exploit.fetchExploit(z,findArgs,returnEx)
+        globals.G_bash.ACTIVE=_prevActive
+        return _r
+      end if
+      // No type specified: find best object in priority order shell -> computer -> file
+      _r=Exploit.fetchExploit(z,["--shell"],returnEx)
+      if not (_r isa Error) then globals.G_bash.ACTIVE=_prevActive;return _r
+      _r=Exploit.fetchExploit(z,["--computer"],returnEx)
+      if not (_r isa Error) then globals.G_bash.ACTIVE=_prevActive;return _r
+      _r=Exploit.fetchExploit(z,["--file"],returnEx)
+      globals.G_bash.ACTIVE=_prevActive
+      return _r
+    end if
+		m=null
+		for e in z
+			if indexOf(lib_name(e.metaLib),L)!=null then
+				m=e
+				break
+			end if
+		end for
+		if not m then return Error.set("No library was found with the name: "+L)
+		x=null
+		if not hasIndex(globals.G_exploitCache,lib_name(m.metaLib)+"_"+version(m.metaLib)) then
+			Info.warning("Database is out of date, updateing database...")
+			Exploit.headless(m.metaLib)
+			continue
+		end if
+		x=Exploit._ex(Exploit.getCacheKey(m.metaLib))
+		matches=[]
+		for j in x;if indexOf(j.e,T)!=null then push(matches,j);end for
+		if not matches then return Error.set("No matching exploit found for target: "+Exploit.getItem[T])
+		// Sort: root first, then user, then guest
+		_rm=[];_um=[];_gm=[];_om=[]
+		for j in matches
+			if not hasIndex(j,"u") then
+				push(_om,j)
+			else if j.u=="r" then
+				push(_rm,j)
+			else if j.u=="u" then
+				push(_um,j)
+			else if j.u=="g" then
+				push(_gm,j)
+			else
+				push(_om,j)
+			end if
+		end for
+		matches=_rm+_um+_gm+_om
+    if len(pos)>=4 then A=pos[3] else A=null
+		ex=null
+		e=null
+		for j in matches
+			if not A then ex=Exploit.overflow(m.metaLib,j.m,j.s,null,"attack_recon") else ex=Exploit.overflow(m.metaLib,j.m,j.s,A,"attack_recon")
+			if not ex or ex isa string then continue
+			if ex isa number and ex==1 then
+				if hasIndex(m,"port_number") then
+					if m.port_number==0 or j.e=="d" then return Info.info(Text.buffer.SF)
+				else
+					return Info.info(Text.buffer.SP)
+				end if
+			end if
+			if ex isa number and ex==0 then
+				if hasIndex(m,"port_number") then
+					if m.port_number==0 or j.e=="d" then return Warning.set(Text.buffer.FF)
+				else
+					return Warning.set(Text.buffer.FP)
+				end if
+			end if
+			if ex isa number then continue
+			e=j
+			break
+		end for
+		if not e then return Error.set("No matching exploit found: "+Exploit.getItem[T])
+		//Continuation commands already stored in globals by agent, will be picked up by session
+		if returnEx then return ex else return self.getObject(typeof(ex),ex,m)
+	end while
+	globals.G_bash.SIGSTOP=true
+end function
+Attack.lanCustom=function(Obj,argv)
+  if not len(argv.rest)>=2 then return Error.set("Missing library|object params")
+	b=argv.rest[0]
+	if not b then return Error.set("No library specified")
+	if b=="router" then b="http"
+	t=argv.rest[1]
+  t=Exploit.convertToCode(t)
+	if not t then return Error.set("No object specified")
+	if len(argv.rest)>=3 then extra=argv.rest[2] else extra=null
+	genLan=function(r)
+		a={}
+		for d in sort(devices_lan_ip(r));p=device_ports(r,d);if not p then a[d]=[] else a[d]=p;end for
+		return a
+	end function
+	r=null
+	h=null
+	if Obj.layer=="shell" then
+    h=Obj.packMetaxploit
+    r=Obj.packRouter
+	else
+		h=Library.metaxploit
+		// CONTEXT ROUTING: Get router for LAN bounce attack
+		// Must use Builder.packRouter when pivoted to avoid getting proxy's router
+		if not globals.G_hasPivoted then r=get_router else r=Builder.packRouter(this)
+	end if
+	if not r then return Error.set("Failed to get router")
+	if not h then return Error.set("Failed to get metaxploit")
+	a=genLan(r)
+	for l in a
+		if l.value then
+			if argv.r and argv.r!=l.key then continue
+			for p in l.value
+				if argv.r and argv.r!=p.get_lan_ip then continue
+				if indexOf(port_info(r,p),b)!=null then
+					if argv.r then
+            z=Exploit.extract(r,argv.r,h,true)
+            if z isa Error then continue
+          else
+            z=Exploit.extract(r,l.key,h)
+            if z isa Error then continue
+          end if
+					if not z then
+						Info.error("No attack vectors found")
+						continue
+					end if
+					m=null
+					for e in z
+						if b=="http" and lib_name(e.metaLib)=="kernel_router.so" then
+							m=e
+							break
+						end if
+						if indexOf(lib_name(e.metaLib),b)!=null then
+							m=e
+							break
+						end if
+					end for
+					if not m then
+						Info.error("No exploit found for: "+b)
+						continue
+					end if
+					x=null
+					if not hasIndex(globals.G_exploitCache,lib_name(m.metaLib)+"_"+version(m.metaLib)) then
+						Info.warning("Database is out of date, updateing database...")
+						Exploit.headless(m.metaLib)
+						continue
+					end if
+					x=Exploit._ex(Exploit.getCacheKey(m.metaLib))
+					e=null
+					for j in x
+						if indexOf(lower(j.e),t)!=null then
+							e=j
+							break
+						end if
+					end for
+					if not e then
+						Info.error("Object not found: "+t)
+						continue
+					end if
+					if not extra then ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"attack_recon") else ex=Exploit.overflow(m.metaLib,e.m,e.s,extra,"attack_recon")
+					if not ex then
+						Info.error("Returned null")
+						continue
+					else if ex isa string then
+						Info.error(ex)
+						continue
+					else if ex isa number and ex==1 then
+            if hasIndex(m,"port_number") then
+              if m.port_number==0 or e.e=="d" then return Info.info(Text.buffer.SF)
+            else
+              return Info.info(Text.buffer.SP)
+            end if
+					else if ex isa number and ex==0 then
+            if hasIndex(m,"port_number") then
+              if m.port_number==0 or e.e=="d" then return Warning.set(Text.buffer.FF)
+            else
+              return Warning.set(Text.buffer.FP)
+            end if
+					end if
+					return self.getObject(typeof(ex),ex,m)
+				end if
+			end for
+		end if
+	end for
+	if globals.G_bash.ACTIVE then globals.G_bash.SIGBREAK=true
+end function
+Attack.map=function(j,r,argv)
+  if not j then return "Not enough attack vectors to use this option at this time"
+  _p=ArgumentParser.init
+  _p.addArgument("extreme",true,"flag")
+  argv=_p.parseArgs("map",argv)
+  if argv isa Error then return
+  if not argv.extreme then argv.extreme=50 else argv.extreme=255
+  if not argv.rest then argv.rest=Net.getRouters(r)
+	l=[]
+  y=["#### Public IP : "+j[0].public_ip]
+	h=false
+	for m in j
+		if h then break
+		q=null
+		c=0
+		z=0
+		if not hasIndex(globals.G_exploitCache,lib_name(m.metaLib)+"_"+version(m.metaLib)) then
+			Info.warning("Database is out of date, updateing database...")
+			Exploit.headless(m.metaLib)
+		end if
+    q=Exploit._ex(Exploit.getCacheKey(m.metaLib))
+		if not q isa list then continue
+		for e in q
+			if h then break
+			if e.e!="l" then continue
+			for i in argv.rest
+				if indexOf(l,i)!=null then continue
+				push(l,yellow("Lan Map for the following subnet [ "+green(i)+" ]"))
+        push(y,"Lan Map for the following subnet [ "+i+" ]")
+				z+=1
+				v=split(i,"\.")
+				x=join(v[:-1],".")+"."
+				b=0
+				a=0;while a<=argv.extreme
+					if not argv.extreme then
+            if b>20 then break
+          end if
+          t=x+a
+					if t==i then
+						a+=1
+						continue
+					end if
+					ex=Exploit.overflow(m.metaLib,e.m,e.s,t,"attack_recon")
+          if ex==null or ex isa number or ex isa string then
+						b+=1
+						a+=1;continue
+					end if
+					if typeof(ex)=="computer" then
+						push(l,green("[------> ")+blue("Device at ")+" "+yellow(t))
+            push(y,"[------> Device at "+(t))
+						c+=1
+					end if
+				a+=1;end while
+			end for
+			h=true
+		end for
+	end for
+	if len(l)==1 then return Warning.set("No devices found on this network, Possible Cause: No Lan Bounce from the router")
+	print join(l,char(10))
+	print yellow("There are "+white(str(c))+" device(s) and "+white(str(z))+" router(s) on this network")
+	if Gui.yesNoNon("Save this data for future use?",false) then
+		f=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/map.txt")
+		if not f then f=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/map.txt"])
+		if f isa Error then return
+		_ct=get_content(f);if not _ct then set_content(f,join(y,char(10))) else set_content(f,_ct+char(10)+join(y,char(10)))
+	end if
+end function
+// Extract system logs from remote target
+// Args: Obj (context), argv (IP and options: -p port, -w watch)
+Attack.grabLog=function(Obj,argv)
+  if not argv then return Man.help(["grab"])
+  if not Library.haveMetaxploit then return
+  // Resolve target IP
+  i=Net.lookup(pull(argv))
+  if not i then return Error.set("Invalid ip: "+i)
+  _p=ArgumentParser.init
+  _p.addArgument("p",false,"storeNumber")
+  _p.addArgument("w",false,"flag")
+  argv=_p.parseArgs("grab",argv)
+  if argv isa Error then return
+  if not argv.p then argv.p=0
+  // Get metaxploit library
+  if globals.G_metaxploit then z=globals.G_metaxploit else z=Library.metaxploit
+  S=null
+  // Get router and extract exploits
+  r=get_router(i)
+  if not r then return Warning.set("IP down")
+  m=Exploit.extract(r,i)
+  if m isa Error then return Warning.set("No attack vectors found")
+  // Find shell exploit for target port
+  for e in m
+    if not e.port_number==argv.p then continue
+    // Update exploit cache if needed
+    if not hasIndex(globals.G_exploitCache,lib_name(e.metaLib)+"_"+version(e.metaLib)) then
+      Info.warning("Database is out of date, updateing database...")
+			Exploit.headless(e.metaLib)
+		end if
+    // Try shell exploits
+    for y in Exploit._ex(Exploit.getCacheKey(e.metaLib))
+			if y.e!="s" then continue
+      ex=Exploit.overflow(e.metaLib,y.m,y.s,null,"attack_recon")
+      if not ex then continue
+      if ex isa number or ex isa string then continue
+      // Get or escalate to root shell
+      if Utility.getUserEX(ex).user=="root" then
+        S=ex
+      else
+        S=Exploit.tryShellEX(ex,true)
+        if not S then
+          Error.set("Failed to escalate permissions to root")
+          continue
+        end if
+      end if
+      // Check log file permissions
+      if not has_permission(File(host_computer(S),"/var/system.log"),"r") then continue
+      // Copy log file to local system
+      x=scp(S,"var/system.log",path(globals.G_main.user.home)+"/Downloads",globals.G_main.shell)
+      if x isa string then return Error.set(x)
+      // Optionally log shell access
+      if argv.w then Log.shellLog(S)
+      // Move log to current directory with IP and port in name
+      f=File(globals.G_main.computer,path(globals.G_main.user.home)+"/Downloads/system.log")
+      if move(f,path(globals.G_main.dir.current),"system"+i+"_"+argv.p+".log")!=1 then return Error.set("Failed to move "+path(globals.G_main.user.home)+"/Downloads/system.log") else return Info.info("Log file saved to: "+path(globals.G_main.dir.current)+"/system"+i+"_"+argv.p+".log")
+    end for
+  end for
+  // Report failure if no shell found
+  if not S then Info.warning("Unable to find a shell to "+i+":"+argv.p) else Info.warning("Unable to retrieve logs from "+i+":"+argv.p)
+end function
+// Automated bounce attack - connect to router, pivot to LAN computer, get root
+// Args: Obj (context), argv (command arguments with -p public IP, -l LAN IP)
+// Returns: Root computer object on success, null on failure
+Attack.bounce=function(argv,headless=false)
+  // Check for vulnerable library configuration
+  if not globals.G_settings.vulnerableLib or globals.G_settings.vulnerableLibIndex==-1 then return Error.set("No vulnerable library set for bounce attack")
+  // Extract -p and -l values; everything else becomes trailing commands
+  publicIP=null
+  lanIP=null
+  trailing=[]
+  i=0
+  while i<len(argv)
+    a=argv[i]
+    if a=="-p" and i+1<len(argv) then
+      publicIP=argv[i+1]
+      i+=2
+    else if a=="-l" and i+1<len(argv) then
+      lanIP=argv[i+1]
+      i+=2
+    else
+      push(trailing,a)
+      i+=1
+    end if
+  end while
+  if not publicIP or not lanIP then return Error.set("Missing required parameters: -p <public IP> -l <LAN IP>")
+  // Resolve public IP to router
+  publicIP=Net.lookup(publicIP)
+  // Use Mission.getRootBounce to handle the attack
+  result=Mission.getRootBounce(publicIP,lanIP,{})
+  // Error result: ["error", message]
+  if result isa list then return Error.set(result[1])
+  // If inside a bash script, set FLAGS directly
+  if globals.G_bash.ACTIVE then
+    co=Exploit.getComputer(result,true)
+    if co isa Error then
+      globals.G_bash.FLAGS["scan_ok"]=false
+      globals.G_bash.FLAGS["hold"]=null
+      return co
+    end if
+    globals.G_bash.FLAGS["scan_ok"]=true
+    if trailing then
+      globals.G_bash.FLAGS["hold"]=null
+      cmdGroups=join(trailing," ").split(" then ")
+      for cmd in cmdGroups
+        parts=split(trim(cmd)," ")
+        if not parts then continue
+        cmdName=lower(parts[0])
+        if hasIndex(co.commands,cmdName) then co.commands[cmdName](parts[1:])
+      end for
+    else
+      globals.G_bash.FLAGS["hold"]=co
+    end if
+    return co
+  end if
+  // Interactive (non-script) mode
+  if trailing then
+    co=Exploit.getComputer(result,true)
+    if co isa Error then return co
+    cmdGroups=join(trailing," ").split(" then ")
+    for cmd in cmdGroups
+      parts=split(trim(cmd)," ")
+      if not parts then continue
+      cmdName=lower(parts[0])
+      if hasIndex(co.commands,cmdName) then co.commands[cmdName](parts[1:])
+    end for
+  else
+    Exploit.getComputer(result,headless)
+  end if
+end function
+// Attack.shellBounce - Like scan --c but executes commands on the resulting shell
+// Usage: scan --s IP LIBRARY s [-S] [cmd [then cmd ...]]
+// -S = su to root after getting shell
+// Everything before first "then" token (minus -S) is passed to scanCustom
+Attack.shellBounce=function(argv,Obj=null)
+  doSu=false
+  scanArgs=[]
+  trailing=[]
+  positionalCount=0
+  i=0
+  _len=len(argv)
+  while i<_len
+    a=argv[i]
+    if a=="-S" then
+      doSu=true
+    else if lower(a)=="then" then
+      // explicit separator — everything after is trailing
+      trailing=argv[i+1:]
+      break
+    else if positionalCount<3 or a[:2]=="--" then
+      // still collecting scan args: first 3 positionals + any --flags (e.g. --router)
+      push(scanArgs,a)
+      if a[:2]!="--" then positionalCount+=1
+    else
+      // 3 positionals done and not a -- flag — rest is trailing
+      trailing=argv[i:]
+      break
+    end if
+    i+=1
+  end while
+  // LAN IP auto-detection: if first positional is a LAN IP, scan it directly
+  // and select the best shell by privilege (root -> user -> guest)
+  if len(scanArgs)>=1 and is_lan_ip(scanArgs[0]) and len(scanArgs)<3 then
+    lanIP=scanArgs[0]
+    // Any extra positionals captured beyond the IP become trailing commands
+    if len(scanArgs)>1 then
+      if trailing then trailing=scanArgs[1:]+["then"]+trailing else trailing=scanArgs[1:]
+    end if
+    if not globals.G_hasPivoted then r=get_router else r=Builder.packRouter(Obj)
+    if not r then return Error.set("Failed to get router for LAN scan")
+    z=Exploit.extract(r,lanIP)
+    if z isa Error then return z
+    if not z then return Error.set("No attack vectors found for "+lanIP)
+    // Filter to entries targeting lanIP; fall back to full z if none match
+    zTarget=[]
+    for _ze in z;if _ze.local_ip==lanIP then push(zTarget,_ze);end for
+    if not zTarget then zTarget=z
+    _prevActive=globals.G_bash.ACTIVE
+    globals.G_bash.ACTIVE=true
+    ex=Exploit.fetchExploit(zTarget,["--shell"],true)
+    globals.G_bash.ACTIVE=_prevActive
+  else
+    if len(scanArgs)<3 then return Error.set("Usage: scan --s IP LIBRARY TYPE [-S] [cmd then cmd ...]")
+    // Get raw object via scanCustom
+    ex=Attack.scanCustom(scanArgs,true)
+  end if
+  if not ex then return
+  if ex isa Error then return ex
+  if typeof(ex)!="shell" then return Error.set("--s requires a shell-type exploit (got "+typeof(ex)+")")
+  // Wrap headless
+  shellObj=Exploit.getShell(ex,false,[],true)
+  if shellObj isa Error then return shellObj
+  // Optionally escalate to root
+  if doSu then
+    suResult=ShellObject.headlessSu(shellObj)
+    if not (suResult isa Error) then shellObj=suResult
+  end if
+  // Run trailing commands or drop into interactive shell
+  // If inside a bash script, set FLAGS directly
+  if globals.G_bash.ACTIVE then
+    globals.G_bash.FLAGS["scan_ok"]=true
+    if trailing then
+      globals.G_bash.FLAGS["hold"]=null
+      cmdGroups=join(trailing," ").split(" then ")
+      for cmd in cmdGroups
+        parts=split(trim(cmd)," ")
+        if not parts then continue
+        cmdName=lower(parts[0])
+        if hasIndex(shellObj.commands,cmdName) then shellObj.commands[cmdName](parts[1:])
+      end for
+    else
+      globals.G_bash.FLAGS["hold"]=shellObj
+    end if
+    return shellObj
+  end if
+  // Interactive (non-script) mode
+  if trailing then
+    cmdGroups=join(trailing," ").split(" then ")
+    for cmd in cmdGroups
+      parts=split(trim(cmd)," ")
+      if not parts then continue
+      cmdName=lower(parts[0])
+      if hasIndex(shellObj.commands,cmdName) then shellObj.commands[cmdName](parts[1:])
+    end for
+  else
+    Exploit.getShell(ex)
+  end if
+end function

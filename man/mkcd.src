@@ -1,0 +1,30 @@
+// Man page for mkcd
+manMkcd="MKCD(1)                          X Shell Manual                          MKCD(1)
+
+<b>NAME</b>
+    mkcd - Make directory and change into it
+<b>SYNOPSIS</b>
+    <b>mkcd</b> (<b>-y</b>) <b>NAME</b>
+<b>DESCRIPTION</b>
+    Create a new folder and immediately change into it. Combines
+    mkdir and cd into a single convenient command. Use -y flag to
+    overwrite if directory already exists.
+<b>OPTIONS</b>
+    <b>NAME</b> - Create and Enter
+      Create new folder and cd into it.
+
+    <b>-y NAME</b> - Force Overwrite
+      Overwrite existing directory if it exists.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Usage</color>
+    <b>mkcd NewFolder</b>
+    Create folder in current directory
+
+    <b>mkcd /home/tux/projects/new</b>
+    Create folder with full path
+
+    <color=#e4ff34># Overwrite Existing</color>
+    <b>mkcd -y existing_folder</b>
+    Overwrite and enter existing directory
+<b>SEE ALSO</b>
+    <b>mkdir</b>, <b>cd</b>"

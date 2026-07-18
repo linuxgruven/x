@@ -1,0 +1,48 @@
+_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  _Files MONITOR TEST</color>
+_print <color=#eb0cc6>========================================</color>
+_print
+
+if $1 == ""
+  _print <color=#ff0000>[X] Usage: run test_dmon <path></color>
+  _exit
+endif
+
+_setvar(entries,null)
+_setvar(prevCount,0)
+_setvar(curCount,0)
+_setvar(loop,null)
+_setvar(i,0)
+
+_setvar(entries,_Files($1))
+if _getvar(entries) == null
+  _print <color=#ff0000>[X] Directory not found: $1</color>
+  _exit
+endif
+
+_setvar(prevCount,len(_getvar(entries)))
+_print <color=#00bfff>Monitoring $1 — initial entries: _getvar(prevCount)</color>
+_print <color=#888888>Checking every 3s for 10 iterations...</color>
+_print
+
+_setvar(i,0)
+while _getvar(i) < 10
+  _sleep 3
+  _setvar(entries,_Files($1))
+  if _getvar(entries) == null
+    _print <color=#ffff00>[!] Directory removed</color>
+    _exit
+  endif
+  _setvar(curCount,len(_getvar(entries)))
+  if to_int(_getvar(curCount)) != to_int(_getvar(prevCount))
+    _print <color=#00ff00>[CHANGE] entries: _getvar(prevCount) -> _getvar(curCount)</color>
+    _setvar(loop,_Files($1))
+    for e in loop
+      _print  - _getvar(e).name
+    endfor
+    _setvar(prevCount,_getvar(curCount))
+  endif
+  _setvar(i,_getvar(i)+1)
+end while
+
+_print <color=#eb0cc6>Done (10 checks complete)</color>

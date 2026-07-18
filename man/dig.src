@@ -1,0 +1,471 @@
+// Man page for dig
+manDig="DIG(1)                           X Shell Manual                           DIG(1)
+
+<b>NAME</b>
+    dig - Router network crawler and reconnaissance tool
+<b>SYNOPSIS</b>
+    <b>dig -a</b> [--lwipe] [--extreme N] [-i IP[,IP...]] [--router] [--root] [--filter] [--all] [--files] [--subject] [-s [NAME]] [--cache NAME|!] [--ip IP]
+    <b>dig -e</b> [--wipe|--clean] [--lwipe] [--extreme N] [--subject] [--files] [--view] [-i IP[,IP...]] [--router] [--root] [--filter] [-s [NAME]] [--cache NAME|!] [--ip IP]
+    <b>dig -b</b> [--wipe|--clean] [--lwipe] [--extreme N] [--files] [-i IP[,IP...]] [--router] [--root] [--filter] [-s [NAME]] [--cache NAME|!] [--ip IP]
+    <b>dig -r</b> [--extreme N] [--lwipe] [--files] [-i IP[,IP...]] [--router] [--root] [--filter] [-s [NAME]] [--cache NAME|!] [--ip IP]
+    <b>dig -u</b> [--lwipe] [--extreme N] [--files] [--router] [--root] [--filter] [-s [NAME]] [-i IP[,IP...]] [--cache NAME|!] [--ip IP]
+    <b>dig -g</b> [--lwipe] [--extreme N] [-i IP[,IP...]] [--router] [--root] [--filter] [--grep PAT ...] [-s [NAME]] [--cache NAME|!] [--ip IP]
+    <b>dig cache</b>
+    <b>dig cache</b> NAME [--filter] [--grep PAT ...] [--dump] [--all|--email|--bank|--rshell|--user]
+    <b>dig cache clear</b> [NAME]
+    <b>dig search</b> [--lwipe] [--extreme N] [-i IP[,IP...]] [-p PATH] [-f PATTERN] [--all] [--view] [--root] [--ip IP]
+    <b>dig -c</b> [--lwipe] [--extreme N] OPTION LIBRARY MEMORY UNSECURED_VALUE [y|n]
+    <b>dig -x</b> [--lwipe] [--extreme N] [--router] [--root] [-i IP[,IP...]] COMMAND [PARAMS] [+ COMMAND [PARAMS] ...] [--ip IP]
+    <b>dig -rm</b> [--extreme N] [-i IP[,IP...]] [--router] [--root] [--lwipe] -f FILE [--ip IP]
+    <b>dig -sw</b> [--extreme N] [-i IP[,IP...]] [--router] [--root] [--ip IP]
+    <b>dig obj</b> [-l|-x|-t N]
+    <b>echo PUBLIC_IP | dig --ip</b> SUBCOMMAND [OPTIONS]
+    <b>bc ip | dig --ip</b> SUBCOMMAND [OPTIONS]
+<b>DESCRIPTION</b>
+    The dig framework provides automated network reconnaissance and data
+    extraction from router LANs. It crawls connected computers, extracts
+    sensitive data, and executes remote commands across network segments.
+
+    <color=#e4ff34>*** Must be executed from a router ***</color>
+    <color=#e4ff34>*** Requires LAN bounce to function ***</color>
+
+    <b>Pipe Support:</b>
+      Pipe a public IP into any dig subcommand by adding <b>--ip</b> (no value).
+      dig reads the IP from stdin, exploits into that router (escalating to
+      root if <b>--root</b> is given), and runs the scan against its LAN.
+
+        <b>echo 1.2.3.4 | dig --ip -e</b>       Scan emails behind router at 1.2.3.4
+        <b>echo 1.2.3.4 | dig --ip -e --subject</b>   Same, with mailbox subject lines
+        <b>bc ip | dig --ip -x --root cat /etc/passwd</b>   Random router, root exec
+        <b>bc ip | dig --ip -a</b>              Full scan on a random router's LAN
+
+    <b>Common Flags:</b>
+      <b>-i IP[,IP...]</b>  Specify one or more LAN IPs to scan (comma-separated, no spaces).
+                     When provided, <b>--extreme</b> is ignored — each IP is overflowed directly.
+      <b>-s [NAME]</b>    Save dataset to NAME.txt (default: digData.txt)
+      <b>--subject</b>    Log into each found mailbox and list email subject lines.
+                     Only used with <b>-a</b> and <b>-e</b>. Off by default — without this
+                     flag, dig reads credentials from Mail.txt only and does not
+                     log into any mailbox. A 2 second cooldown applies between
+                     each mailbox login (Grey Hack rate limit).
+      <b>--filter</b>    Filter result datasets interactively
+      <b>--grep PAT</b>  Filter grab results by pattern(s) (non-interactive; OR-match)
+      <b>--router</b>    Include routers in scan
+      <b>--lwipe</b>    Wipe log file
+      <b>--extreme N</b>    Scan addresses 0..N per subnet (default: 50; use 255 for full range).
+                     Ignored when <b>-i</b> is specified.
+      <b>--root</b>         Escalate to root on the current router, install the configured
+                     vulnerable library to /lib, then rescan — allows bouncing through
+                     the router even when no lib is pre-installed.
+                     Requires <b>vulnerableLib</b> and <b>vulnerableLibIndex</b> set in settings.
+      <b>--ip [IP]</b>      Exploit into the router at IP, get a shell (escalating to root if
+                     <b>--root</b> is also given), and run the scan against its LAN.
+                     IP is optional — if omitted (or the next arg is a flag), the IP
+                     is read from stdin, enabling pipe usage.
+                     Examples: <b>dig -e --ip 1.2.3.4</b>   or   <b>echo 1.2.3.4 | dig --ip -e</b>
+      <b>--all</b>          Include normally hidden system files in results (e.g. httpd.conf).
+
+    <b>--files</b>        Include home directory and system config files in scan results.
+                   Applies to -a, -e, -b, -r, -u. Not needed for -g (always collects files).
+    <b>Search Flags:</b>
+      <b>-f PATTERN</b>    File to search for (default: decipher)
+        Patterns with regex metacharacters are treated as regex;
+        all others use substring matching (e.g. -f ""\..txt$"")
+      <b>-p PATH</b>    Search path (default: /)
+      <b>--all</b>    Scan all machines (default: stop at first match)
+      <b>--view</b>    Show content of each matched file
+    <i>Scripting flags: --quiet --raw --list --text (see SCRIPTING FLAGS)</i>
+<b>OPTIONS</b>
+    <b>-a</b> - Scan All Data
+      Comprehensive scan for all data types across network.
+      <b>--subject</b>    After extraction, log into each found mailbox and list
+                     all email subject lines (2s cooldown between logins)
+      <b>--files</b>      Include home directory and system config files in output
+
+    <b>-e</b> - Scan Email Data
+      Extract email credentials from Mail.txt on all computers. Does not log
+      into mailboxes unless <b>--subject</b> is also given.
+      <b>--wipe</b>       Remove all Mail.txt files after extraction
+      <b>--clean</b>      Clear contents of Mail.txt files after extraction (mutually exclusive with --wipe)
+      <b>--subject</b>    After extraction, log into each found mailbox and list
+                     all email subject lines (2s cooldown between logins)
+      <b>--files</b>      Include home directory and system config files in output
+      <b>--view</b>       Show content of text files found in user home directories
+
+    <b>-b</b> - Scan Bank Data
+      Extract banking information from all computers.
+      <b>--wipe</b>    Remove all Bank.txt files after extraction
+      <b>--clean</b>   Clear contents of Bank.txt files after extraction (mutually exclusive with --wipe)
+
+    <b>-r</b> - Scan Rshell Data
+      Search for and extract remote shell data.
+
+    <b>-u</b> - Scan User Data
+      Extract user account and credential information.
+
+    <b>-g</b> - Grab Text Files
+      Grab all readable text files from each computer on the LAN.
+      Searches /home and the full filesystem (excl. /home) on every device.
+      Skips Mail.txt and Bank.txt (use -e and -b for those).
+      Use <b>--grep PAT [PAT ...]</b> to filter grabbed files non-interactively:
+        only files/lines matching any pattern are shown (matching lines highlighted).
+      Use <b>--filter</b> to enter an interactive search loop:
+        type a pattern to show only matching lines, empty to show all.
+
+    <b>search</b> - Search for Specific File
+      Search network for specific file by name or pattern.
+      Use <b>-f PATTERN</b> to match filenames (regex or substring).
+      Use <b>-p PATH</b> to set the search directory (default: /etc).
+      Use <b>--view</b> to print the content of each matched file.
+      By default stops at first match. Use <b>--all</b> to scan every machine.
+
+    <b>-c</b> - Scan Custom Data
+      Custom data extraction with specified parameters:
+      OPTION: Scan type, LIBRARY: Target library, MEMORY: Memory value
+      UNSECURED_VALUE: Security parameter, y|n: Confirmation
+
+    <b>-x COMMAND</b> [PARAMS] [<b>+</b> COMMAND [PARAMS] ...] - Execute Remote Command
+      Execute one or more commands on all found computers.
+      Separate multiple commands with <b>+</b> — each runs in order on every host.
+      Flags: <b>-i IP[,IP...]</b> (one or more target IPs, comma-separated), <b>--router</b>, <b>--extreme N</b>
+      Pass command arguments as positionals after each COMMAND.
+      Example: <b>dig -x list \.txt$</b>          list -i with regex pattern
+               <b>dig -x list -sB</b>              list -sB on all hosts
+               <b>dig -x list -sB + ifconfig</b>   list accounts then show network info
+               <b>dig -x ps + cat /etc/passwd</b>  run ps and dump passwd on all hosts
+
+    <b>-rm -f FILE</b> - Remove File from Network
+      Delete specified FILE from all found computers.
+
+    <b>-sw</b> - System Wipe
+      Wipe all found computer, router, and switch systems.
+      <b>WARNING:</b> Does NOT wipe current router - manual action required
+
+    <b>obj</b> - Computer Object Cache
+      Access computers collected during the last dig scan without rescanning.
+      Computer objects are cached automatically during any scan and cleared
+      at the start of each new scan.
+      Does NOT require a router — usable from any machine after a scan.
+      <b>obj</b>        List cached computers (same as <b>obj -l</b>)
+      <b>obj -l</b>     List all cached computers with index:  0) 192.168.1.5
+      <b>obj -t N</b>   Take computer N — opens a computer session
+      <b>obj -x</b>     Clear the object cache
+
+    <b>--cache NAME|!</b>
+      After scanning, save results to the session cache under NAME.
+      Use <b>!</b> as NAME to auto-key by the router's public IP.
+      Cache persists across pivots (stored in globals). Run from any machine.
+
+    <b>cache</b> - View / Manage Cached Results
+      List all cached entries, view a named entry, or clear cache.
+      Does NOT require a router - usable from any machine.
+      <b>cache</b>              List all cached entries
+      <b>cache NAME</b>         Print cached entry NAME using its stored type
+      <b>cache NAME --filter</b>     Interactively filter cached entry
+      <b>cache NAME --grep PAT</b>   Filter cached entry by pattern (non-interactive; OR-match)
+      <b>cache NAME --dump</b>       Save cached entry to digData.txt in current directory
+      <b>cache NAME --email</b>      Override display type (--all, --email, --bank, --rshell, --user)
+      <b>cache NAME --quiet</b>      Suppress print output
+      <b>cache NAME --raw</b>        Return raw dataset map (bash scripts only — use with _setvar)
+      <b>cache clear</b>        Clear all cached entries (prompts for confirmation)
+      <b>cache clear NAME</b>   Remove single cached entry NAME
+<b>SCRIPTING FLAGS</b>
+    These flags are available on all data-collecting subcommands (-a, -e, -b,
+    -r, -u, -g). They work from the CLI but are primarily for use inside
+    <b>run</b> bash scripts via <b>_dig</b>.
+
+    <b>--quiet</b>
+    Suppress all printed output. Use with --raw, --list, or --text so the
+    result is returned instead of printed to the screen.
+
+    <b>--raw</b>
+    Return a structured map. Best for field access in scripts.
+    Capture with: <b>_setvar(data, _dig -a --raw --quiet)</b>
+    Map keys:
+      <b>E</b>    Email records         <b>U</b>    User/passwd records
+      <b>B</b>    Bank records          <b>R</b>    Rshell records
+      <b>G</b>    Grabbed file records  <b>F</b>    File path sets
+      <b>S</b>    System/config files   <b>PIP</b>  Router public IP
+      <b>type</b> Scan type that produced the data
+
+    <b>--list</b>
+    Return an ordered list of all section values.
+
+    <b>--text</b>
+    Return a flat plain-text string of all section values.
+
+    Example:
+      _setvar(data, _dig -e --raw --quiet)
+      _setvar(emails, _getvar(data).E)
+      for entry in _getvar(emails)
+        _print _getvar(entry).email  _getvar(entry).pass
+      endfor
+
+    See <b>SCRIPTING REFERENCE</b> below for full field definitions and more examples.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Scanning</color>
+    <b>dig -a</b>
+    Scan all data on network
+
+    <b>dig -a --extreme 255</b>
+    Scan all data with maximum addressing
+
+    <b>dig -a --router -s</b>
+    Scan all data including routers, save results
+
+    <color=#e4ff34># Grab Text Files</color>
+    <b>dig -g</b>
+    Grab all text files from /etc on every LAN computer
+
+    <b>dig -g -p /home --filter</b>
+    Grab text files from /home, then grep interactively through results
+
+    <b>dig -g --grep root admin</b>
+    Grab all text files, show only files/lines matching 'root' OR 'admin'
+
+    <b>dig -g --grep passwd --cache grab1</b>
+    Grab files, filter by 'passwd', cache full results as 'grab1'
+
+    <b>dig -g -p / --extreme 255 -s loot</b>
+    Grab all text files from entire filesystem, save to loot.txt
+
+    <b>dig -g --filter --cache grab1</b>
+    Grab files, cache results as 'grab1', then search with filter
+
+    <color=#e4ff34># Targeted Scans</color>
+    <b>dig -e</b>
+    Scan email credentials from Mail.txt only (no mailbox login)
+
+    <b>dig -e -i 192.168.0.4 -s</b>
+    Scan email data from specific LAN IP, save to digData.txt
+
+    <b>dig -e --subject</b>
+    Scan email credentials, then log into each mailbox to list subject lines
+
+    <b>dig -e --subject -s mydig</b>
+    Scan with subject lines and save to mydig.txt
+
+    <b>dig -b -s</b>
+    Scan bank data and save
+
+    <b>dig -r --extreme 255 --lwipe</b>
+    Scan rshell data with max addressing, wipe logs
+
+    <b>dig -u --filter</b>
+    Scan user data with filtering
+
+    <color=#e4ff34># File Search</color>
+    <b>dig search -i 192.168.0.2 -p /etc -f decipher</b>
+    Search for decipher file in /etc on specific IP
+
+    <b>dig search -i 192.168.0.2 -v -p / -f source</b>
+    Search for source file in root, view contents
+
+    <b>dig search -p /home -f secret.txt --extreme 255</b>
+    Search /home for secret.txt with max addressing
+
+    <b>dig search -f system.log -p /var --all</b>
+    Search for system.log in /var on all machines
+
+    <b>dig search -f ""\.txt$"" -p /home --all</b>
+    Search /home for any .txt file (regex) on all machines
+
+    <color=#e4ff34># --ip Inline Router Targeting</color>
+    <b>dig -e --ip 1.2.3.4</b>
+    Exploit into router at 1.2.3.4, scan all email data on its LAN
+
+    <b>dig -a --ip 1.2.3.4 --root</b>
+    Exploit into router at 1.2.3.4, escalate to root, full scan
+
+    <b>dig -e --ip 1.2.3.4 --cache !</b>
+    Exploit in, full email scan, cache results by public IP
+
+    <color=#e4ff34># Object Cache</color>
+    <b>dig -e</b>
+    Scan email data — computer objects cached automatically
+
+    <b>dig obj</b>
+    List all cached computers:  0) 192.168.1.5  1) 192.168.1.12
+
+    <b>dig obj -t 0</b>
+    Take computer 0 — sets it as the current shell target
+
+    <b>dig obj -x</b>
+    Clear the object cache
+
+    <color=#e4ff34># Remote Execution</color>
+    <b>dig -x --extreme 255 ps</b>
+    Execute ps command on all computers
+
+    <b>dig -x ls /home</b>
+    List /home directory on all computers
+
+    <b>dig -x --router cat /etc/passwd</b>
+    Read passwd on all computers and routers
+
+    <b>dig -x list -sB + ifconfig</b>
+    List accounts then show network config on all hosts
+
+    <b>dig -x ps + cat /etc/passwd + ifconfig</b>
+    Run three commands in sequence on every host
+
+    <color=#e4ff34># Pipe — Remote Router Targeting (stdin IP)</color>
+    <b>echo 1.2.3.4 | dig -e</b>
+    Exploit into router at 1.2.3.4, scan all email data on its LAN
+
+    <b>echo 1.2.3.4 | dig -x --root cat /etc/passwd</b>
+    Exploit into router at 1.2.3.4, escalate to root, dump passwd on all LAN hosts
+
+    <b>bc ip | dig -e</b>
+    Pick a random public router, exploit in, scan all email data
+
+    <b>bc ip | dig -a --cache !</b>
+    Full scan on a random router's LAN, cache results keyed by its public IP
+
+    <b>bc ip | dig -x ls /home</b>
+    Random router — list /home on every device behind it
+
+    <color=#e4ff34># Destructive Operations</color>
+    <b>dig -rm -f secret.txt</b>
+    Remove secret.txt from all computers
+
+    <b>dig -rm --extreme 255 --router -f Bank.txt</b>
+    Remove Bank.txt from all systems including routers
+
+    <b>dig -sw --extreme 255</b>
+    Wipe all systems on network (WARNING: DESTRUCTIVE)
+
+    <color=#e4ff34># Data Extraction with Cleanup</color>
+    <b>dig -e --wipe --lwipe -s</b>
+    Extract emails, remove Mail.txt files, wipe logs, save
+
+    <b>dig -e --clean -s</b>
+    Extract emails, clear Mail.txt contents (file stays), save
+
+    <b>dig -b --wipe --extreme 255 -s</b>
+    Extract bank data, remove Bank.txt, max addressing, save
+
+    <color=#e4ff34># Cache</color>
+    <b>dig -e -s --cache !</b>
+    Scan email data, save to file, cache results keyed by public IP
+
+    <b>dig -e -s --cache corp_emails</b>
+    Scan email data, save to file, and cache results as 'corp_emails'
+
+    <b>dig cache</b>
+    List all cached dig entries
+
+    <b>dig cache corp_emails</b>
+    Print cached 'corp_emails' results
+
+    <b>dig cache corp_emails --dump</b>
+    Save cached 'corp_emails' results to digData.txt in current directory
+
+    <b>dig cache corp_emails --filter</b>
+    Interactively filter cached 'corp_emails' results
+
+    <b>dig cache corp_emails --email</b>
+    View only email data from a cached 'all' scan
+
+    <b>dig cache clear corp_emails</b>
+    Remove 'corp_emails' from cache
+
+    <b>dig cache clear</b>
+    Clear all cached results
+
+    <color=#e4ff34># Scripting (bash scripts only)</color>
+    <b>_setvar(data, dig -a --raw --quiet)</b>
+    Run dig silently, capture full dataset map into variable
+
+    <b>_setvar(data, dig -a --quiet --cache myhost)</b>
+    Run dig silently, save to cache (no capture needed)
+
+    <b>_setvar(data, dig cache myhost --raw)</b>
+    Load a cached entry into a variable for processing
+
+    <b>_setvar(rshell, dig -r --raw --quiet)</b>
+    _print Rshell IP: _getvar(rshell).PIP
+    Capture rshell dataset and access PIP directly
+<b>SCRIPTING REFERENCE</b>
+    When called from a bash script via <b>_dig</b>, use one of the three output
+    modes to capture data instead of printing. Combine with <b>--quiet</b> to
+    suppress all screen output.
+
+    <b>Output Modes:</b>
+      <b>--raw</b>    Return a structured map with named section keys (best for field access)
+      <b>--list</b>   Return a ordered list of section values
+      <b>--text</b>   Return a flat text string
+
+    <b>--raw Map Keys:</b>
+      <b>E</b>  list  Email records (-e scan)
+              .name     account holder name
+              .email    email address
+              .pass     email password
+              .ip       LAN IP of the source machine
+
+      <b>U</b>  list  User records (-u scan)
+              .user     username
+              .pass     password
+              .ip       LAN IP of the source machine
+              .probe    probe/service tag
+
+      <b>B</b>  list  Bank records (-b scan)
+              .name     account holder name
+              .account  bank account number
+              .pass     account password
+
+      <b>R</b>  list  Rshell records (-r scan)
+              .name     owner name
+              .email    associated email
+              .pass     password
+              .ip       LAN IP of the source machine
+
+      <b>G</b>  list  Grabbed file records (-g scan)
+              .name     filename
+              .ip       LAN IP of the source machine
+              .path     full path to file
+              .content  file contents
+              .user     owning user
+
+      <b>F</b>  list  File sets (grouped by machine)
+              .ip       LAN IP of the machine
+              .user     user on that machine
+              .files    list of file paths found
+
+      <b>S</b>  map   Service/config files
+              .name     filename
+              .ip       LAN IP of the source machine
+              .path     full path to file
+              .content  file contents
+
+      <b>PIP</b>  str   Router public IP address
+      <b>type</b> str   Scan type that produced the data (e.g. ""-e"", ""-a"")
+
+    <b>Examples:</b>
+      <color=#e4ff34># Iterate over email results</color>
+      _setvar(data, _dig -e --raw --quiet)
+      _setvar(emails, _getvar(data).E)
+      for entry in _getvar(emails)
+        _print _getvar(entry).name  _getvar(entry).email
+      endfor
+
+      <color=#e4ff34># Access the router public IP from an rshell scan</color>
+      _setvar(data, _dig -r --raw --quiet)
+      _print _getvar(data).PIP
+
+      <color=#e4ff34># Iterate grabbed file records</color>
+      _setvar(data, _dig -g --raw --quiet)
+      _setvar(files, _getvar(data).G)
+      for f in _getvar(files)
+        _print _getvar(f).ip  _getvar(f).path  _getvar(f).name
+      endfor
+
+      <color=#e4ff34># Get all section values as a list</color>
+      _setvar(sections, _dig -a --list --quiet)
+
+      <color=#e4ff34># Get everything as a printable text string</color>
+      _setvar(report, _dig -a --text --quiet)
+      _print _getvar(report)
+
+<b>SEE ALSO</b>
+    <b>recon</b>, <b>scanlan</b>, <b>nmap</b>"

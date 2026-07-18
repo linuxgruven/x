@@ -1,0 +1,7 @@
+// Man page for anon
+manAnon="ANON(1)                          X Shell Manual                          ANON(1)
+
+<b>NAME</b>
+    anon - toggles streaming mode on or off
+<b>DESCRIPTION</b>
+    Only hides passwords, use streaming mode if you need to hide more."

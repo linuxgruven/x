@@ -1,0 +1,95 @@
+// Man page for server
+manServer="SERVER(1)                        X Shell Manual                        SERVER(1)
+
+<b>NAME</b>
+    server - is used to run commands on your database or lms server
+<b>SYNOPSIS</b>
+    <b>server </b><b>-l</b>
+    <b>server </b><b>-t</b>
+    <b>server </b><b>-s</b>
+    <b>server </b><b>-o </b><b>OPEN_FLAG</b> [<b>PARAMS</b>]
+    <b>server </b><b>-f</b>
+    <b>server </b><b>-p</b>
+    <b>server </b><b>-r</b>
+    <b>server </b><b>-n</b>
+    <b>server </b><b>-z</b>
+    <b>server </b><b>refresh</b>
+<b>DESCRIPTION</b>
+    Manage database or LMS server without running sys -d. Execute common server management
+    commands directly for convenience. Launch binaries, start terminals or shells, view
+    filesystem stats, manage processes, secure the system, and refresh exploit databases.
+    Requires an active server connection. Provides quick access to frequently used server
+    administration tasks.
+    <color=#e4ff34>*** Must be using a server ***</color>
+<b>OPTIONS</b>
+    <b>-l</b>
+    Launch a binary or script
+    Execute program on server
+
+    <b>-t</b>
+    Start a terminal
+    Open terminal session on server
+
+    <b>-s</b>
+    Start a shell
+    Open shell session on server
+
+    <b>-o OPEN_FLAG [PARAMS]</b>
+    Open files or resources
+    Works like the open command with flags and parameters
+
+    <b>-f</b>
+    View filesystem statistics
+    Display disk usage and space information
+
+    <b>-p</b>
+    View and manage server processes
+    List and control running processes
+
+    <b>-r</b>
+    Wipe trash
+    Empty server trash folder
+
+    <b>-n</b>
+    View the notes file
+    Display server notes and documentation
+
+    <b>-z</b>
+    Secure the server and filesystem
+    Apply security measures and hardening
+
+    <b>refresh</b>
+    Refresh the exploit database
+    Update exploit information and vulnerabilities
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Launch and Execute</color>
+    <b>server -l scanner.bin</b>
+    Launch scanner on server
+
+    <b>server -t</b>
+    Start terminal session
+
+    <b>server -s</b>
+    Start shell session
+
+    <color=#e4ff34># System Management</color>
+    <b>server -f</b>
+    View filesystem stats
+
+    <b>server -p</b>
+    Manage server processes
+
+    <b>server -r</b>
+    Empty trash folder
+
+    <color=#e4ff34># Security and Info</color>
+    <b>server -z</b>
+    Secure server filesystem
+
+    <b>server -n</b>
+    View server notes
+
+    <b>server refresh</b>
+    Update exploit database
+<b>SEE ALSO</b>
+    <b>sys</b>, <b>service</b>, <b>net</b>"

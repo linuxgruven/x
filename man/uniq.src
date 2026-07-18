@@ -1,0 +1,38 @@
+// Man page for uniq
+manUniq="UNIQ(1)                          X Shell Manual                          UNIQ(1)
+
+<b>NAME</b>
+    uniq - Remove duplicate lines from file
+<b>SYNOPSIS</b>
+    <b>uniq</b> FILE
+    <b>uniq -s</b> FILE
+<b>DESCRIPTION</b>
+    Remove duplicate lines from files. Useful for cleaning word lists,
+    removing repeated entries, and deduplicating any line-based data.
+<b>OPTIONS</b>
+    <b>FILE</b> - Remove Duplicates
+      Remove duplicate lines from file.
+
+    <b>-s FILE</b> - Remove and Sort
+      Remove duplicates and sort the file alphabetically.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man uniq</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>uniq</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Usage</color>
+    <b>uniq wordlist.txt</b>
+    Remove duplicate words
+
+    <b>uniq users.txt</b>
+    Deduplicate user list
+
+    <color=#e4ff34># Sort and Deduplicate</color>
+    <b>uniq -s passwords.txt</b>
+    Remove duplicates and sort
+<b>SEE ALSO</b>
+    <b>sort</b>, <b>grep</b>"

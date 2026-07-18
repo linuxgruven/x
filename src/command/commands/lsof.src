@@ -1,0 +1,48 @@
+// =============================================================================
+// LSOF
+// Display CPU and memory usage for all processes owned by the current user.
+// =============================================================================
+Command.lsof=function(Obj)
+  procLines=split(show_procs(Obj.computer),char(10))[1:]
+  if not len(procLines) then return Info.info("You have no open files")
+  bar=function(percent,length=29)
+    filled=ceil(percent/length*10)
+    empty=length-filled
+    filledBar="#"*filled
+    emptyBar="-"*empty
+    return (blue(filledBar)+black(emptyBar))
+  end function
+  processData={}
+  totalCPU=0.0
+  totalMEM=0.0
+  index=0
+  for line in procLines
+    fields=split(line," ")
+    username=fields[0]
+    // Filter to current user only (skip other users' processes)
+    if username!=Obj.user.name then continue
+    entry={
+      "user":liteGrey(username),
+      "pid":green(str(fields[1])),
+      "cpu":blue(str(fields[2])),
+      "mem":blue(str(fields[3])),
+      "command":lime(fields[4])
+    }
+    // Accumulate totals (remove % symbol with [:-1] slice)
+    totalCPU+=val(fields[2][:-1])
+    totalMEM+=val(fields[3][:-1])
+    processData[index]=entry
+    index+=1
+  end for
+  print liteGrey("    tasks: "+len(processData))
+  print liteGrey("cpu_usage: ["+bar(totalCPU)+"]==>["+blue(totalCPU+"%")+"]")
+  print liteGrey("mem_usage: ["+bar(totalMEM)+"]==>["+blue(totalMEM+"%")+"]")
+  if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+    for entry in processData;data=entry.value;push(globals.G_pipe.stdout,join([data.user,data.pid,data.cpu,data.mem,data.command]," "));end for
+    return
+  end if
+  columns=[]
+  push(columns,join([grey("USER"),grey("PID"),grey("CPU"),grey("MEM"),grey("COMMAND")],"  "))
+  for entry in processData;data=entry.value;push(columns,join([data.user,data.pid,data.cpu,data.mem,data.command],"  "));end for
+  print format_columns(join(columns,char(10)))
+end function

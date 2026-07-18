@@ -1,0 +1,132 @@
+// Man page for email
+manEmail="EMAIL(1)                         X Shell Manual                         EMAIL(1)
+
+<b>NAME</b>
+    email - Email client and mail management
+<b>SYNOPSIS</b>
+    <b>email</b> <b>-c</b> ([EMAIL] [PASSWORD])
+    <b>[pipe] | email -c</b>
+    <b>[pipe] | email -l</b>
+    <b>email</b> <b>-v</b>
+    <b>email</b> <b>-o</b> ID
+    <b>email</b> <b>-l</b> [USER] ([PASSWORD])
+    <b>email</b> <b>-s</b>
+    <b>email</b> <b>-n</b>
+    <b>email</b> <b>-b</b> RECIPIENT SUBJECT MESSAGE [COUNT]
+    <b>email</b> <b>-r</b> ID
+    <b>email</b> <b>-x</b>
+    <b>email</b> <b>-cc</b> [-a]
+    <b>email</b> <b>-m</b> ACCOUNT PASSWORD REFRESH
+<b>DESCRIPTION</b>
+    Command-line email client for reading, composing, and managing messages.
+    Supports account login, inbox monitoring, email bombing, and automated
+    mail operations. Essential for social engineering and phishing campaigns (When Kuro get is head out of his arse).
+
+    <color=#e4ff34>*** Use [A] in the client to switch accounts within a session ***</color>
+<b>OPTIONS</b>
+    <b>-c</b> ([EMAIL] [PASSWORD])
+    Open email client interface
+    Launch GUI for email management
+    Optionally pass email and password to open a specific account directly
+    Also accepts piped input: <b>echo ""user@mail.com pass"" | email -c</b>
+
+    <b>-v</b>
+    View inbox messages
+    List all emails in current account
+
+    <b>-o</b> ID
+    Open specific email by ID
+    Display full email content
+
+    <b>-l</b> [USER] ([PASSWORD])
+    Login to email account
+    Prompts for password if not provided
+
+    <b>-s</b>
+    Setup new email account configuration
+    Register account with framework
+
+    <b>-n</b>
+    Compose new email message
+    Interactive message composition
+
+    <b>-b</b> RECIPIENT SUBJECT MESSAGE [COUNT]
+    Email bomb attack
+    Send multiple messages, COUNT defaults to 10
+
+    <b>-r</b> ID
+    Remove email by ID
+    Delete specific message from inbox
+
+    <b>-x</b>
+    Clear all emails from inbox
+    Purge entire mailbox
+
+    <b>-cc</b> [-a]
+    Clear saved credentials file
+    Resets the stored email account from the framework
+    Use <b>-a</b> to immediately re-prompt for new credentials after clearing
+
+    <b>-m</b> ACCOUNT PASSWORD REFRESH
+    Monitor account with auto-refresh
+    All three arguments required
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Account Management</color>
+    <b>email -s</b>
+    Setup new account
+
+    <b>email -l user@mail.com</b>
+    Login with password prompt
+
+    <b>email -l admin@corp.com secretpass</b>
+    Direct login with password
+
+    <color=#e4ff34># Reading Email</color>
+    <b>email -c</b>
+    Open email client GUI
+
+    <b>email -c victim@corp.com password123</b>
+    Open client logged in as another account
+
+    <b>echo ""victim@corp.com password123"" | email -c</b>
+    Open client with piped credentials
+
+    <b>cat creds.txt | email -l</b>
+    Login with piped credentials
+
+    <b>email -v</b>
+    View all messages in inbox
+
+    <b>email -o 5</b>
+    Open email ID 5
+
+    <color=#e4ff34># Sending Email</color>
+    <b>email -n</b>
+    Compose new message
+
+    <color=#e4ff34># Email Bombing</color>
+    <b>email -b target@victim.com Spam Test 100</b>
+    Send 100 test messages
+
+    <b>email -b admin@corp.com Alert Security 500</b>
+    Flood with 500 messages
+
+    <color=#e4ff34># Cleanup</color>
+    <b>email -r 12</b>
+    Delete email ID 12
+
+    <b>email -x</b>
+    Clear entire inbox
+
+    <color=#e4ff34># Credentials</color>
+    <b>email -cc</b>
+    Remove saved credentials
+
+    <b>email -cc -a</b>
+    Remove saved credentials and re-setup
+
+    <color=#e4ff34># Monitoring</color>
+    <b>email -m user@mail.com pass123 30</b>
+    Monitor with 30-second refresh
+<b>SEE ALSO</b>
+    <b>open</b>, <b>notes</b>"

@@ -1,0 +1,256 @@
+// =============================================================================
+// FTPSHELL_OBJECT
+// FTP shell session handler; provides FTP file system access through exploitation framework.
+// =============================================================================
+FTPShellObject={}
+// Function: run
+// Purpose: Initialize and run FTP shell session with command loop
+// Args:
+//   this - Reference to return as session object
+//   ex - FTP shell object
+//   IP - Public IP address for metadata
+// Returns: null (runs until session closed)
+FTPShellObject.run=function(this,ex,IP,port=21)
+  BaseObject.init(self,ex,"ftpshell")
+  //Store FTP shell object reference
+  self.object=ex
+  //Store shell type
+  self.type=typeof(ex)
+	//Get host computer from shell
+	self.computer=host_computer(ex)
+	//Store shell reference
+	self.shell=ex
+  //Store metadata (public_ip from arg, local_ip as port for display)
+  self.meta={"public_ip":IP,"local_ip":str(port)}
+	//Get root directory File object
+	self.root=File(host_computer(ex),"/")
+	//Detect current user and home directory
+	self.user=Utility.getUser(self)
+  //Initialize directory structure
+  self.dir={
+    "current":self.user.home,
+    "last":null
+  }
+  self.net={
+    "hasInternet":globals.G_main.net.hasInternet,
+    "router":null,
+    "lan":null
+  }
+  //If internet available, get router and scan LAN
+  if self.net.hasInternet then
+    self.net.router=get_router(self.meta.public_ip)
+    self.net.lan=devices_lan_ip(self.net.router)
+  end if
+  //Set machine type to blue FTP + hostname label
+  self.machineType=blue("FTP")+" "+get_name(self.computer)
+	self.pwa=Gui.pwAccess(self)
+  //Set hardware unit label (green uppercase shell type)
+  self.hw_unit=green(upper(self.type))
+  //Set layer type as ftp
+  self.layer="ftp"
+  //Function: gui - Update GUI display cache
+  gui=function;Gui.updateCP(this);end function
+  //Function: __ls - List directory contents
+  __ls=function(argv)
+    //Call Command.ls with session context
+    Command.ls(this,argv)
+  end function
+  //Function: __cd - Change directory
+  __cd=function(argv)
+    //Call Command.cd with session context
+    Command.cd(this,argv)
+  end function
+  //Function: __pwd - Print working directory
+  __pwd=function(argv)
+    //Call Command.pwd with session context
+    Command.pwd(this)
+  end function
+	//Function: __cmds - List available commands
+	__cmds=function(argv)
+		//Return ftpshell-specific command list
+		return Man.commands(["ftpshell"])
+	end function
+	//Function: __get - Download files from FTP server
+	__get=function(argv)
+    if not argv then return Info.man("Usage:get (-p [SAVE_TO_PATH]) [--log|FILE(S)]","get")
+    //Call Io.download with session context
+    Io.download(this,argv)
+	end function
+	//Function: __put - Upload files to FTP server
+	__put=function(argv)
+    if not argv then return Info.man("Usage:put (-p [GET_FROM_PATH]) [--log|FILE(S)]","put")
+    //Call Io.upload with session context
+    Io.upload(this,argv)
+	end function
+  //Function: __rm - Remove files
+  __rm=function(argv)
+    if not argv then return Info.man("Usage:rm (-r|-R) [FILE]","rm")
+    //Call Command.rm with session context
+    Command.rm(this,argv)
+  end function
+  //Function: __rmdir - Remove directory
+  __rmdir=function(argv)
+    if not argv then return Info.man("Usage:rmdir [DIR]","rmdir")
+    //Call Command.rmdir with session context
+    Command.rmdir(this,argv)
+  end function
+  //Function: __cp - Copy files
+  __cp=function(argv)
+    //Validate argument count (require source and dest)
+    if len(argv)!=2 then return Info.man("Usage: cp [SOURCE] [DEST]","cp")
+    //Call Command.cp with session context
+    Command.cp(this,argv)
+  end function
+  //Function: __mv - Move files
+  __mv=function(argv)
+    //Validate argument count (require source and dest)
+    if len(argv)!=2 then return Info.man("Usage: mv [SOURCE] [DEST]","mv")
+    //Call Command.mv with session context
+    Command.mv(this,argv)
+  end function
+  //Function: __rn - Rename files
+  __rn=function(argv)
+    //Validate argument count (require file and name)
+    if len(argv)!=2 then return Info.man("Usage: rn [FILE] [NAME]","rn")
+    //Call Command.rn with session context
+    Command.rn(this,argv)
+  end function
+  //Function: __mc - File browser (midnight commander style)
+  __mc=function(argv)
+    //Call Io.browse with session context
+    Io.browse(this,argv)
+  end function
+  //Function: __mkdir - Create directory
+  __mkdir=function(argv)
+    if not argv then return Info.man("Usage: mkdir [PATH/TO/NEW_FOLDER]","mkdir")
+    //Call Command.mkdir with session context
+    Command.mkdir(this,argv)
+  end function
+  //Function: __mkcd - Create directory and change to it
+  __mkcd=function(argv)
+    if not argv then return Info.man("Usage: mkcd [DIR]","mkcd")
+    //Call Command.mkcd with session context
+    Command.mkcd(this,argv)
+  end function
+  //Function: __hostname - Display hostname
+  __hostname=function(argv)
+    //Print hostname in yellow
+    print yellow(get_name(this.computer))
+  end function
+  //Function: __clear - Clear screen
+  __clear=function(argv)
+    //Clear terminal screen
+    clear_screen
+  end function
+  //Function: __wipelog - Wipe FTP logs
+  __wipelog=function(argv)
+    //Call Log.ftp to wipe FTP logs
+    Log.ftp(this)
+  end function
+  //Function: __wipesys - Wipe FTP system traces
+  __wipesys=function(argv)
+    //Call Attack.ftpSystem to clean FTP system
+    Attack.ftpSystem(this)
+  end function
+	//Function: __du - Show disk usage
+	__du=function(arg)
+		//Call Disk.used with session context
+		Disk.used(this,arg)
+	end function
+	//Function: __df - Show disk free space
+	__df=function(arg)
+		//Call Disk.free with session context
+		Disk.free(this,arg)
+	end function
+  //Function: __open - Launch a GUI application on the FTP host
+  __open=function(argv);if not argv or not len(argv) then return Info.man("Usage: open APP (ARGS)","open");Command.open(this,argv);end function
+  //Function: __exec - Execute a binary on the FTP host via launch
+  __exec=function(argv)
+    if not argv or not len(argv) then return Info.man("Usage: exec PATH (PARAMS)","exec")
+    filePath=argv[0]
+    params=null
+    if len(argv)>1 then params=join(argv[1:]," ")
+    if filePath[0]!="/" then filePath=path(this.dir.current)+"/"+filePath
+    execFile=File(this.computer,filePath)
+    if not execFile then execFile=File(this.computer,"/usr/bin/"+argv[0])
+    if not execFile then execFile=File(this.computer,"/bin/"+argv[0])
+    if not execFile then return Error.set("Binary not found: "+argv[0])
+    if params then launch(this.shell,path(execFile),params) else launch(this.shell,path(execFile))
+  end function
+  //Function: __close - Close FTP session
+  __close=function(argv)
+		//Stop main loop
+		this.running=false
+	end function
+  //Register all available FTP commands
+  self.commands={
+    "mc":@__mc,
+    "ls":@__ls,
+    "rn":@__rn,
+    "mkdir":@__mkdir,
+    "mkcd":@__mkcd,
+    "cd":@__cd,
+    "pwd":@__pwd,
+    "get":@__get,
+    "put":@__put,
+    "rm":@__rm,
+    "hostname":@__hostname,
+    "clear":@__clear,
+    "rmdir":@__rmdir,
+    "cp":@__cp,
+    "mv":@__mv,
+    "du":@__du,
+    "df":@__df,
+    "exec":@__exec,
+    "open":@__open,
+    "?":@__cmds,
+    "help":@__cmds,
+    "cmds":@__cmds,
+    "wipelog":@__wipelog,
+    "wipesys":@__wipesys,
+    "close":@__close,
+    "quit":@__close,
+    "x":@__close
+  }
+	//Main command loop
+	while self.running
+		//Update GUI display cache
+		gui
+    //Build prompt string
+    promptStr=BaseObject.buildPrompt(self,"x = Exit")
+    //Get user input and split into command array
+    c=split(trim(user_input(promptStr,0,0,1))," ").removeSpace
+		//Skip empty input
+		if not c then continue
+    //Cache lower command token for reuse
+    cmdKey=lower(c[0])
+    //Cache raw token and first char to reduce repeated indexing
+    firstToken=c[0]
+    firstChar=firstToken[0]
+    //Handle history operators (!, !!, !!!)
+    if cmdKey=="!" or cmdKey=="!!" or cmdKey=="!!!" then
+      c=BaseObject.handleHistory(self,cmdKey)
+      if not c then continue
+      cmdKey=lower(c[0])
+      firstToken=c[0]
+      firstChar=firstToken[0]
+      //Re-check for pipe/chain in recalled command
+      cmdStr=join(c," ")
+      if BaseObject.handleChainOrPipe(self, c, cmdStr) then continue
+    end if
+    //Handle * - wildcard command search
+    if BaseObject.handleWildcard(self,firstToken) then continue
+    //Execute command if found
+    if hasIndex(self.commands,cmdKey) then
+      //Get command function
+      f=self.commands[cmdKey]
+      //Add to history and execute
+      BaseObject.addToHistory(self,c)
+      f(c[1:])
+    else
+      //Display command not found error
+      Info.error(Text.msg.command+c[0]+" ]")
+    end if
+	//End main loop
+	end while
+end function

@@ -1,0 +1,45 @@
+// Man page for app
+manApp="APP(1)                           X Shell Manual                           APP(1)
+
+<b>NAME</b>
+    app - Smart appliance interface
+<b>SYNOPSIS</b>
+    <b>app -o</b><b> POWER TEMPERATURE</b>
+    <b>app -m</b>
+    <b>app -a</b><b> ACTION</b>
+<b>DESCRIPTION</b>
+    The app utility provides a communication interface for controlling smart
+    appliances. It enables power and temperature overrides, model information
+    retrieval, and alarm control for connected appliances.
+<b>OPTIONS</b>
+    <b>-o POWER TEMPERATURE</b> - Override Settings
+      Override power and temperature settings of connected appliance.
+      Defaults: POWER=500, TEMPERATURE=50 (if parameters omitted)
+
+    <b>-m</b> - View Model
+      Display appliance model information.
+
+    <b>-a ACTION</b> - Control Alarm
+      Activate or deactivate malfunction sound alarm.
+      Valid actions: on|off, true|false, 1|0
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Override Settings</color>
+    <b>app -o 1000 75</b>
+    Set power to 1000 and temperature to 75
+
+    <b>app -o</b>
+    Use default values (power: 500, temp: 50)
+
+    <color=#e4ff34># Appliance Information</color>
+    <b>app -m</b>
+    Display appliance model
+
+    <color=#e4ff34># Alarm Control</color>
+    <b>app -a on</b>
+    Enable malfunction alarm
+
+    <b>app -a off</b>
+    Disable malfunction alarm
+
+    <b>app -a 1</b>
+    Enable alarm using numeric value"

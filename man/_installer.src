@@ -1,0 +1,1256 @@
+// Man Pages Installer
+// Installs all man pages to /home/USER/payload/man directory
+print "<color=#20ff98>Installing X's man pages...</color>"
+import_code("./0day.src")
+import_code("./active.src")
+import_code("./addpass.src")
+import_code("./aes128.src")
+import_code("./aircrack.src")
+import_code("./aireplay.src")
+import_code("./airmon.src")
+import_code("./ai.src")
+import_code("./alias.src")
+import_code("./and.src")
+import_code("./anon.src")
+import_code("./app.src")
+import_code("./arrow.src")
+import_code("./arrow2.src")
+import_code("./average.src")
+import_code("./audit.src")
+import_code("./awk.src")
+import_code("./bang.src")
+import_code("./bang2.src")
+import_code("./bang3.src")
+import_code("./batch.src")
+import_code("./bc.src")
+import_code("./binary.src")
+import_code("./bit.src")
+import_code("./brute.src")
+import_code("./build.src")
+import_code("./cache.src")
+import_code("./cal.src")
+import_code("./cam.src")
+import_code("./cat.src")
+import_code("./cdl.src")
+import_code("./cd.src")
+import_code("./check.src")
+import_code("./chgrp.src")
+import_code("./chmod.src")
+import_code("./chog.src")
+import_code("./chown.src")
+import_code("./clean.src")
+import_code("./clear.src")
+import_code("./close.src")
+import_code("./coin.src")
+import_code("./compare.src")
+import_code("./column.src")
+import_code("./config.src")
+import_code("./cp.src")
+import_code("./cut.src")
+import_code("./date.src")
+import_code("./ddos.src")
+import_code("./decimal.src")
+import_code("./decrypt.src")
+import_code("./decipher.src")
+import_code("./devices.src")
+import_code("./dict.src")
+import_code("./diff.src")
+import_code("./dig.src")
+import_code("./dirty.src")
+import_code("./disk.src")
+import_code("./do.src")
+import_code("./drop.src")
+import_code("./dump.src")
+import_code("./echo.src")
+import_code("./editor.src")
+import_code("./email.src")
+import_code("./encrypt.src")
+import_code("./es.src")
+import_code("./exec.src")
+import_code("./exit.src")
+import_code("./exploits.src")
+import_code("./favs.src")
+import_code("./file.src")
+import_code("./find.src")
+import_code("./ftp.src")
+import_code("./fw.src")
+import_code("./get.src")
+import_code("./gmon.src")
+import_code("./grab.src")
+import_code("./grep.src")
+import_code("./groupadd.src")
+import_code("./groupdel.src")
+import_code("./groups.src")
+import_code("./gzip.src")
+import_code("./hc.src")
+import_code("./hf.src")
+import_code("./head.src")
+import_code("./heist.src")
+import_code("./hex.src")
+import_code("./hide.src")
+import_code("./home.src")
+import_code("./hops.src")
+import_code("./hostname.src")
+import_code("./htop.src")
+import_code("./cron.src")
+import_code("./hunt.src")
+import_code("./ids.src")
+import_code("./initd.src")
+import_code("./ifconfig.src")
+import_code("./index.src")
+import_code("./info.src")
+import_code("./inject.src")
+import_code("./iploop.src")
+import_code("./iwconfig.src")
+import_code("./iwlist.src")
+import_code("./jack.src")
+import_code("./jq.src")
+import_code("./join.src")
+import_code("./jump.src")
+import_code("./kill.src")
+import_code("./kiddy.src")
+import_code("./l33t.src")
+import_code("./libs.src")
+import_code("./linklibs.src")
+import_code("./list.src")
+import_code("./lms.src")
+import_code("./ln.src")
+import_code("./load.src")
+import_code("./locate.src")
+import_code("./lock.src")
+import_code("./logs.src")
+import_code("./lw.src")
+import_code("./loop.src")
+import_code("./lsof.src")
+import_code("./ls.src")
+import_code("./lt.src")
+import_code("./main.src")
+import_code("./make.src")
+import_code("./man.src")
+import_code("./mark.src")
+import_code("./mc.src")
+import_code("./median.src")
+import_code("./missions.src")
+import_code("./mkcd.src")
+import_code("./mkdir.src")
+import_code("./more.src")
+import_code("./mv.src")
+import_code("./neofetch.src")
+import_code("./netcat.src")
+import_code("./net.src")
+import_code("./nmap.src")
+import_code("./notes.src")
+import_code("./nslookup.src")
+import_code("./open.src")
+import_code("./pack.src")
+import_code("./pacman.src")
+import_code("./passwd.src")
+import_code("./passwords.src")
+import_code("./percent.src")
+import_code("./ping.src")
+import_code("./pingport.src")
+import_code("./pipe.src")
+import_code("./paste.src")
+import_code("./pivot.src")
+import_code("./ports.src")
+import_code("./post.src")
+import_code("./print.src")
+import_code("./printf.src")
+import_code("./pRoot.src")
+import_code("./probe.src")
+import_code("./proxy.src")
+import_code("./ps.src")
+import_code("./pull.src")
+import_code("./pwd.src")
+import_code("./pwgen.src")
+import_code("./pzip.src")
+import_code("./qrm.src")
+import_code("./rainbow.src")
+import_code("./radix.src")
+import_code("./rat.src")
+import_code("./reboot.src")
+import_code("./recon.src")
+import_code("./rec.src")
+import_code("./reload.src")
+import_code("./repl.src")
+import_code("./reset.src")
+import_code("./rev.src")
+import_code("./rmdir.src")
+import_code("./rm.src")
+import_code("./rnet.src")
+import_code("./rn.src")
+import_code("./rshell.src")
+import_code("./rsync.src")
+import_code("./run.src")
+import_code("./scanlan.src")
+import_code("./scanlib.src")
+import_code("./scanrouter.src")
+import_code("./scanaddress.src")
+import_code("./scan.src")
+import_code("./scp.src")
+import_code("./scrub.src")
+import_code("./sed.src")
+import_code("./sessions.src")
+import_code("./server.src")
+import_code("./service.src")
+import_code("./set.src")
+import_code("./seq.src")
+import_code("./sha256.src")
+import_code("./shadow.src")
+import_code("./share.src")
+import_code("./show.src")
+import_code("./smtpuserlist.src")
+import_code("./sniffer.src")
+import_code("./sort.src")
+import_code("./spawn.src")
+import_code("./specs.src")
+import_code("./split.src")
+import_code("./ssh.src")
+import_code("./sssh.src")
+import_code("./start.src")
+import_code("./stat.src")
+import_code("./stats.src")
+import_code("./su.src")
+import_code("./swap.src")
+import_code("./system.src")
+import_code("./tail.src")
+import_code("./tar.src")
+import_code("./temp.src")
+import_code("./tee.src")
+import_code("./time.src")
+import_code("./touch.src")
+import_code("./tree.src")
+import_code("./trim.src")
+import_code("./tr.src")
+import_code("./uniq.src")
+import_code("./uptime.src")
+import_code("./useradd.src")
+import_code("./userdel.src")
+import_code("./vfile.src")
+import_code("./vi.src")
+import_code("./wait.src")
+import_code("./wallet.src")
+import_code("./wc.src")
+import_code("./web.src")
+import_code("./whatami.src")
+import_code("./whoami.src")
+import_code("./whois.src")
+import_code("./wipe.src")
+import_code("./write.src")
+import_code("./yes.src")
+import_code("./x.src")
+import_code("./xclip.src")
+import_code("./zap.src")
+import_code("./zip.src")
+// Get computer and setup directory
+c=host_computer(get_shell)
+home=File(c,home_dir)
+if not home then exit("<color=red>Unable to access home directory</color>")
+_findAll=function(dir,fName,results)
+  for sub in get_folders(dir)
+    if name(sub)==fName then push(results,sub)
+    _findAll(sub,fName,results)
+  end for
+end function
+payloadDir=File(c,home_dir+"/payload")
+if not payloadDir then
+  print "<color=#ffff00>Locating payload...</color>"
+  _found=[]
+  _findAll(File(c,"/"),"payload",_found)
+  if not _found then exit("<color=red>payload folder not found. Please run X at least once to set up X's file structure.</color>")
+  if len(_found)==1 then
+    payloadDir=_found[0]
+    print "<color=#20ff98>Found payload at: "+path(payloadDir)+"</color>"
+  else
+    print "<color=#ffff00>Multiple payload folders found:</color>"
+    _i=0
+    _len=len(_found)
+    while _i<_len
+      print "<color=#ffffff>  ["+(_i+1)+"] "+path(_found[_i])+"</color>"
+      _i=_i+1
+    end while
+    print "<color=#ffffff>  [0] Cancel</color>"
+    _choice=to_int(user_input("<color=#87ceeb>Select payload (0 to cancel, 1-"+_len+"): </color>"))
+    if _choice==0 then exit("<color=#ffff00>Cancelled.</color>")
+    if _choice<1 or _choice>_len then exit("<color=red>Invalid selection.</color>")
+    payloadDir=_found[_choice-1]
+    print "<color=#20ff98>Using payload at: "+path(payloadDir)+"</color>"
+  end if
+end if
+payload=path(payloadDir)
+// Create man pages directory if it doesn't exist
+if not File(c,payload+"/man") then create_folder(c,payload,"man")
+manDir=File(c,payload+"/man")
+if not manDir then exit("<color=red>Failed to create /payload/man directory</color>")
+// Install each man page
+touch(c,path(manDir),"0day")
+f=File(c,path(manDir)+"/0day")
+set_content(f,man0day)
+print "<color=#aaaaaa>  Installed 0day</color>"
+touch(c,path(manDir),"active")
+f=File(c,path(manDir)+"/active")
+set_content(f,manActive)
+print "<color=#aaaaaa>  Installed active</color>"
+touch(c,path(manDir),"addpass")
+f=File(c,path(manDir)+"/addpass")
+set_content(f,manAddpass)
+print "<color=#aaaaaa>  Installed addpass</color>"
+touch(c,path(manDir),"aes128")
+f=File(c,path(manDir)+"/aes128")
+set_content(f,manAes128)
+print "<color=#aaaaaa>  Installed aes128</color>"
+touch(c,path(manDir),"aircrack")
+f=File(c,path(manDir)+"/aircrack")
+set_content(f,manAircrack)
+print "<color=#aaaaaa>  Installed aircrack</color>"
+touch(c,path(manDir),"aireplay")
+f=File(c,path(manDir)+"/aireplay")
+set_content(f,manAireplay)
+print "<color=#aaaaaa>  Installed aireplay</color>"
+touch(c,path(manDir),"airmon")
+f=File(c,path(manDir)+"/airmon")
+set_content(f,manAirmon)
+print "<color=#aaaaaa>  Installed airmon</color>"
+touch(c,path(manDir),"ai")
+f=File(c,path(manDir)+"/ai")
+set_content(f,manAi)
+print "<color=#aaaaaa>  Installed ai</color>"
+touch(c,path(manDir),"alias")
+f=File(c,path(manDir)+"/alias")
+set_content(f,manAlias)
+print "<color=#aaaaaa>  Installed alias</color>"
+touch(c,path(manDir),"and")
+f=File(c,path(manDir)+"/and")
+set_content(f,manAnd)
+print "<color=#aaaaaa>  Installed and</color>"
+touch(c,path(manDir),"anon")
+f=File(c,path(manDir)+"/anon")
+set_content(f,manAnon)
+print "<color=#aaaaaa>  Installed anon</color>"
+touch(c,path(manDir),"app")
+f=File(c,path(manDir)+"/app")
+set_content(f,manApp)
+print "<color=#aaaaaa>  Installed app</color>"
+touch(c,path(manDir),"arrow")
+f=File(c,path(manDir)+"/arrow")
+set_content(f,manArrow)
+print "<color=#aaaaaa>  Installed arrow</color>"
+touch(c,path(manDir),"arrow2")
+f=File(c,path(manDir)+"/arrow2")
+set_content(f,manArrow2)
+print "<color=#aaaaaa>  Installed arrow2</color>"
+touch(c,path(manDir),"average")
+f=File(c,path(manDir)+"/average")
+set_content(f,manAverage)
+print "<color=#aaaaaa>  Installed average</color>"
+touch(c,path(manDir),"awk")
+f=File(c,path(manDir)+"/awk")
+set_content(f,manAwk)
+print "<color=#aaaaaa>  Installed awk</color>"
+touch(c,path(manDir),"audit")
+f=File(c,path(manDir)+"/audit")
+set_content(f,manAudit)
+print "<color=#aaaaaa>  Installed audit</color>"
+touch(c,path(manDir),"bang")
+f=File(c,path(manDir)+"/bang")
+set_content(f,manBang)
+print "<color=#aaaaaa>  Installed bang</color>"
+touch(c,path(manDir),"bang2")
+f=File(c,path(manDir)+"/bang2")
+set_content(f,manBang2)
+print "<color=#aaaaaa>  Installed bang2</color>"
+touch(c,path(manDir),"bang3")
+f=File(c,path(manDir)+"/bang3")
+set_content(f,manBang3)
+print "<color=#aaaaaa>  Installed bang3</color>"
+touch(c,path(manDir),"batch")
+f=File(c,path(manDir)+"/batch")
+set_content(f,manBatch)
+print "<color=#aaaaaa>  Installed batch</color>"
+touch(c,path(manDir),"bc")
+f=File(c,path(manDir)+"/bc")
+set_content(f,manBc)
+print "<color=#aaaaaa>  Installed bc</color>"
+touch(c,path(manDir),"binary")
+f=File(c,path(manDir)+"/binary")
+set_content(f,manBinary)
+print "<color=#aaaaaa>  Installed binary</color>"
+touch(c,path(manDir),"bit")
+f=File(c,path(manDir)+"/bit")
+set_content(f,manBit)
+print "<color=#aaaaaa>  Installed bit</color>"
+touch(c,path(manDir),"brute")
+f=File(c,path(manDir)+"/brute")
+set_content(f,manBrute)
+print "<color=#aaaaaa>  Installed brute</color>"
+touch(c,path(manDir),"build")
+f=File(c,path(manDir)+"/build")
+set_content(f,manBuild)
+print "<color=#aaaaaa>  Installed build</color>"
+touch(c,path(manDir),"cache")
+f=File(c,path(manDir)+"/cache")
+set_content(f,manCache)
+print "<color=#aaaaaa>  Installed cache</color>"
+touch(c,path(manDir),"cal")
+f=File(c,path(manDir)+"/cal")
+set_content(f,manCal)
+print "<color=#aaaaaa>  Installed cal</color>"
+touch(c,path(manDir),"cam")
+f=File(c,path(manDir)+"/cam")
+set_content(f,manCam)
+print "<color=#aaaaaa>  Installed cam</color>"
+touch(c,path(manDir),"cat")
+f=File(c,path(manDir)+"/cat")
+set_content(f,manCat)
+print "<color=#aaaaaa>  Installed cat</color>"
+touch(c,path(manDir),"cdl")
+f=File(c,path(manDir)+"/cdl")
+set_content(f,manCdl)
+print "<color=#aaaaaa>  Installed cdl</color>"
+touch(c,path(manDir),"cd")
+f=File(c,path(manDir)+"/cd")
+set_content(f,manCd)
+print "<color=#aaaaaa>  Installed cd</color>"
+touch(c,path(manDir),"check")
+f=File(c,path(manDir)+"/check")
+set_content(f,manCheck)
+print "<color=#aaaaaa>  Installed check</color>"
+touch(c,path(manDir),"chgrp")
+f=File(c,path(manDir)+"/chgrp")
+set_content(f,manChgrp)
+print "<color=#aaaaaa>  Installed chgrp</color>"
+touch(c,path(manDir),"chmod")
+f=File(c,path(manDir)+"/chmod")
+set_content(f,manChmod)
+print "<color=#aaaaaa>  Installed chmod</color>"
+touch(c,path(manDir),"chog")
+f=File(c,path(manDir)+"/chog")
+set_content(f,manChog)
+print "<color=#aaaaaa>  Installed chog</color>"
+touch(c,path(manDir),"chown")
+f=File(c,path(manDir)+"/chown")
+set_content(f,manChown)
+print "<color=#aaaaaa>  Installed chown</color>"
+touch(c,path(manDir),"clean")
+f=File(c,path(manDir)+"/clean")
+set_content(f,manClean)
+print "<color=#aaaaaa>  Installed clean</color>"
+touch(c,path(manDir),"clear")
+f=File(c,path(manDir)+"/clear")
+set_content(f,manClear)
+print "<color=#aaaaaa>  Installed clear</color>"
+touch(c,path(manDir),"close")
+f=File(c,path(manDir)+"/close")
+set_content(f,manClose)
+print "<color=#aaaaaa>  Installed close</color>"
+touch(c,path(manDir),"coin")
+f=File(c,path(manDir)+"/coin")
+set_content(f,manCoin)
+print "<color=#aaaaaa>  Installed coin</color>"
+touch(c,path(manDir),"compare")
+f=File(c,path(manDir)+"/compare")
+set_content(f,manCompare)
+print "<color=#aaaaaa>  Installed compare</color>"
+touch(c,path(manDir),"config")
+f=File(c,path(manDir)+"/config")
+set_content(f,manConfig)
+print "<color=#aaaaaa>  Installed config</color>"
+touch(c,path(manDir),"column")
+f=File(c,path(manDir)+"/column")
+set_content(f,manColumn)
+print "<color=#aaaaaa>  Installed column</color>"
+touch(c,path(manDir),"cp")
+f=File(c,path(manDir)+"/cp")
+set_content(f,manCp)
+print "<color=#aaaaaa>  Installed cp</color>"
+touch(c,path(manDir),"cut")
+f=File(c,path(manDir)+"/cut")
+set_content(f,manCut)
+print "<color=#aaaaaa>  Installed cut</color>"
+touch(c,path(manDir),"date")
+f=File(c,path(manDir)+"/date")
+set_content(f,manDate)
+print "<color=#aaaaaa>  Installed date</color>"
+touch(c,path(manDir),"ddos")
+f=File(c,path(manDir)+"/ddos")
+set_content(f,manDdos)
+print "<color=#aaaaaa>  Installed ddos</color>"
+touch(c,path(manDir),"decimal")
+f=File(c,path(manDir)+"/decimal")
+set_content(f,manDecimal)
+print "<color=#aaaaaa>  Installed decimal</color>"
+touch(c,path(manDir),"dec")
+f=File(c,path(manDir)+"/dec")
+set_content(f,manDecrypt)
+print "<color=#aaaaaa>  Installed dec</color>"
+touch(c,path(manDir),"decipher")
+f=File(c,path(manDir)+"/decipher")
+set_content(f,manDecipher)
+print "<color=#aaaaaa>  Installed decipher</color>"
+touch(c,path(manDir),"devices")
+f=File(c,path(manDir)+"/devices")
+set_content(f,manDevices)
+print "<color=#aaaaaa>  Installed devices</color>"
+touch(c,path(manDir),"dict")
+f=File(c,path(manDir)+"/dict")
+set_content(f,manDict)
+print "<color=#aaaaaa>  Installed dict</color>"
+touch(c,path(manDir),"diff")
+f=File(c,path(manDir)+"/diff")
+set_content(f,manDiff)
+print "<color=#aaaaaa>  Installed diff</color>"
+touch(c,path(manDir),"dig")
+f=File(c,path(manDir)+"/dig")
+set_content(f,manDig)
+print "<color=#aaaaaa>  Installed dig</color>"
+touch(c,path(manDir),"dirty")
+f=File(c,path(manDir)+"/dirty")
+set_content(f,manDirty)
+print "<color=#aaaaaa>  Installed dirty</color>"
+touch(c,path(manDir),"disk")
+f=File(c,path(manDir)+"/disk")
+set_content(f,manDisk)
+print "<color=#aaaaaa>  Installed disk</color>"
+touch(c,path(manDir),"do")
+f=File(c,path(manDir)+"/do")
+set_content(f,manDo)
+print "<color=#aaaaaa>  Installed do</color>"
+touch(c,path(manDir),"drop")
+f=File(c,path(manDir)+"/drop")
+set_content(f,manDrop)
+print "<color=#aaaaaa>  Installed drop</color>"
+touch(c,path(manDir),"dump")
+f=File(c,path(manDir)+"/dump")
+set_content(f,manDump)
+print "<color=#aaaaaa>  Installed dump</color>"
+touch(c,path(manDir),"echo")
+f=File(c,path(manDir)+"/echo")
+set_content(f,manEcho)
+print "<color=#aaaaaa>  Installed echo</color>"
+touch(c,path(manDir),"editor")
+f=File(c,path(manDir)+"/editor")
+set_content(f,manEditor)
+print "<color=#aaaaaa>  Installed editor</color>"
+touch(c,path(manDir),"email")
+f=File(c,path(manDir)+"/email")
+set_content(f,manEmail)
+print "<color=#aaaaaa>  Installed email</color>"
+touch(c,path(manDir),"encrypt")
+f=File(c,path(manDir)+"/encrypt")
+set_content(f,manEncrypt)
+print "<color=#aaaaaa>  Installed encrypt</color>"
+touch(c,path(manDir),"es")
+f=File(c,path(manDir)+"/es")
+set_content(f,manEs)
+print "<color=#aaaaaa>  Installed es</color>"
+touch(c,path(manDir),"exec")
+f=File(c,path(manDir)+"/exec")
+set_content(f,manExec)
+print "<color=#aaaaaa>  Installed exec</color>"
+touch(c,path(manDir),"exit")
+f=File(c,path(manDir)+"/exit")
+set_content(f,manExit)
+print "<color=#aaaaaa>  Installed exit</color>"
+touch(c,path(manDir),"exploits")
+f=File(c,path(manDir)+"/exploits")
+set_content(f,manExploits)
+print "<color=#aaaaaa>  Installed exploits</color>"
+touch(c,path(manDir),"favs")
+f=File(c,path(manDir)+"/favs")
+set_content(f,manFavs)
+print "<color=#aaaaaa>  Installed favs</color>"
+touch(c,path(manDir),"file")
+f=File(c,path(manDir)+"/file")
+set_content(f,manFile)
+print "<color=#aaaaaa>  Installed file</color>"
+touch(c,path(manDir),"find")
+f=File(c,path(manDir)+"/find")
+set_content(f,manFind)
+print "<color=#aaaaaa>  Installed find</color>"
+touch(c,path(manDir),"ftp")
+f=File(c,path(manDir)+"/ftp")
+set_content(f,manFtp)
+print "<color=#aaaaaa>  Installed ftp</color>"
+touch(c,path(manDir),"fw")
+f=File(c,path(manDir)+"/fw")
+set_content(f,manFw)
+print "<color=#aaaaaa>  Installed fw</color>"
+touch(c,path(manDir),"get")
+f=File(c,path(manDir)+"/get")
+set_content(f,manGet)
+print "<color=#aaaaaa>  Installed get</color>"
+touch(c,path(manDir),"gmon")
+f=File(c,path(manDir)+"/gmon")
+set_content(f,manGmon)
+print "<color=#aaaaaa>  Installed gmon</color>"
+touch(c,path(manDir),"grab")
+f=File(c,path(manDir)+"/grab")
+set_content(f,manGrab)
+print "<color=#aaaaaa>  Installed grab</color>"
+touch(c,path(manDir),"grep")
+f=File(c,path(manDir)+"/grep")
+set_content(f,manGrep)
+print "<color=#aaaaaa>  Installed grep</color>"
+touch(c,path(manDir),"groupadd")
+f=File(c,path(manDir)+"/groupadd")
+set_content(f,manGroupadd)
+print "<color=#aaaaaa>  Installed groupadd</color>"
+touch(c,path(manDir),"groupdel")
+f=File(c,path(manDir)+"/groupdel")
+set_content(f,manGroupdel)
+print "<color=#aaaaaa>  Installed groupdel</color>"
+touch(c,path(manDir),"groups")
+f=File(c,path(manDir)+"/groups")
+set_content(f,manGroups)
+print "<color=#aaaaaa>  Installed groups</color>"
+touch(c,path(manDir),"gzip")
+f=File(c,path(manDir)+"/gzip")
+set_content(f,manGzip)
+print "<color=#aaaaaa>  Installed gzip</color>"
+touch(c,path(manDir),"hc")
+f=File(c,path(manDir)+"/hc")
+set_content(f,manHashcat)
+print "<color=#aaaaaa>  Installed hc</color>"
+touch(c,path(manDir),"hf")
+f=File(c,path(manDir)+"/hf")
+set_content(f,manHashfile)
+print "<color=#aaaaaa>  Installed hf</color>"
+touch(c,path(manDir),"head")
+f=File(c,path(manDir)+"/head")
+set_content(f,manHead)
+print "<color=#aaaaaa>  Installed head</color>"
+touch(c,path(manDir),"heist")
+f=File(c,path(manDir)+"/heist")
+set_content(f,manHeist)
+print "<color=#aaaaaa>  Installed heist</color>"
+touch(c,path(manDir),"hex")
+f=File(c,path(manDir)+"/hex")
+set_content(f,manHex)
+print "<color=#aaaaaa>  Installed hex</color>"
+touch(c,path(manDir),"hide")
+f=File(c,path(manDir)+"/hide")
+set_content(f,manHide)
+print "<color=#aaaaaa>  Installed hide</color>"
+touch(c,path(manDir),"home")
+f=File(c,path(manDir)+"/home")
+set_content(f,manHome)
+print "<color=#aaaaaa>  Installed home</color>"
+touch(c,path(manDir),"hops")
+f=File(c,path(manDir)+"/hops")
+set_content(f,manHops)
+print "<color=#aaaaaa>  Installed hops</color>"
+touch(c,path(manDir),"hostname")
+f=File(c,path(manDir)+"/hostname")
+set_content(f,manHostname)
+print "<color=#aaaaaa>  Installed hostname</color>"
+touch(c,path(manDir),"htop")
+f=File(c,path(manDir)+"/htop")
+set_content(f,manHtop)
+print "<color=#aaaaaa>  Installed htop</color>"
+touch(c,path(manDir),"cron")
+f=File(c,path(manDir)+"/cron")
+set_content(f,manCron)
+print "<color=#aaaaaa>  Installed cron</color>"
+touch(c,path(manDir),"hunt")
+f=File(c,path(manDir)+"/hunt")
+set_content(f,manHunt)
+print "<color=#aaaaaa>  Installed hunt</color>"
+touch(c,path(manDir),"ids")
+f=File(c,path(manDir)+"/ids")
+set_content(f,manIds)
+print "<color=#aaaaaa>  Installed ids</color>"
+touch(c,path(manDir),"initd")
+f=File(c,path(manDir)+"/initd")
+set_content(f,manInitd)
+print "<color=#aaaaaa>  Installed initd</color>"
+touch(c,path(manDir),"ifconfig")
+f=File(c,path(manDir)+"/ifconfig")
+set_content(f,manIfconfig)
+print "<color=#aaaaaa>  Installed ifconfig</color>"
+touch(c,path(manDir),"index")
+f=File(c,path(manDir)+"/index")
+set_content(f,manIndex)
+print "<color=#aaaaaa>  Installed index</color>"
+touch(c,path(manDir),"info")
+f=File(c,path(manDir)+"/info")
+set_content(f,manInfo)
+print "<color=#aaaaaa>  Installed info</color>"
+touch(c,path(manDir),"inject")
+f=File(c,path(manDir)+"/inject")
+set_content(f,manInject)
+print "<color=#aaaaaa>  Installed inject</color>"
+touch(c,path(manDir),"iploop")
+f=File(c,path(manDir)+"/iploop")
+set_content(f,manIploop)
+print "<color=#aaaaaa>  Installed iploop</color>"
+touch(c,path(manDir),"iwconfig")
+f=File(c,path(manDir)+"/iwconfig")
+set_content(f,manIwconfig)
+print "<color=#aaaaaa>  Installed iwconfig</color>"
+touch(c,path(manDir),"iwlist")
+f=File(c,path(manDir)+"/iwlist")
+set_content(f,manIwlist)
+print "<color=#aaaaaa>  Installed iwlist</color>"
+touch(c,path(manDir),"jack")
+f=File(c,path(manDir)+"/jack")
+set_content(f,manJack)
+print "<color=#aaaaaa>  Installed jack</color>"
+touch(c,path(manDir),"jq")
+f=File(c,path(manDir)+"/jq")
+set_content(f,manJq)
+print "<color=#aaaaaa>  Installed jq</color>"
+touch(c,path(manDir),"join")
+f=File(c,path(manDir)+"/join")
+set_content(f,manJoin)
+print "<color=#aaaaaa>  Installed join</color>"
+touch(c,path(manDir),"jump")
+f=File(c,path(manDir)+"/jump")
+set_content(f,manJump)
+print "<color=#aaaaaa>  Installed jump</color>"
+touch(c,path(manDir),"kill")
+f=File(c,path(manDir)+"/kill")
+set_content(f,manKill)
+print "<color=#aaaaaa>  Installed kill</color>"
+touch(c,path(manDir),"kiddy")
+f=File(c,path(manDir)+"/kiddy")
+set_content(f,manKiddy)
+print "<color=#aaaaaa>  Installed kiddy</color>"
+touch(c,path(manDir),"l33t")
+f=File(c,path(manDir)+"/l33t")
+set_content(f,manL33t)
+print "<color=#aaaaaa>  Installed l33t</color>"
+touch(c,path(manDir),"libs")
+f=File(c,path(manDir)+"/libs")
+set_content(f,manLibs)
+print "<color=#aaaaaa>  Installed libs</color>"
+touch(c,path(manDir),"linklibs")
+f=File(c,path(manDir)+"/linklibs")
+set_content(f,manLinklibs)
+print "<color=#aaaaaa>  Installed linklibs</color>"
+touch(c,path(manDir),"list")
+f=File(c,path(manDir)+"/list")
+set_content(f,manList)
+print "<color=#aaaaaa>  Installed list</color>"
+touch(c,path(manDir),"lms")
+f=File(c,path(manDir)+"/lms")
+set_content(f,manLms)
+print "<color=#aaaaaa>  Installed lms</color>"
+touch(c,path(manDir),"ln")
+f=File(c,path(manDir)+"/ln")
+set_content(f,manLn)
+print "<color=#aaaaaa>  Installed ln</color>"
+touch(c,path(manDir),"load")
+f=File(c,path(manDir)+"/load")
+set_content(f,manLoad)
+print "<color=#aaaaaa>  Installed load</color>"
+touch(c,path(manDir),"locate")
+f=File(c,path(manDir)+"/locate")
+set_content(f,manLocate)
+print "<color=#aaaaaa>  Installed locate</color>"
+touch(c,path(manDir),"lock")
+f=File(c,path(manDir)+"/lock")
+set_content(f,manLock)
+print "<color=#aaaaaa>  Installed lock</color>"
+touch(c,path(manDir),"logs")
+f=File(c,path(manDir)+"/logs")
+set_content(f,manLogs)
+print "<color=#aaaaaa>  Installed logs</color>"
+touch(c,path(manDir),"lw")
+f=File(c,path(manDir)+"/lw")
+set_content(f,manLogwatcher)
+print "<color=#aaaaaa>  Installed lw</color>"
+touch(c,path(manDir),"loop")
+f=File(c,path(manDir)+"/loop")
+set_content(f,manLoop)
+print "<color=#aaaaaa>  Installed loop</color>"
+touch(c,path(manDir),"lsof")
+f=File(c,path(manDir)+"/lsof")
+set_content(f,manLsof)
+print "<color=#aaaaaa>  Installed lsof</color>"
+touch(c,path(manDir),"ls")
+f=File(c,path(manDir)+"/ls")
+set_content(f,manLs)
+print "<color=#aaaaaa>  Installed ls</color>"
+
+touch(c,path(manDir),"lt")
+f=File(c,path(manDir)+"/lt")
+set_content(f,manLt)
+print "<color=#aaaaaa>  Installed lt</color>"
+touch(c,path(manDir),"main")
+f=File(c,path(manDir)+"/main")
+set_content(f,manMain)
+print "<color=#aaaaaa>  Installed main</color>"
+touch(c,path(manDir),"make")
+f=File(c,path(manDir)+"/make")
+set_content(f,manMake)
+print "<color=#aaaaaa>  Installed make</color>"
+touch(c,path(manDir),"man")
+f=File(c,path(manDir)+"/man")
+set_content(f,manMan)
+print "<color=#aaaaaa>  Installed man</color>"
+touch(c,path(manDir),"mark")
+f=File(c,path(manDir)+"/mark")
+set_content(f,manMark)
+print "<color=#aaaaaa>  Installed mark</color>"
+touch(c,path(manDir),"mc")
+f=File(c,path(manDir)+"/mc")
+set_content(f,manMc)
+print "<color=#aaaaaa>  Installed mc</color>"
+touch(c,path(manDir),"median")
+f=File(c,path(manDir)+"/median")
+set_content(f,manMedian)
+print "<color=#aaaaaa>  Installed median</color>"
+touch(c,path(manDir),"missions")
+f=File(c,path(manDir)+"/missions")
+set_content(f,manMissions)
+print "<color=#aaaaaa>  Installed missions</color>"
+touch(c,path(manDir),"mkcd")
+f=File(c,path(manDir)+"/mkcd")
+set_content(f,manMkcd)
+print "<color=#aaaaaa>  Installed mkcd</color>"
+touch(c,path(manDir),"mkdir")
+f=File(c,path(manDir)+"/mkdir")
+set_content(f,manMkdir)
+print "<color=#aaaaaa>  Installed mkdir</color>"
+touch(c,path(manDir),"more")
+f=File(c,path(manDir)+"/more")
+set_content(f,manMore)
+print "<color=#aaaaaa>  Installed more</color>"
+touch(c,path(manDir),"mv")
+f=File(c,path(manDir)+"/mv")
+set_content(f,manMv)
+print "<color=#aaaaaa>  Installed mv</color>"
+touch(c,path(manDir),"neofetch")
+f=File(c,path(manDir)+"/neofetch")
+set_content(f,manNeofetch)
+print "<color=#aaaaaa>  Installed neofetch</color>"
+touch(c,path(manDir),"netcat")
+f=File(c,path(manDir)+"/netcat")
+set_content(f,manNetcat)
+print "<color=#aaaaaa>  Installed netcat</color>"
+touch(c,path(manDir),"net")
+f=File(c,path(manDir)+"/net")
+set_content(f,manNet)
+print "<color=#aaaaaa>  Installed net</color>"
+touch(c,path(manDir),"nmap")
+f=File(c,path(manDir)+"/nmap")
+set_content(f,manNmap)
+print "<color=#aaaaaa>  Installed nmap</color>"
+touch(c,path(manDir),"notes")
+f=File(c,path(manDir)+"/notes")
+set_content(f,manNotes)
+print "<color=#aaaaaa>  Installed notes</color>"
+touch(c,path(manDir),"nslookup")
+f=File(c,path(manDir)+"/nslookup")
+set_content(f,manNslookup)
+print "<color=#aaaaaa>  Installed nslookup</color>"
+touch(c,path(manDir),"open")
+f=File(c,path(manDir)+"/open")
+set_content(f,manOpen)
+print "<color=#aaaaaa>  Installed open</color>"
+touch(c,path(manDir),"pack")
+f=File(c,path(manDir)+"/pack")
+set_content(f,manPack)
+print "<color=#aaaaaa>  Installed pack</color>"
+touch(c,path(manDir),"pacman")
+f=File(c,path(manDir)+"/pacman")
+set_content(f,manPacman)
+print "<color=#aaaaaa>  Installed pacman</color>"
+touch(c,path(manDir),"passwd")
+f=File(c,path(manDir)+"/passwd")
+set_content(f,manPasswd)
+print "<color=#aaaaaa>  Installed passwd</color>"
+touch(c,path(manDir),"pass")
+f=File(c,path(manDir)+"/pass")
+set_content(f,manPasswords)
+print "<color=#aaaaaa>  Installed pass</color>"
+touch(c,path(manDir),"percent")
+f=File(c,path(manDir)+"/percent")
+set_content(f,manPercent)
+print "<color=#aaaaaa>  Installed percent</color>"
+touch(c,path(manDir),"ping")
+f=File(c,path(manDir)+"/ping")
+set_content(f,manPing)
+print "<color=#aaaaaa>  Installed ping</color>"
+touch(c,path(manDir),"pp")
+f=File(c,path(manDir)+"/pp")
+set_content(f,manPingport)
+print "<color=#aaaaaa>  Installed pp</color>"
+touch(c,path(manDir),"pipe")
+f=File(c,path(manDir)+"/pipe")
+set_content(f,manPipe)
+print "<color=#aaaaaa>  Installed pipe</color>"
+touch(c,path(manDir),"paste")
+f=File(c,path(manDir)+"/paste")
+set_content(f,manPaste)
+print "<color=#aaaaaa>  Installed paste</color>"
+touch(c,path(manDir),"pivot")
+f=File(c,path(manDir)+"/pivot")
+set_content(f,manPivot)
+print "<color=#aaaaaa>  Installed pivot</color>"
+touch(c,path(manDir),"ports")
+f=File(c,path(manDir)+"/ports")
+set_content(f,manPorts)
+print "<color=#aaaaaa>  Installed ports</color>"
+touch(c,path(manDir),"post")
+f=File(c,path(manDir)+"/post")
+set_content(f,manPost)
+print "<color=#aaaaaa>  Installed post</color>"
+touch(c,path(manDir),"print")
+f=File(c,path(manDir)+"/print")
+set_content(f,manPrint)
+print "<color=#aaaaaa>  Installed print</color>"
+touch(c,path(manDir),"printf")
+f=File(c,path(manDir)+"/printf")
+set_content(f,manPrintf)
+print "<color=#aaaaaa>  Installed printf</color>"
+touch(c,path(manDir),"pRoot")
+f=File(c,path(manDir)+"/pRoot")
+set_content(f,manPRoot)
+print "<color=#aaaaaa>  Installed pRoot</color>"
+touch(c,path(manDir),"probe")
+f=File(c,path(manDir)+"/probe")
+set_content(f,manProbe)
+print "<color=#aaaaaa>  Installed probe</color>"
+touch(c,path(manDir),"proxy")
+f=File(c,path(manDir)+"/proxy")
+set_content(f,manProxy)
+print "<color=#aaaaaa>  Installed proxy</color>"
+touch(c,path(manDir),"ps")
+f=File(c,path(manDir)+"/ps")
+set_content(f,manPs)
+print "<color=#aaaaaa>  Installed ps</color>"
+touch(c,path(manDir),"pull")
+f=File(c,path(manDir)+"/pull")
+set_content(f,manPull)
+print "<color=#aaaaaa>  Installed pull</color>"
+touch(c,path(manDir),"pwd")
+f=File(c,path(manDir)+"/pwd")
+set_content(f,manPwd)
+print "<color=#aaaaaa>  Installed pwd</color>"
+touch(c,path(manDir),"pwgen")
+f=File(c,path(manDir)+"/pwgen")
+set_content(f,manPwgen)
+print "<color=#aaaaaa>  Installed pwgen</color>"
+touch(c,path(manDir),"pzip")
+f=File(c,path(manDir)+"/pzip")
+set_content(f,manPzip)
+print "<color=#aaaaaa>  Installed pzip</color>"
+touch(c,path(manDir),"qrm")
+f=File(c,path(manDir)+"/qrm")
+set_content(f,manQrm)
+print "<color=#aaaaaa>  Installed qrm</color>"
+touch(c,path(manDir),"rainbow")
+f=File(c,path(manDir)+"/rainbow")
+set_content(f,manRainbow)
+print "<color=#aaaaaa>  Installed rainbow</color>"
+touch(c,path(manDir),"radix")
+f=File(c,path(manDir)+"/radix")
+set_content(f,manRadix)
+print "<color=#aaaaaa>  Installed radix</color>"
+touch(c,path(manDir),"rat")
+f=File(c,path(manDir)+"/rat")
+set_content(f,manRat)
+print "<color=#aaaaaa>  Installed rat</color>"
+touch(c,path(manDir),"reboot")
+f=File(c,path(manDir)+"/reboot")
+set_content(f,manReboot)
+print "<color=#aaaaaa>  Installed reboot</color>"
+touch(c,path(manDir),"recon")
+f=File(c,path(manDir)+"/recon")
+set_content(f,manRecon)
+print "<color=#aaaaaa>  Installed recon</color>"
+touch(c,path(manDir),"rec")
+f=File(c,path(manDir)+"/rec")
+set_content(f,manRec)
+print "<color=#aaaaaa>  Installed rec</color>"
+touch(c,path(manDir),"reload")
+f=File(c,path(manDir)+"/reload")
+set_content(f,manReload)
+print "<color=#aaaaaa>  Installed reload</color>"
+touch(c,path(manDir),"repl")
+f=File(c,path(manDir)+"/repl")
+set_content(f,manRepl)
+print "<color=#aaaaaa>  Installed repl</color>"
+touch(c,path(manDir),"reset")
+f=File(c,path(manDir)+"/reset")
+set_content(f,manReset)
+print "<color=#aaaaaa>  Installed reset</color>"
+touch(c,path(manDir),"rev")
+f=File(c,path(manDir)+"/rev")
+set_content(f,manRev)
+print "<color=#aaaaaa>  Installed rev</color>"
+touch(c,path(manDir),"rmdir")
+f=File(c,path(manDir)+"/rmdir")
+set_content(f,manRmdir)
+print "<color=#aaaaaa>  Installed rmdir</color>"
+touch(c,path(manDir),"rm")
+f=File(c,path(manDir)+"/rm")
+set_content(f,manRm)
+print "<color=#aaaaaa>  Installed rm</color>"
+touch(c,path(manDir),"rnet")
+f=File(c,path(manDir)+"/rnet")
+set_content(f,manRnet)
+print "<color=#aaaaaa>  Installed rnet</color>"
+touch(c,path(manDir),"rn")
+f=File(c,path(manDir)+"/rn")
+set_content(f,manRn)
+print "<color=#aaaaaa>  Installed rn</color>"
+touch(c,path(manDir),"rshell")
+f=File(c,path(manDir)+"/rshell")
+set_content(f,manRshell)
+print "<color=#aaaaaa>  Installed rshell</color>"
+touch(c,path(manDir),"rsync")
+f=File(c,path(manDir)+"/rsync")
+set_content(f,manRsync)
+print "<color=#aaaaaa>  Installed rsync</color>"
+touch(c,path(manDir),"run")
+f=File(c,path(manDir)+"/run")
+set_content(f,manRun)
+print "<color=#aaaaaa>  Installed run</color>"
+touch(c,path(manDir),"scanlan")
+f=File(c,path(manDir)+"/scanlan")
+set_content(f,manScanlan)
+print "<color=#aaaaaa>  Installed scanlan</color>"
+touch(c,path(manDir),"scanlib")
+f=File(c,path(manDir)+"/scanlib")
+set_content(f,manScanlib)
+print "<color=#aaaaaa>  Installed scanlib</color>"
+touch(c,path(manDir),"scanrouter")
+f=File(c,path(manDir)+"/scanrouter")
+set_content(f,manScanrouter)
+print "<color=#aaaaaa>  Installed scanrouter</color>"
+touch(c,path(manDir),"scanaddress")
+f=File(c,path(manDir)+"/scanaddress")
+set_content(f,manScanaddress)
+print "<color=#aaaaaa>  Installed scanaddress</color>"
+touch(c,path(manDir),"scan")
+f=File(c,path(manDir)+"/scan")
+set_content(f,manScan)
+print "<color=#aaaaaa>  Installed scan</color>"
+touch(c,path(manDir),"scp")
+f=File(c,path(manDir)+"/scp")
+set_content(f,manScp)
+print "<color=#aaaaaa>  Installed scp</color>"
+touch(c,path(manDir),"scrub")
+f=File(c,path(manDir)+"/scrub")
+set_content(f,manScrub)
+print "<color=#aaaaaa>  Installed scrub</color>"
+touch(c,path(manDir),"sed")
+f=File(c,path(manDir)+"/sed")
+set_content(f,manSed)
+print "<color=#aaaaaa>  Installed sed</color>"
+touch(c,path(manDir),"sessions")
+f=File(c,path(manDir)+"/sessions")
+set_content(f,manSessions)
+print "<color=#aaaaaa>  Installed sessions</color>"
+touch(c,path(manDir),"server")
+f=File(c,path(manDir)+"/server")
+set_content(f,manServer)
+print "<color=#aaaaaa>  Installed server</color>"
+touch(c,path(manDir),"service")
+f=File(c,path(manDir)+"/service")
+set_content(f,manService)
+print "<color=#aaaaaa>  Installed service</color>"
+touch(c,path(manDir),"set")
+f=File(c,path(manDir)+"/set")
+set_content(f,manSet)
+print "<color=#aaaaaa>  Installed set</color>"
+touch(c,path(manDir),"seq")
+f=File(c,path(manDir)+"/seq")
+set_content(f,manSeq)
+print "<color=#aaaaaa>  Installed seq</color>"
+touch(c,path(manDir),"sha256")
+f=File(c,path(manDir)+"/sha256")
+set_content(f,manSha256)
+print "<color=#aaaaaa>  Installed sha256</color>"
+touch(c,path(manDir),"shadow")
+f=File(c,path(manDir)+"/shadow")
+set_content(f,manShadow)
+print "<color=#aaaaaa>  Installed shadow</color>"
+touch(c,path(manDir),"share")
+f=File(c,path(manDir)+"/share")
+set_content(f,manShare)
+print "<color=#aaaaaa>  Installed share</color>"
+touch(c,path(manDir),"show")
+f=File(c,path(manDir)+"/show")
+set_content(f,manShow)
+print "<color=#aaaaaa>  Installed show</color>"
+touch(c,path(manDir),"smtp")
+f=File(c,path(manDir)+"/smtp")
+set_content(f,manSmtpuserlist)
+print "<color=#aaaaaa>  Installed smtp</color>"
+touch(c,path(manDir),"sniffer")
+f=File(c,path(manDir)+"/sniffer")
+set_content(f,manSniffer)
+print "<color=#aaaaaa>  Installed sniffer</color>"
+touch(c,path(manDir),"sort")
+f=File(c,path(manDir)+"/sort")
+set_content(f,manSort)
+print "<color=#aaaaaa>  Installed sort</color>"
+touch(c,path(manDir),"spawn")
+f=File(c,path(manDir)+"/spawn")
+set_content(f,manSpawn)
+print "<color=#aaaaaa>  Installed spawn</color>"
+touch(c,path(manDir),"specs")
+f=File(c,path(manDir)+"/specs")
+set_content(f,manSpecs)
+print "<color=#aaaaaa>  Installed specs</color>"
+touch(c,path(manDir),"split")
+f=File(c,path(manDir)+"/split")
+set_content(f,manSplit)
+print "<color=#aaaaaa>  Installed split</color>"
+touch(c,path(manDir),"ssh")
+f=File(c,path(manDir)+"/ssh")
+set_content(f,manSsh)
+print "<color=#aaaaaa>  Installed ssh</color>"
+touch(c,path(manDir),"sssh")
+f=File(c,path(manDir)+"/sssh")
+set_content(f,manSssh)
+print "<color=#aaaaaa>  Installed sssh</color>"
+touch(c,path(manDir),"start")
+f=File(c,path(manDir)+"/start")
+set_content(f,manStart)
+print "<color=#aaaaaa>  Installed start</color>"
+touch(c,path(manDir),"stat")
+f=File(c,path(manDir)+"/stat")
+set_content(f,manStat)
+print "<color=#aaaaaa>  Installed stat</color>"
+touch(c,path(manDir),"stats")
+f=File(c,path(manDir)+"/stats")
+set_content(f,manStats)
+print "<color=#aaaaaa>  Installed stats</color>"
+touch(c,path(manDir),"su")
+f=File(c,path(manDir)+"/su")
+set_content(f,manSu)
+print "<color=#aaaaaa>  Installed su</color>"
+touch(c,path(manDir),"swap")
+f=File(c,path(manDir)+"/swap")
+set_content(f,manSwap)
+print "<color=#aaaaaa>  Installed swap</color>"
+touch(c,path(manDir),"system")
+f=File(c,path(manDir)+"/system")
+set_content(f,manSystem)
+print "<color=#aaaaaa>  Installed system</color>"
+touch(c,path(manDir),"tail")
+f=File(c,path(manDir)+"/tail")
+set_content(f,manTail)
+print "<color=#aaaaaa>  Installed tail</color>"
+touch(c,path(manDir),"tar")
+f=File(c,path(manDir)+"/tar")
+set_content(f,manTar)
+print "<color=#aaaaaa>  Installed tar</color>"
+touch(c,path(manDir),"temp")
+f=File(c,path(manDir)+"/temp")
+set_content(f,manTemp)
+print "<color=#aaaaaa>  Installed temp</color>"
+touch(c,path(manDir),"tee")
+f=File(c,path(manDir)+"/tee")
+set_content(f,manTee)
+print "<color=#aaaaaa>  Installed tee</color>"
+touch(c,path(manDir),"time")
+f=File(c,path(manDir)+"/time")
+set_content(f,manTime)
+print "<color=#aaaaaa>  Installed time</color>"
+touch(c,path(manDir),"touch")
+f=File(c,path(manDir)+"/touch")
+set_content(f,manTouch)
+print "<color=#aaaaaa>  Installed touch</color>"
+touch(c,path(manDir),"tree")
+f=File(c,path(manDir)+"/tree")
+set_content(f,manTree)
+print "<color=#aaaaaa>  Installed tree</color>"
+touch(c,path(manDir),"tr")
+f=File(c,path(manDir)+"/tr")
+set_content(f,manTr)
+print "<color=#aaaaaa>  Installed tr</color>"
+touch(c,path(manDir),"trim")
+f=File(c,path(manDir)+"/trim")
+set_content(f,manTrim)
+print "<color=#aaaaaa>  Installed trim</color>"
+touch(c,path(manDir),"uniq")
+f=File(c,path(manDir)+"/uniq")
+set_content(f,manUniq)
+print "<color=#aaaaaa>  Installed uniq</color>"
+touch(c,path(manDir),"uptime")
+f=File(c,path(manDir)+"/uptime")
+set_content(f,manUptime)
+print "<color=#aaaaaa>  Installed uptime</color>"
+touch(c,path(manDir),"useradd")
+f=File(c,path(manDir)+"/useradd")
+set_content(f,manUseradd)
+print "<color=#aaaaaa>  Installed useradd</color>"
+touch(c,path(manDir),"userdel")
+f=File(c,path(manDir)+"/userdel")
+set_content(f,manUserdel)
+print "<color=#aaaaaa>  Installed userdel</color>"
+touch(c,path(manDir),"vfile")
+f=File(c,path(manDir)+"/vfile")
+set_content(f,manVfile)
+print "<color=#aaaaaa>  Installed vfile</color>"
+touch(c,path(manDir),"vi")
+f=File(c,path(manDir)+"/vi")
+set_content(f,manVi)
+print "<color=#aaaaaa>  Installed vi</color>"
+touch(c,path(manDir),"wait")
+f=File(c,path(manDir)+"/wait")
+set_content(f,manWait)
+print "<color=#aaaaaa>  Installed wait</color>"
+touch(c,path(manDir),"wallet")
+f=File(c,path(manDir)+"/wallet")
+set_content(f,manWallet)
+print "<color=#aaaaaa>  Installed wallet</color>"
+touch(c,path(manDir),"wc")
+f=File(c,path(manDir)+"/wc")
+set_content(f,manWc)
+print "<color=#aaaaaa>  Installed wc</color>"
+touch(c,path(manDir),"web")
+f=File(c,path(manDir)+"/web")
+set_content(f,manWeb)
+print "<color=#aaaaaa>  Installed web</color>"
+touch(c,path(manDir),"whatami")
+f=File(c,path(manDir)+"/whatami")
+set_content(f,manWhatami)
+print "<color=#aaaaaa>  Installed whatami</color>"
+touch(c,path(manDir),"whoami")
+f=File(c,path(manDir)+"/whoami")
+set_content(f,manWhoami)
+print "<color=#aaaaaa>  Installed whoami</color>"
+touch(c,path(manDir),"whois")
+f=File(c,path(manDir)+"/whois")
+set_content(f,manWhois)
+print "<color=#aaaaaa>  Installed whois</color>"
+touch(c,path(manDir),"wipe")
+f=File(c,path(manDir)+"/wipe")
+set_content(f,manWipe)
+print "<color=#aaaaaa>  Installed wipe</color>"
+touch(c,path(manDir),"write")
+f=File(c,path(manDir)+"/write")
+set_content(f,manWrite)
+print "<color=#aaaaaa>  Installed write</color>"
+touch(c,path(manDir),"yes")
+f=File(c,path(manDir)+"/yes")
+set_content(f,manYes)
+print "<color=#aaaaaa>  Installed yes</color>"
+touch(c,path(manDir),"x")
+f=File(c,path(manDir)+"/x")
+set_content(f,manX)
+print "<color=#aaaaaa>  Installed x</color>"
+touch(c,path(manDir),"xclip")
+f=File(c,path(manDir)+"/xclip")
+set_content(f,manXclip)
+print "<color=#aaaaaa>  Installed xclip</color>"
+touch(c,path(manDir),"zap")
+f=File(c,path(manDir)+"/zap")
+set_content(f,manZap)
+print "<color=#aaaaaa>  Installed zap</color>"
+touch(c,path(manDir),"zip")
+f=File(c,path(manDir)+"/zip")
+set_content(f,manZip)
+print "<color=#aaaaaa>  Installed zip</color>"
+print "<color=#20ff98>Finished installing man pages to "+payload+"/man</color>"
+if params.indexOf("--delete") != null then
+  f=File(c,program_path)
+  if f then delete(f)
+  print "<color=#20ff98>Installer deleted.</color>"
+end if

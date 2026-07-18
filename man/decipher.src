@@ -1,0 +1,56 @@
+// Man page for decipher
+manDecipher="DECIPHER(1)                      X Shell Manual                      DECIPHER(1)
+
+<b>NAME</b>
+    decipher - used for deciphering MD5 hashes
+<b>SYNOPSIS</b>
+    <b>decipher</b> HASH
+    <b>decipher</b> (<b>-d</b>) HASH
+    <b>decipher</b> FILE
+    <b>decipher</b> (<b>-u</b>) USER (<b>-d</b>) FILE
+<b>DESCRIPTION</b>
+    Can also make use of redirects and --post.
+    *** Redirect input is never printed to the tty ***
+<b>OPTIONS</b>
+    <b>HASH</b> - Decipher Hash
+      Use Crypto to decipher the hash.
+
+    <b>-d HASH</b> - Dictionary Crack
+      Use a dictionary list to crack hashes.
+
+    <b>FILE</b> - Decipher File
+      Decipher a file.
+
+    <b>-u USER FILE</b> - Target User
+      User to target from a file.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man decipher</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>decipher</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Hash Cracking</color>
+    <b>decipher 5f4dcc3b5aa765d61d8327deb882cf99</b>
+    Decipher single hash
+
+    <b>decipher -d 5f4dcc3b5aa765d61d8327deb882cf99</b>
+    Dictionary attack on hash
+
+    <color=#e4ff34># File Cracking</color>
+    <b>decipher /etc/passwd</b>
+    Decipher passwd file
+
+    <b>decipher /etc/passwd -u root</b>
+    Target root user
+
+    <b>decipher /etc/passwd -u root -d</b>
+    Dictionary attack on root
+
+    <color=#e4ff34># With Redirects</color>
+    <b>decipher params --post</b>
+    Use --post redirect
+<b>SEE ALSO</b>
+    <b>hc</b>, <b>hf</b>"

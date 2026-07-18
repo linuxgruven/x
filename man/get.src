@@ -1,0 +1,44 @@
+// Man page for get
+// XFIX1.0: get -z / bestSize obsolete on Grey Hack 1.0 — see man/1.0 get.src
+manGet="GET(1)                           X Shell Manual                           GET(1)
+
+<b>NAME</b>
+    get - bank accounts, email accounts, map|proxy accounts...
+<b>SYNOPSIS</b>
+    <b>get </b><b>-p</b>
+    <b>get </b><b>-z</b> [<b>-c</b>]
+    <b>get </b><b>-i</b>
+    <b>get </b><b>-w</b>
+    <b>get </b><b>-n</b> [<b>-c</b> [<b>QUANTITY</b>] [<b>-s</b>] [<b>-n</b> [<b>SAVE[NAME]</b>])
+    <b>get </b><b>-m</b> [<b>-c</b> [<b>QUANTITY</b>] [<b>-d</b>] [<b>-s</b>] [<b>-n</b> [<b>SAVE[NAME]</b>])
+    <b>get </b><b>-b</b> [<b>-c</b> [<b>QUANTITY</b>] [<b>-d</b>] [<b>-s</b>] [<b>-n</b> [<b>SAVE[NAME]</b>])
+    <b>get </b><b>-e</b> [<b>-c</b> [<b>QUANTITY</b>] [<b>-d</b>] [<b>-s</b>] [<b>-n</b> [<b>SAVE[NAME]</b>])
+<b>DESCRIPTION</b>
+    <b>get</b> will use a dictionary attack by default. If you want|need to use
+    decipher then pass the -d flag. [QUANTITY] has a 'fuzzy' meaning it will target
+    [QUANTITY] systems so you will get >=[QUANTITY]. If the -s flag is specified then
+    will use shells. If [QUANTITY] is omitted then will fetch 1 account for proxy,
+    10 for emails|banks and 100 for names
+<b>OPTIONS</b>
+    <b>get </b><b>-p</b>
+    Download the passwd file.
+    <b>get </b><b>-z</b>
+    Determine the best letter combination for the smallest file compile size.
+    Pass <b>-c</b> to keep searching past the first match (continuous mode; press 'q' to stop).
+    (Pre-1.0 only. On Grey Hack 1.0 compile size follows source length — this option is obsolete.)
+    <b>get </b><b>-i</b>
+    View local network status.
+    <b>get </b><b>-w</b>
+    Show wifi information.
+    <b>get </b><b>-n</b> [<b>-c</b> [<b>QUANTITY</b>] [<b>-s</b>] [<b>-n</b> [<b>SAVE[NAME]</b>])
+    Get amount of random names. For [QUANTITY] <= 19k should be safe.
+    Prerequisites: shell, main, proxy, or pivot
+    <b>get </b><b>-m</b> [<b>-c</b> [<b>QUANTITY</b>] [<b>-d</b>] [<b>-s</b>] [<b>-n</b> [<b>SAVE[NAME]</b>])
+    Get map|proxy accounts.
+    Prerequisites: shell, main, proxy, or pivot
+    <b>get </b><b>-b</b> [<b>-c</b> [<b>QUANTITY</b>] [<b>-d</b>] [<b>-s</b>] [<b>-n</b> [<b>SAVE[NAME]</b>])
+    Get amount of bank accounts.
+    Prerequisites: shell, main, proxy, or pivot
+    <b>get </b><b>-e</b> [<b>-c</b> [<b>QUANTITY</b>] [<b>-d</b>] [<b>-s</b>] [<b>-n</b> [<b>SAVE[NAME]</b>])
+    Get amount of email accounts.
+    Prerequisites: shell, main, proxy, or pivot"

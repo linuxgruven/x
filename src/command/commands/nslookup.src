@@ -1,0 +1,14 @@
+// =============================================================================
+// NSLOOKUP
+// Resolve a hostname to an IP address.
+// =============================================================================
+Command.nslookup=function(argv)
+  if not argv then return Man.help(["nslookup"])
+  hostname=argv[0]
+  result=nslookup(hostname)
+  if globals.G_pipe.PIPE_MODE then
+    push(globals.G_pipe.stdout,result)
+    return
+  end if
+  print blue("Address: "+result)
+end function

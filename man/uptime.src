@@ -1,0 +1,13 @@
+// Man page for uptime
+manUptime="UPTIME(7)                        X Shell Manual                        UPTIME(7)
+
+<b>NAME</b>
+    uptime - Display x session uptime
+<b>SYNOPSIS</b>
+    <b>uptime</b>
+<b>DESCRIPTION</b>
+    Display the current x session uptime showing how long
+    the x environment has been running.
+<b>EXAMPLE:</b>
+    <b>uptime</b>
+    Show x session uptime"

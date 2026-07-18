@@ -1,0 +1,43 @@
+// Man page for ln
+manLn="LN(1)                            X Shell Manual                            LN(1)
+
+<b>NAME</b>
+    ln - Create and manage symbolic links
+<b>SYNOPSIS</b>
+    <b>ln</b> SOURCEFILE DESTPATH
+    <b>ln</b> <b>-l</b>
+<b>DESCRIPTION</b>
+    Symbolic link management tool. Creates indirect file pointers for
+    filesystem navigation and organization. Links reference original files
+    without duplicating data. If DESTPATH is an existing folder, the link
+    uses the source filename. If DESTPATH includes a filename, it becomes
+    the link name.
+    Supports glob patterns: <b>ln *.so /lib/</b>, <b>ln bin/* /usr/bin/</b>
+<b>OPTIONS</b>
+    <b>ln SOURCEFILE DESTPATH</b>
+    Create symbolic link
+    DESTPATH can be a folder or a full path with link name
+
+    <b>ln -l</b>
+    List all symbolic links
+    Show system-wide links
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Creating Links</color>
+    <b>ln /bin/important /home/shortcuts</b>
+    Link to shortcuts folder (keeps source name)
+
+    <b>ln /var/logs/system.log /home/user/access_log</b>
+    Custom link name
+
+    <color=#e4ff34># File Organization</color>
+    <b>ln /etc/config.conf /home/user/myconfig</b>
+    Easy access link
+
+    <b>ln /lib/crypto.so /root/libs</b>
+    Library shortcut
+
+    <color=#e4ff34># Listing Links</color>
+    <b>ln -l</b>
+    Display all symbolic links
+<b>SEE ALSO</b>
+    <b>cp</b>, <b>mv</b>, <b>ls</b>"

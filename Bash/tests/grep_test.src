@@ -1,0 +1,94 @@
+// grep_test.src
+// Tests for grep flags using _dig --text output
+// _dig --text returns 9 lines, one per section:
+//   line 1=U  line 2=E(emails)  line 3=B  line 4=R(rshell)
+//   line 5=G  line 6=F  line 7=S  line 8=PIP  line 9=type
+// Flag summary (Linux-equivalent):
+//   -n  = line numbers (like linux grep -n)
+//   -l  = list files with matches (like linux grep -l) — file mode only, not pipe
+//   -v  = invert match
+//   -c  = count matching lines
+//   -o  = count occurrences (use -e -o for all occurrences)
+// Usage: @grep_test
+
+// --- Single _dig call ---
+_setvar(result, _dig -e --text --quiet)
+
+_print green(=== grep tests ===)
+_print white(------------------------------)
+
+// --- Test 1: basic match — email section contains @ ---
+_print cyan(Test 1: basic match @ — email section line)
+echo _getvar(result) | grep @
+_print white(------------------------------)
+
+// --- Test 2: -c count — how many lines contain @ (E + R both have emails) ---
+_print cyan(Test 2: -c count lines with @)
+echo _getvar(result) | grep -c @
+_print white(------------------------------)
+
+// --- Test 3: -e -o occurrences — regex mode counts ALL @ hits; literal -o only finds first per line ---
+_print cyan(Test 3: -e -o total @ occurrences = email count)
+echo _getvar(result) | grep -e -o @
+_print white(------------------------------)
+
+// --- Test 4: -v invert — sections with no email addresses ---
+_print cyan(Test 4: -v invert — sections without @)
+echo _getvar(result) | grep -v @
+_print white(------------------------------)
+
+// --- Test 5: MISSING entries ---
+_print cyan(Test 5: grep MISSING — users with no email found)
+echo _getvar(result) | grep MISSING
+_print white(------------------------------)
+
+// --- Test 6: -i case-insensitive ---
+_print cyan(Test 6: -i case-insensitive match on MISSING)
+echo _getvar(result) | grep -i missing
+_print white(------------------------------)
+
+// --- Test 7: -n line numbers — outputs lineNum:line for each match ---
+_print cyan(Test 7: -n line number prefix on each match)
+echo _getvar(result) | grep -n @
+_print white(------------------------------)
+
+// --- Test 8: -m max — first line with @ only ---
+_print cyan(Test 8: -m 1 max matches)
+echo _getvar(result) | grep -m 1 @
+_print white(------------------------------)
+
+// --- Test 9: -e regex — PIP line starts with digit ---
+_print cyan(Test 9: -e regex ^[0-9] — find PIP line)
+echo _getvar(result) | grep -e "^[0-9]"
+_print white(------------------------------)
+
+// --- Test 10: -e IP pattern — lines containing x.x octets ---
+_print cyan(Test 10: -e regex IP pattern — sections with IPs)
+echo _getvar(result) | grep -e "[0-9]\.[0-9]"
+_print white(------------------------------)
+
+// --- Test 11: -A after context — PIP line + type line after it ---
+_print cyan(Test 11: -A 1 — PIP line plus type line after)
+echo _getvar(result) | grep -A 1 -e "^[0-9]"
+_print white(------------------------------)
+
+// --- Test 12: -B before context — section before PIP ---
+_print cyan(Test 12: -B 1 — section before PIP line)
+echo _getvar(result) | grep -B 1 -e "^[0-9]"
+_print white(------------------------------)
+
+// --- Test 13: grep | awk — subnet mask from PIP line ---
+_print cyan(Test 13: grep | awk — subnet mask from PIP)
+echo _getvar(result) | grep -e "^[0-9]" | awk -F. '{print $1"."$2".0.0/16"}'
+_print white(------------------------------)
+
+// --- Test 14: grep | cut — first octet of PIP ---
+_print cyan(Test 14: grep | cut — first octet of PIP)
+echo _getvar(result) | grep -e "^[0-9]" | cut -d. -f1
+_print white(------------------------------)
+
+// --- Test 15: section-level limitation — grep -v MISSING drops the ENTIRE email line ---
+// because MISSING appears anywhere within the section. No per-entry filtering possible this way.
+_print cyan(Test 15: grep | grep -v MISSING — drops whole section if any entry has MISSING)
+echo _getvar(result) | grep @ | grep -v MISSING
+_print white(------------------------------)

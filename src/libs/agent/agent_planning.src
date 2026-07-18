@@ -1,0 +1,1344 @@
+// =============================================================================
+// AGENT_PLANNING
+// AI agent planning; plan creation, strategy generation, and goal decomposition.
+// =============================================================================
+AgentPlanning={}
+AgentPlanning._LOCAL_OPS=["directCommand","navigation","fileOp","fileContent","permissions"]
+AgentPlanning._DANGEROUS_OPS=["wipe","bomb","ddos","0day","encrypt"]
+AgentPlanning._MODERATE_OPS=["tux","exploit","crack","escalate"]
+AgentPlanning._COMPLEX_OPS=["escalate","backdoor","0day"]
+AgentPlanning._COMMAND_MAPPING={"fetch":"scan","scan":"scan","exploit":"exploit","crack":"crack","escalate":"su","proxy":"proxy","pivot":"pivot","nmap":"nmap","dig":"deepscan","decipher":"decipher","tux":"adduser","backdoor":"backdoor","encrypt":"encrypt","decrypt":"decrypt","build":"build","sniffer":"sniffer"}
+AgentPlanning._SYNONYM_GROUPS=[["space","free","available","capacity","remaining","left"],["find","search","locate","discover"],["list","show","display","print"],["delete","remove","erase"],["copy","duplicate"],["move","relocate"],["create","make","new"]]
+AgentPlanning._expandSubnet=function(subnet)
+  debug=globals.G_agent.config.debug
+  //Parse CIDR notation: 192.168.1.0/24
+  if indexOf(subnet,"/")==null then return [subnet]  //Not a subnet, return as-is
+  parts=split(subnet,"\/")
+  if len(parts)!=2 then return [subnet]
+  baseIP=parts[0]
+  mask=parts[1].val
+  if not mask or mask<1 or mask>32 then return [subnet]
+  //Calculate how many IPs will be scanned (prompt user if configured)
+  ipCount=0
+  if mask==24 then
+    ipCount=254
+  else if mask>=25 and mask<=30 then
+    ipCount=2^(32-mask)-2
+  end if
+  if ipCount>0 and globals.G_agent.config.promptOnSlow then
+    shouldExpand=globals.G_agent.promptUser("This will scan "+ipCount+" IP addresses. Continue?",{"type":"subnet_expansion","details":"Subnet: "+subnet+" ("+ipCount+" IPs)"},true)
+    if not shouldExpand then
+      if debug then print green("[DEBUG] Agent: Subnet expansion cancelled by user")
+      return [subnet]
+    end if
+  end if
+  //For /24, generate all IPs in range
+  if mask==24 then
+    octets=split(baseIP,".")
+    if len(octets)!=4 then return [subnet]
+    base=octets[0]+"."+octets[1]+"."+octets[2]+"."
+    ips=[]
+    i=1;while i<=254;push(ips,base+i);i+=1;end while
+    if debug then print green("[DEBUG] Agent: Expanded /24 subnet to "+len(ips)+" IPs")
+    return ips
+  end if
+  //For /25-/30, calculate smaller ranges
+  if mask>=25 and mask<=30 then
+    octets=split(baseIP,".")
+    if len(octets)!=4 then return [subnet]
+    base=octets[0]+"."+octets[1]+"."+octets[2]+"."
+    lastOctet=octets[3].val
+    rangeSize=2^(32-mask)
+    ips=[]
+    _len=rangeSize-2;i=1;while i<=_len;push(ips,base+(lastOctet+i));i+=1;end while
+    if debug then print green("[DEBUG] Agent: Expanded /"+mask+" subnet to "+len(ips)+" IPs")
+    return ips
+  end if
+  return [subnet]  //Unsupported mask, return as-is
+end function
+AgentPlanning._extractIps=function(text)
+  ips=[]
+  //Simple pattern matching for IPs (not perfect but functional)
+  parts=split(text," ")
+  for part in parts
+    //Remove trailing punctuation (comma, period, etc)
+    part=part.replace(",","").replace(";","")
+    //Skip empty strings after cleanup
+    if len(part)==0 then continue
+    //Handle CIDR notation (e.g., 192.168.1.0/24)
+    cidrPart=part
+    if indexOf(part,"/")!=null then
+      cidrPart=split(part,"\/")[0]
+      //Keep the full CIDR notation as well
+      //Check if it looks like an IP by counting dots
+      dotCount=0
+      _len=len(part);i=0;while i<_len;if part[i]=="." then dotCount+=1;i+=1;end while
+      if dotCount==3 then
+        //This is likely a CIDR notation IP, keep it as-is
+        push(ips,part)
+        continue
+      end if
+    end if
+    //Check if it looks like an IP by counting dots
+    //Skip if cidrPart is empty
+    _len=len(cidrPart)
+    if _len==0 then continue
+    dotCount=0
+    i=0;while i<_len;if cidrPart[i]=="." then dotCount+=1;i+=1;end while
+    if dotCount==3 then
+      segments=split(cidrPart,"\.")
+      valid=true
+      if len(segments)==4 then
+        for seg in segments
+          if to_int(seg)<0 or to_int(seg)>255 then
+            valid=false
+            break
+          end if
+        end for
+        if valid then push(ips,cidrPart)
+      end if
+    end if
+  end for
+  return ips
+end function
+//Classify IP as public or private
+AgentPlanning._isPrivateIp=function(ip)
+  if not ip or typeof(ip)!="string" then return false
+  parts=split(ip,"\.")
+  if len(parts)!=4 then return false
+  //Verify we have enough elements (defensive programming)
+  if len(parts)<2 then return false
+  //Safely convert with bounds checking
+  if len(parts)>=1 then first=to_int(parts[0]) else return false
+  if len(parts)>=2 then second=to_int(parts[1]) else return false
+  if first==10 then return true
+  if first==172 and second>=16 and second<=31 then return true
+  if first==192 and second==168 then return true
+  if first==127 then return true
+  return false
+end function
+//Prompt user with yes/no question
+AgentPlanning._promptUser=function(question,defaultYes=true)
+  outLvl=globals.G_agent.config.outputLevel
+  if outLvl==0 then return defaultYes
+  if typeof(Gui)!="map" or not hasIndex(Gui,"yesno") then return defaultYes
+  response=Gui.yesno(question)
+  if response==null then return defaultYes
+  return response
+end function
+//Ask user a question and get response
+AgentPlanning._askUser=function(question, options=null)
+  outLvl=globals.G_agent.config.outputLevel
+  if outLvl==0 then return null
+  if typeof(Gui)!="map" or not hasIndex(Gui,"input") then return null
+  if options then
+    //Multiple choice
+    if hasIndex(Gui,"choiceAnykey") then
+      choices=[]
+      for opt in options;push(choices,opt);end for
+      result=Gui.choiceHybrid(choices,{},0,false,true)
+      if result>=0 and result<len(options) then return options[result]
+      return null
+    end if
+  end if
+  //Free text input
+  inputConfig={}
+  inputConfig.text=question
+  result=Gui.input(inputConfig)
+  return result
+end function
+//Generic command executor helper
+AgentPlanning._execCommand=function(Obj,cmdName,argv,context)
+  result={"success":false}
+  if hasIndex(Obj.commands,cmdName) then
+    f=Obj.commands[cmdName]
+    cmdResult=f(argv)
+    result.success=true
+    result.data=cmdResult
+    if context then context[cmdName+"_data"]=cmdResult
+  else
+    result.error=cmdName+" command not available"
+  end if
+  return result
+end function
+//AI risk assessment for operations
+AgentPlanning._assessRisk=function(operation, context)
+  outLvl=globals.G_agent.config.outputLevel
+  risk={"level":"low","score":0,"factors":[]}
+  //Skip risk assessment for local/simple commands
+  localOps=self._LOCAL_OPS
+  for op in localOps;if operation==op then return risk;end for
+  if outLvl>=2 then print yellow("[!] AI: Risk analysis for operation '"+operation+"'...")
+  //High-risk operations
+  dangerousOps=self._DANGEROUS_OPS
+  for op in dangerousOps
+    if operation==op then
+      risk.level="critical"
+      risk.score+=50
+      push(risk.factors,"Destructive operation")
+      if outLvl>=2 then print yellow("  * Destructive operation detected (+50 pts)")
+      break
+    end if
+  end for
+  //Medium-risk operations
+  moderateOps=self._MODERATE_OPS
+  for op in moderateOps
+    if indexOf(lower(operation),op)!=null then
+      risk.score+=25
+      push(risk.factors,"Security-sensitive operation")
+      if outLvl>=2 then print yellow("  * Security-sensitive operation (+25 pts)")
+      break
+    end if
+  end for
+  //Context-based risk factors
+  if hasIndex(context,"target") then
+    if not globals.G_agent._isPrivateIp(context.target) then
+      risk.score+=20
+      push(risk.factors,"Public IP target")
+      if outLvl>=2 then print yellow("  * Public IP target (+20 pts)")
+    end if
+  end if
+  //Check if we have a fallback
+  if not hasIndex(context,"shell") and not hasIndex(context,"backupShell") then
+    risk.score+=15
+    push(risk.factors,"No fallback shell")
+    if outLvl>=2 then print yellow("  * No fallback shell (+15 pts)")
+  end if
+  //Determine risk level by score
+  if risk.score>=50 then
+    risk.level="critical"
+  else if risk.score>=25 then
+    risk.level="high"
+  else if risk.score>=10 then
+    risk.level="medium"
+  else
+    risk.level="low"
+  end if
+  if outLvl>=2 then print yellow("  -> Total risk: "+risk.score+" pts ("+upper(risk.level)+")")
+  return risk
+end function
+//AI success prediction based on context
+AgentPlanning._predictSuccess=function(stepType, context)
+  outLvl=globals.G_agent.config.outputLevel
+  prediction={"confidence":0.5,"factors":[]}
+  if outLvl>=2 then print yellow("[AI] Predicting success for '"+stepType+"'...")
+  //Higher confidence if we've succeeded before
+  successCount=0
+  totalCount=0
+  for entry in globals.G_agent.history
+    if hasIndex(entry,"result") and hasIndex(entry.result,"stepsCompleted") then
+      totalCount+=1
+      if entry.result.success then successCount+=1
+    end if
+  end for
+  if totalCount>0 then
+    baseConfidence=successCount/totalCount
+    prediction.confidence=baseConfidence
+    push(prediction.factors,"Historical success rate: "+round(baseConfidence*100)+"%")
+    if outLvl>=2 then print yellow("  * Historical rate: "+round(baseConfidence*100)+"% ("+successCount+"/"+totalCount+" succeeded)")
+  end if
+  //Boost confidence if we have necessary tools
+  if stepType=="scan" or stepType=="exploit" or stepType=="crack" then
+    if hasIndex(context,"availableExploits") and len(context.availableExploits)>0 then
+      prediction.confidence+=0.2
+      push(prediction.factors,"Multiple exploits available")
+      if outLvl>=2 then print yellow("  * Multiple exploits available (+0.2 confidence)")
+    end if
+  end if
+  //Reduce confidence for complex operations without prep
+  complexOps=self._COMPLEX_OPS
+  for op in complexOps
+    if stepType==op then
+      if not hasIndex(context,"scanData") then
+        prediction.confidence-=0.2
+        push(prediction.factors,"Insufficient reconnaissance")
+        if outLvl>=2 then print yellow("  * Missing scan data (-0.2 confidence)")
+      end if
+      break
+    end if
+  end for
+  //Cap confidence
+  if prediction.confidence>0.95 then prediction.confidence=0.95
+  if prediction.confidence<0.1 then prediction.confidence=0.1
+  if outLvl>=2 then print green("  -> Predicted confidence: "+round(prediction.confidence*100)+"%")
+  return prediction
+end function
+//Create alternative plan when critical step fails
+AgentPlanning._createAlternativePlan=function(Obj,failedStep,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  plan={"steps":[]}
+  if outLvl>=2 then print yellow("[AI] Analyzing alternatives for failed '"+failedStep.type+"'...")
+  if debug then print skyblue("Agent: Creating alternative plan for failed "+failedStep.type)
+  //Alternative strategies based on failure type
+  if failedStep.type=="scan" then
+    //Try different scan tool
+    if hasIndex(failedStep,"tool") and failedStep.tool=="scan" then
+      push(plan.steps,{"type":"scan","tool":"nmap","target":failedStep.target,"description":"Retry scan with nmap"})
+      if outLvl>=2 then print yellow("  * Alternative 1: Retry with nmap")
+    else if hasIndex(failedStep,"tool") and failedStep.tool=="nmap" then
+      push(plan.steps,{"type":"recon","target":failedStep.target,"description":"Switch to reconnaissance approach"})
+      if outLvl>=2 then print yellow("  * Alternative 1: Switch to reconnaissance")
+    end if
+  else if failedStep.type=="exploit" then
+    //Try different exploit or manual approach
+    if hasIndex(context,"availableExploits") and len(context.availableExploits)>1 then
+      push(plan.steps,{"type":"exploit","description":"Retry with next best exploit","retryCount":1})
+      if outLvl>=2 then print yellow("  * Alternative 1: Try next exploit from list")
+    else
+      push(plan.steps,{"type":"crack","description":"Attempt credential cracking instead"})
+      if outLvl>=2 then print yellow("  * Alternative 1: Switch to credential cracking")
+    end if
+  else if failedStep.type=="escalate" then
+    //Try alternative escalation methods
+    push(plan.steps,{"type":"findEscalation","description":"Search for alternative escalation vectors"})
+    push(plan.steps,{"type":"crack","crackType":"password","description":"Attempt password cracking for privilege escalation"})
+    if outLvl>=2 then
+      print yellow("  * Alternative 1: Search for escalation vectors")
+      print yellow("  * Alternative 2: Password cracking for privesc")
+    end if
+  else if failedStep.type=="crackPassword" or failedStep.type=="crackShell" then
+    //Try different cracking approach
+    push(plan.steps,{"type":"recon","description":"Gather more intelligence for targeted attack"})
+    if outLvl>=2 then print yellow("  * Alternative 1: Gather more intelligence")
+  end if
+  if len(plan.steps)==0 then
+    if outLvl>=2 then print yellow("  [X] No alternative strategy available")
+  else
+    if outLvl>=2 then print green("  -> Injecting "+len(plan.steps)+" alternative step(s) into plan")
+  end if
+  return plan
+end function
+//AI adaptive strategy based on failures
+AgentPlanning._adaptStrategy=function(context)
+  outLvl=globals.G_agent.config.outputLevel
+  if len(globals.G_agent.history)==0 then return {"adjusted":false}
+  //Check recent failures
+  recentFailures=0
+  recentOps=3  //Look at last 3 operations
+  startIdx=len(globals.G_agent.history)-recentOps
+  if startIdx<0 then startIdx=0
+  _len=len(globals.G_agent.history);i=startIdx;while i<_len
+    entry=globals.G_agent.history[i]
+    if hasIndex(entry,"result") and hasIndex(entry.result,"success") then
+      if not entry.result.success then recentFailures+=1
+    end if
+  i+=1;end while
+  adaptation={"adjusted":false,"changes":[]}
+  //If multiple failures, become more aggressive
+  if recentFailures>=2 then
+    if outLvl>=2 then print yellow("[AI] Strategy adaptation triggered ("+recentFailures+" recent failures)...")
+    if not globals.G_agent.config.aggressive then
+      globals.G_agent.config.aggressive=true
+      adaptation.adjusted=true
+      push(adaptation.changes,"Switched to aggressive mode")
+      if outLvl>=2 then print yellow("  * Switching aggressive mode: OFF -> ON")
+    end if
+    //Reduce stealth if failing
+    if globals.G_agent.config.stealth then
+      globals.G_agent.config.stealth=false
+      adaptation.adjusted=true
+      push(adaptation.changes,"Disabled stealth mode")
+      if outLvl>=2 then print yellow("  * Disabling stealth for better success rate")
+    end if
+  end if
+  if adaptation.adjusted and outLvl>=2 then print green("  -> Strategy adapted: "+join(adaptation.changes,", "))
+  return adaptation
+end function
+//Plan builder registry - maps action names to builder functions
+AgentPlanning._initPlanBuilders=function
+  globals.G_agent._planBuilders={}
+  //Register all plan builders
+  globals.G_agent._planBuilders.autonomous=@globals.G_agent._buildAutonomousPlan
+  globals.G_agent._planBuilders.knowledge=@globals.G_agent._buildKnowledgePlan
+  globals.G_agent._planBuilders.getObject=@globals.G_agent._buildGetObjectPlan
+  globals.G_agent._planBuilders.extractData=@globals.G_agent._buildExtractDataPlan
+  globals.G_agent._planBuilders.scan=@globals.G_agent._buildScanPlan
+  globals.G_agent._planBuilders.crackAll=@globals.G_agent._buildCrackAllPlan
+  globals.G_agent._planBuilders.exploit=@globals.G_agent._buildExploitPlan
+  globals.G_agent._planBuilders.attack=@globals.G_agent._buildAttackPlan
+  globals.G_agent._planBuilders.escalate=@globals.G_agent._buildEscalatePlan
+  globals.G_agent._planBuilders.recon=@globals.G_agent._buildReconPlan
+  globals.G_agent._planBuilders.backdoor=@globals.G_agent._buildBackdoorPlan
+  globals.G_agent._planBuilders.directCommand=@globals.G_agent._buildDirectCommandPlan
+  globals.G_agent._planBuilders.view=@globals.G_agent._buildViewPlan
+  globals.G_agent._planBuilders.open=@globals.G_agent._buildViewPlan
+  globals.G_agent._planBuilders.browser=@globals.G_agent._buildBrowserPlan
+  globals.G_agent._planBuilders.fetch=@globals.G_agent._buildFetchPlan
+  globals.G_agent._planBuilders.proxy=@globals.G_agent._buildProxyPlan
+  globals.G_agent._planBuilders.pivot=@globals.G_agent._buildProxyPlan
+  globals.G_agent._planBuilders.su=@globals.G_agent._buildSuPlan
+  //Hunt command builder
+  globals.G_agent._planBuilders.hunt=@globals.G_agent._buildHuntPlan
+  //Config management builders
+  globals.G_agent._planBuilders.setConfig=@globals.G_agent._buildSetConfigPlan
+  globals.G_agent._planBuilders.showConfig=@globals.G_agent._buildShowConfigPlan
+  globals.G_agent._planBuilders.resetConfig=@globals.G_agent._buildResetConfigPlan
+  globals.G_agent._planBuilders.showMyIp=@globals.G_agent._buildShowMyIpPlan
+  //Simple command builders (group similar actions)
+  globals.G_agent._planBuilders.nmap=@globals.G_agent._buildNetworkCmdPlan
+  globals.G_agent._planBuilders.dig=@globals.G_agent._buildNetworkCmdPlan
+  globals.G_agent._planBuilders.ping=@globals.G_agent._buildNetworkCmdPlan
+  globals.G_agent._planBuilders.whois=@globals.G_agent._buildNetworkCmdPlan
+  globals.G_agent._planBuilders.ports=@globals.G_agent._buildNetworkCmdPlan
+  globals.G_agent._planBuilders.nslookup=@globals.G_agent._buildNetworkCmdPlan
+  globals.G_agent._planBuilders.lsof=@globals.G_agent._buildNetworkCmdPlan
+  globals.G_agent._planBuilders.build=@globals.G_agent._buildBuildExecPlan
+  globals.G_agent._planBuilders.exec=@globals.G_agent._buildBuildExecPlan
+  globals.G_agent._planBuilders.make=@globals.G_agent._buildBuildExecPlan
+  //File operation commands
+  globals.G_agent._planBuilders.copy=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.move=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.remove=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.rm=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.cp=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.mv=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.mkdir=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.touch=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.ln=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.rmdir=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.mkcd=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.file=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.tree=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.vi=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.open=@globals.G_agent._buildFileOpPlan
+  globals.G_agent._planBuilders.stat=@globals.G_agent._buildFileOpPlan
+  //File content commands (text processing)
+  globals.G_agent._planBuilders.cat=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.write=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.grep=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.find=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.head=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.tail=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.more=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.diff=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.sort=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.uniq=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.wc=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.awk=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.sed=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.cut=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.join=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.split=@globals.G_agent._buildFileContentPlan
+  globals.G_agent._planBuilders.rev=@globals.G_agent._buildFileContentPlan
+  //Permission commands
+  globals.G_agent._planBuilders.chmod=@globals.G_agent._buildPermissionsPlan
+  globals.G_agent._planBuilders.chown=@globals.G_agent._buildPermissionsPlan
+  globals.G_agent._planBuilders.chgrp=@globals.G_agent._buildPermissionsPlan
+  globals.G_agent._planBuilders.chog=@globals.G_agent._buildPermissionsPlan
+  globals.G_agent._planBuilders.es=@globals.G_agent._buildEsPlan
+  globals.G_agent._planBuilders.iwlist=@globals.G_agent._buildWifiPlan
+  globals.G_agent._planBuilders.encrypt=@globals.G_agent._buildEncryptPlan
+  globals.G_agent._planBuilders.decrypt=@globals.G_agent._buildEncryptPlan
+  globals.G_agent._planBuilders.tux=@globals.G_agent._buildTuxPlan
+  globals.G_agent._planBuilders.bomb=@globals.G_agent._buildAdvancedAttackPlan
+  globals.G_agent._planBuilders.wipe=@globals.G_agent._buildAdvancedAttackPlan
+  globals.G_agent._planBuilders.hide=@globals.G_agent._buildAdvancedAttackPlan
+  globals.G_agent._planBuilders.scp=@globals.G_agent._buildTransferPlan
+  globals.G_agent._planBuilders.rsync=@globals.G_agent._buildTransferPlan
+  globals.G_agent._planBuilders.ps=@globals.G_agent._buildProcessPlan
+  globals.G_agent._planBuilders.kill=@globals.G_agent._buildProcessPlan
+  globals.G_agent._planBuilders.htop=@globals.G_agent._buildProcessPlan
+  globals.G_agent._planBuilders.useradd=@globals.G_agent._buildUserMgmtPlan
+  globals.G_agent._planBuilders.userdel=@globals.G_agent._buildUserMgmtPlan
+  globals.G_agent._planBuilders.passwd=@globals.G_agent._buildUserMgmtPlan
+  globals.G_agent._planBuilders.groups=@globals.G_agent._buildUserMgmtPlan
+  globals.G_agent._planBuilders.groupadd=@globals.G_agent._buildUserMgmtPlan
+  globals.G_agent._planBuilders.groupdel=@globals.G_agent._buildUserMgmtPlan
+  globals.G_agent._planBuilders.mail=@globals.G_agent._buildMailPlan
+  globals.G_agent._planBuilders.decipher=@globals.G_agent._buildDecipherPlan
+  globals.G_agent._planBuilders.aircrack=@globals.G_agent._buildWifiAttackPlan
+  globals.G_agent._planBuilders.wifi=@globals.G_agent._buildWifiAttackPlan
+  globals.G_agent._planBuilders.airmon=@globals.G_agent._buildWifiAttackPlan
+  globals.G_agent._planBuilders.aireplay=@globals.G_agent._buildWifiAttackPlan
+  globals.G_agent._planBuilders.sniffer=@globals.G_agent._buildNetworkToolPlan
+  globals.G_agent._planBuilders.netcat=@globals.G_agent._buildNetworkToolPlan
+  globals.G_agent._planBuilders.ddos=@globals.G_agent._buildAdvancedAttackPlan
+  globals.G_agent._planBuilders["0day"]=@globals.G_agent._buildAdvancedAttackPlan
+  globals.G_agent._planBuilders.logs=@globals.G_agent._buildLogsPlan
+  globals.G_agent._planBuilders.push=@globals.G_agent._buildPushPlan
+  globals.G_agent._planBuilders.run=@globals.G_agent._buildRunPlan
+  globals.G_agent._planBuilders.launch=@globals.G_agent._buildLaunchPlan
+  globals.G_agent._planBuilders.route=@globals.G_agent._buildNetConfigPlan
+  globals.G_agent._planBuilders.netstat=@globals.G_agent._buildNetConfigPlan
+  globals.G_agent._planBuilders.tar=@globals.G_agent._buildCompressionPlan
+  globals.G_agent._planBuilders.gzip=@globals.G_agent._buildCompressionPlan
+  globals.G_agent._planBuilders.gunwconfig=@globals.G_agent._buildNetConfigPlan
+  globals.G_agent._planBuilders.tar=@globals.G_agent._buildCompressionPlan
+  globals.G_agent._planBuilders.gzip=@globals.G_agent._buildCompressionPlan
+  //Removed cd/ls/pwd - let them use universal parameter extraction instead
+  globals.G_agent._planBuilders.promptIpAction=@globals.G_agent._buildPromptPlan
+  globals.G_agent._planBuilders.multiTarget=@globals.G_agent._buildMultiTargetPlan
+  globals.G_agent._planBuilders.test=@globals.G_agent._buildTestPlan
+end function
+//Create execution plan based on parsed command
+AgentPlanning._createPlan=function(Obj,parsed,headless=false)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  if debug then
+    print green("[DEBUG] Planning: _createPlan called with action='"+parsed.action+"'")
+    if hasIndex(parsed,"source") then print green("[DEBUG] Planning: parsed has source='"+parsed.source+"'")
+    if hasIndex(parsed,"destination") then print green("[DEBUG] Planning: parsed has destination='"+parsed.destination+"'")
+  end if
+  plan={}
+  if hasIndex(parsed,"action") then plan.action=parsed.action else plan.action="unknown"
+  if hasIndex(parsed,"target") then plan.target=parsed.target else plan.target=null
+  if hasIndex(parsed,"goal") then plan.goal=parsed.goal else plan.goal="shell"
+  //Store headless flag in parsed for builders to use
+  parsed.headless=headless
+  plan.steps=[]
+  //AI: Check learned templates for a matching action sequence (fuzzy matching)
+  if hasIndex(globals.G_agent.sessionContext,"templates") and typeof(globals.G_agent.sessionContext.templates)=="list" then
+    bestTemplate=null
+    bestTemplateScore=0
+    for tmpl in globals.G_agent.sessionContext.templates
+      if tmpl.successCount>=2 and hasIndex(tmpl,"signature") and hasIndex(tmpl,"steps") then
+        score=globals.G_agent._scoreFuzzyTemplate(parsed.action,tmpl)
+        if score>bestTemplateScore then
+          bestTemplateScore=score
+          bestTemplate=tmpl
+        end if
+      end if
+    end for
+    //Use template if score is above threshold (0.4 = at least partial match)
+    if bestTemplate and bestTemplateScore>=0.4 then
+      if debug then print green("[DEBUG] Planning: Fuzzy template match '"+bestTemplate.signature+"' (score="+round(bestTemplateScore*100)+"%  success="+bestTemplate.successCount+")")
+      for stepCmd in bestTemplate.steps;push(plan.steps,{"type":"command","command":stepCmd});end for
+      plan.fromTemplate=true
+      plan.templateScore=bestTemplateScore
+      if outLvl>=1 then print skyblue("Agent: Using learned template '"+bestTemplate.signature+"' ("+round(bestTemplateScore*100)+"% match)")
+      return plan
+    end if
+  end if
+  //AI: Consult man pages to understand commands we'll be using
+  if hasIndex(parsed,"action") and parsed.action!="directCommand" then
+    //Map actions to actual commands that will be executed
+    commandMapping=self._COMMAND_MAPPING
+    if hasIndex(commandMapping,parsed.action) then
+      cmdToLearn=commandMapping[parsed.action]
+      learnedKnowledge=globals.G_agent.getCommandInfo(cmdToLearn)
+      //Store in plan context for handlers to use
+      if learnedKnowledge then plan.commandKnowledge=learnedKnowledge
+    end if
+  end if
+  //Initialize plan builders if not already done
+  if not hasIndex(self,"_planBuilders") then globals.G_agent._initPlanBuilders
+  //Dispatch to appropriate plan builder
+  if hasIndex(parsed,"action") and hasIndex(globals.G_agent._planBuilders,parsed.action) then
+    if debug then print green("[DEBUG] Planning: Using plan builder for action='"+parsed.action+"'")
+    builder=globals.G_agent._planBuilders[parsed.action]
+    plan=builder(Obj,parsed,plan)
+  else
+    if debug then print green("[DEBUG] Planning: No plan builder for action='"+parsed.action+"', checking man pages...")
+    //Unknown action - check if we have man page knowledge for it
+    if hasIndex(parsed,"action") and hasIndex(globals.G_agent,"commandKnowledgeCache") then
+      cmdName=parsed.action
+      if debug then print green("[DEBUG] Planning: Checking if '"+cmdName+"' is in commandKnowledgeCache...")
+      if hasIndex(globals.G_agent.commandKnowledgeCache,cmdName) then
+        if debug then print green("[DEBUG] Planning: Found '"+cmdName+"' in commandKnowledgeCache!")
+        //We have man page knowledge - determine appropriate flags
+        knowledge=globals.G_agent.commandKnowledgeCache[cmdName]
+        cmdString=cmdName
+        //Universal parameter extraction - works for any command
+        if debug then print green("[DEBUG] Planning: About to extract params from parsed.raw='"+parsed.raw+"'")
+        extractedParams=globals.G_agent._extractParameters(parsed.raw,cmdName,knowledge)
+        if len(extractedParams)>0 then
+          cmdString=cmdName+" "+extractedParams
+          if debug then print green("[DEBUG] Planning: Extracted parameters '"+extractedParams+"'")
+        else
+          if debug then print green("[DEBUG] Planning: No parameters extracted")
+        end if
+        //Match query words to flag descriptions or flag names
+        if hasIndex(knowledge,"flags") and len(knowledge.flags)>0 and hasIndex(parsed,"raw") then
+          queryLower=lower(parsed.raw)
+          //Extract meaningful words from query
+            sw=AgentCore._STOP_WORDS
+            queryWords=split(queryLower," ")
+            meaningfulWords=[]
+            for word in queryWords;if len(word)>2 and not hasIndex(sw,word) then push(meaningfulWords,word);end for
+            //Common synonyms for semantic expansion
+            synonymGroups=self._SYNONYM_GROUPS
+            expandedWords=[]
+            for word in meaningfulWords
+              push(expandedWords,word)
+              //Add synonyms from matching group
+              for group in synonymGroups
+                if group.indexOf(word)!=null then
+                  for synonym in group;if expandedWords.indexOf(synonym)==null then push(expandedWords,synonym);end for
+                  break
+                end if
+              end for
+            end for
+            bestFlag=null
+            bestFlagScore=0
+            for flag in knowledge.flags.indexes
+              score=0
+              //Try matching against flag description first
+              flagDesc=lower(knowledge.flags[flag])
+              if len(flagDesc)>0 then
+                //Score based on how many meaningful words appear in description
+                for word in meaningfulWords;if indexOf(flagDesc,word)!=null then score=score+20;end for
+                //Bonus for synonym matches (lower score)
+                for word in expandedWords;if meaningfulWords.indexOf(word)==null and indexOf(flagDesc,word)!=null then score=score+3;end for
+                //Context-aware boost for crack commands
+                if indexOf(queryLower,"crack")!=null then
+                  //Boost rainbow table/dictionary flags for "crack"
+                  if indexOf(flagDesc,"rainbow")!=null or indexOf(flagDesc,"dictionary")!=null or indexOf(flagDesc,"table")!=null then score=score+15
+                  //Penalize decipher/computational for "crack" (user wants fast rainbow tables)
+                  if indexOf(flagDesc,"decipher")!=null or indexOf(flagDesc,"computational")!=null then score=score-10
+                end if
+                //Detect hash values in extracted parameters (32 hex chars = MD5)
+                _len=len(extractedParams)
+                if _len==32 then
+                  isHash=true
+                  i=0;while i<_len
+                    c=extractedParams[i]
+                    if "0123456789abcdef".indexOf(c)==null then
+                      isHash=false
+                      break
+                    end if
+                  i+=1;end while
+                  //If we have a hash value, penalize file flags
+                  if isHash then
+                    if indexOf(flagDesc,"file")!=null then score=score-30  //Strong penalty for file flags when hash provided
+                    //Boost flags that take hash directly
+                    if indexOf(flag,"-h")!=null or indexOf(flag,"-d")!=null then score=score+25  //Boost hash/decipher flags
+                  end if
+                end if
+                //Penalty for contradictory terms
+                if indexOf(queryLower,"how much")!=null or indexOf(queryLower,"summary")!=null or indexOf(queryLower,"total")!=null then
+                  //User wants summary, penalize flags about listing all items
+                  if indexOf(flagDesc,"all")!=null or indexOf(flagDesc,"each")!=null or indexOf(flagDesc,"every")!=null then score=score-5
+                end if
+              else
+                //No flag description - try matching flag name itself to query words
+                //Strip dashes from flag name for matching
+                flagName=flag.replace("-","").replace("--","")
+                flagNameLower=lower(flagName)
+                //Check if any query words match the flag name
+                for word in meaningfulWords
+                  if flagNameLower==word then score=score+10  //Exact match
+                  if indexOf(flagNameLower,word)!=null then score=score+5  //Partial match
+                  if indexOf(word,flagNameLower)!=null then score=score+5  //Word contains flag name
+                end for
+              end if
+              if score>bestFlagScore then
+                bestFlag=flag
+                bestFlagScore=score
+              end if
+            end for
+            if bestFlag and bestFlagScore>=5 then
+              cmdString=cmdName+" "+bestFlag
+              //Don't append extracted parameters when using knowledge-matched flags
+              //The flag itself represents the complete intent from the query
+              if debug then print green("[DEBUG] Planning: Matched flag '"+bestFlag+"' for query (score: "+bestFlagScore+")")
+              //Verbose output explaining AI reasoning
+              if outLvl>=2 then
+                flagDesc=knowledge.flags[bestFlag]
+                if flagDesc then
+                  print yellow("[VERBOSE] Agent reasoning: Selected '"+bestFlag+"' flag (score: "+bestFlagScore+")")
+                  print yellow("[VERBOSE] Learned from 'man "+cmdName+"': "+flagDesc)
+                else
+                  print yellow("[VERBOSE] Agent reasoning: Selected '"+bestFlag+"' flag from "+cmdName+" knowledge (score: "+bestFlagScore+")")
+                end if
+              end if
+            end if
+        end if
+        summaryText="Execute "+cmdString
+        if hasIndex(parsed,"summary") then summaryText=parsed.summary
+        step={"type":"directCommand","command":cmdString,"description":summaryText}
+        //Copy parsed fields to step for executor
+        if hasIndex(parsed,"source") then
+          step.source=parsed.source
+          if debug then print green("[DEBUG] Planning: Copying source='"+parsed.source+"' to step")
+        end if
+        if hasIndex(parsed,"destination") then
+          step.destination=parsed.destination
+          if debug then print green("[DEBUG] Planning: Copying destination='"+parsed.destination+"' to step")
+        end if
+        if hasIndex(parsed,"content") then step.content=parsed.content
+        if hasIndex(parsed,"target") then step.target=parsed.target
+        if hasIndex(parsed,"permValue") then step.permValue=parsed.permValue
+        push(plan.steps,step)
+        if debug then print green("[DEBUG] Planning: Using man page knowledge to execute '"+cmdString+"'")
+      else
+        //No knowledge - generic fallback
+        if debug then print green("[DEBUG] Planning: No man page knowledge for '"+cmdName+"', using generic fallback")
+        step={"type":"directCommand","command":cmdName,"description":"Execute command"}
+        //Copy parsed fields to step for executor
+        if hasIndex(parsed,"source") then
+          step.source=parsed.source
+          if debug then print green("[DEBUG] Planning: (Fallback) Copying source='"+parsed.source+"' to step")
+        end if
+        if hasIndex(parsed,"destination") then
+          step.destination=parsed.destination
+          if debug then print green("[DEBUG] Planning: (Fallback) Copying destination='"+parsed.destination+"' to step")
+        end if
+        if hasIndex(parsed,"content") then step.content=parsed.content
+        if hasIndex(parsed,"target") then step.target=parsed.target
+        if hasIndex(parsed,"permValue") then step.permValue=parsed.permValue
+        push(plan.steps,step)
+      end if
+    else
+      //No action at all
+      actionCmd="unknown"
+      if hasIndex(parsed,"action") then actionCmd=parsed.action
+      summaryText="execute command"
+      if hasIndex(parsed,"summary") then summaryText=parsed.summary
+      step={"type":"directCommand","command":actionCmd,"description":summaryText}
+      //Copy parsed fields to step for executor
+      if hasIndex(parsed,"source") then step.source=parsed.source
+      if hasIndex(parsed,"destination") then step.destination=parsed.destination
+      if hasIndex(parsed,"content") then step.content=parsed.content
+      if hasIndex(parsed,"target") then step.target=parsed.target
+      if hasIndex(parsed,"permValue") then step.permValue=parsed.permValue
+      push(plan.steps,step)
+    end if
+  end if
+  return plan
+end function
+//Plan builder functions - each handles one action type
+//Autonomous decision-making
+AgentPlanning._buildAutonomousPlan=function(Obj,parsed,plan)
+  debug=globals.G_agent.config.debug
+  target=parsed.target
+  if not target then
+    push(plan.steps,{"type":"error","description":"Need target for autonomous decision-making"})
+    return plan
+  end if
+  //Handle network-scope targets
+  if target=="network" then
+    //Try to resolve to router
+    routerIP=Obj.getRouter
+    if routerIP then
+      target=routerIP
+      parsed.target=routerIP
+    else
+      push(plan.steps,{"type":"error","description":"Network scope requires router access. Connect to a network first."})
+      return plan
+    end if
+  end if
+  //Determine scan target: use publicIP (router) if available, otherwise use target
+  scanTarget=target
+  if hasIndex(parsed,"publicIP") and parsed.publicIP then scanTarget=parsed.publicIP
+  goal="compromise"
+  if hasIndex(parsed,"goal") then goal=parsed.goal
+  //Extract requirements if present
+  requirements=null
+  if hasIndex(parsed,"requirements") then requirements=parsed.requirements
+  context={}
+  context.target=target
+  if hasIndex(parsed,"publicIP") then context.publicIP=parsed.publicIP
+  if hasIndex(parsed,"lanIP") then context.lanIP=parsed.lanIP
+  context.originalCommand=parsed.originalInput  // Store for knowledge recording
+  if requirements then context.requirements=requirements
+  if hasIndex(parsed,"shouldStore") then
+    context.shouldStore=parsed.shouldStore  //Pass store flag to context
+    if debug then print green("[DEBUG] Planning: Set context.shouldStore = "+str(context.shouldStore))
+  end if
+  //Store context in plan for later execution
+  plan.context=context
+  //Debug: verify context storage
+  if debug then
+    if debug then print green("[DEBUG] Stored context in plan")
+    if debug then print green("[DEBUG] context.originalCommand = "+context.originalCommand)
+    if debug then print green("[DEBUG] plan.context exists: "+hasIndex(plan,"context"))
+    if hasIndex(parsed,"publicIP") and debug then print green("[DEBUG] Using publicIP "+parsed.publicIP+" for scanning")
+  end if
+  //If we have specific requirements (especially LAN targets), skip command selection and go straight to exploit
+  if requirements and (hasIndex(requirements,"targetIP") or hasIndex(requirements,"privilege") or hasIndex(requirements,"objectType")) then
+    //Build scan + exploit steps for requirement-based attacks
+    step1={"type":"scan","target":scanTarget,"flag":"-n","autonomous":true,"description":"Scan "+scanTarget}
+    step2={"type":"exploit","target":target,"autonomous":true,"description":"Exploit "+target}
+    if requirements then
+      step1.requirements=requirements
+      step2.requirements=requirements
+    end if
+    //Pass continuation commands if present
+    if hasIndex(parsed,"continuationCommands") then step2.continuationCommands=parsed.continuationCommands
+    push(plan.steps,step1)
+    push(plan.steps,step2)
+    return plan
+  end if
+  //For autonomous mode, always do scan + exploit unless specific goal is set
+  if not goal or goal=="compromise" or goal=="scan" then
+    //Default autonomous flow: scan then exploit
+    step1={"type":"scan","target":scanTarget,"flag":"-n","autonomous":true,"description":"Scan "+scanTarget}
+    step2={"type":"exploit","target":target,"autonomous":true,"description":"Exploit "+target}
+    if requirements then
+      step1.requirements=requirements
+      step2.requirements=requirements
+    end if
+    //Pass continuation commands if present
+    if hasIndex(parsed,"continuationCommands") then step2.continuationCommands=parsed.continuationCommands
+    //Pass interactive shell flag if present
+    if hasIndex(parsed,"needsInteractiveShell") and parsed.needsInteractiveShell then
+      step2.needsInteractiveShell=true
+      if debug then print green("[DEBUG] Step 2 will open interactive shell (not headless)")
+    end if
+    push(plan.steps,step1)
+    push(plan.steps,step2)
+    return plan
+  end if
+  chosenCommand=globals.G_agent._chooseBestCommand(goal,context)
+  if chosenCommand then
+    if chosenCommand=="scan" or chosenCommand=="nmap" then
+      step={"type":"scan","target":target,"flag":"-n","autonomous":true,"description":"Autonomously scan "+target}
+      if requirements then step.requirements=requirements
+      push(plan.steps,step)
+    else if chosenCommand=="crack" then
+      step={"type":"crackPassword","target":target,"autonomous":true,"description":"Autonomously crack "+target}
+      if requirements then step.requirements=requirements
+      push(plan.steps,step)
+    else if chosenCommand=="exploit" then
+      step={"type":"exploit","target":target,"autonomous":true,"description":"Autonomously exploit "+target}
+      if requirements then step.requirements=requirements
+      push(plan.steps,step)
+    else
+      step={"type":"directCommand","command":chosenCommand+" "+target,"autonomous":true,"description":"Autonomously execute "+chosenCommand}
+      if requirements then step.requirements=requirements
+      push(plan.steps,step)
+    end if
+  else
+    if goal=="scan" or goal=="recon" then
+      step={"type":"scan","target":target,"flag":"-n","autonomous":true,"description":"Scan "+target}
+      if requirements then step.requirements=requirements
+      push(plan.steps,step)
+    else if goal=="password" then
+      step={"type":"crackPassword","target":target,"autonomous":true,"description":"Crack passwords on "+target}
+      if requirements then step.requirements=requirements
+      push(plan.steps,step)
+    else if goal=="root" then
+      step1={"type":"scan","target":target,"flag":"-n","autonomous":true,"description":"Scan "+target}
+      step2={"type":"exploit","target":target,"autonomous":true,"description":"Exploit "+target}
+      step3={"type":"escalate","target":target,"autonomous":true,"description":"Escalate to root on "+target}
+      if requirements then
+        step1.requirements=requirements
+        step2.requirements=requirements
+        step3.requirements=requirements
+      end if
+      push(plan.steps,step1)
+      push(plan.steps,step2)
+      push(plan.steps,step3)
+    else
+      step1={"type":"scan","target":target,"flag":"-n","autonomous":true,"description":"Scan "+target}
+      step2={"type":"exploit","target":target,"autonomous":true,"description":"Exploit "+target}
+      if requirements then
+        step1.requirements=requirements
+        step2.requirements=requirements
+      end if
+      push(plan.steps,step1)
+      push(plan.steps,step2)
+    end if
+  end if
+  return plan
+end function
+AgentPlanning._buildKnowledgePlan=function(Obj,parsed,plan);push(plan.steps,{"type":"knowledge","command":parsed.knowledgeCommand,"description":"Get information about "+parsed.knowledgeCommand});return plan;end function
+AgentPlanning._buildGetObjectPlan=function(Obj,parsed,plan)
+  debug=globals.G_agent.config.debug
+  objectType="computer"
+  if hasIndex(parsed,"objectType") then objectType=parsed.objectType
+  isHeadless=false
+  if hasIndex(parsed,"isHeadless") then isHeadless=parsed.isHeadless
+  //Check if headless flag was set by multi-step handler
+  if hasIndex(parsed,"headless") and parsed.headless then isHeadless=true
+  needRoot=false
+  if hasIndex(parsed,"needRoot") then needRoot=parsed.needRoot
+  //Check if interactive shell is needed
+  needsInteractiveShell=false
+  if hasIndex(parsed,"needsInteractiveShell") then needsInteractiveShell=parsed.needsInteractiveShell
+  //Create context and pass shouldStore flag if present
+  context={}
+  if hasIndex(parsed,"shouldStore") then
+    context.shouldStore=parsed.shouldStore
+    if debug then print green("[DEBUG] Planning: Set context.shouldStore = "+str(context.shouldStore))
+  end if
+  if hasIndex(parsed,"originalInput") then context.originalCommand=parsed.originalInput
+  plan.context=context
+  //Check if we have both IPs
+  if hasIndex(parsed,"publicIP") and hasIndex(parsed,"lanIP") then
+    //Have both - direct bounce attack
+    descStr="Get "+objectType+" on "+parsed.lanIP+" via router bounce from "+parsed.publicIP
+    if needRoot then descStr="Get root "+objectType+" on "+parsed.lanIP+" via router bounce from "+parsed.publicIP
+    step={"type":"getObject","publicIP":parsed.publicIP,"lanIP":parsed.lanIP,"objectType":objectType,"isHeadless":isHeadless,"needRoot":needRoot,"description":descStr}
+    if needsInteractiveShell then step.needsInteractiveShell=needsInteractiveShell
+    push(plan.steps,step)
+  else if hasIndex(parsed,"lanIP") and not hasIndex(parsed,"publicIP") then
+    //Only have LAN IP - need to scan for routers first
+    descStr="Find router and get "+objectType+" on "+parsed.lanIP
+    if needRoot then descStr="Find router and get root "+objectType+" on "+parsed.lanIP
+    //Step 1: LAN scan to find routers
+    push(plan.steps,{"type":"scan","flag":"-l","description":"Scan LAN for routers"})
+    //Step 2: Get object via router bounce (handler will use found router)
+    step={"type":"getObject","lanIP":parsed.lanIP,"objectType":objectType,"isHeadless":isHeadless,"needRoot":needRoot,"autoFindRouter":true,"description":descStr}
+    if needsInteractiveShell then step.needsInteractiveShell=needsInteractiveShell
+    push(plan.steps,step)
+  else
+    //Missing required IPs
+    push(plan.steps,{"type":"error","description":"Need LAN IP for object access"})
+  end if
+  return plan
+end function
+AgentPlanning._buildExtractDataPlan=function(Obj,parsed,plan)
+  debug=globals.G_agent.config.debug
+  target=null
+  if hasIndex(parsed,"target") then target=parsed.target
+  //Check if this is a shorthand command without a target
+  if not target and hasIndex(parsed,"shorthand") and parsed.shorthand then
+    push(plan.steps,{"type":"error","description":"No target specified. Use 'ai <command> <target>' first, or specify a target: 'ai "+parsed.dataType+" <IP>'"})
+    return plan
+  end if
+  //Map dataType to dig flag
+  flag=null
+  if hasIndex(parsed,"dataType") then
+    if debug then print green("[DEBUG PLANNING] parsed.dataType="+parsed.dataType)
+    if parsed.dataType=="email" then
+      flag="-e"
+    else if parsed.dataType=="bank" then
+      flag="-b"
+    else if parsed.dataType=="user" then
+      flag="-u"
+    else if parsed.dataType=="rshell" then
+      flag="-r"
+    else if parsed.dataType=="all" then
+      flag="-a"
+    end if
+    if debug then print green("[DEBUG PLANNING] Mapped to flag="+str(flag))
+  end if
+  step={"type":"dataExtraction","target":target,"dataType":parsed.dataType,"description":"Extract "+parsed.dataType+" data"}
+  if flag then step.flag=flag
+  if debug then
+    flagStatus="<not set>"
+    if hasIndex(step,"flag") then flagStatus=str(step.flag)
+    if debug then print green("[DEBUG PLANNING] step.flag set to "+flagStatus)
+  end if
+  if hasIndex(parsed,"useFilter") then step.useFilter=parsed.useFilter
+  if hasIndex(parsed,"saveResults") then step.saveResults=parsed.saveResults
+  //Pass extracted IPs for multi-IP commands ("via" syntax)
+  if hasIndex(parsed,"extractedIps") then step.extractedIps=parsed.extractedIps
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildScanPlan=function(Obj,parsed,plan)
+  outLvl=globals.G_agent.config.outputLevel
+  //Check if we have a flag that doesn't require a target (like -r for random or -l for localhost)
+  if hasIndex(parsed,"flag") and (parsed.flag=="-r" or parsed.flag=="-l") then
+    //Flag-only scan - no target needed
+    description="Scan random network"
+    if parsed.flag=="-l" then description="Scan localhost"
+    scanStep={"type":"scan","flag":parsed.flag,"description":description}
+    if hasIndex(parsed,"headless") and parsed.headless then scanStep.autonomous=true
+    push(plan.steps,scanStep)
+    return plan
+  end if
+  if not hasIndex(parsed,"target") or not parsed.target then
+    //Check if this is a shorthand command
+    if hasIndex(parsed,"shorthand") and parsed.shorthand then push(plan.steps,{"type":"error","description":"No target specified. Use 'ai scan <target>' first to set a target, or specify one: 'ai scan <IP>'"}) else push(plan.steps,{"type":"error","description":"No target specified for scan"})
+    return plan
+  end if
+  target=parsed.target
+  scanMode="lan"
+  if indexOf(target,".")!=-1 and len(split(target,"\."))==4 then
+    parts=split(target,"\.")
+    if parts[0]=="192" or parts[0]=="10" or parts[0]=="172" then scanMode="lan" else scanMode="external"
+  end if
+  scanFlag="-n"
+  if scanMode=="external" then scanFlag="-l"
+  if hasIndex(parsed,"flag") then scanFlag=parsed.flag
+  reason="external target"
+  if scanMode=="lan" then reason="LAN target"
+  if outLvl>=2 then print yellow("[VERBOSE] Agent: Chose scan flag "+scanFlag+" because "+reason)
+  //Mark as autonomous if in headless mode to prevent interactive prompts
+  scanStep={"type":"scan","target":target,"flag":scanFlag,"description":"Scan "+target}
+  if hasIndex(parsed,"headless") and parsed.headless then scanStep.autonomous=true
+  push(plan.steps,scanStep)
+  return plan
+end function
+AgentPlanning._buildCrackAllPlan=function(Obj,parsed,plan)
+  //Crack all accounts on target system
+  //Use AI to discover the right commands dynamically - no transformations
+  target=null
+  if hasIndex(parsed,"target") then target=parsed.target
+  //Step 1: Extract subject from query and discover how to list it
+  //Remove action words and let system figure out the best command
+  queryLower=lower(parsed.raw)
+  actionWords=["crack","break","get","fetch","find","attack","exploit"]
+  discoveryQuery=queryLower
+  for action in actionWords;discoveryQuery=discoveryQuery.replace(action+" ","");discoveryQuery=discoveryQuery.replace(action,"");end for
+  //Add "list" or "show" prefix to help system understand we want to discover/enumerate
+  if indexOf(discoveryQuery,"list")==null and indexOf(discoveryQuery,"show")==null then discoveryQuery="list "+trim(discoveryQuery)
+  listCmd=globals.G_agent._discoverCommand(Obj,discoveryQuery)
+  if listCmd then push(plan.steps,{"type":"directCommand","command":listCmd,"description":"Discover accounts"})
+  //Step 2: Crack root password
+  push(plan.steps,{"type":"crackPassword","target":target,"user":"root","description":"Crack root password"})
+  return plan
+end function
+AgentPlanning._buildExploitPlan=function(Obj,parsed,plan)
+  if not hasIndex(parsed,"target") then
+    push(plan.steps,{"type":"error","description":"No target specified for exploit"})
+    return plan
+  end if
+  push(plan.steps,{"type":"exploit","target":parsed.target,"description":"Exploit "+parsed.target})
+  return plan
+end function
+AgentPlanning._buildAttackPlan=function(Obj,parsed,plan)
+  if not hasIndex(parsed,"target") then
+    push(plan.steps,{"type":"error","description":"No target specified for attack"})
+    return plan
+  end if
+  push(plan.steps,{"type":"attack","target":parsed.target,"description":"Attack "+parsed.target})
+  return plan
+end function
+AgentPlanning._buildEscalatePlan=function(Obj,parsed,plan);push(plan.steps,{"type":"escalate","description":"Escalate privileges"});return plan;end function
+AgentPlanning._buildReconPlan=function(Obj,parsed,plan)
+  if not hasIndex(parsed,"target") then
+    push(plan.steps,{"type":"error","description":"No target specified for recon"})
+    return plan
+  end if
+  push(plan.steps,{"type":"recon","target":parsed.target,"description":"Recon "+parsed.target})
+  return plan
+end function
+AgentPlanning._buildBackdoorPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"backdoor","description":"Install backdoor"});return plan;end function
+AgentPlanning._buildDirectCommandPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"directCommand","command":parsed.command,"description":"Execute: "+parsed.command});return plan;end function
+AgentPlanning._buildViewPlan=function(Obj,parsed,plan)
+  step={"type":"view"}
+  //Check if we have a file path or an application flag
+  if hasIndex(parsed,"path") then
+    step.path=parsed.path
+    step.description="View "+parsed.path
+  else if hasIndex(parsed,"openFlag") then
+    step.openFlag=parsed.openFlag
+    if hasIndex(parsed,"summary") then step.description=parsed.summary else step.description="Open application"
+  else if hasIndex(parsed,"searchLocation") then
+    step.searchLocation=parsed.searchLocation
+    step.description="Search and open file"
+  else
+    step.description="Open file"
+  end if
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildBrowserPlan=function(Obj,parsed,plan)
+  if not hasIndex(parsed,"url") then
+    push(plan.steps,{"type":"error","description":"Browser action requires URL"})
+    return plan
+  end if
+  push(plan.steps,{"type":"browser","url":parsed.url,"description":"Open "+parsed.url})
+  return plan
+end function
+AgentPlanning._buildFetchPlan=function(Obj,parsed,plan)
+  debug=globals.G_agent.config.debug
+  if not hasIndex(parsed,"url") then
+    //No URL means this is a fetch shell command
+    //Check if we have a target
+    if not hasIndex(parsed,"target") then
+      push(plan.steps,{"type":"error","description":"No target specified for fetch"})
+      return plan
+    end if
+    //Build fetchShell step with all the parsed parameters
+    step={"type":"fetchShell","target":parsed.target,"description":parsed.summary}
+    if hasIndex(parsed,"service") then step.service=parsed.service
+    if hasIndex(parsed,"objectType") then step.objectType=parsed.objectType
+    if hasIndex(parsed,"needRoot") then step.needRoot=parsed.needRoot
+    if hasIndex(parsed,"isHeadless") then step.isHeadless=parsed.isHeadless
+    //If shouldStore is set, force headless mode
+    if hasIndex(parsed,"shouldStore") and parsed.shouldStore then step.isHeadless=true
+    if hasIndex(parsed,"libsToInstall") then step.libsToInstall=parsed.libsToInstall
+    if hasIndex(parsed,"autoSu") then step.autoSu=parsed.autoSu
+    if hasIndex(parsed,"extractedIps") then step.extractedIps=parsed.extractedIps
+    if hasIndex(plan,"commandKnowledge") then step.commandKnowledge=plan.commandKnowledge
+    push(plan.steps,step)
+    //Create context and pass shouldStore flag if present
+    context={}
+    if hasIndex(parsed,"shouldStore") then
+      context.shouldStore=parsed.shouldStore
+      if debug then print green("[DEBUG] Planning (fetch): Set context.shouldStore = "+str(context.shouldStore))
+    end if
+    plan.context=context
+    //Add continuation commands if present
+    if hasIndex(parsed,"continuationCommands") and len(parsed.continuationCommands)>0 then
+      for contCmd in parsed.continuationCommands;push(plan.steps,{"type":"directCommand","command":contCmd,"description":"Execute: "+contCmd});end for
+    end if
+    return plan
+  end if
+  push(plan.steps,{"type":"fetch","url":parsed.url,"description":"Fetch "+parsed.url})
+  return plan
+end function
+AgentPlanning._buildProxyPlan=function(Obj,parsed,plan)
+  target=null
+  if hasIndex(parsed,"target") then target=parsed.target
+  step={"type":"proxy","quiet":true,"description":"Create proxy session"}
+  if target then
+    step.target=target
+    step.description="Use proxy "+target
+  end if
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildSuPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"su","user":parsed.user,"description":"Switch to user "+parsed.user});return plan;end function
+AgentPlanning._buildNetworkToolPlan=function(Obj,parsed,plan)
+  target=""
+  if hasIndex(parsed,"target") then target=parsed.target
+  desc=parsed.action
+  if target then desc=parsed.action+" "+target
+  push(plan.steps,{"type":"networkTool","tool":parsed.action,"target":target,"description":desc})
+  return plan
+end function
+AgentPlanning._buildBuildExecPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"buildExec","command":parsed.action,"description":"Build/execute"});return plan;end function
+AgentPlanning._buildFileOpPlan=function(Obj,parsed,plan)
+  step={"type":"fileOp","command":parsed.action,"description":"File operation"}
+  if hasIndex(parsed,"source") then step.source=parsed.source
+  if hasIndex(parsed,"target") then step.target=parsed.target
+  if hasIndex(parsed,"destination") then step.destination=parsed.destination
+  if hasIndex(parsed,"permValue") then step.permValue=parsed.permValue
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildFileContentPlan=function(Obj,parsed,plan)
+  step={"type":"fileContent","command":parsed.action,"description":"File content operation"}
+  if hasIndex(parsed,"target") then step.target=parsed.target
+  if hasIndex(parsed,"content") then step.content=parsed.content
+  if hasIndex(parsed,"pattern") then step.pattern=parsed.pattern
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildEncryptPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"encrypt","command":parsed.action,"description":"Encryption operation"});return plan;end function
+AgentPlanning._buildUserMgmtPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"userMgmt","command":parsed.action,"description":"User management"});return plan;end function
+AgentPlanning._buildWifiAttackPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"wifiAttack","command":parsed.action,"description":"WiFi attack"});return plan;end function
+AgentPlanning._buildNetworkCmdPlan=function(Obj,parsed,plan)
+  step={"type":"networkCmd","command":parsed.action,"description":"Network command"}
+  if hasIndex(parsed,"flags") then step.flags=parsed.flags
+  if hasIndex(parsed,"target") then step.target=parsed.target
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildPushPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"push","description":"Deploy/push"});return plan;end function
+AgentPlanning._buildTuxPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"tux","description":"Tux operation"});return plan;end function
+AgentPlanning._buildAdvancedAttackPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"advancedAttack","command":parsed.action,"description":"Advanced attack"});return plan;end function
+AgentPlanning._buildTransferPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"transfer","command":parsed.action,"description":"File transfer"});return plan;end function
+AgentPlanning._buildProcessPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"process","command":parsed.action,"description":"Process management"});return plan;end function
+AgentPlanning._buildMailPlan=function(Obj,parsed,plan)
+  target=null
+  if hasIndex(parsed,"target") then target=parsed.target
+  push(plan.steps,{"type":"email","target":target,"description":"Mail operation"})
+  return plan
+end function
+AgentPlanning._buildDecipherPlan=function(Obj,parsed,plan)
+  step={"type":"decipher","description":"Decipher"}
+  //Extract hash or target from parsed command
+  if hasIndex(parsed,"hash") then
+    step.target=parsed.hash
+  else if hasIndex(parsed,"target") then
+    step.target=parsed.target
+  else if hasIndex(parsed,"args") and len(parsed.args)>0 then
+    step.target=parsed.args[0]
+  else
+    //Prompt for hash
+    hashInput=user_input("Enter hash to decipher: ")
+    if hashInput and len(hashInput)==32 then
+      step.target=lower(hashInput)
+    else
+      push(plan.steps,{"type":"error","description":"Invalid or no hash provided"})
+      return plan
+    end if
+  end if
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildLogsPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"logs","command":parsed.action,"description":"Logs operation"});return plan;end function
+AgentPlanning._buildNetConfigPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"netConfig","command":parsed.action,"description":"Network config"});return plan;end function
+AgentPlanning._buildCompressionPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"compression","command":parsed.action,"description":"Compression"});return plan;end function
+AgentPlanning._buildPermissionsPlan=function(Obj,parsed,plan)
+  debug=globals.G_agent.config.debug
+  step={"type":"permissions","command":parsed.action,"description":"Change permissions"}
+  if hasIndex(parsed,"target") then step.target=parsed.target
+  if hasIndex(parsed,"permValue") then step.permValue=parsed.permValue
+  if hasIndex(parsed,"user") then 
+    step.user=parsed.user
+    if debug then print green("[DEBUG] Planning: Copied user='"+parsed.user+"' to step")
+  end if
+  if hasIndex(parsed,"group") then 
+    step.group=parsed.group
+    if debug then print green("[DEBUG] Planning: Copied group='"+parsed.group+"' to step")
+  end if
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildEsPlan=function(Obj,parsed,plan)
+  step={"type":"permissions","command":"es","description":"Discrete exploit scan"}
+  //Check if we have IP + port or library
+  if hasIndex(parsed,"target") and hasIndex(parsed,"port") then
+    step.target=parsed.target
+    step.port=parsed.port
+    step.description="Scan "+parsed.target+":"+parsed.port
+  else if hasIndex(parsed,"library") then
+    step.library=parsed.library
+    step.description="Scan "+parsed.library+" library"
+  end if
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildWifiPlan=function(Obj,parsed,plan)
+  step={"type":"permissions","command":"iwlist","description":"List WiFi networks"}
+  if hasIndex(parsed,"flag") then
+    step.flag=parsed.flag
+    if parsed.flag=="-l" then step.description="List WiFi networks"
+  end if
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildPromptPlan=function(Obj,parsed,plan)
+  plan.needsPrompt=true
+  plan.promptMessage=parsed.summary
+  plan.options=parsed.options
+  return plan
+end function
+//Multi-target plan builder: apply same action to multiple IPs
+//AI: Fuzzy template matching - score how well a parsed action matches a template
+AgentPlanning._scoreFuzzyTemplate=function(action,tmpl)
+  if not action or not hasIndex(tmpl,"signature") then return 0
+  sigParts=split(tmpl.signature,"->")
+  //Exact match: action appears directly in signature
+  if indexOf(sigParts,action)!=null then return 1.0
+  //Similarity groups: related actions that should partially match
+  groups=[]
+  push(groups,["exploit","attack","hack","pwn","compromise","break"])
+  push(groups,["scan","probe","recon","enumerate","discover","check"])
+  push(groups,["crack","brute","bruteforce","decrypt","password"])
+  push(groups,["fetch","get","grab","pull","retrieve","extract","dump"])
+  push(groups,["find","search","locate","look","list"])
+  push(groups,["connect","ssh","shell","rshell","access","login"])
+  push(groups,["install","deploy","setup","upload","push"])
+  push(groups,["delete","remove","wipe","clean","purge"])
+  //Find which group the action belongs to
+  actionGroup=null
+  for g in groups
+    if indexOf(g,action)!=null then
+      actionGroup=g
+      break
+    end if
+  end for
+  if actionGroup==null then return 0
+  //Check if any signature part is in the same group
+  bestPartScore=0
+  for part in sigParts
+    if indexOf(actionGroup,part)!=null then
+      bestPartScore=0.8
+      break
+    end if
+  end for
+  if bestPartScore==0 then return 0
+  //Bonus for higher success counts (diminishing returns)
+  successBonus=0
+  if tmpl.successCount>2 then successBonus=0.05
+  if tmpl.successCount>5 then successBonus=0.1
+  score=bestPartScore+successBonus
+  if score>1.0 then score=1.0
+  return score
+end function
+AgentPlanning._buildMultiTargetPlan=function(Obj,parsed,plan)
+  outLvl=globals.G_agent.config.outputLevel
+  if not hasIndex(parsed,"targets") or len(parsed.targets)==0 then
+    push(plan.steps,{"type":"error","description":"No targets specified for multi-target operation"})
+    return plan
+  end if
+  targetAction=parsed.targetAction
+  if not targetAction then targetAction="scan"
+  if outLvl>=1 then print skyblue("Agent: Multi-target "+targetAction+" on "+len(parsed.targets)+" targets")
+  plan.context={"multiTarget":true,"targetAction":targetAction}
+  for ip in parsed.targets
+    step={}
+    step.type="multiTargetStep"
+    step.target=ip
+    step.targetAction=targetAction
+    step.description=targetAction+" "+ip
+    push(plan.steps,step)
+  end for
+  return plan
+end function
+//Config management plan builders
+AgentPlanning._buildSetConfigPlan=function(Obj,parsed,plan)
+  step={"type":"setConfig","description":"Set configuration"}
+  if hasIndex(parsed,"configKey") then step.configKey=parsed.configKey
+  if hasIndex(parsed,"configValue") then step.configValue=parsed.configValue
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildShowConfigPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"showConfig","description":"Show configuration"});return plan;end function
+AgentPlanning._buildResetConfigPlan=function(Obj,parsed,plan);push(plan.steps,{"type":"resetConfig","description":"Reset configuration to defaults"});return plan;end function
+AgentPlanning._buildShowMyIpPlan=function(Obj,parsed,plan)
+  step={"type":"showMyIp","description":"Show my IP address"}
+  if hasIndex(parsed,"ipType") then step.ipType=parsed.ipType
+  push(plan.steps,step)
+  return plan
+end function
+AgentPlanning._buildRunPlan=function(Obj,parsed,plan)
+  scriptName=null
+  if hasIndex(parsed,"scriptName") then scriptName=parsed.scriptName
+  step={"type":"runBash","description":"Run bash script"}
+  if scriptName then
+    step.scriptName=scriptName
+    step.description="Run "+scriptName
+  end if
+  push(plan.steps,step)
+  return plan
+end function
+//Build launch plan - find and execute file
+AgentPlanning._buildLaunchPlan=function(Obj,parsed,plan)
+  step={"type":"launch","description":"Launch executable"}
+  //Extract filename from parsed object
+  if hasIndex(parsed,"path") then
+    step.filename=parsed.path
+  else if hasIndex(parsed,"target") then
+    step.filename=parsed.target
+  end if
+  if not hasIndex(step,"filename") then step.error="No file specified to launch"
+  push(plan.steps,step)
+  return plan
+end function
+//Build hunt plan - network service/resource discovery
+AgentPlanning._buildHuntPlan=function(Obj,parsed,plan)
+  step={"type":"hunt","description":"Hunt for services"}
+  //Copy all hunt parameters from parsed
+  if hasIndex(parsed,"huntType") then step.huntType=parsed.huntType
+  if hasIndex(parsed,"version") then step.version=parsed.version
+  if hasIndex(parsed,"count") then step.count=parsed.count
+  if hasIndex(parsed,"save") then step.save=parsed.save
+  if hasIndex(parsed,"download") then step.download=parsed.download
+  if hasIndex(parsed,"kill") then step.kill=parsed.kill
+  if hasIndex(parsed,"port") then step.port=parsed.port
+  if hasIndex(parsed,"huntName") then step.huntName=parsed.huntName
+  if hasIndex(parsed,"bssid") then step.bssid=parsed.bssid
+  if hasIndex(parsed,"essid") then step.essid=parsed.essid
+  //Build detailed description
+  descParts=["Hunt for"]
+  if hasIndex(step,"count") and step.count>1 then push(descParts,str(step.count))
+  if hasIndex(step,"huntType") then push(descParts,step.huntType)
+  if hasIndex(step,"version") then push(descParts,"version "+step.version)
+  if hasIndex(step,"huntName") then push(descParts,"named "+step.huntName)
+  if hasIndex(step,"save") and step.save then push(descParts,"(save results)")
+  if hasIndex(step,"download") and step.download then push(descParts,"(download)")
+  step.description=join(descParts," ")
+  push(plan.steps,step)
+  return plan
+end function
+//Build test plan - run AI test suite
+AgentPlanning._buildTestPlan=function(Obj,parsed,plan)
+  step={"type":"test","description":"Run AI improvements test suite"}
+  step.suite="all"
+  //Check if a specific test was requested
+  if hasIndex(parsed,"raw") then
+    rawLower=lower(parsed.raw)
+    if indexOf(rawLower,"synonym")!=null then
+      step.suite="synonyms"
+    else if indexOf(rawLower,"compound")!=null then
+      step.suite="compound"
+    else if indexOf(rawLower,"learn")!=null or indexOf(rawLower,"persist")!=null or indexOf(rawLower,"save")!=null then
+      step.suite="persistence"
+    else if indexOf(rawLower,"template")!=null or indexOf(rawLower,"planner")!=null then
+      step.suite="template"
+    end if
+  end if
+  push(plan.steps,step)
+  return plan
+end function

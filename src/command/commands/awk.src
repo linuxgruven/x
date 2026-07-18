@@ -1,0 +1,426 @@
+// =============================================================================
+// AWK
+// Pattern-scan and process text files field-by-field with custom delimiters.
+// =============================================================================
+Command.awk=function(Obj,argv)
+	//Handle -F flag with no space (e.g., -F: instead of -F :)
+	cleaned=[]
+	for arg in argv
+		if len(arg)>2 and arg[:2]=="-F" then
+			//Split -F: into -F and :
+			push(cleaned,"-F")
+			push(cleaned,arg[2:])
+		else
+			push(cleaned,arg)
+		end if
+	end for
+	argv=cleaned
+	_p=ArgumentParser.init
+	_p.addArgument("F",false,"store")  // Field delimiter
+	_p.addArgument("post",true,"flag")  // Long flag: --post (redirect output)
+	argv=_p.parse("awk",argv,Obj)
+	if argv isa Error then return argv
+	if not argv.rest or len(argv.rest)<1 then return Error.set("Usage: awk [-F delimiter] 'script' file...")
+	delimiter=" "
+  if argv.F then delimiter=escape(argv.F)
+	//Reconstruct script from arguments (may be split by shell)
+	//Look for arguments starting with { or ' until we find one ending with } or '
+	script=""
+	scriptStartIdx=-1
+	scriptEndIdx=-1
+	_len=len(argv.rest)
+	i=0
+	while i<_len
+		arg=argv.rest[i]
+		//Start of script - check for {, ', or "{
+		//Note: char codes 8216=', 8217=', 39='
+		if scriptStartIdx==-1 then
+			if arg[0]=="{" or code(arg[0])==8216 or code(arg[0])==39 then
+				scriptStartIdx=i
+			else if len(arg)>=2 and arg[0]=="""" and arg[1]=="{" then
+				scriptStartIdx=i
+			end if
+		end if
+		if scriptStartIdx!=-1 then
+			if len(script)>0 then script=script+" "
+			script=script+arg
+			//Check if this ends the script - look for } or ' at end, or }" for quoted scripts
+			//Note: char codes 8216=', 8217=', 39='
+			if arg[-1]=="}" or code(arg[-1])==8216 or code(arg[-1])==8217 or code(arg[-1])==39 then
+				scriptEndIdx=i
+				break
+			else if len(arg)>=2 and arg[-2]=="}" and arg[-1]=="""" then
+				scriptEndIdx=i
+				break
+			end if
+		end if
+	i+=1
+	end while
+	if scriptStartIdx==-1 then
+		script=argv.rest[0]
+		scriptEndIdx=0
+	end if
+	//Strip quotes from script (handle both regular and curly quotes)
+	if len(script)>0 and script[0]=="""" and script[-1]=="""" then script=script[1:-1]
+	if len(script)>0 and code(script[0])==8216 and code(script[-1])==8216 then script=script[1:-1]
+	if len(script)>0 and code(script[0])==8216 and code(script[-1])==8217 then script=script[1:-1]
+	if len(script)>0 and script[0]=="'" and script[-1]=="'" then script=script[1:-1]
+	// allow BEGIN/END-only scripts
+	usePipedInput=false
+	stdinContent=null
+	if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+		stdinContent=globals.G_pipe.stdin
+		usePipedInput=true
+	end if
+	lines=[]
+  if usePipedInput then
+    content=stdinContent
+    if typeof(content)!="string" then content=str(content)
+    stdinLines=split(content,char(10))
+    for line in stdinLines;push(lines,line);end for
+  else if len(argv.rest)>scriptEndIdx+1 then
+		_len=len(argv.rest)
+		i=scriptEndIdx+1
+		while i<_len
+			fileArg=argv.rest[i]
+			filePaths=[]
+			//Check if it contains a glob pattern
+			if indexOf(fileArg,"*")!=null then
+				expanded=Glob.expand(Obj,fileArg)
+				if expanded and len(expanded)>0 then
+					//Check if expansion actually worked (not just returning original pattern)
+          //Glob didn't expand, treat as literal filename
+					if len(expanded)==1 and expanded[0]==fileArg then filePaths=[fileArg] else filePaths=expanded //Glob expanded successfully
+				else
+					//Glob expansion returned nothing, try as literal filename
+					filePaths=[fileArg]
+				end if
+			else
+				filePaths=[fileArg]
+			end if
+			for filePath in filePaths
+				file=Io._getFile(Obj,filePath)
+				if file isa Error then return file
+				if not has_permission(file,"r") then return Error.set("PERMISSION",path(file))
+				content=get_content(file)
+				if not content then content=""
+				fileLines=split(content,char(10))
+				for line in fileLines;push(lines,line);end for
+			end for
+		i+=1
+		end while
+	else
+		return Error.set("No input files specified")
+	end if
+	_vars={"OFS":" ","ORS":char(10)}
+	parseRules=function(s)
+		s=trim(s)
+		rules=[]
+		i=0
+		slen=len(s)
+		while i<slen
+			while i<slen and (s[i]==" " or s[i]==char(9) or s[i]==char(10));i+=1;end while
+			if i>=slen then break
+			pat=null
+			if s[i:i+5]=="BEGIN" then
+				pat="BEGIN"
+				i+=5
+			else if s[i:i+3]=="END" then
+				pat="END"
+				i+=3
+			else if s[i]=="/" then
+				i+=1
+				regStr=""
+				while i<slen and s[i]!="/";regStr=regStr+s[i];i+=1;end while
+				i+=1
+				pat={"type":"regex","val":regStr}
+			else if s[i]=="$" then
+				i+=1
+				fnum=""
+				while i<slen and code(s[i])>=48 and code(s[i])<=57;fnum=fnum+s[i];i+=1;end while
+				while i<slen and s[i]==" ";i+=1;end while
+				op=""
+				while i<slen and (s[i]==">" or s[i]=="<" or s[i]=="=" or s[i]=="!");op=op+s[i];i+=1;end while
+				while i<slen and s[i]==" ";i+=1;end while
+				rval=""
+				while i<slen and s[i]!=" " and s[i]!="{";rval=rval+s[i];i+=1;end while
+				pat={"type":"cond","field":val(fnum),"op":op,"rval":rval}
+			end if
+			while i<slen and s[i]==" ";i+=1;end while
+			if i>=slen then break
+			if s[i]=="{" then
+				i+=1
+				depth=1
+				act=""
+				while i<slen and depth>0
+					if s[i]=="{" then
+						depth+=1
+					else if s[i]=="}" then
+						depth-=1
+						if depth==0 then
+							i+=1
+							break
+						end if
+					end if
+					if depth>0 then act=act+s[i]
+					i+=1
+				end while
+				push(rules,{"pat":pat,"act":trim(act)})
+			end if
+		end while
+		return rules
+	end function
+	evalToken=function(token, fields, text, nr)
+		if len(token)==0 then return ""
+		if (token[0]=="""" and token[-1]=="""") or (token[0]=="'" and token[-1]=="'") then return token[1:-1]
+		if token=="NR" then return str(nr)
+		if token=="NF" then return str(len(fields))
+		if indexOf(token,"NR")!=null then
+			expr=token.replace("NR",str(nr))
+			if indexOf(expr,"-")!=null then
+				_ep=split(expr,"-")
+				if len(_ep)==2 then return str(val(_ep[0])-val(_ep[1]))
+			else if indexOf(expr,"+")!=null then
+				_ep=split(expr,"+")
+				if len(_ep)==2 then return str(val(_ep[0])+val(_ep[1]))
+			end if
+			return expr
+		end if
+		// Handle concatenation expressions: e.g. $1"."$2".0.0/16"
+		if indexOf(token,"$")!=null and (indexOf(token,"""")!=null or indexOf(token,"'")!=null) then
+			parts=[]
+			ci=0;tlen=len(token)
+			while ci<tlen
+				c=token[ci]
+				if c=="""" or c=="'" then
+					qc=c;ci+=1;lit=""
+					while ci<tlen
+						if token[ci]==qc then
+							ci+=1
+							break
+						end if
+						lit=lit+token[ci];ci+=1
+					end while
+					push(parts,lit)
+				else
+					word=""
+					while ci<tlen and token[ci]!="""" and token[ci]!="'";word=word+token[ci];ci+=1;end while
+					if len(word)>0 then push(parts,evalToken(word,fields,text,nr))
+				end if
+			end while
+			if len(parts)>1 then return join(parts,"")
+		end if
+		if token[0]=="$" then
+			ref=token[1:]
+			if ref=="0" then return text
+			if ref=="NF" then
+				if len(fields)>0 then return fields[-1] else return ""
+			end if
+			n=val(ref)
+			if n>=1 and n<=len(fields) then return fields[n-1]
+			return ""
+		end if
+		if token[:7]=="length(" then
+			inner=trim(token[7:-1])
+			return str(len(evalToken(inner,fields,text,nr)))
+		end if
+		if token[:7]=="substr(" then
+			inner=token[7:-1]
+			spts=split(inner,",")
+			if len(spts)>=2 then
+				sv=evalToken(trim(spts[0]),fields,text,nr)
+				st=val(trim(spts[1]))-1
+				if len(spts)>=3 then
+					sl=val(trim(spts[2]))
+					return sv[st:st+sl]
+				end if
+				return sv[st:]
+			end if
+			return ""
+		end if
+		return token
+	end function
+	evalAction=function(act, fields, text, nr)
+		act=trim(act)
+		if act[:3]=="OFS" and indexOf(act,"=")!=null then
+			ofsVal=trim(split(act,"=")[1])
+			if len(ofsVal)>0 and (ofsVal[0]=="""" or ofsVal[0]=="'") then ofsVal=ofsVal[1:]
+			if len(ofsVal)>0 and (ofsVal[-1]=="""" or ofsVal[-1]=="'") then ofsVal=ofsVal[:-1]
+			_vars["OFS"]=ofsVal
+			return null
+		end if
+		if act[:6]=="printf" then
+			pExpr=trim(act[6:])
+			pToks=split(pExpr,",")
+			fmt=""
+			pArgs=[]
+			if len(pToks)>0 then
+				fmt=trim(pToks[0])
+				if (fmt[0]=="""" and fmt[-1]=="""") or (fmt[0]=="'" and fmt[-1]=="'") then fmt=fmt[1:-1]
+				pi=1
+				while pi<len(pToks);push(pArgs,evalToken(trim(pToks[pi]),fields,text,nr));pi+=1;end while
+			end if
+			res=""
+			fi=0;flen=len(fmt);aIdx=0
+			while fi<flen
+				c=fmt[fi]
+				if c=="%" and fi+1<flen then
+					fi+=1
+					spec=fmt[fi];fi+=1
+					av="";if aIdx<len(pArgs) then av=pArgs[aIdx]
+					aIdx+=1
+					if spec=="s" then
+						res=res+str(av)
+					else if spec=="d" or spec=="i" then
+						res=res+str(floor(val(av)))
+					else if spec=="f" then
+						res=res+str(val(av))
+					else
+						res=res+"%"+spec
+					end if
+				else if code(c)==92 and fi+1<flen then
+					fi+=1;esc=fmt[fi];fi+=1
+					if esc=="n" then
+						res=res+char(10)
+					else if esc=="t" then
+						res=res+char(9)
+					else
+						res=res+c+esc
+					end if
+				else
+					res=res+c;fi+=1
+				end if
+			end while
+			_rlen=len(res)
+			if _rlen>0 and code(res[_rlen-1])==10 then res=res[:_rlen-1]
+			return res
+		end if
+		if act[:5]=="print" then
+			printExpr=trim(act[5:])
+			// Detect comma outside quotes/parens to determine OFS mode
+			useOFS=false
+			_ci=0;_clen=len(printExpr);_inQ=false;_qc=null;_dep=0
+			while _ci<_clen
+				_cc=printExpr[_ci]
+				if _inQ then
+					if _cc==_qc then _inQ=false
+				else if _cc=="""" or _cc=="'" then
+					_inQ=true;_qc=_cc
+				else if _cc=="(" then
+					_dep+=1
+				else if _cc==")" then
+					_dep-=1
+				else if _cc=="," and _dep==0 then
+					useOFS=true;break
+				end if
+				_ci+=1
+			end while
+			// Quote-and-paren-aware split
+			result=[]
+			toks=[]
+			depth=0;cur="";si=0;plen=len(printExpr);inQ=false;qc=null
+			while si<plen
+				sc=printExpr[si]
+				if inQ then
+					if sc==qc then inQ=false
+					cur=cur+sc
+				else if sc=="""" or sc=="'" then
+					inQ=true;qc=sc
+					cur=cur+sc
+				else if sc=="(" then
+					depth+=1;cur=cur+sc
+				else if sc==")" then
+					depth-=1;cur=cur+sc
+				else if useOFS and sc=="," and depth==0 then
+					push(toks,trim(cur));cur=""
+				else if not useOFS and sc==" " and depth==0 then
+					if len(trim(cur))>0 then push(toks,trim(cur))
+					cur=""
+				else
+					cur=cur+sc
+				end if
+				si+=1
+			end while
+			if len(trim(cur))>0 then push(toks,trim(cur))
+			for tok in toks
+				tok=trim(tok)
+				if len(tok)==0 then continue
+				push(result,evalToken(tok,fields,text,nr))
+			end for
+			if useOFS then return join(result,_vars["OFS"]) else return join(result,"")
+		end if
+		return null
+	end function
+	matchPattern=function(pat, fields, text)
+		if pat==null then return true
+		if pat=="BEGIN" or pat=="END" then return false
+		if typeof(pat)=="map" then
+			if pat.type=="regex" then return is_match(text,pat.val)
+			if pat.type=="cond" then
+				fv=""
+				if pat.field>=1 and pat.field<=len(fields) then fv=fields[pat.field-1]
+				nfv=val(fv);nrv=val(pat.rval)
+				if pat.op==">" then return nfv>nrv
+				if pat.op==">=" then return nfv>=nrv
+				if pat.op=="<" then return nfv<nrv
+				if pat.op=="<=" then return nfv<=nrv
+				if pat.op=="==" then return fv==pat.rval or nfv==nrv
+				if pat.op=="!=" then return fv!=pat.rval
+			end if
+		end if
+		return false
+	end function
+	rules=parseRules(script)
+	output=[]
+	for r in rules
+		if r.pat=="BEGIN" then
+			res=evalAction(r.act,[],"",0)
+			if res!=null then push(output,res)
+		end if
+	end for
+	_NR=0
+	for line in lines
+		_NR=_NR+1
+		text=line+""
+		if len(text)==0 then continue
+		fields=split(text,delimiter)
+		if delimiter==" " then
+			cleanFields=[]
+			for field in fields;trimmed=trim(field);if len(trimmed)>0 then push(cleanFields,trimmed);end for
+			fields=cleanFields
+		end if
+		for r in rules
+			if r.pat=="BEGIN" or r.pat=="END" then continue
+			if matchPattern(r.pat,fields,text) then
+				res=evalAction(r.act,fields,text,_NR)
+				if res!=null then push(output,res)
+			end if
+		end for
+	end for
+	for r in rules
+		if r.pat=="END" then
+			res=evalAction(r.act,[],"",_NR)
+			if res!=null then push(output,res)
+		end if
+	end for
+	// Check if in pipe mode first (pipe chain takes priority over direct redirect)
+	_oLen=len(output);_oi=0
+	while _oi<_oLen
+		_ol=output[_oi];_oll=len(_ol)
+		if _oll>=2 and code(_ol[_oll-2])==92 and code(_ol[_oll-1])==110 then
+			output[_oi]=_ol[:_oll-2]
+		else if _oll>=1 and code(_ol[_oll-1])==10 then
+			output[_oi]=_ol[:_oll-1]
+		end if
+		_oi+=1
+	end while
+	if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+		for line in output;push(globals.G_pipe.stdout,line);end for
+		return
+	end if
+	if _p.write then
+		argv.data=output
+		return _p.out(Obj,argv)
+	end if
+	for line in output;print white(line);end for
+end function

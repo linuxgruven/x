@@ -1,0 +1,260 @@
+// =============================================================================
+// UTILITY_EDITOR
+// Interactive line-by-line file editor with syntax highlighting.
+// =============================================================================
+// Function: editor
+// Purpose: Interactive line-by-line file editor with syntax highlighting
+// Args:
+//   Obj - Session object for file operations
+//   argv - Arguments array, optional -n flag for new file with content
+// Returns: null (interactive loop until user exits)
+Utility.editor=function(Obj,argv)
+	_p=ArgumentParser.init
+  //Add -n flag for creating new file with optional content
+  _p.addArgument("n",false,"store")
+  argv=_p.parseArgs("editor",argv)
+  if argv isa Error then return
+  //Track if syntax highlighting is enabled (for .src files)
+  F=false
+  //Current file being edited
+  f=null
+  //Check if -n flag provided (new file)
+  if argv.n then
+    //Create new file with specified name
+    f=Command.touch(Obj,[argv.n])
+    if f isa Error then return
+    //Join remaining args as initial content
+    c=join(argv.rest," ")
+    if c then set_content(f,c)
+  //Otherwise try to open existing file
+  else
+    if argv.rest then
+      //Get file from first argument
+      f=Io._getFile(Obj,argv.rest[0])
+      if f isa Error then f=null
+    end if
+  end if
+	//Main editor loop
+	while true
+		//Array to hold file lines
+		b=[]
+		//Define editor menu options
+		m={
+      "l":"New line...",
+      "a":"Append to line...",
+      "e":"Edit a line...",
+      "r":"Remove a line...",
+      "c":"Clear all",
+      "o":"Open a file...",
+      "n":"New file...",
+      "f":"Rename this file...",
+      "d":"Delete this file...",
+      "p":"Un|Format",
+      "x":"--- Done ---"
+    }
+		//If no file is open, show prompt to open or create
+		if not f then
+      CH=[green("Open, or create a new file to get started")]
+    //File is open, show file content
+    else
+      //Enable syntax highlighting if file is .src
+      if path(f)[-3:]=="src" then F=true
+      //Split file into lines
+      b=split(get_content(f),char(10))
+      //Set menu header with filename
+      CH=[green("What would you like to do with the [ "+white(name(f))+" ] file?")]
+      //Check if file is empty
+      if not get_content(f) then
+        print red("Add something...")
+      //File has content, display it
+      else
+        //Display without syntax highlighting
+        if not F then
+          //Remove color codes and escape newlines
+          r=uncolorString(get_content(f)).replace("\\n","\<b></b>n")
+          p=split(r,char(10))
+          //Add each line to choice list in white
+          _len=len(p);l=0;while l<_len;push(CH,white(p[l]));l+=1;end while
+        //Display with syntax highlighting
+        else
+          //Parse syntax and escape newlines
+          r=parseSyntax(uncolorString(get_content(f)),false).replace("\\n","\<b></b>n")
+          p=split(r,char(10))
+          //Add each colored line to choice list
+          _len=len(p);l=0;while l<_len;push(CH,p[l]);l+=1;end while
+        end if
+        //Display line and character counts
+        print blue("Line Item Count: ")+yellow(str(len(b)))
+        print blue("Character Count: ")+yellow(str(len(join(split(get_content(f),char(10))))))
+      end if
+    end if
+		//Show menu and get user choice
+		UCH=lower(Gui.choiceAlpha(CH,m,"x"))
+		//Exit editor if user chose x
+		if UCH=="x" then break
+		//Command: l - Add new line to end of file
+		if UCH=="l" then
+      //Skip if no file open
+      if not f then continue
+			//Check write permission
+			if has_permission(f,"w") then
+				//Prompt for line content
+				add=Gui.input({"text":"Add What?"})
+				//Skip if user cancelled
+				if add==null then continue
+				//Add line to array
+				push(b,add)
+				//Write updated content to file
+				set_content(f,trim(join(b,char(10))))
+			//No write permission error
+			else
+				Info.error(Info.message.NOW)
+			end if
+		//Command: a - Append text to existing line
+		else if UCH=="a" then
+			//Skip if no lines or no file
+			if not len(b) or not f then continue
+			//Check write permission
+			if has_permission(f,"w") then
+				//Prompt for line number (convert to 0-indexed)
+				n=Gui.inputInt({"text":"What line to append?"})-1
+        //Skip if invalid number
+        if not n isa number then continue
+				//Validate line number in range
+				if n>=0 and n<len(b) then
+					//Store original line
+					z=b[n]
+					//Prompt for text to append
+					t=Gui.input({"text":"What would you like to append?"})
+          //Skip if user cancelled
+          if t==null then continue
+					//Skip if same as original
+					if t==z then continue
+					//Append text with space separator
+					b[n]=b[n]+" "+trim(t)
+					//Write updated content
+					set_content(f,trim(join(b,char(10))))
+				end if
+			//No write permission error
+			else
+				Info.error(Info.message.NOW)
+			end if
+		//Command: e - Edit existing line (replace)
+		else if UCH=="e" then
+			//Skip if no lines or no file
+			if not len(b) or not f then continue
+			//Check write permission
+			if has_permission(f,"w") then
+				//Prompt for line number (convert to 0-indexed)
+				n=Gui.inputInt({"text":"What line to edit?"})-1
+        //Skip if invalid number
+        if not n isa number then continue
+				//Validate line number in range
+				if n>=0 and n<len(b) then
+					//Store original line
+					z=b[n]
+					//Show current line in orange
+					print orange(z)
+					//Prompt for replacement text
+					t=Gui.input({"text":"What changes do you want to make?"})
+          //Skip if user cancelled
+          if t==null then continue
+					//Skip if same as original
+					if t==z then continue
+					//Replace line with new text
+					b[n]=trim(t)
+					//Write updated content
+					set_content(f,trim(join(b,char(10))))
+				end if
+			//No write permission error
+			else
+				Info.error(Info.message.NOW)
+			end if
+		//Command: r - Remove line by number
+		else if UCH=="r" then
+			//Skip if no lines
+			if not len(b) then continue
+			//Check write permission
+			if has_permission(f,"w") then
+				//Prompt for line number (convert to 0-indexed)
+				n=Gui.inputInt({"text":"What line do you want to remove?"})-1
+        //Skip if invalid number
+        if not n isa number then continue
+				//Validate line number in range
+				if n>=0 and n<=len(b) then
+					//Remove line from array
+					remove(b,n)
+					//Write updated content
+					set_content(f,trim(join(b,char(10))))
+				end if
+			//No write permission error
+			else
+				Info.error(Info.message.NOW)
+			end if
+		//Command: c - Clear all file content
+		else if UCH=="c" then
+			//Skip if no lines or no file
+			if not len(b) or not f then continue
+			//Check write permission and clear, or show error
+			if has_permission(f,"w") then set_content(f,"") else Info.error(Info.message.NOW)
+		//Command: n - Create new file
+		else if UCH=="n" then
+      //Prompt for filename
+      e=Gui.input({"text":"Enter new file name"})
+      //Check if valid name entered
+      if e==null then
+        Info.error("No valid name entered")
+        continue
+      end if
+      //Create new file in current directory
+      f=Command.touch(Obj,[e])
+			//Set to null if error creating
+			if f isa Error then f=null
+    //Command: o - Open existing file
+    else if UCH=="o" then
+      //Browse and select file
+      f=Io.file(Obj,Obj.dir.current,"Select an file to open:")
+      //Handle warning result
+      if f isa Warning then f
+    //Command: f - Rename current file
+    else if UCH=="f" then
+      //Skip if no file open
+      if not f then continue
+      //Prompt for new filename
+      e=Gui.input({"text":"Enter a new file name"})
+      //Check if valid name entered
+      if e==null then
+        Info.error("No valid name entered")
+        continue
+      end if
+      //Attempt to rename file
+      r=rename(f,e)
+      //Show error if rename failed
+      if r then
+        Info.error(r)
+        continue
+      end if
+      //Update file reference with new name
+      f=File(Obj.computer,path(Obj.dir.current)+"/"+e)
+    //Command: d - Delete current file
+    else if UCH=="d" then
+      //Skip if no file open
+      if not f then continue
+      //Attempt to delete file
+      r=delete(f)
+      //Show error if delete failed
+      if r then
+        Info.error(r)
+      //Delete successful, prompt to open another
+      else
+        f=Io.file(Obj,Obj.dir.current,"Select an file to open:")
+        if f isa Warning then f
+      end if
+    //Command: p - Toggle syntax highlighting
+    else if UCH=="p" then
+      //Toggle format flag
+      F=not F
+    end if
+	//End of main editor loop
+	end while
+end function

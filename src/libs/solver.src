@@ -1,0 +1,598 @@
+// =============================================================================
+// SOLVER
+// Code analysis and bug detection; finds exploitable vulnerabilities in GreyScript source files.
+// =============================================================================
+Solver={}
+Solver.debug=null
+// Line type identifiers
+Solver.lineTypes={
+	"FUNCTION":"function",
+	"IF":"if",
+	"FOR":"for",
+	"LIST_PUSH":"listPush",
+	"LIST_SET":"listSet",
+	"END":"end",
+	"OTHER":"other"
+}
+// Natural language pattern prefixes
+Solver._PATTERN_FUNCTION="The function "
+Solver._PATTERN_IF="If the value of "
+Solver._PATTERN_FOR="For each "
+Solver._PATTERN_LIST="creates a list "
+Solver._PATTERN_ASSIGN="assigns "
+Solver._PATTERN_CALL="calls the function "
+Solver._PATTERN_ADD="adds "
+Solver._PATTERN_CALC="calculates "
+Solver._PATTERN_UPDATE="updates "
+Solver._PATTERN_FINALLY="Finally, it"
+Solver._PATTERN_RETURN="returns "
+// Pattern components
+Solver._PREFIX_AND="and "
+Solver._PREFIX_THEN="then "
+Solver._PREFIX_FROM="from "
+Solver._PREFIX_CALCULATING="calculating "
+Solver._INFIX_TO=" to "
+Solver._INFIX_WITH=" with "
+Solver._INFIX_BY=" by "
+Solver._INFIX_BY_CALC=" by calculating "
+Solver._INFIX_TO_FIRST_ELEM=" to the first element of "
+// Indentation
+Solver._INDENT="    "
+// Validation thresholds
+Solver._MISSING_LINE_THRESHOLD=0.5
+Solver._LOOKAHEAD_DEPTH=2
+// Solver.getLineType - Identify code line type
+// Args: l - Code line string
+// Returns: Line type constant from lineTypes map
+Solver.getLineType=function(l)
+	// Function definition (func_name = function)
+	if startsWith(l,"func_") then return self.lineTypes.FUNCTION
+	// Conditional statement (if condition then)
+	if startsWith(l,"if ") then return self.lineTypes.IF
+	// Loop statement (for var in range)
+	if startsWith(l,"for ") then return self.lineTypes.FOR
+	// List push operation (list.push)
+	if contains(l,"push") then return self.lineTypes.LIST_PUSH
+	// List element assignment (list[index] = value)
+	if contains(l,"[") and contains(l,"]") then return self.lineTypes.LIST_SET
+	// Block terminator (end if/for/function)
+	if contains(l,"end") then return self.lineTypes.END
+	// All other code lines
+	return self.lineTypes.OTHER
+end function
+// Map of natural language math phrases to operators
+Solver.mathReplacements={
+	"is equal to ":"== ",
+	"is not equal to ":"!= ",
+	"is greater than or equal to ":">= ",
+	"is less than or equal to ":"<= ",
+	"is greater than ":"> ",
+	"is less than ":"< ",
+	"minus ":"- ",
+	"plus ":"+ ",
+	"multiplied by ":"* ",
+	"multiplying it by ":"{VARNAME} * ",
+	"divided by ":"/ ",
+	"dividing it by ":"{VARNAME} / "
+}
+// HELPER FUNCTIONS
+//Extract word from string after a marker until delimiter
+Solver._extractWord=function(str,startMarker,delimiter=" ")
+	start=indexOf(str,startMarker)
+	if start==null then return null
+	start+=len(startMarker)
+	sub=str[start:]
+	endPos=indexOf(sub,delimiter)
+	if endPos==null then return sub
+	return sub[:endPos]
+end function
+//Extract variable name (handles comma edge case)
+Solver._extractVarName=function(str,startMarker)
+	word=self._extractWord(str,startMarker," ")
+	if word==null then return null
+	// Handle comma in variable name
+	_idx=indexOf(word,",");if _idx!=null then word=word[:_idx]
+	return word
+end function
+//Insert items into array after specified index
+Solver._insertAfter=function(array,index,items);if not items isa list then items=[items];return array[:index+1]+items+array[index+1:];end function
+//Debug logging helper
+Solver._debugLog=function(type,lineNum,content="")
+	if not self.debug then return
+	if type=="prog" then
+		print("prog("+lineNum+"): ["+content+"]")
+	else if type=="info" then
+		print("info("+lineNum+"): ["+content+"]")
+	else if type=="missing" then
+		print("missing: "+lineNum+" = "+content)
+	else if type=="incorrect" then
+		print("incorrect: "+lineNum)
+	else if type=="sep" then
+		print(".")
+	else
+		print(content)
+	end if
+end function
+//Print numbered lines for debug
+Solver._printDebugLines=function(lines);_len=len(lines);i=0;while i<_len;print((i+1)+":"+lines[i]);i+=1;end while;end function
+//Validate input for parsing
+Solver._validateInput=function(input,name)
+	if not input then return Error.set(name+" cannot be null")
+	if not input isa list then return Error.set(name+" must be a list")
+	if len(input)==0 then return Error.set(name+" cannot be empty")
+	return true
+end function
+//Variable tracking - mark as defined
+Solver._varDefined=function(variables,funcName,varName);if indexOf(variables[funcName],varName)==null then push(variables[funcName],varName);end function
+//Variable tracking - mark as used (add to args if undefined)
+Solver._varUsed=function(variables,args,funcName,varName)
+	if indexOf(variables[funcName],varName)==null then
+		if indexOf(args[funcName],varName)==null then push(args[funcName],varName)
+		push(variables[funcName],varName)
+	end if
+end function
+//Variable tracking - initialize new function
+Solver._funcDefined=function(variables,args,funcName)
+variables[funcName]=[];args[funcName]=[];return funcName
+end function
+// PARSER FUNCTIONS - Convert natural language patterns to code
+//Parse function definition
+Solver._parseFunction=function(line,vars,args,currentFunc)
+	// Extract function name
+	_plen=len(self._PATTERN_FUNCTION);funcName=line[_plen:_plen-1+12]
+	// Initialize function tracking
+	currentFunc=self._funcDefined(vars,args,funcName)
+	// Extract clauses after function name
+	clauses=split(line[len(self._PATTERN_FUNCTION+"func_")-1+8:],", ")
+	// Build function definition
+	result=[funcName+" = function()"]
+	// Add clauses (join nested statements, separate others)
+	if startsWith(clauses[0],"For each") or startsWith(clauses[0],"If ") then result.push(join(clauses,", ")) else result+=clauses
+	return {"result":result,"func":currentFunc}
+end function
+//Parse conditional statement
+Solver._parseIf=function(line)
+	// Split condition from body
+	parts=split(line,", ")
+	condition=parts[0]
+	body=parts[1:]
+	// Convert to if statement
+	result=["if "+self.parseEquation(condition[len(self._PATTERN_IF)-1+1:])+" then"]
+	result+=body
+	result.push("end if")
+	return {"result":result}
+end function
+//Parse for loop
+Solver._parseFor=function(line,vars,currentFunc)
+	// Extract loop variable
+	loopVar=line[len(self._PATTERN_FOR):]
+	loopVar=loopVar[:indexOf(loopVar," ")]
+	// Extract range
+	rangeStr=line[indexOf(line,loopVar)+len(loopVar)+1:]
+	rangeStr=rangeStr[:indexOf(rangeStr,", ")]
+	// Strip "from " prefix
+	if startsWith(rangeStr,self._PREFIX_FROM) then rangeStr=rangeStr[len(self._PREFIX_FROM):]
+	// Mark loop index as defined
+	self._varDefined(vars,currentFunc,"i")
+	// Extract body
+	body=split(line,", ")[1:]
+	// Build for loop
+	result=["for "+loopVar+" in "+self.parseForRange(rangeStr)]
+	result+=body
+	result.push("end for")
+	return {"result":result}
+end function
+//Parse list creation
+Solver._parseList=function(line,vars,currentFunc)
+	// Extract variable name
+	varName=self._extractVarName(line,self._PATTERN_LIST)
+	// Mark as defined
+	self._varDefined(vars,currentFunc,varName)
+	// Build list initialization
+	result=[varName+" = []"]
+	// Extract following clauses
+	clauses=split(line,", ")[1:]
+	result+=clauses
+	return {"result":result}
+end function
+//Parse array element assignment
+Solver._parseAssign=function(line,vars,args,currentFunc)
+	// Extract target variable
+	targetVar=self._extractWord(line,self._PATTERN_ASSIGN," ")
+	self._varDefined(vars,currentFunc,targetVar)
+	// Extract source array
+	sourceArray=self._extractWord(line,self._INFIX_TO_FIRST_ELEM," ")
+	self._varUsed(vars,args,currentFunc,sourceArray)
+	// Build array access
+	result=[targetVar+" = "+sourceArray+"[0]"]
+	return {"result":result}
+end function
+//Parse function call
+Solver._parseCall=function(line,vars,args,currentFunc)
+	// Extract function name
+	funcName=self._extractWord(line,self._PATTERN_CALL," ")
+	// Extract argument
+	argVar=self._extractWord(line,self._INFIX_WITH," ")
+	self._varUsed(vars,args,currentFunc,argVar)
+	// Build function call
+	result=[argVar+" = "+funcName+"("+argVar+")"]
+	return {"result":result}
+end function
+//Parse list push operation
+Solver._parsePush=function(line,vars,args,currentFunc)
+	// Extract value to add
+	value=self._extractWord(line,self._PATTERN_ADD," ")
+	self._varUsed(vars,args,currentFunc,value)
+	// Extract target list
+	listName=self._extractWord(line,self._INFIX_TO," ")
+	self._varUsed(vars,args,currentFunc,listName)
+	// Build push operation
+	result=[listName+".push("+value+")"]
+	return {"result":result}
+end function
+//Parse calculation
+Solver._parseCalc=function(line,vars,args,currentFunc)
+	// Extract result variable
+	resultVar=self._extractWord(line,self._PATTERN_CALC," ")
+	self._varUsed(vars,args,currentFunc,resultVar)
+	// Build assignment with equation
+	result=[resultVar+" = "+self.parseEquation(line[len(self._PATTERN_CALC):],resultVar)]
+	return {"result":result}
+end function
+//Parse update operation
+Solver._parseUpdate=function(line,vars,args,currentFunc)
+	// Extract variable to update
+	updateVar=self._extractWord(line,self._PATTERN_UPDATE," ")
+	self._varUsed(vars,args,currentFunc,updateVar)
+	// Extract expression
+	expr=line[indexOf(line,self._INFIX_BY)+len(self._INFIX_BY):]
+	// Strip calculating prefix
+	if startsWith(expr,self._PREFIX_CALCULATING) then expr=expr[len(self._PREFIX_CALCULATING):]
+	// Build assignment with equation
+	result=[updateVar+" = "+self.parseEquation(expr,updateVar)]
+	return {"result":result}
+end function
+//Parse return statement
+Solver._parseReturn=function(line)
+	// Extract return expression
+	expr=line[len(self._PATTERN_RETURN):]
+	// Build return statement
+	result=["return "+self.parseEquation(expr),"end function"]
+	return {"result":result}
+end function
+// Solver.parseEquation - Convert natural language math to operators
+// Args: s - Natural language math string, v - Variable name to substitute
+// Returns: Converted operator expression string
+Solver.parseEquation=function(s,v="{VARNAME}")
+	// Replace all natural language phrases with operators
+	for r in self.mathReplacements;s=s.replace(r.key,r.value);end for
+	// Substitute variable name
+	s=s.replace("{VARNAME}",v)
+	// Split by spaces to analyze parts
+	l=split(s," ")
+	// Reverse multiplication/addition for better matching (3 parts only)
+	if len(l)==3 and (l[1]=="*" or l[1]=="+") then
+		// Reverse if second operand is "i"
+		if l[2]=="i" then
+			l.reverse
+		// Reverse if second operand longer than first (var comes first)
+		else if len(l[2])>len(l[1]) then
+			l.reverse
+		end if
+	end if
+	// Rejoin with spaces
+	s=join(l," ")
+	return s
+end function
+// Solver.parseForRange - Convert "a to b" to range(a, b)
+// Args: s - Range string like "1 to 10"
+// Returns: Range function call string
+Solver.parseForRange=function(s)
+	// Split by " to " separator
+	s=split(s," to ")
+	// Return as range(start, end)
+	return "range("+s[0]+", "+s[1]+")"
+end function
+// Solver.initialParse - Split compiler output into program/info
+// Args: r - Raw compiler output string
+// Returns: Map with "program" and "info" arrays
+Solver.initialParse=function(r)
+	// Initialize program lines array
+	p=[]
+	// Initialize info lines array
+	i=[]
+	// Process each line
+	for l in split(r,char(10))
+		// Trim whitespace
+		l=trim(l)
+		// Skip empty lines and header
+		if l=="" or l=="Potential problems have been found in the following code:" then continue
+		// Lines without colon are info (split by period)
+		if l.indexOf(":")==null then
+			i+=split(l,"\.")
+		// Lines with colon are program (extract after colon)
+		else
+			l=l[indexOf(l,":")+2:]
+			push(p,l)
+		end if
+	end for
+	// Return map with both arrays
+	return {"program":p,"info":i}
+end function
+// Solver.simularityTest - Calculate line similarity score
+// Args: a - First line string, b - Second line string
+// Returns: Similarity score (higher = more similar)
+Solver.simularityTest=function(a,b)
+	// Store original strings for length comparison
+	y=a
+	z=b
+	// Split into word arrays
+	a=split(a," ")
+	b=split(b," ")
+	// Build map from b for O(1) lookups
+	bMap={}
+	for x in b;bMap[x]=true;end for
+	// Build map from a for O(1) lookups
+	aMap={}
+	for x in a;aMap[x]=true;end for
+	// Initialize score
+	s=0
+	// Add points for matching words (length + 0.1)
+	for x in a;if hasIndex(bMap,x) then s+=len(x)+0.1;end for
+	// Subtract 0.1 for words in b not in a
+	for x in b;if not hasIndex(aMap,x) then s-=0.1;end for
+	// Subtract length difference penalty
+	s-=abs(len(y)-len(z))/10
+	return s
+end function
+// Solver.wrongTokens - Count mismatched tokens between lines
+// Args: a - First line string, b - Second line string
+// Returns: Number of mismatched tokens
+Solver.wrongTokens=function(a,b)
+	// Split into word arrays
+	y=split(a," ")
+	z=split(b," ")
+	// Build unique word maps
+	aMap={}
+	for x in y;aMap[x]=true;end for
+	bMap={}
+	for x in z;bMap[x]=true;end for
+	// Count matching unique words
+	s=0
+	for x in aMap.indexes;if hasIndex(bMap,x) then s+=1;end for
+	// Return average of non-matching words
+	aLen=len(aMap.indexes)
+	bLen=len(bMap.indexes)
+	return (aLen-s+bLen-s)/2
+end function
+// Solver.fixIndentationAndAddArgs - Add indentation and function arguments
+// Args: f - Array of code lines, a - Map of function arguments
+// Returns: Array of properly indented code with function signatures
+Solver.fixIndentationAndAddArgs=function(f,a)
+	// Initialize output array
+	p=[]
+	// Initialize indentation level
+	i=0
+	// Process each line
+	_len=len(f)
+	n=0;while n<_len
+		l=f[n]
+		// Get line type
+		y=self.getLineType(l)
+		// Decrease indent before END statements
+		if y==self.lineTypes.END then i-=1
+		// Add function arguments to function definitions
+		if y==self.lineTypes.FUNCTION then
+			// Extract function name (before space)
+			m=l[:indexOf(l," ")]
+			// Rebuild with arguments from map
+			l=m+" = function("+join(a[m],", ")+")"
+		end if
+		// Add line with current indentation
+		push(p,self._INDENT*i+l)
+		// Increase indent after block openers
+		if contains([self.lineTypes.FUNCTION,self.lineTypes.IF,self.lineTypes.FOR],y) then i+=1
+	n+=1;end while
+	return p
+end function
+// Solver.parseInfo - Convert natural language to executable code
+// Args: i - Array of info lines (natural language descriptions)
+// Returns: Array of formatted code lines with indentation
+Solver.parseInfo=function(i)
+	// Validate input
+	valid=self._validateInput(i,"Info array")
+	if valid isa Error then return valid
+	// Current function name
+	F=null
+	// Variables defined per function
+	V={}
+	// Arguments needed per function
+	A={}
+	// Copy info array to avoid modifying original
+	p=i[0:]
+	// Initialize line counter
+	n=0
+	// Process each line
+	while n<len(p)
+		// Trim whitespace from line
+		l=trim(p[n])
+		// Remove duplicate empty lines
+		if n!=0 and p[n-1]==p[n] and p[n]=="" then
+			remove(p,n)
+			continue
+		end if
+		// Strip common prefixes
+		if startsWith(l,self._PREFIX_AND) then l=l[len(self._PREFIX_AND):]
+		if startsWith(l,self._PREFIX_THEN) then l=l[len(self._PREFIX_THEN):]
+		// Try to match and parse patterns
+		parsed=null
+		if startsWith(l,self._PATTERN_FUNCTION) then
+			parsed=self._parseFunction(l,V,A,F)
+			if parsed.func then F=parsed.func
+		else if startsWith(l,self._PATTERN_IF) then
+			parsed=self._parseIf(l)
+		else if startsWith(l,self._PATTERN_FOR) then
+			parsed=self._parseFor(l,V,F)
+		else if startsWith(l,self._PATTERN_LIST) then
+			parsed=self._parseList(l,V,F)
+		else if startsWith(l,self._PATTERN_ASSIGN) then
+			parsed=self._parseAssign(l,V,A,F)
+		else if startsWith(l,self._PATTERN_CALL) then
+			parsed=self._parseCall(l,V,A,F)
+		else if startsWith(l,self._PATTERN_ADD) then
+			parsed=self._parsePush(l,V,A,F)
+		else if startsWith(l,self._PATTERN_CALC) then
+			parsed=self._parseCalc(l,V,A,F)
+		else if startsWith(l,self._PATTERN_UPDATE) then
+			parsed=self._parseUpdate(l,V,A,F)
+		else if startsWith(l,self._PATTERN_FINALLY) then
+			// Remove prefix and reprocess
+			p[n]=l[len(self._PATTERN_FINALLY):]
+			continue
+		else if startsWith(l,self._PATTERN_RETURN) then
+			parsed=self._parseReturn(l)
+		else
+			// Keep unrecognized lines as-is
+			p[n]=l
+			n+=1
+			continue
+		end if
+		// Apply parsed result
+		if parsed and parsed.result then
+			p[n]=parsed.result[0]
+			if len(parsed.result)>1 then p=self._insertAfter(p,n,parsed.result[1:])
+		end if
+		// Move to next line
+		n+=1
+	end while
+	// Add indentation and function arguments
+	return self.fixIndentationAndAddArgs(p,A)
+end function
+// LOOK-AHEAD LOGIC - Detect missing lines
+//Check if next lines match better (look-ahead analysis)
+Solver._checkLookAhead=function(prog,info,progIdx,infoIdx)
+	offset=0;while offset<=self._LOOKAHEAD_DEPTH
+		pIdx=progIdx+offset
+		iIdx=infoIdx+offset+1
+		// Break if out of bounds
+		if not prog.hasIndex(pIdx) or not info.hasIndex(iIdx) then break
+		// Compare similarity scores
+		currSim=self.simularityTest(prog[pIdx],info[infoIdx+offset])
+		nextSim=self.simularityTest(prog[pIdx],info[iIdx])
+		// Next line must match better than current
+		if not (nextSim>currSim or prog[pIdx]==info[iIdx]) then return false
+	offset+=1;end while
+	return true
+end function
+//Detect if a line is missing from program
+Solver._detectMissingLine=function(prog,info,progIdx,infoIdx)
+	// Validate indices for look-ahead
+	if not prog.hasIndex(progIdx) or not info.hasIndex(infoIdx+1) then return false
+	// Require significant token mismatch
+	if self.wrongTokens(prog[progIdx],info[infoIdx])<=self._MISSING_LINE_THRESHOLD then return false
+	// If different line types, definitely missing
+	if self.getLineType(prog[progIdx])!=self.getLineType(info[infoIdx]) then return true
+	// Same type: check if next lines match better
+	return self._checkLookAhead(prog,info,progIdx,infoIdx)
+end function
+// Solver.compare - Find incorrect/missing lines in program
+// Args: p - Program lines array, i - Info lines array (correct code)
+// Returns: Array of incorrect/missing line numbers (1-indexed)
+Solver.compare=function(p,i)
+	// Validate inputs
+	valid=self._validateInput(p,"Program array")
+	if valid isa Error then return valid
+	valid=self._validateInput(i,"Info array")
+	if valid isa Error then return valid
+	// Initialize result array
+	r=[]
+	// Info array index (correct code)
+	a=0
+	// Program array index (code to check)
+	b=0
+	// Compare line by line
+	_lenI=len(i)
+	_lenP=len(p)
+	while a<_lenI and b<_lenP
+		// Debug output
+		self._debugLog("prog",b+1,p[b])
+		self._debugLog("info",a+1,i[a])
+		// Check if lines are different
+		c=p[b]!=i[a]
+		// Look ahead to detect missing lines
+		if c and p.hasIndex(b) and i.hasIndex(a+1) then
+			m=self._detectMissingLine(p,i,b,a)
+			// Mark as missing if look-ahead confirms
+			if m then
+				self._debugLog("missing",b+1,str(a+2))
+				// Add line number to result
+				push(r,b+1)
+				// Back up program index (info moves forward)
+				b-=1
+				// Clear difference flag
+				c=false
+			end if
+		end if
+		// Mark as incorrect if still different
+		if c then
+			self._debugLog("incorrect",b+1)
+			// Add line number to result
+			push(r,b+1)
+		end if
+		// Debug separator
+		self._debugLog("sep")
+		// Advance to next program line
+		b+=1
+		// Advance to next info line
+		a+=1
+	end while
+	// Return unique line numbers
+	return distinct(r)
+end function
+// Solver.solve - Main solver entry point
+// Args: r - Raw compiler output string
+// Returns: [line_numbers_array, corrected_code_array]
+Solver.solve=function(r)
+	// Parse compiler output into program and info arrays
+	r=self.initialParse(r)
+	// Extract info array (natural language descriptions)
+	o=r.info
+	// Extract program array (actual code lines)
+	p=r.program
+	// Convert info to executable code
+	f=self.parseInfo(o)
+	// Handle parsing errors
+	if f isa Error then return f
+	// Compare and find problematic lines
+	u=self.compare(p,f)
+	// Handle comparison errors
+	if u isa Error then return u
+	// Show debug output if enabled
+	if self.debug then
+		print("...")
+		// Display corrected code
+		print("Info (correct code):")
+		self._printDebugLines(f)
+		// Display original code
+		print("Program (incorrect code):")
+		self._printDebugLines(p)
+		// Display problematic line numbers
+		print("Expected result:")
+		print(u)
+		print("...")
+	end if
+	// Return line numbers and corrected code
+	return [u,f]
+end function
+// Solver.New - Create new Solver instance
+// Args: None
+// Returns: New Solver object with initialized state
+Solver.New=function
+	// Create new instance from prototype
+	r=new Solver
+	// Copy line types map
+	r.lineTypes=Solver.lineTypes
+	// Set debug flag from global settings
+	r.debug=globals.G_settings.pDebug
+	return r
+end function

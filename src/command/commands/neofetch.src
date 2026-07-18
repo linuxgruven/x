@@ -1,0 +1,96 @@
+// =============================================================================
+// NEOFETCH
+// Display system information with ASCII art logo.
+// =============================================================================
+Command.neofetch=function(Obj,argv)
+  logo=[
+    "<color=#FF1111>                .·´(                         </color>",
+    "<color=#FF1111>   /(.·´(      )::..:`·.( `·.                </color>",
+    "<color=#DD4433>   )::..::`·._/;;  --  ' '\.::)  )\    ''    </color>",
+    "<color=#DD4433>.·´;; --  ' '               \/.·´ .:(.·´(    </color>",
+    "<color=#BB8855>):/\                 ,..::´/):::..::::·´     </color>",
+    "<color=#BB8855>I/::::\...:´/\       \::::'/ /¯¯¯¯'/         </color>",
+    "<color=#99CC77>  \::::/:::'/:::\       \-´ '/    /'         </color>",
+    "<color=#99CC77>    \/;::-' \::::'\       \/     /::         </color>",
+    "<color=#77EE99>            \:::::\            /'            </color>",
+    "<color=#77EE99>              \:::/            \             </color>",
+    "<color=#5588BB>             )\'\/       /\      '\           </color>",
+    "<color=#5588BB>    )\    .·´.:/       /:::\       \         </color>",
+    "<color=#3344DD>.·´.::.`·.):.'/.. - ··  ´´       .·´/'       </color>",
+    "<color=#3344DD>`·::..;::-  '        ..-:::::'/::::/'    '   </color>",
+    "<color=#3344DD>   )/::`*..¸..-::::::::::::/:::·´'           </color>",
+    "<color=#3344DD>  /::::::::/::::::::::-·· ´´                 </color>",
+    "<color=#3344DD>  `*-::;/::::-·· ´´''                        </color>"
+  ]
+  // Gather system information
+  info=[]
+  // Hostname and User
+  if Obj.type=="file" then hostname="FileObject" else hostname=get_name(Obj.computer)
+  username=Obj.user.name
+  userType=Obj.user.user
+  push(info,bold(green(username)+"@"+green(hostname)))
+  push(info,"-"*(len(username+hostname)+11))
+  // Operating System
+  push(info,yellow("      OS")+": X Shell System")
+  // Kernel Version
+  push(info,yellow("  Kernel")+": "+Kernel.version)
+  // User
+  userDisplay=username
+  if userType=="root" then userDisplay=userDisplay+" "+red("(ROOT)")
+  if userType==green("ROOT") then userDisplay=userDisplay+" "+red("(ROOT)")
+  if userType==red("GUEST") then userDisplay=userDisplay+" "+red("(GUEST)")
+  if userType==blue("USER") then userDisplay=userDisplay+" "+blue("(USER)")
+  push(info,yellow("    User")+": "+userDisplay)
+  // Shell Type
+  shellType="Unknown"
+  if Obj.type=="shell" then shellType="Shell"
+  if Obj.type=="computer" then shellType="Computer"
+  if Obj.type=="file" then shellType="File"
+  if indexOf(Obj.type,"shell")!=null then shellType="Shell"
+  push(info,yellow("   Shell")+": "+shellType)
+  // IP Addresses
+  if Obj.meta and Obj.meta.public_ip then
+    publicIP=Obj.meta.public_ip
+    if publicIP=="LIMITED" then publicIP=red("LIMITED")
+    push(info,yellow("     PUB")+": "+publicIP)
+  end if
+  if Obj.meta and Obj.meta.local_ip then push(info,yellow("     LAN")+": "+Obj.meta.local_ip)
+  push(info,yellow("    Home")+": "+path(Obj.user.home))
+  push(info,yellow(" Current")+": "+path(Obj.dir.current))
+  // Prepare color palette blocks
+  colors1=[]
+  colorsArr=["000000","FF0000","00FF00","FFFF00","0000FF","FF00FF","00FFFF","FFFFFF"]
+  for x in colorsArr;colors1.push("<mark=#"+x+">---</mark>");end for
+  colorLine1=colors1.join("")
+  colors2=[]
+  colorsArr=["808080","FF8080","80FF80","FFFF80","8080FF","FF80FF","80FFFF","FFFFFF"]
+  for x in colorsArr;colors2.push("<mark=#"+x+">---</mark>");end for
+  colorLine2=colors2.join("")
+  // Print with ASCII art side by side
+  maxLogoLines=len(logo)
+  maxInfoLines=len(info)
+  maxLines=maxLogoLines
+  if maxInfoLines>maxLines then maxLines=maxInfoLines
+  if maxInfoLines+4>maxLines then maxLines=maxInfoLines+4
+  // Pipe mode: output plain info fields to stdout
+  if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+    for line in info;push(globals.G_pipe.stdout,line);end for
+    return
+  end if
+  // Use simple fixed spacing - just a few spaces between logo and info
+  spacing="     "  // 5 spaces
+  i=0
+  while i<maxLines
+    line=""
+    if i<maxLogoLines then line=logo[i]+spacing else line=(" "*47)+spacing  // maintain alignment when logo ends
+    if i<maxInfoLines then
+      line=line+info[i]
+    else if i==maxInfoLines+1 then
+      line=line+colorLine1
+    else if i==maxInfoLines+2 then
+      line=line+colorLine2
+    end if
+    print line
+  i+=1
+  end while
+end function

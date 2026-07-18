@@ -1,0 +1,123 @@
+// =============================================================================
+// CHMOD
+// Change file permissions with symbolic (u+rwx) or octal (755) mode.
+// =============================================================================
+Command.chmod=function(Obj,argv)
+  if not argv or len(argv)==0 then return Man.help(["chmod"])
+	argv=ArgumentParser.check(argv)
+	_p=ArgumentParser.init
+	_p.addArgument("R",false,"flag")  // Recursive mode
+	_p.addArgument("r",false,"flag")  // Recursive mode alias
+	argv=_p.parseArgs("chmod",argv)
+	if argv isa Error then return
+	// Make -r an alias for -R for user convenience
+	if argv.r then argv.R=true
+	argv=_p.parsePath(Obj,argv)
+	if argv isa Error then return
+	if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE then
+		if not hasIndex(argv,"files") or not argv.files then argv.files=[]
+		for _line in globals.G_pipe.stdin.split(char(10))
+			_line=trim(_line)
+			if _line=="" then continue
+			_f=Io._getFile(Obj,_line)
+			if _f and not (_f isa Error) then push(argv.files,_f)
+		end for
+	end if
+	// Handle octal mode (e.g., 755, 644) - detected by numeric first argument
+	if to_int(argv.rest[0]) isa number then
+		hasFiles=(argv.hasIndex("files") and argv.files and len(argv.files)>0)
+		if len(argv.rest)<2 and not hasFiles then return Man.help(["chmod"])
+		mode=argv.rest[0]
+		targets=[]
+		if hasFiles then
+			targets=argv.files
+		else
+			target=Io._getFile(Obj,argv.rest[-1])
+			if target isa Error then return target
+			targets=[target]
+		end if
+		for target in targets
+			if not target or target isa Error then continue
+			if len(mode)!=3 then
+				Error.set("Invalid octal mode (must be 3 digits: ugo)")
+				continue
+			end if
+			// chmod -r stays on engine recurse (fast). Walk reporting is for chown/chgrp.
+			Command.chmodFile(target,mode,argv.R)
+		end for
+		return
+	end if
+	// Handle interactive GUI mode when triggered by ?
+	if hasIndex(argv,"useAI") then
+		target=null
+		if Gui.yesNo("Are we changing access permissions of a file?") then
+			target=Io.file(Obj,Obj.dir.current,"Select a file to change the access permissions of:")
+			if target isa Warning then return target
+		else
+			target=Io.folder(Obj,Obj.dir.current,"Select a directory to change the access permissions of:")
+			if target isa Warning then return target
+			// Only prompt for recursive if target is a directory
+			argv.R=Gui.yesNo("Recursive?")
+		end if
+		Info.info("[u,g,o(+/-)rwx|000-777]")
+		mode=Gui.input({"text":"Set the access permissions for "+name(target)+" to"})
+		if mode==null then return
+		push(argv.rest,mode)
+		push(argv.rest,path(target))
+	end if
+	// Parse command-line arguments: last arg is path, first arg is mode
+	hasFiles=(argv.hasIndex("files") and argv.files and len(argv.files)>0)
+	if len(argv.rest)<2 and not hasFiles then return Man.help(["chmod"])
+	mode=argv.rest[0]
+	mode=clean(mode)
+	targets=[]
+	if hasFiles then
+		targets=argv.files
+	else
+		target=Io._getFile(Obj,argv.rest[-1])
+		if target isa Error then return target
+		targets=[target]
+	end if
+	for target in targets
+		if not target or target isa Error then continue
+		result=chmod(target,mode,argv.R)
+		if result then Error.set(result)
+	end for
+end function
+Command.chmodFile=function(fileObj,mode,recursive=false)
+	if not fileObj then return Error.set("Invalid file object")
+	if not mode then return Error.set("No mode specified")
+	rec=0
+	if recursive then rec=1
+	// Handle octal mode (e.g., 755, 644) - detected by numeric conversion
+	if to_int(mode) isa number then
+		// Validate octal format must be exactly 3 digits
+		if len(mode)!=3 then return Error.set("Invalid octal mode (must be 3 digits: ugo)")
+		for owner in [[mode[0].to_int,"u"],[mode[1].to_int,"g"],[mode[2].to_int,"o"]]
+			value=owner[0]
+			who=owner[1]
+			// Clear all permissions first to ensure clean state
+			result=chmod(fileObj,who+"-rwx",rec)
+			if result then return Error.set(result)
+			// Check each bit: 4=read, 2=write, 1=execute
+			if bitAnd(value,4) then
+				result=chmod(fileObj,who+"+r",rec)
+				if result then return Error.set(result)
+			end if
+			if bitAnd(value,2) then
+				result=chmod(fileObj,who+"+w",rec)
+				if result then return Error.set(result)
+			end if
+			if bitAnd(value,1) then
+				result=chmod(fileObj,who+"+x",rec)
+				if result then return Error.set(result)
+			end if
+		end for
+		return true
+	end if
+	// Handle symbolic mode (e.g., u+x, g-w, o+r)
+	mode=clean(mode)
+	result=chmod(fileObj,mode,rec)
+	if result then return Error.set(result)
+	return true
+end function

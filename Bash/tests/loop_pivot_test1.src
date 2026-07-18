@@ -1,0 +1,16 @@
+// TEST 1: FOR loop with pivot
+// Expected: Each iteration should print messages IN the proxy context
+// After proxy, remaining commands in the body should execute in proxy context
+// After all iterations, the after-loop message should print
+
+_printnow <color=#ff0>== FOR LOOP PIVOT TEST ==</color>
+
+_setvar(targets, [one, two, three])
+
+for item in _getvar(targets)
+  _printnow <color=#0f0>[BEFORE PIVOT]</color> item = _getvar(item)
+  proxy -q
+  _printnow <color=#0f0>[AFTER PIVOT]</color> item = _getvar(item)
+endfor
+
+_printnow <color=#ff0>== FOR LOOP COMPLETE ==</color>

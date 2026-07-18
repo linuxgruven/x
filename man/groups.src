@@ -1,0 +1,26 @@
+// Man page for groups
+manGroups="GROUPS(1)                        X Shell Manual                        GROUPS(1)
+
+<b>NAME</b>
+    groups - used to view all the groups a user belongs to
+<b>SYNOPSIS</b>
+    <b>groups </b><b>USER</b>
+<b>DESCRIPTION</b>
+    Display all groups a user belongs to. Lists group memberships for specified user.
+    Essential for permission management and security auditing.
+<b>OPTIONS</b>
+    <b>USER</b>
+    Target username
+    Display group list
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View Groups</color>
+    <b>groups root</b>
+    Show root groups
+
+    <b>groups tux</b>
+    Show tux groups
+
+    <b>groups guest</b>
+    Show guest groups
+<b>SEE ALSO</b>
+    <b>groupdel</b>, <b>groupadd</b>, <b>useradd</b>"

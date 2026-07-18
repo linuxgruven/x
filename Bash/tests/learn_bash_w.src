@@ -1,0 +1,2946 @@
+testLearnBash="// ================================================================
+// x Bash Learning Guide & Tutorial Test Script
+// ================================================================
+// This script teaches new players how to use x's bash scripting
+// language through working examples. Every section defines
+// real functions, calls them, and prints results so you can
+// see exactly what happens.
+//
+// Run this script with:   @learn_bash
+//
+// Each section builds on the previous ones. Read the comments
+// to understand what each line does, then check the output.
+// ================================================================
+
+// ---------------------------------------------------------------
+// HELPER: assert function used throughout for self-checking
+// ---------------------------------------------------------------
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>  [PASS]</color> _getvar(label) <color=#888888>= _getvar(actual)</color>
+  else
+    _print <color=#ff0000>  [FAIL]</color> _getvar(label) <color=#ffff00> expected:</color>_getvar(expected) <color=#ffff00> got:</color>_getvar(actual)
+  endif
+endfunc
+
+// ---------------------------------------------------------------
+// HELPER: section header printer
+// ---------------------------------------------------------------
+func printHeader(title)
+  _print
+  _print <color=#eb0cc6>============================================</color>
+  _print <color=#eb0cc6>  _getvar(title)</color>
+  _print <color=#eb0cc6>============================================</color>
+endfunc
+
+// ---------------------------------------------------------------
+// HELPER: lesson sub-header printer
+// ---------------------------------------------------------------
+func printLesson(title)
+  _print
+  _print <color=#00bfff>--- _getvar(title) ---</color>
+endfunc
+
+// ---------------------------------------------------------------
+// HELPER: tip printer (educational notes)
+// ---------------------------------------------------------------
+func printTip(msg)
+  _print <color=#ffff00>  TIP:</color> _getvar(msg)
+endfunc
+
+// ---------------------------------------------------------------
+// HELPER: note printer (general info)
+// ---------------------------------------------------------------
+func printNote(msg)
+  _print <color=#aaaaaa>  NOTE:</color> _getvar(msg)
+endfunc
+
+_print
+_print <color=#eb0cc6>============================================================</color>
+_print <color=#eb0cc6>    x BASH LEARNING GUIDE & TUTORIAL</color>
+_print <color=#eb0cc6>    A hands-on walkthrough of the bash scripting language</color>
+_print <color=#eb0cc6>============================================================</color>
+_print <color=#aaaaaa>  Every example defines a function and calls it.</color>
+_print <color=#aaaaaa>  Read the source code alongside the output to learn.</color>
+_print
+
+// ###############################################################
+//
+//   CHAPTER 1: FUNDAMENTALS
+//   Variables, printing, basic types
+//
+// ###############################################################
+
+printHeader(CHAPTER 1: FUNDAMENTALS)
+
+// ===================================================================
+// LESSON 1.1 - HELLO WORLD & PRINTING
+// ===================================================================
+// The most basic thing you can do: print text to the screen.
+// _print sends text to the terminal output.
+// ===================================================================
+
+printLesson(Lesson 1.1: Hello World & Printing)
+
+// A function that takes no arguments and returns nothing.
+// This is called a ""void"" function - it just does work.
+func helloWorld()
+  _print <color=#00ff00>  Hello World! Welcome to x bash.</color>
+endfunc
+
+// Call the function - just use its name with ()
+helloWorld()
+
+printTip(_print queues output. _printnow prints immediately.)
+printNote(Void functions do work but don't return a value.)
+
+// ===================================================================
+// LESSON 1.2 - VARIABLES: SET AND GET
+// ===================================================================
+// Variables store values. Use _setvar() to store, _getvar() to read.
+// Variables can hold strings, numbers, lists, and more.
+// ===================================================================
+
+printLesson(Lesson 1.2: Variables - Assign and Read)
+
+// Function that demonstrates basic variable usage
+func variableBasics()
+  // Store a string
+  _setvar(name, tux)
+  _print <color=#aaaaaa>  Assign name = tux -> name is now:</color> _getvar(name)
+
+  // Store a number
+  _setvar(level, 42)
+  _print <color=#aaaaaa>  Assign level = 42 -> level is now:</color> _getvar(level)
+
+  // Store a decimal
+  _setvar(ratio, 3.14)
+  _print <color=#aaaaaa>  Assign ratio = 3.14 -> ratio is now:</color> _getvar(ratio)
+
+  // Overwrite a variable - the old value is gone
+  _setvar(name, root)
+  _print <color=#aaaaaa>  After overwrite, name is now:</color> _getvar(name)
+endfunc
+
+variableBasics()
+printTip(Variables in functions are LOCAL - they don't leak out.)
+
+// ===================================================================
+// LESSON 1.3 - ARITHMETIC
+// ===================================================================
+// _setvar() automatically evaluates math expressions.
+// Supported: + - * / % ** (add, subtract, multiply, divide, mod, power)
+// ===================================================================
+
+printLesson(Lesson 1.3: Arithmetic Expressions)
+
+// A mini-calculator function
+func showArithmetic()
+  _setvar(a, 10)
+  _setvar(b, 3)
+
+  _setvar(sum, _getvar(a) + _getvar(b))
+  _print <color=#aaaaaa>  10 + 3 =</color> _getvar(sum)
+
+  _setvar(diff, _getvar(a) - _getvar(b))
+  _print <color=#aaaaaa>  10 - 3 =</color> _getvar(diff)
+
+  _setvar(prod, _getvar(a) * _getvar(b))
+  _print <color=#aaaaaa>  10 * 3 =</color> _getvar(prod)
+
+  _setvar(quot, _getvar(a) / _getvar(b))
+  _print <color=#aaaaaa>  10 / 3 =</color> _getvar(quot)
+
+  _setvar(mod, _getvar(a) % _getvar(b))
+  _print <color=#aaaaaa>  10 % 3 =</color> _getvar(mod)
+
+  _setvar(pow, 2 ** 10)
+  _print <color=#aaaaaa>  2 ** 10 =</color> _getvar(pow)
+endfunc
+
+showArithmetic()
+printTip(Operator precedence: ** first then * / % then + -)
+
+// Verify arithmetic with asserts
+func testArithmetic()
+  _setvar(r, 7 + 3)
+  assert(7+3 equals 10, _getvar(r), 10)
+
+  _setvar(r, 6 * 7)
+  assert(6x7 equals 42, _getvar(r), 42)
+
+  _setvar(r, 2 ** 8)
+  assert(2pow8 equals 256, _getvar(r), 256)
+
+  _setvar(r, 17 % 5)
+  assert(17mod5 equals 2, _getvar(r), 2)
+
+  _setvar(r, 3 * 4 + 2)
+  assert(3x4+2 equals 14 precedence, _getvar(r), 14)
+
+  _setvar(r, -3 + -2)
+  assert(neg3+neg2 equals neg5, _getvar(r), -5)
+endfunc
+
+testArithmetic()
+
+// ===================================================================
+// LESSON 1.4 - LISTS (ARRAYS)
+// ===================================================================
+// Lists store multiple values in order.
+// Create with [item1, item2, ...] syntax.
+// Use _push, _pop, _pull to modify.
+// ===================================================================
+
+printLesson(Lesson 1.4: Lists / Arrays)
+
+// Function that builds and manipulates a list
+func listDemo()
+  // Create a list
+  _setvar(fruits, [apple, banana, cherry])
+  _print <color=#aaaaaa>  Created list: [apple, banana, cherry]</color>
+  _print <color=#aaaaaa>  Length:</color> len(_getvar(fruits))
+
+  // Push adds to the end
+  _push fruits date
+  _print <color=#aaaaaa>  After _push fruits date, length:</color> len(_getvar(fruits))
+
+  // Pop removes from the end
+  _pop fruits
+  _print <color=#aaaaaa>  After _pop fruits, length:</color> len(_getvar(fruits))
+
+  // Pull removes from the start
+  _pull fruits
+  _print <color=#aaaaaa>  After _pull fruits, length:</color> len(_getvar(fruits))
+
+  // Check if item exists
+  _setvar(found, _in(_getvar(fruits), banana))
+  _print <color=#aaaaaa>  Is 'banana' in list?</color> _getvar(found)
+  _setvar(miss, _in(_getvar(fruits), grape))
+  _print <color=#aaaaaa>  Is 'grape' in list?</color> _getvar(miss)
+endfunc
+
+listDemo()
+printTip(_push and _pop use command-style: _push arrName value)
+printTip(The _in builtin returns 1 if found or 0 if not)
+
+// Verify list operations
+func testListOps()
+  _setvar(arr, [])
+  _push arr x
+  _push arr y
+  _push arr z
+  _setvar(r, len(_getvar(arr)))
+  assert(push 3 items gives len 3, _getvar(r), 3)
+
+  _pop arr
+  _setvar(r, len(_getvar(arr)))
+  assert(pop brings len to 2, _getvar(r), 2)
+
+  _pull arr
+  _setvar(r, len(_getvar(arr)))
+  assert(pull brings len to 1, _getvar(r), 1)
+
+  _setvar(arr, [a, b, c])
+  _setvar(r, _in(_getvar(arr), b))
+  assert(_in finds b in list, _getvar(r), 1)
+  _setvar(r, _in(_getvar(arr), z))
+  assert(_in does not find z, _getvar(r), 0)
+endfunc
+
+testListOps()
+
+// ###############################################################
+//
+//   CHAPTER 2: FUNCTIONS IN DEPTH
+//   Parameters, return values, scope, patterns
+//
+// ###############################################################
+
+printHeader(CHAPTER 2: FUNCTIONS IN DEPTH)
+
+// ===================================================================
+// LESSON 2.1 - FUNCTIONS WITH PARAMETERS
+// ===================================================================
+// Functions can take parameters (inputs).
+// Inside the function, use _getvar(paramName) to read them.
+// ===================================================================
+
+printLesson(Lesson 2.1: Function Parameters)
+
+// One parameter
+func greet(name)
+  _print <color=#00ff00>  Hello, _getvar(name)!</color>
+endfunc
+
+greet(Hacker)
+greet(Player)
+
+// Two parameters
+func introduce(name, role)
+  _print <color=#aaaaaa>  _getvar(name) is a _getvar(role)</color>
+endfunc
+
+introduce(tux, pentester)
+introduce(root, sysadmin)
+
+// Verify parameters work
+func addNums(a, b)
+  _return _getvar(a) + _getvar(b)
+endfunc
+
+_setvar(r, addNums(15, 27))
+assert(addNums(15 27) returns 42, _getvar(r), 42)
+
+// Three parameters
+func clamp(val, lo, hi)
+  if _getvar(val) < _getvar(lo)
+    _return _getvar(lo)
+  elif _getvar(val) > _getvar(hi)
+    _return _getvar(hi)
+  else
+    _return _getvar(val)
+  endif
+endfunc
+
+_setvar(r, clamp(50, 0, 10))
+assert(clamp 50 within 0-10 is 10, _getvar(r), 10)
+_setvar(r, clamp(-5, 0, 10))
+assert(clamp -5 within 0-10 is 0, _getvar(r), 0)
+_setvar(r, clamp(5, 0, 10))
+assert(clamp 5 within 0-10 is 5, _getvar(r), 5)
+
+printTip(Functions can take 0 to many parameters separated by commas.)
+
+// ===================================================================
+// LESSON 2.2 - RETURN VALUES
+// ===================================================================
+// Functions can give back a value using _return.
+// Capture it with _setvar(result, myFunc())
+// ===================================================================
+
+printLesson(Lesson 2.2: Return Values)
+
+// Return a number
+func getAnswer()
+  _return 42
+endfunc
+
+_setvar(r, getAnswer())
+_print <color=#aaaaaa>  getAnswer() returned:</color> _getvar(r)
+assert(getAnswer returns 42, _getvar(r), 42)
+
+// Return a computed result
+func circleArea(radius)
+  _return _getvar(radius) * _getvar(radius) * 3
+endfunc
+
+_setvar(r, circleArea(5))
+_print <color=#aaaaaa>  circleArea(5) = 5*5*3 =</color> _getvar(r)
+assert(circleArea(5) is 75, _getvar(r), 75)
+
+// Return a compound string using join (dash is safe as join delimiter)
+func makeTag(prefix, id)
+  _setvar(parts, [])
+  _push parts _getvar(prefix)
+  _push parts _getvar(id)
+  _return join(_getvar(parts), -)
+endfunc
+
+_setvar(r, makeTag(srv, web1))
+_print <color=#aaaaaa>  makeTag(srv, web1) =</color> _getvar(r)
+assert(makeTag gives srv-web1, _getvar(r), srv-web1)
+
+// Return from conditional
+func grade(score)
+  if _getvar(score) >= 90
+    _return A
+  elif _getvar(score) >= 80
+    _return B
+  elif _getvar(score) >= 70
+    _return C
+  elif _getvar(score) >= 60
+    _return D
+  else
+    _return F
+  endif
+endfunc
+
+_setvar(r, grade(95))
+assert(grade 95 is A, _getvar(r), A)
+_setvar(r, grade(85))
+assert(grade 85 is B, _getvar(r), B)
+_setvar(r, grade(55))
+assert(grade 55 is F, _getvar(r), F)
+
+printTip(_return passes a value back. The caller captures it in a variable.)
+
+// ===================================================================
+// LESSON 2.3 - VOID FUNCTIONS (NO RETURN)
+// ===================================================================
+// Not every function needs to return a value.
+// Some just do work: print, modify state, etc.
+// Calling them as _setvar(r, voidFunc()) gives empty string.
+// ===================================================================
+
+printLesson(Lesson 2.3: Void Functions - No Return Value)
+
+// A void function that just prints
+func banner(text)
+  _print <color=#eb0cc6>  *** _getvar(text) ***</color>
+endfunc
+
+banner(This is a banner)
+
+// A void function that logs info
+func logAction(action, target)
+  _print <color=#aaaaaa>  [LOG] _getvar(action) -> _getvar(target)</color>
+endfunc
+
+logAction(SCAN, 192.168.0.1)
+logAction(CONNECT, port 22)
+
+// Verify void returns empty
+func doNothing()
+endfunc
+
+_setvar(r, doNothing())
+assert(void func returns empty, _getvar(r), )
+
+// A void function with side effect (local only)
+func workWithoutReturn()
+  _setvar(tmp, working)
+  // tmp is local and will be discarded
+endfunc
+
+workWithoutReturn()
+printNote(Void functions are great for printing or performing actions.)
+
+// ===================================================================
+// LESSON 2.4 - SCOPE ISOLATION
+// ===================================================================
+// Variables inside a function are LOCAL - they do NOT affect
+// variables with the same name outside the function.
+// This is critical for avoiding bugs!
+// ===================================================================
+
+printLesson(Lesson 2.4: Scope Isolation)
+
+func scopeDemo()
+  // This 'x' is local to scopeDemo
+  _setvar(x, inside_func)
+  _return _getvar(x)
+endfunc
+
+// Set an outer 'x'
+_setvar(x, outside)
+
+// Call the function - it sets its own 'x' internally
+_setvar(inner, scopeDemo())
+
+// Our outer 'x' is untouched!
+assert(outer x unchanged after func, _getvar(x), outside)
+assert(func returned its local x, _getvar(inner), inside_func)
+
+// Another scope demo: parameter shadows outer var
+_setvar(name, original)
+
+func echoName(name)
+  _return _getvar(name)
+endfunc
+
+_setvar(r, echoName(temporary))
+assert(param shadows outer var, _getvar(r), temporary)
+assert(outer name unchanged, _getvar(name), original)
+
+printTip(Function variables are always local. This prevents accidental overwrites.)
+
+// ===================================================================
+// LESSON 2.5 - FUNCTIONS CALLING FUNCTIONS
+// ===================================================================
+// Functions can call other functions! This is how you build
+// complex programs from simple pieces.
+// ===================================================================
+
+printLesson(Lesson 2.5: Functions Calling Functions)
+
+func increment(n)
+  _return _getvar(n) + 1
+endfunc
+
+func doubleVal(n)
+  _return _getvar(n) * 2
+endfunc
+
+// A function that chains two others
+func doubleThenIncrement(n)
+  _setvar(doubled, doubleVal(_getvar(n)))
+  _setvar(result, increment(_getvar(doubled)))
+  _return _getvar(result)
+endfunc
+
+// 5 -> double=10 -> increment=11
+_setvar(r, doubleThenIncrement(5))
+_print <color=#aaaaaa>  doubleThenIncrement(5): 5*2=10, 10+1=11 =</color> _getvar(r)
+assert(doubleThenIncrement(5) is 11, _getvar(r), 11)
+
+// A 3-step pipeline
+func pipeline(n)
+  _setvar(s1, increment(_getvar(n)))
+  _setvar(s2, doubleVal(_getvar(s1)))
+  _setvar(s3, increment(_getvar(s2)))
+  _return _getvar(s3)
+endfunc
+
+// 3 -> inc=4 -> double=8 -> inc=9
+_setvar(r, pipeline(3))
+assert(pipeline(3): 3+1=4 *2=8 +1=9, _getvar(r), 9)
+
+printTip(Build complex logic by combining simple functions.)
+
+// ===================================================================
+// LESSON 2.6 - RECURSION
+// ===================================================================
+// A function can call ITSELF! This is called recursion.
+// Always have a base case to stop, or you'll loop forever.
+// ===================================================================
+
+printLesson(Lesson 2.6: Recursion)
+
+// Classic: factorial  (5! = 5 * 4 * 3 * 2 * 1 = 120)
+func factorial(n)
+  if _getvar(n) <= 1
+    _return 1
+  else
+    _setvar(prev, factorial(_getvar(n) - 1))
+    _return _getvar(n) * _getvar(prev)
+  endif
+endfunc
+
+_setvar(r, factorial(1))
+assert(factorial(1) is 1, _getvar(r), 1)
+_setvar(r, factorial(5))
+assert(factorial(5) is 120, _getvar(r), 120)
+_setvar(r, factorial(7))
+assert(factorial(7) is 5040, _getvar(r), 5040)
+
+// Recursive countdown
+func countdownMsg(n)
+  if _getvar(n) <= 0
+    _print <color=#00ff00>  Liftoff!</color>
+    _return 0
+  else
+    _print <color=#aaaaaa>  Countdown: _getvar(n)</color>
+    _return countdownMsg(_getvar(n) - 1)
+  endif
+endfunc
+
+_setvar(r, countdownMsg(3))
+assert(countdown reaches 0, _getvar(r), 0)
+
+// Recursive sum 1..n
+func recursiveSum(n)
+  if _getvar(n) <= 0
+    _return 0
+  else
+    _setvar(rest, recursiveSum(_getvar(n) - 1))
+    _return _getvar(n) + _getvar(rest)
+  endif
+endfunc
+
+_setvar(r, recursiveSum(10))
+assert(recursiveSum 1..10 is 55, _getvar(r), 55)
+
+printTip(Always have a base case! Without one recursion never stops.)
+printNote(x bash supports recursion up to 1000 levels deep.)
+
+// ###############################################################
+//
+//   CHAPTER 3: CONTROL FLOW
+//   if/elif/else, for, while, until, switch, break, continue
+//
+// ###############################################################
+
+printHeader(CHAPTER 3: CONTROL FLOW)
+
+// ===================================================================
+// LESSON 3.1 - IF / ELIF / ELSE
+// ===================================================================
+// Branch your code based on conditions.
+// Comparison operators: == != < > <= >=
+// Logical operators: and  or  not  !
+// ===================================================================
+
+printLesson(Lesson 3.1: if / elif / else Conditionals)
+
+// Function demonstrating if/elif/else
+func weatherAdvice(temp)
+  if _getvar(temp) >= 35
+    _return Stay inside - heat warning!
+  elif _getvar(temp) >= 25
+    _return Nice day for hacking outdoors
+  elif _getvar(temp) >= 15
+    _return Bring a jacket
+  elif _getvar(temp) >= 0
+    _return Bundle up!
+  else
+    _return Freezing - stay home
+  endif
+endfunc
+
+_setvar(r, weatherAdvice(40))
+assert(40deg: heat warning, _getvar(r), Stay inside - heat warning!)
+_setvar(r, weatherAdvice(20))
+assert(20deg: bring jacket, _getvar(r), Bring a jacket)
+_setvar(r, weatherAdvice(-5))
+assert(neg5deg: freezing, _getvar(r), Freezing - stay home)
+
+// Function demonstrating logical operators
+func canAccess(isAdmin, hasKey)
+  if _getvar(isAdmin) == 1 or _getvar(hasKey) == 1
+    _return granted
+  else
+    _return denied
+  endif
+endfunc
+
+_setvar(r, canAccess(1, 0))
+assert(admin access granted, _getvar(r), granted)
+_setvar(r, canAccess(0, 1))
+assert(key access granted, _getvar(r), granted)
+_setvar(r, canAccess(0, 0))
+assert(no access denied, _getvar(r), denied)
+
+// ===================================================================
+// LESSON 3.2 - FOR LOOPS
+// ===================================================================
+// for loops iterate over lists or ranges.
+// range(start, end) generates numbers from start to end inclusive.
+// ===================================================================
+
+printLesson(Lesson 3.2: for Loops)
+
+// Sum numbers 1 to 10 using a for loop
+func sumRange(start, finish)
+  _setvar(total, 0)
+  for i in range(_getvar(start), _getvar(finish))
+    _setvar(total, _getvar(total) + _getvar(i))
+  endfor
+  _return _getvar(total)
+endfunc
+
+_setvar(r, sumRange(1, 10))
+_print <color=#aaaaaa>  Sum of 1 to 10 =</color> _getvar(r)
+assert(sum 1..10 is 55, _getvar(r), 55)
+
+// Loop over a list using join builtin
+func joinNames(names)
+  _return join(_getvar(names), ~)
+endfunc
+
+_setvar(names, [Alice, Bob, Charlie])
+_setvar(r, joinNames(_getvar(names)))
+_print <color=#aaaaaa>  Joined names:</color> _getvar(r)
+
+// Count items matching a condition
+func countEven(limit)
+  _setvar(count, 0)
+  for i in range(1, _getvar(limit))
+    if _getvar(i) % 2 == 0
+      _setvar(count, _getvar(count) + 1)
+    endif
+  endfor
+  _return _getvar(count)
+endfunc
+
+_setvar(r, countEven(10))
+assert(even numbers 1-10 is 5, _getvar(r), 5)
+_setvar(r, countEven(20))
+assert(even numbers 1-20 is 10, _getvar(r), 10)
+
+printTip(for i in range(1, 5) gives i = 1, 2, 3, 4, 5)
+printTip(for item in [a, b, c] iterates over list items)
+
+// ===================================================================
+// LESSON 3.3 - WHILE LOOPS
+// ===================================================================
+// while loops repeat as long as a condition is true.
+// Great for counting, searching, or waiting.
+// ===================================================================
+
+printLesson(Lesson 3.3: while Loops)
+
+// Double a number until it exceeds a target
+func doubleUntilOver(start, target)
+  _setvar(val, _getvar(start))
+  _setvar(steps, 0)
+  while _getvar(val) <= _getvar(target)
+    _setvar(val, _getvar(val) * 2)
+    _setvar(steps, _getvar(steps) + 1)
+  endwhile
+  _return _getvar(steps)
+endfunc
+
+_setvar(r, doubleUntilOver(1, 100))
+_print <color=#aaaaaa>  Doublings to exceed 100 starting from 1:</color> _getvar(r)
+assert(doublings from 1 to pass 100 is 7, _getvar(r), 7)
+
+// Collatz conjecture: always reaches 1 (famous unsolved problem!)
+func collatzSteps(n)
+  _setvar(steps, 0)
+  while to_int(_getvar(n)) != 1
+    if _getvar(n) % 2 == 0
+      _setvar(n, floor(_getvar(n) / 2))
+    else
+      _setvar(n, _getvar(n) * 3 + 1)
+    endif
+    _setvar(steps, _getvar(steps) + 1)
+  endwhile
+  _return _getvar(steps)
+endfunc
+
+_setvar(r, collatzSteps(6))
+_print <color=#aaaaaa>  Collatz steps for 6:</color> _getvar(r)
+assert(collatz(6) takes 8 steps, _getvar(r), 8)
+_setvar(r, collatzSteps(27))
+assert(collatz(27) takes 111 steps, _getvar(r), 111)
+
+printTip(While loops need a condition that eventually becomes false!)
+
+// ===================================================================
+// LESSON 3.4 - UNTIL LOOPS
+// ===================================================================
+// until is the opposite of while: it loops UNTIL the condition
+// becomes true. Same as ""while NOT condition"".
+// ===================================================================
+
+printLesson(Lesson 3.4: until Loops)
+
+func countToTarget(target)
+  _setvar(n, 0)
+  until _getvar(n) == _getvar(target)
+    _setvar(n, _getvar(n) + 1)
+  enduntil
+  _return _getvar(n)
+endfunc
+
+_setvar(r, countToTarget(5))
+assert(until counts to 5, _getvar(r), 5)
+
+// Find first multiple of 7 above a number
+func nextMultipleOf7(start)
+  _setvar(n, _getvar(start) + 1)
+  until _getvar(n) % 7 == 0
+    _setvar(n, _getvar(n) + 1)
+  enduntil
+  _return _getvar(n)
+endfunc
+
+_setvar(r, nextMultipleOf7(10))
+assert(next multiple of 7 after 10 is 14, _getvar(r), 14)
+_setvar(r, nextMultipleOf7(20))
+assert(next multiple of 7 after 20 is 21, _getvar(r), 21)
+
+printTip(until loops are great when you're waiting for a specific condition.)
+
+// ===================================================================
+// LESSON 3.5 - BREAK AND CONTINUE
+// ===================================================================
+// break   - exit the loop immediately
+// continue - skip the rest of this iteration, go to next
+// ===================================================================
+
+printLesson(Lesson 3.5: break and continue)
+
+// break: find the first number divisible by both 3 and 7
+func firstDivisibleBy3And7(limit)
+  _setvar(found, -1)
+  for i in range(1, _getvar(limit))
+    if _getvar(i) % 3 == 0
+      if _getvar(i) % 7 == 0
+        _setvar(found, _getvar(i))
+        break
+      endif
+    endif
+  endfor
+  _return _getvar(found)
+endfunc
+
+_setvar(r, firstDivisibleBy3And7(100))
+assert(first div by 3 and 7 is 21, _getvar(r), 21)
+
+// continue: sum only odd numbers
+func sumOdds(limit)
+  _setvar(total, 0)
+  for i in range(1, _getvar(limit))
+    if _getvar(i) % 2 == 0
+      continue
+    endif
+    _setvar(total, _getvar(total) + _getvar(i))
+  endfor
+  _return _getvar(total)
+endfunc
+
+// Odd 1-10: 1+3+5+7+9 = 25
+_setvar(r, sumOdds(10))
+assert(sum odds 1-10 is 25, _getvar(r), 25)
+
+printTip(break exits the entire loop. continue skips to the next iteration.)
+
+// ===================================================================
+// LESSON 3.6 - SWITCH / CASE
+// ===================================================================
+// switch tests a value against multiple cases.
+// Only the first matching case runs. default runs if none match.
+// ===================================================================
+
+printLesson(Lesson 3.6: switch / case Statements)
+
+func portService(port)
+  _setvar(service, unknown)
+  switch _getvar(port)
+    case 21
+      _setvar(service, FTP)
+    case 22
+      _setvar(service, SSH)
+    case 25
+      _setvar(service, SMTP)
+    case 80
+      _setvar(service, HTTP)
+    case 443
+      _setvar(service, HTTPS)
+    case 3306
+      _setvar(service, MySQL)
+    default
+      _setvar(service, unknown)
+  endswitch
+  _return _getvar(service)
+endfunc
+
+_setvar(r, portService(22))
+_print <color=#aaaaaa>  Port 22 =</color> _getvar(r)
+assert(port 22 is SSH, _getvar(r), SSH)
+_setvar(r, portService(80))
+assert(port 80 is HTTP, _getvar(r), HTTP)
+_setvar(r, portService(443))
+assert(port 443 is HTTPS, _getvar(r), HTTPS)
+_setvar(r, portService(9999))
+assert(port 9999 is unknown, _getvar(r), unknown)
+
+// Switch with string values
+func commandHelp(cmd)
+  _setvar(help, )
+  switch _getvar(cmd)
+    case scan
+      _setvar(help, Scans a target IP for open ports)
+    case exploit
+      _setvar(help, Attempts to exploit a vulnerability)
+    case nmap
+      _setvar(help, Network mapper - discover hosts)
+    default
+      _setvar(help, No help available for that command)
+  endswitch
+  _return _getvar(help)
+endfunc
+
+_setvar(r, commandHelp(scan))
+_setvar(helpLen, len(_getvar(r)))
+assert(scan help is nonempty, _getvar(helpLen), 32)
+_setvar(r, commandHelp(bogus))
+assert(bogus gets default help, _getvar(r), No help available for that command)
+
+printTip(switch is cleaner than long if/elif chains when checking one value.)
+
+// ###############################################################
+//
+//   CHAPTER 4: STRING MASTERY
+//   String builtins, manipulation, building text
+//
+// ###############################################################
+
+printHeader(CHAPTER 4: STRING MASTERY)
+
+// ===================================================================
+// LESSON 4.1 - STRING FUNCTIONS OVERVIEW
+// ===================================================================
+
+printLesson(Lesson 4.1: String Functions)
+
+// Demonstrate each string builtin
+func stringShowcase()
+  _setvar(myStr, hello)
+  _setvar(myStr2, HELLO)
+  _setvar(mySub, ell)
+  _setvar(myOld, l)
+  _setvar(myNew, rr)
+  _setvar(myFoo, foo)
+  _setvar(myBar, bar)
+  _setvar(res, len(myStr))
+  _print <color=#aaaaaa>  len of ""hello"" =</color> _getvar(res)
+  _setvar(res, upper(myStr))
+  _print <color=#aaaaaa>  upper of ""hello"" =</color> _getvar(res)
+  _setvar(res, lower(myStr2))
+  _print <color=#aaaaaa>  lower of ""HELLO"" =</color> _getvar(res)
+  _setvar(res, substr(_getvar(myStr), 1, 4))
+  _print <color=#aaaaaa>  substr ""hello"" 1 4 =</color> _getvar(res)
+  _setvar(res, contains(myStr, mySub))
+  _print <color=#aaaaaa>  contains ""hello"" ""ell"" =</color> _getvar(res)
+  _setvar(res, replace(myStr, myOld, myNew))
+  _print <color=#aaaaaa>  replace ""hello"" ""l"" ""rr"" =</color> _getvar(res)
+  _setvar(res, trim_str(myStr))
+  _print <color=#aaaaaa>  trim_str of ""hello"" =</color> _getvar(res)
+  _setvar(res, concat(myFoo, myBar))
+  _print <color=#aaaaaa>  concat ""foo"" + ""bar"" =</color> _getvar(res)
+endfunc
+
+stringShowcase()
+
+// ===================================================================
+// LESSON 4.2 - PRACTICAL STRING FUNCTIONS
+// ===================================================================
+
+printLesson(Lesson 4.2: Practical String Functions)
+
+// Check if a string starts with a prefix
+func startsWith(str, prefix)
+  _setvar(prefixLen, len(_getvar(prefix)))
+  _setvar(chunk, substr(_getvar(str), 0, _getvar(prefixLen)))
+  if _getvar(chunk) == _getvar(prefix)
+    _return 1
+  else
+    _return 0
+  endif
+endfunc
+
+_setvar(r, startsWith(/home/tux, /home))
+assert(startsWith /home/tux /home = 1, _getvar(r), 1)
+_setvar(r, startsWith(/var/log, /home))
+assert(startsWith /var/log /home = 0, _getvar(r), 0)
+
+// Reverse a string character by character
+func reverseStr(s)
+  _setvar(out, )
+  _setvar(i, len(_getvar(s)) - 1)
+  while _getvar(i) >= 0
+    _setvar(ch, substr(_getvar(s), _getvar(i), _getvar(i) + 1))
+    _setvar(out, concat(_getvar(out), _getvar(ch)))
+    _setvar(i, _getvar(i) - 1)
+  endwhile
+  _return _getvar(out)
+endfunc
+
+_setvar(r, reverseStr(hello))
+assert(reverse 'hello' is 'olleh', _getvar(r), olleh)
+_setvar(r, reverseStr(abc))
+assert(reverse 'abc' is 'cba', _getvar(r), cba)
+
+// Check if a string is a palindrome
+func isPalindrome(s)
+  _setvar(rev, reverseStr(_getvar(s)))
+  if _getvar(s) == _getvar(rev)
+    _return 1
+  else
+    _return 0
+  endif
+endfunc
+
+_setvar(r, isPalindrome(elle))
+assert(elle is palindrome, _getvar(r), 1)
+_setvar(r, isPalindrome(hello))
+assert(hello is not palindrome, _getvar(r), 0)
+
+// Repeat a string N times
+func repeatStr(s, n)
+  _setvar(out, )
+  _setvar(i, 0)
+  while _getvar(i) < _getvar(n)
+    _setvar(out, concat(_getvar(out), _getvar(s)))
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return _getvar(out)
+endfunc
+
+_setvar(r, repeatStr(ab, 4))
+assert(repeat 'ab' 4 times is 'abababab', _getvar(r), abababab)
+
+// Build a simple progress bar
+func progressBar(current, total, width)
+  _setvar(filled, _getvar(current) * _getvar(width) / _getvar(total))
+  _setvar(filled, floor(_getvar(filled)))
+  _setvar(bar, repeatStr(#, _getvar(filled)))
+  _return _getvar(bar)
+endfunc
+
+_setvar(r, progressBar(7, 10, 20))
+_print <color=#aaaaaa>  Progress 7/10:</color> _getvar(r)
+
+_setvar(r, progressBar(3, 10, 20))
+_print <color=#aaaaaa>  Progress 3/10:</color> _getvar(r)
+
+printTip(Build complex output by combining concat and string functions.)
+
+// ===================================================================
+// LESSON 4.3 - SPLIT AND JOIN
+// ===================================================================
+// split_str breaks a string into a list.
+// join combines a list back into a string.
+// ===================================================================
+
+printLesson(Lesson 4.3: split_str and join)
+
+// Split a delimited string into parts
+func splitByDash(text)
+  _setvar(parts, split_str(_getvar(text), -))
+  _return _getvar(parts)
+endfunc
+
+_setvar(parts, splitByDash(home-tux-files))
+_setvar(r, len(_getvar(parts)))
+assert(splitting home-tux-files gives 3 parts, _getvar(r), 3)
+
+// Join with a custom separator
+func formatList(items, separator)
+  _return join(_getvar(items), _getvar(separator))
+endfunc
+
+_setvar(colors, [red, green, blue])
+_setvar(r, formatList(_getvar(colors), -))
+_print <color=#aaaaaa>  Joined with dash:</color> _getvar(r)
+assert(join with dash gives red-green-blue, _getvar(r), red-green-blue)
+
+_setvar(nums, [1, 2, 3, 4])
+_setvar(r, formatList(_getvar(nums), :))
+_print <color=#aaaaaa>  Joined with colon:</color> _getvar(r)
+
+printTip(split_str and join are inverses - one splits a string and the other joins a list.)
+
+// ###############################################################
+//
+//   CHAPTER 5: MATH & TYPE SYSTEM
+//   Math builtins, type casting, type checking
+//
+// ###############################################################
+
+printHeader(CHAPTER 5: MATH & TYPE SYSTEM)
+
+// ===================================================================
+// LESSON 5.1 - MATH BUILTINS
+// ===================================================================
+
+printLesson(Lesson 5.1: Math Functions)
+
+func mathShowcase()
+  _setvar(r, floor(3.7))
+  _print <color=#aaaaaa>  floor of 3.7 =</color> _getvar(r)
+  _setvar(r, ceil(3.2))
+  _print <color=#aaaaaa>  ceil of 3.2 =</color> _getvar(r)
+  _setvar(r, round(3.5))
+  _print <color=#aaaaaa>  round of 3.5 =</color> _getvar(r)
+  _setvar(r, abs(-42))
+  _print <color=#aaaaaa>  abs of -42 =</color> _getvar(r)
+  _setvar(r, min(5, 12))
+  _print <color=#aaaaaa>  min of 5, 12 =</color> _getvar(r)
+  _setvar(r, max(5, 12))
+  _print <color=#aaaaaa>  max of 5, 12 =</color> _getvar(r)
+  _setvar(r, random(1, 100))
+  _print <color=#aaaaaa>  random 1 to 100 =</color> _getvar(r)
+endfunc
+
+mathShowcase()
+
+// Practical math: distance between two points (Manhattan distance)
+func manhattanDist(x1, y1, x2, y2)
+  _setvar(dx, abs(_getvar(x1) - _getvar(x2)))
+  _setvar(dy, abs(_getvar(y1) - _getvar(y2)))
+  _return _getvar(dx) + _getvar(dy)
+endfunc
+
+_setvar(r, manhattanDist(0, 0, 3, 4))
+assert(manhattan (0,0)-(3,4) is 7, _getvar(r), 7)
+_setvar(r, manhattanDist(5, 5, 5, 5))
+assert(manhattan same point is 0, _getvar(r), 0)
+
+// Practical math: is a year a leap year?
+func isLeapYear(year)
+  if _getvar(year) % 400 == 0
+    _return 1
+  elif _getvar(year) % 100 == 0
+    _return 0
+  elif _getvar(year) % 4 == 0
+    _return 1
+  else
+    _return 0
+  endif
+endfunc
+
+_setvar(r, isLeapYear(2000))
+assert(2000 is leap year, _getvar(r), 1)
+_setvar(r, isLeapYear(1900))
+assert(1900 is not leap year, _getvar(r), 0)
+_setvar(r, isLeapYear(2024))
+assert(2024 is leap year, _getvar(r), 1)
+_setvar(r, isLeapYear(2023))
+assert(2023 is not leap year, _getvar(r), 0)
+
+// Practical math: GCD (Euclidean algorithm)
+func gcd(a, b)
+  while _getvar(b) != 0
+    _setvar(t, _getvar(b))
+    _setvar(b, _getvar(a) % _getvar(b))
+    _setvar(a, _getvar(t))
+  endwhile
+  _return _getvar(a)
+endfunc
+
+_setvar(r, gcd(48, 18))
+assert(gcd(48, 18) is 6, _getvar(r), 6)
+_setvar(r, gcd(100, 75))
+assert(gcd(100, 75) is 25, _getvar(r), 25)
+
+// LCM using GCD
+func lcm(a, b)
+  _setvar(g, gcd(_getvar(a), _getvar(b)))
+  _return _getvar(a) * _getvar(b) / _getvar(g)
+endfunc
+
+_setvar(r, lcm(4, 6))
+assert(lcm(4, 6) is 12, _getvar(r), 12)
+
+printTip(The random builtin gives a random integer in [min, max] inclusive.)
+
+// ===================================================================
+// LESSON 5.2 - TYPE CASTING
+// ===================================================================
+// Convert between types: string, int, float, boolean-like
+// ===================================================================
+
+printLesson(Lesson 5.2: Type Casting)
+
+func typeCastDemo()
+  // Number to string
+  _setvar(numStr, to_string(42))
+  _print <color=#aaaaaa>  to_string of 42 =</color> _getvar(numStr)
+
+  // String to integer
+  _setvar(num, to_int(99))
+  _print <color=#aaaaaa>  to_int of ""99"" =</color> _getvar(num)
+
+  // String to float
+  _setvar(dec, to_float(3.14))
+  _print <color=#aaaaaa>  to_float of ""3.14"" =</color> _getvar(dec)
+
+  // Boolean-like conversions
+  _setvar(r, to_yesno(1))
+  _print <color=#aaaaaa>  to_yesno of 1 =</color> _getvar(r)
+  _setvar(r, to_yesno(0))
+  _print <color=#aaaaaa>  to_yesno of 0 =</color> _getvar(r)
+  _setvar(r, to_truefalse(1))
+  _print <color=#aaaaaa>  to_truefalse of 1 =</color> _getvar(r)
+  _setvar(r, to_truefalse(0))
+  _print <color=#aaaaaa>  to_truefalse of 0 =</color> _getvar(r)
+endfunc
+
+typeCastDemo()
+
+// Test type casting in a function
+func formatBool(val)
+  if _getvar(val) == 1
+    _return to_truefalse(1)
+  else
+    _return to_truefalse(0)
+  endif
+endfunc
+
+_setvar(r, formatBool(1))
+assert(formatBool(1) is true, _getvar(r), true)
+_setvar(r, formatBool(0))
+assert(formatBool(0) is false, _getvar(r), false)
+
+// ===================================================================
+// LESSON 5.3 - TYPE CHECKING
+// ===================================================================
+// typeof_val checks a value's type.
+// ===================================================================
+
+printLesson(Lesson 5.3: Type Checking with typeof_val)
+
+func typeCheckDemo()
+  _setvar(myStr, hello)
+  _setvar(myList, [1, 2, 3])
+  _setvar(myNum, 42)
+
+  _print <color=#aaaaaa>  typeof_val(myStr) =</color> typeof_val(myStr)
+  _print <color=#aaaaaa>  typeof_val(myList) =</color> typeof_val(myList)
+  _print <color=#aaaaaa>  typeof_val(myNum) =</color> typeof_val(myNum)
+endfunc
+
+typeCheckDemo()
+
+// A function that behaves differently based on type
+func describe(thing)
+  _setvar(t, typeof_val(thing))
+  if _getvar(t) == list
+    _setvar(l, len(_getvar(thing)))
+    _setvar(desc, concat(list_with_, to_string(_getvar(l))))
+    _setvar(desc, concat(_getvar(desc), _items))
+    _return _getvar(desc)
+  else
+    _return concat(value:_, _getvar(thing))
+  endif
+endfunc
+
+_setvar(myList, [a, b, c])
+_setvar(r, describe(_getvar(myList)))
+_print <color=#aaaaaa>  describe([a,b,c]) =</color> _getvar(r)
+
+printTip(typeof_val checks the type of a variable or value.)
+
+// ###############################################################
+//
+//   CHAPTER 6: SYSTEM INTERACTION
+//   Environment, file system, networking
+//
+// ###############################################################
+
+printHeader(CHAPTER 6: SYSTEM INTERACTION)
+
+// ===================================================================
+// LESSON 6.1 - ENVIRONMENT INFO
+// ===================================================================
+// x bash can query the running environment for info.
+// ===================================================================
+
+printLesson(Lesson 6.1: Environment Info)
+
+func showEnvironment()
+  _setvar(user, get_user())
+  _print <color=#aaaaaa>  Current user:</color> _getvar(user)
+
+  _setvar(home, get_home())
+  _print <color=#aaaaaa>  Home directory:</color> _getvar(home)
+
+  _setvar(shell, get_shell_type())
+  _print <color=#aaaaaa>  Shell type:</color> _getvar(shell)
+
+  _setvar(ts, timestamp())
+  _print <color=#aaaaaa>  Timestamp:</color> _getvar(ts)
+
+  _setvar(dt, date())
+  _print <color=#aaaaaa>  Date:</color> _getvar(dt)
+endfunc
+
+showEnvironment()
+
+// Verify environment calls return useful data
+func testEnvironment()
+  _setvar(u, get_user())
+  if len(_getvar(u)) > 0
+    _setvar(pass, 1)
+  else
+    _setvar(pass, 0)
+  endif
+  assert(get_user returns non-empty, _getvar(pass), 1)
+
+  _setvar(h, get_home())
+  _setvar(hasSlash, contains(_getvar(h), /))
+  assert(get_home contains a slash, _getvar(hasSlash), 1)
+
+  _setvar(ts, timestamp())
+  if _getvar(ts) > 0
+    _setvar(pass, 1)
+  else
+    _setvar(pass, 0)
+  endif
+  assert(timestamp is positive, _getvar(pass), 1)
+endfunc
+
+testEnvironment()
+printTip(The get_user and get_home builtins tell you who and where you are.)
+
+// ===================================================================
+// LESSON 6.2 - NETWORK IP INFO
+// ===================================================================
+// Query the machine's network identity.
+// ===================================================================
+
+printLesson(Lesson 6.2: Network IP Info)
+
+func showNetworkInfo()
+  _setvar(lan, get_lanIP())
+  _print <color=#aaaaaa>  LAN IP:</color> _getvar(lan)
+
+  _setvar(pub, get_publicIP())
+  _print <color=#aaaaaa>  Public IP:</color> _getvar(pub)
+endfunc
+
+showNetworkInfo()
+
+// Verify IPs are non-empty
+func testNetworkInfo()
+  _setvar(lan, get_lanIP())
+  if len(_getvar(lan)) > 0
+    _setvar(pass, 1)
+  else
+    _setvar(pass, 0)
+  endif
+  assert(LAN IP is non-empty, _getvar(pass), 1)
+
+  _setvar(pub, get_publicIP())
+  if len(_getvar(pub)) > 0
+    _setvar(pass, 1)
+  else
+    _setvar(pass, 0)
+  endif
+  assert(Public IP is non-empty, _getvar(pass), 1)
+endfunc
+
+testNetworkInfo()
+printTip(get_lanIP is your local network address. get_publicIP is internet-facing.)
+
+// ===================================================================
+// LESSON 6.3 - FILE SYSTEM OPERATIONS
+// ===================================================================
+// Read the current directory, check file existence, and more.
+// ===================================================================
+
+printLesson(Lesson 6.3: File System)
+
+func fileSystemDemo()
+  // Check current directory
+  _setvar(cwd, _fs_pwd)
+  _print <color=#aaaaaa>  Current directory:</color> _getvar(cwd)
+
+  // Check if common paths exist
+  _setvar(exists, _File(/etc))
+  _print <color=#aaaaaa>  /etc exists?</color> _getvar(exists)
+
+  _setvar(exists, _File(/etc/passwd))
+  _print <color=#aaaaaa>  /etc/passwd exists?</color> _getvar(exists)
+
+  // Check if something is a folder
+  _setvar(isDir, _File(/etc))
+  _setvar(isDir, _getvar(isDir).is_folder)
+  _print <color=#aaaaaa>  /etc is folder?</color> _getvar(isDir)
+
+  _setvar(isDir, _File(/etc/passwd))
+  _setvar(isDir, _getvar(isDir).is_folder)
+  _print <color=#aaaaaa>  /etc/passwd is folder?</color> _getvar(isDir)
+endfunc
+
+fileSystemDemo()
+
+// A function that reports file status
+func fileReport(path)
+  _setvar(exists, _File(_getvar(path)))
+  if not _getvar(exists)
+    _return not found
+  endif
+  _setvar(isDir, _getvar(exists).is_folder)
+  if _getvar(isDir)
+    _return directory
+  else
+    _return file
+  endif
+endfunc
+
+_setvar(r, fileReport(/etc))
+_print <color=#aaaaaa>  /etc is a:</color> _getvar(r)
+_setvar(r, fileReport(/etc/passwd))
+_print <color=#aaaaaa>  /etc/passwd is a:</color> _getvar(r)
+
+printTip(Use _File to get a file object. Returns null if the path does not exist.)
+printTip(Access .is_folder on a _File result to check if it is a directory.)
+
+// ===================================================================
+// LESSON 6.4 - READING FILES
+// ===================================================================
+// _fs_read reads file contents into a variable.
+// Useful for parsing configs, checking passwords, etc.
+// ===================================================================
+
+printLesson(Lesson 6.4: Reading Files)
+
+func readAndCheck(path)
+  _setvar(exists, _File(_getvar(path)))
+  if not _getvar(exists)
+    _print <color=#ff0000>  File not found:</color> _getvar(path)
+    _return
+  endif
+  _setvar(content, _fs_read _getvar(path))
+  _setvar(cl, len(_getvar(content)))
+  _print <color=#aaaaaa>  Read _getvar(path): _getvar(cl) characters</color>
+  _return _getvar(cl)
+endfunc
+
+readAndCheck(/etc/passwd)
+
+printTip(_fs_read <path> stores file content in a variable.)
+printNote(Always check the _File result before reading to avoid errors.)
+
+// ===================================================================
+// LESSON 6.5 - WRITING FILES
+// ===================================================================
+// _fs_write creates or overwrites a file.
+// _fs_mkdir creates directories.
+// Be careful - this modifies the file system!
+// ===================================================================
+
+printLesson(Lesson 6.5: Writing Files & Directories)
+
+func writeDemo()
+  // Demonstrate file writing and directory creation
+  _fs_mkdir tmp_test
+  _print <color=#00ff00>  Created directory:</color> tmp_test
+
+  // Change into the new directory, write a file, then come back
+  _fs_cd tmp_test
+  _fs_write hello.txt Hello from x bash!
+  _print <color=#00ff00>  Wrote file:</color> hello.txt
+
+  // Read it back to verify using file_read() builtin
+  _setvar(contents, file_read(""hello.txt""))
+  _print <color=#aaaaaa>  Contents:</color> _getvar(contents)
+  _setvar(wroteOk, file_exists(""hello.txt""))
+  assert(6.5a hello.txt exists, _getvar(wroteOk), 1)
+
+  // Return to original directory
+  _fs_cd ..
+endfunc
+
+writeDemo()
+
+printTip(_fs_write <path> <text> creates or overwrites a file.)
+printTip(_fs_mkdir <path> creates a directory.)
+printNote(Be careful with _fs_write - it overwrites existing files!)
+
+// ###############################################################
+//
+//   CHAPTER 7: SCANNING & RECON
+//   Network scanning, port checking, device discovery
+//
+// ###############################################################
+
+printHeader(CHAPTER 7: SCANNING & RECON)
+
+// ===================================================================
+// LESSON 7.1 - SCANNING PORTS
+// ===================================================================
+// _net_ports scans an IP for open ports (formatted output).
+// _net_ports returns a list of port numbers.
+// _net_port checks a specific port.
+// ===================================================================
+
+printLesson(Lesson 7.1: Port Scanning)
+
+func scanDemo()
+  // Get our own public IP to scan ourselves
+  _setvar(myIP, get_publicIP())
+  _print <color=#aaaaaa>  Scanning self:</color> _getvar(myIP)
+
+  // Get list of ports
+  _setvar(ports, _net_ports _getvar(myIP))
+  if len(_getvar(ports)) > 0
+    _print <color=#00ff00>  Found open ports on self</color>
+    // Check how many
+    _setvar(numPorts, len(_getvar(ports)))
+    _print <color=#aaaaaa>  Number of open ports:</color> _getvar(numPorts)
+  else
+    _print <color=#ffff00>  No ports found (or host unreachable)</color>
+  endif
+endfunc
+
+scanDemo()
+
+printTip(_net_ports returns a list you can loop through.)
+printTip(_net_port(ip, port) checks if a specific port is open.)
+
+// ===================================================================
+// LESSON 7.2 - HOST CHECKING
+// ===================================================================
+// _net_ping checks if a host is reachable.
+// _net_random gets a random reachable router IP.
+// ===================================================================
+
+printLesson(Lesson 7.2: Host Checking)
+
+func hostCheckDemo()
+  // Check if our own IP is reachable (it should be!)
+  _setvar(myIP, get_publicIP())
+  _setvar(reachable, _net_ping _getvar(myIP))
+  _print <color=#aaaaaa>  _net_ping _getvar(myIP):</color> _getvar(reachable)
+
+  // Get a random router IP
+  _setvar(randomIP, _net_random)
+  _print <color=#aaaaaa>  Random router IP:</color> _getvar(randomIP)
+endfunc
+
+hostCheckDemo()
+
+printTip(_net_ping returns 1 if host responds or 0 if not.)
+printTip(_net_random finds a random reachable router for practice.)
+
+// ===================================================================
+// LESSON 7.3 - LAN DEVICE DISCOVERY
+// ===================================================================
+// Discover devices on a local network.
+// ===================================================================
+
+printLesson(Lesson 7.3: LAN Device Discovery)
+
+func lanDiscoveryDemo()
+  _setvar(myIP, get_publicIP())
+  _print <color=#aaaaaa>  Checking LAN devices for:</color> _getvar(myIP)
+
+  _setvar(devices, _net_devices _getvar(myIP))
+  if _getvar(devices)
+    _setvar(count, len(_getvar(devices)))
+    _print <color=#aaaaaa>  Found devices:</color> _getvar(count)
+  else
+    _print <color=#ffff00>  No devices found or not a router</color>
+  endif
+endfunc
+
+lanDiscoveryDemo()
+
+printTip(_net_devices works on router IPs to list connected devices.)
+
+// ###############################################################
+//
+//   CHAPTER 8: PRACTICAL PROGRAMS
+//   Real mini-programs that combine everything learned
+//
+// ###############################################################
+
+printHeader(CHAPTER 8: PRACTICAL PROGRAMS)
+
+// ===================================================================
+// LESSON 8.1 - PRIME NUMBER CHECKER
+// ===================================================================
+// A classic algorithm: is this number prime?
+// ===================================================================
+
+printLesson(Lesson 8.1: Prime Number Checker)
+
+func isPrime(n)
+  if _getvar(n) < 2
+    _return 0
+  endif
+  _setvar(i, 2)
+  while _getvar(i) * _getvar(i) <= _getvar(n)
+    if _getvar(n) % _getvar(i) == 0
+      _return 0
+    endif
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return 1
+endfunc
+
+// Test the prime checker
+_setvar(r, isPrime(1))
+assert(1 is not prime, _getvar(r), 0)
+_setvar(r, isPrime(2))
+assert(2 is prime, _getvar(r), 1)
+_setvar(r, isPrime(7))
+assert(7 is prime, _getvar(r), 1)
+_setvar(r, isPrime(9))
+assert(9 is not prime (3*3), _getvar(r), 0)
+_setvar(r, isPrime(13))
+assert(13 is prime, _getvar(r), 1)
+_setvar(r, isPrime(100))
+assert(100 is not prime, _getvar(r), 0)
+
+// Count primes in a range
+func countPrimes(limit)
+  _setvar(count, 0)
+  for i in range(2, _getvar(limit))
+    _setvar(p, isPrime(_getvar(i)))
+    if _getvar(p) == 1
+      _setvar(count, _getvar(count) + 1)
+    endif
+  endfor
+  _return _getvar(count)
+endfunc
+
+_setvar(r, countPrimes(10))
+_print <color=#aaaaaa>  Primes up to 10:</color> _getvar(r)
+assert(primes up to 10 is 4 (2,3,5,7), _getvar(r), 4)
+_setvar(r, countPrimes(20))
+assert(primes up to 20 is 8, _getvar(r), 8)
+
+// List primes up to N
+func listPrimes(limit)
+  _setvar(primes, [])
+  for i in range(2, _getvar(limit))
+    _setvar(p, isPrime(_getvar(i)))
+    if _getvar(p) == 1
+      _push primes _getvar(i)
+    endif
+  endfor
+  _return _getvar(primes)
+endfunc
+
+_setvar(primeList, listPrimes(30))
+_print <color=#aaaaaa>  Primes up to 30:</color> join(_getvar(primeList), , )
+_setvar(r, len(_getvar(primeList)))
+assert(10 primes under 30, _getvar(r), 10)
+
+printTip(Check divisibility up to sqrt(n) for efficiency.)
+
+// ===================================================================
+// LESSON 8.2 - FIBONACCI GENERATOR
+// ===================================================================
+// The famous sequence: 0, 1, 1, 2, 3, 5, 8, 13, 21, ...
+// Each number is the sum of the two before it.
+// ===================================================================
+
+printLesson(Lesson 8.2: Fibonacci Generator)
+
+// Iterative fibonacci (fast!)
+func fibonacci(n)
+  if _getvar(n) <= 0
+    _return 0
+  endif
+  if _getvar(n) == 1
+    _return 1
+  endif
+  _setvar(a, 0)
+  _setvar(b, 1)
+  _setvar(i, 2)
+  while _getvar(i) <= _getvar(n)
+    _setvar(temp, _getvar(b))
+    _setvar(b, _getvar(a) + _getvar(b))
+    _setvar(a, _getvar(temp))
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return _getvar(b)
+endfunc
+
+_setvar(r, fibonacci(0))
+assert(fib(0) is 0, _getvar(r), 0)
+_setvar(r, fibonacci(1))
+assert(fib(1) is 1, _getvar(r), 1)
+_setvar(r, fibonacci(5))
+assert(fib(5) is 5, _getvar(r), 5)
+_setvar(r, fibonacci(10))
+assert(fib(10) is 55, _getvar(r), 55)
+_setvar(r, fibonacci(20))
+assert(fib(20) is 6765, _getvar(r), 6765)
+
+// Build and display fibonacci sequence
+func fibSequence(count)
+  _setvar(seq, [])
+  for i in range(0, _getvar(count))
+    _setvar(val, fibonacci(_getvar(i)))
+    _push seq _getvar(val)
+  endfor
+  _return _getvar(seq)
+endfunc
+
+_setvar(seq, fibSequence(12))
+_print <color=#aaaaaa>  First 13 Fibonacci numbers:</color>
+_print <color=#00ff00>  _getvar(seq)</color>
+
+printTip(Iterative is much faster than recursive for fibonacci.)
+
+// ===================================================================
+// LESSON 8.3 - SORTING: BUBBLE SORT
+// ===================================================================
+// A simple sorting algorithm that swaps adjacent elements.
+// Not the fastest, but easy to understand!
+// ===================================================================
+
+printLesson(Lesson 8.3: Sorting - Bubble Sort)
+
+// Note: x bash lists don't support index assignment easily,
+// so we use a comparison-based approach with variables
+func bubbleSortDemo()
+  // We'll sort 5 numbers using variables (since list index
+  // assignment isn't directly supported)
+  _setvar(a, 5)
+  _setvar(b, 2)
+  _setvar(c, 8)
+  _setvar(d, 1)
+  _setvar(e, 4)
+  _print <color=#aaaaaa>  Before: _getvar(a), _getvar(b), _getvar(c), _getvar(d), _getvar(e)</color>
+
+  // Multiple passes - swap adjacent if out of order
+  // Pass 1
+  if _getvar(a) > _getvar(b)
+    _setvar(t, _getvar(a))
+    _setvar(a, _getvar(b))
+    _setvar(b, _getvar(t))
+  endif
+  if _getvar(b) > _getvar(c)
+    _setvar(t, _getvar(b))
+    _setvar(b, _getvar(c))
+    _setvar(c, _getvar(t))
+  endif
+  if _getvar(c) > _getvar(d)
+    _setvar(t, _getvar(c))
+    _setvar(c, _getvar(d))
+    _setvar(d, _getvar(t))
+  endif
+  if _getvar(d) > _getvar(e)
+    _setvar(t, _getvar(d))
+    _setvar(d, _getvar(e))
+    _setvar(e, _getvar(t))
+  endif
+  // Pass 2
+  if _getvar(a) > _getvar(b)
+    _setvar(t, _getvar(a))
+    _setvar(a, _getvar(b))
+    _setvar(b, _getvar(t))
+  endif
+  if _getvar(b) > _getvar(c)
+    _setvar(t, _getvar(b))
+    _setvar(b, _getvar(c))
+    _setvar(c, _getvar(t))
+  endif
+  if _getvar(c) > _getvar(d)
+    _setvar(t, _getvar(c))
+    _setvar(c, _getvar(d))
+    _setvar(d, _getvar(t))
+  endif
+  // Pass 3
+  if _getvar(a) > _getvar(b)
+    _setvar(t, _getvar(a))
+    _setvar(a, _getvar(b))
+    _setvar(b, _getvar(t))
+  endif
+  if _getvar(b) > _getvar(c)
+    _setvar(t, _getvar(b))
+    _setvar(b, _getvar(c))
+    _setvar(c, _getvar(t))
+  endif
+  // Pass 4
+  if _getvar(a) > _getvar(b)
+    _setvar(t, _getvar(a))
+    _setvar(a, _getvar(b))
+    _setvar(b, _getvar(t))
+  endif
+
+  _print <color=#00ff00>  After:  _getvar(a), _getvar(b), _getvar(c), _getvar(d), _getvar(e)</color>
+endfunc
+
+bubbleSortDemo()
+printNote(Bubble sort compares neighbors and swaps if needed. Repeat until sorted.)
+
+// ===================================================================
+// LESSON 8.4 - ITERATIVE POWER (EXPONENTIATION)
+// ===================================================================
+// Calculate base^exp without the ** operator.
+// ===================================================================
+
+printLesson(Lesson 8.4: Iterative Power)
+
+func power(base, exp)
+  _setvar(result, 1)
+  _setvar(i, 0)
+  while _getvar(i) < _getvar(exp)
+    _setvar(result, _getvar(result) * _getvar(base))
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return _getvar(result)
+endfunc
+
+_setvar(r, power(2, 0))
+assert(2^0 is 1, _getvar(r), 1)
+_setvar(r, power(2, 10))
+assert(2^10 is 1024, _getvar(r), 1024)
+_setvar(r, power(3, 5))
+assert(3^5 is 243, _getvar(r), 243)
+_setvar(r, power(10, 3))
+assert(10^3 is 1000, _getvar(r), 1000)
+
+// ===================================================================
+// LESSON 8.5 - LIST STATISTICS
+// ===================================================================
+// Functions that analyze a list of numbers.
+// ===================================================================
+
+printLesson(Lesson 8.5: List Statistics)
+
+// Find minimum value
+func listMin(lst)
+  _setvar(best, 999999)
+  for item in _getvar(lst)
+    if _getvar(item) < _getvar(best)
+      _setvar(best, _getvar(item))
+    endif
+  endfor
+  _return _getvar(best)
+endfunc
+
+// Find maximum value
+func listMax(lst)
+  _setvar(best, -999999)
+  for item in _getvar(lst)
+    if _getvar(item) > _getvar(best)
+      _setvar(best, _getvar(item))
+    endif
+  endfor
+  _return _getvar(best)
+endfunc
+
+// Sum all values
+func listSum(lst)
+  _setvar(total, 0)
+  for item in _getvar(lst)
+    _setvar(total, _getvar(total) + _getvar(item))
+  endfor
+  _return _getvar(total)
+endfunc
+
+// Average
+func listAvg(lst)
+  _setvar(total, listSum(_getvar(lst)))
+  _setvar(count, len(_getvar(lst)))
+  _return _getvar(total) / _getvar(count)
+endfunc
+
+// Range (max - min)
+func listRange(lst)
+  _setvar(lo, listMin(_getvar(lst)))
+  _setvar(hi, listMax(_getvar(lst)))
+  _return _getvar(hi) - _getvar(lo)
+endfunc
+
+_setvar(data, [10, 25, 3, 47, 18, 9, 33])
+
+_setvar(r, listMin(_getvar(data)))
+_print <color=#aaaaaa>  Min:</color> _getvar(r)
+assert(list min is 3, _getvar(r), 3)
+
+_setvar(r, listMax(_getvar(data)))
+_print <color=#aaaaaa>  Max:</color> _getvar(r)
+assert(list max is 47, _getvar(r), 47)
+
+_setvar(r, listSum(_getvar(data)))
+_print <color=#aaaaaa>  Sum:</color> _getvar(r)
+assert(list sum is 145, _getvar(r), 145)
+
+_setvar(r, listRange(_getvar(data)))
+_print <color=#aaaaaa>  Range:</color> _getvar(r)
+assert(list range is 44, _getvar(r), 44)
+
+printTip(Build reusable utility functions like these for your own scripts!)
+
+// ===================================================================
+// LESSON 8.6 - SEARCH ALGORITHMS
+// ===================================================================
+// Find items in a list.
+// ===================================================================
+
+printLesson(Lesson 8.6: Search Functions)
+
+// Linear search: find index of item
+func findIndex(lst, target)
+  _setvar(idx, 0)
+  for item in _getvar(lst)
+    if _getvar(item) == _getvar(target)
+      _return _getvar(idx)
+    endif
+    _setvar(idx, _getvar(idx) + 1)
+  endfor
+  _return -1
+endfunc
+
+_setvar(arr, [apple, banana, cherry, date, elderberry])
+_setvar(r, findIndex(_getvar(arr), cherry))
+assert(findIndex cherry is 2, _getvar(r), 2)
+_setvar(r, findIndex(_getvar(arr), elderberry))
+assert(findIndex elderberry is 4, _getvar(r), 4)
+_setvar(r, findIndex(_getvar(arr), fig))
+assert(findIndex fig not found is -1, _getvar(r), -1)
+
+// Count occurrences
+func countOccurrences(lst, target)
+  _setvar(count, 0)
+  for item in _getvar(lst)
+    if _getvar(item) == _getvar(target)
+      _setvar(count, _getvar(count) + 1)
+    endif
+  endfor
+  _return _getvar(count)
+endfunc
+
+_setvar(arr, [a, b, a, c, a, b])
+_setvar(r, countOccurrences(_getvar(arr), a))
+assert(count of 'a' is 3, _getvar(r), 3)
+_setvar(r, countOccurrences(_getvar(arr), b))
+assert(count of 'b' is 2, _getvar(r), 2)
+_setvar(r, countOccurrences(_getvar(arr), z))
+assert(count of 'z' is 0, _getvar(r), 0)
+
+// Filter: return items above a threshold
+func filterAbove(lst, threshold)
+  _setvar(result, [])
+  for item in _getvar(lst)
+    if _getvar(item) > _getvar(threshold)
+      _push result _getvar(item)
+    endif
+  endfor
+  _return _getvar(result)
+endfunc
+
+_setvar(nums, [1, 5, 3, 8, 2, 9, 4, 7])
+_setvar(above5, filterAbove(_getvar(nums), 5))
+_setvar(r, len(_getvar(above5)))
+_print <color=#aaaaaa>  Items above 5:</color> _getvar(r)
+assert(3 items above 5 (8, 9, 7), _getvar(r), 3)
+
+printTip(Searching and filtering are fundamental operations you'll use constantly.)
+
+// ###############################################################
+//
+//   CHAPTER 9: COLOR & FORMATTING
+//   Making beautiful terminal output
+//
+// ###############################################################
+
+printHeader(CHAPTER 9: COLOR & FORMATTING)
+
+// ===================================================================
+// LESSON 9.1 - COLOR FUNCTIONS
+// ===================================================================
+// x bash has built-in color functions for formatting output.
+// Also supports <color=#hex> tags for custom colors.
+// ===================================================================
+
+printLesson(Lesson 9.1: Terminal Colors)
+
+func colorGallery()
+  _print <color=#aaaaaa>  Available color functions:</color>
+  _print <color=#ff0000>  red() - Red text for errors</color>
+  _print <color=#00ff00>  green() - Green text for success</color>
+  _print <color=#0000ff>  blue() - Blue text for info</color>
+  _print <color=#ffff00>  yellow() - Yellow text for warnings</color>
+  _print <color=#00ffff>  cyan() - Cyan text for highlights</color>
+  _print <color=#ff00ff>  magenta() - Magenta text for special</color>
+  _print <color=#ff8800>  orange() - Orange text</color>
+  _print <color=#00ff88>  lime() - Lime text</color>
+  _print <color=#eb0cc6>  purple() - Purple text for headers</color>
+  _print <color=#aaaaaa>  grey() - Grey text for subtle info</color>
+  _print
+  _print <color=#aaaaaa>  Custom colors use: <color=#RRGGBB>text</color></color>
+endfunc
+
+colorGallery()
+
+printTip(Use colors to make your script output readable and professional.)
+
+// ===================================================================
+// LESSON 9.2 - FORMATTED OUTPUT
+// ===================================================================
+// Build professional-looking reports and displays.
+// ===================================================================
+
+printLesson(Lesson 9.2: Formatted Reports)
+
+func printDivider()
+  _print <color=#555555>  ----------------------------------------</color>
+endfunc
+
+func printRow(label, value)
+  _print <color=#00bfff>  _getvar(label):</color> <color=#ffffff>_getvar(value)</color>
+endfunc
+
+func systemReport()
+  _print
+  _print <color=#eb0cc6>  +----- SYSTEM REPORT -----+</color>
+  printDivider()
+
+  _setvar(user, get_user())
+  printRow(User, _getvar(user))
+
+  _setvar(home, get_home())
+  printRow(Home, _getvar(home))
+
+  _setvar(lan, get_lanIP())
+  printRow(LAN IP, _getvar(lan))
+
+  _setvar(pub, get_publicIP())
+  printRow(Public IP, _getvar(pub))
+
+  _setvar(shell, get_shell_type())
+  printRow(Shell, _getvar(shell))
+
+  _setvar(dt, date())
+  printRow(Date, _getvar(dt))
+
+  printDivider()
+  _print <color=#eb0cc6>  +----- END REPORT --------+</color>
+endfunc
+
+systemReport()
+
+printTip(Helper functions like printRow make consistent formatting easy.)
+
+// ###############################################################
+//
+//   CHAPTER 10: ADVANCED PATTERNS
+//   Function composition, state machines, complex algorithms
+//
+// ###############################################################
+
+printHeader(CHAPTER 10: ADVANCED PATTERNS)
+
+// ===================================================================
+// LESSON 10.1 - FUNCTION COMPOSITION
+// ===================================================================
+// Chain multiple functions together for complex transformations.
+// ===================================================================
+
+printLesson(Lesson 10.1: Function Composition)
+
+// Build a pipeline: clean user input
+func cleanInput(text)
+  _setvar(trimmed, trim_str(_getvar(text)))
+  _setvar(lowered, lower(_getvar(trimmed)))
+  _return _getvar(lowered)
+endfunc
+
+_setvar(r, cleanInput(  HELLO WORLD  ))
+assert(cleanInput trims and lowers, _getvar(r), hello world)
+
+// Build a tag function using join (dash is safe as join delimiter)
+func makeID(prefix, number)
+  _setvar(numStr, to_string(_getvar(number)))
+  _setvar(parts, [])
+  _push parts _getvar(prefix)
+  _push parts _getvar(numStr)
+  _return join(_getvar(parts), -)
+endfunc
+
+_setvar(r, makeID(SRV, 1))
+assert(makeID SRV-1, _getvar(r), SRV-1)
+_setvar(r, makeID(SRV, 42))
+assert(makeID SRV-42, _getvar(r), SRV-42)
+_setvar(r, makeID(SRV, 100))
+assert(makeID SRV-100, _getvar(r), SRV-100)
+
+// Generate a batch of IDs
+func generateIDs(prefix, count)
+  _setvar(ids, [])
+  for i in range(1, _getvar(count))
+    _setvar(id, makeID(_getvar(prefix), _getvar(i)))
+    _push ids _getvar(id)
+  endfor
+  _return _getvar(ids)
+endfunc
+
+_setvar(servers, generateIDs(WEB, 5))
+_setvar(r, len(_getvar(servers)))
+_print <color=#aaaaaa>  Generated IDs:</color> _getvar(servers)
+assert(generated 5 server IDs, _getvar(r), 5)
+
+printTip(Small reusable functions compose into powerful pipelines.)
+
+// ===================================================================
+// LESSON 10.2 - STATE MACHINE: LOGIN SIMULATOR
+// ===================================================================
+// Simulate a login system with attempt tracking.
+// ===================================================================
+
+printLesson(Lesson 10.2: State Machine - Login Simulator)
+_print   Simulating a login with 3 attempts (wrong, wrong, correct):
+
+// Simulate checking a password
+func checkPassword(input, correct)
+  if _getvar(input) == _getvar(correct)
+    _return granted
+  else
+    _return denied
+  endif
+endfunc
+
+// Login system with max attempts
+func loginSystem(attempts, password)
+  _setvar(maxAttempts, _getvar(attempts))
+  _setvar(attempt, 0)
+  _setvar(status, locked)
+
+  while _getvar(attempt) < _getvar(maxAttempts)
+    _setvar(attempt, _getvar(attempt) + 1)
+    // Simulate trying the right password on the last attempt
+    if _getvar(attempt) == _getvar(maxAttempts)
+      _setvar(result, checkPassword(_getvar(password), _getvar(password)))
+    else
+      _setvar(result, checkPassword(wrong, _getvar(password)))
+    endif
+
+    if _getvar(result) == granted
+      _setvar(status, granted)
+      _print <color=#00ff00>  Attempt _getvar(attempt): Access granted (correct password)</color>
+      _setvar(attempt, _getvar(maxAttempts))
+    else
+      _print <color=#ff0000>  Attempt _getvar(attempt): Access denied (wrong password)</color>
+    endif
+  endwhile
+
+  _return _getvar(status)
+endfunc
+
+_setvar(r, loginSystem(3, secret123))
+_print   Final status: _getvar(r)
+assert(login succeeds on last attempt, _getvar(r), granted)
+_print   TIP: State machines track status across iterations - here: locked -> denied -> denied -> granted.
+
+// ===================================================================
+// LESSON 10.3 - ITERATIVE ALGORITHMS: FIZZBUZZ
+// ===================================================================
+// The classic programming interview question!
+// For 1 to N: print Fizz (div by 3), Buzz (div by 5),
+//             FizzBuzz (div by both), or the number.
+// ===================================================================
+
+printLesson(Lesson 10.3: FizzBuzz)
+
+func fizzBuzz(n)
+  _setvar(fizzes, 0)
+  _setvar(buzzes, 0)
+  _setvar(fizzbuzzes, 0)
+
+  for i in range(1, _getvar(n))
+    if _getvar(i) % 15 == 0
+      _setvar(fizzbuzzes, _getvar(fizzbuzzes) + 1)
+    elif _getvar(i) % 3 == 0
+      _setvar(fizzes, _getvar(fizzes) + 1)
+    elif _getvar(i) % 5 == 0
+      _setvar(buzzes, _getvar(buzzes) + 1)
+    endif
+  endfor
+
+  _print <color=#aaaaaa>  FizzBuzz(1-_getvar(n)): Fizzes=_getvar(fizzes) Buzzes=_getvar(buzzes) FizzBuzzes=_getvar(fizzbuzzes)</color>
+  _return _getvar(fizzbuzzes)
+endfunc
+
+_setvar(r, fizzBuzz(15))
+assert(fizzbuzz 1-15 has 1 fizzbuzz (15), _getvar(r), 1)
+_setvar(r, fizzBuzz(30))
+assert(fizzbuzz 1-30 has 2 fizzbuzzes (15 30), _getvar(r), 2)
+
+// ===================================================================
+// LESSON 10.4 - COMPLEX CALL CHAINS
+// ===================================================================
+// Show how functions build on each other.
+// ===================================================================
+
+printLesson(Lesson 10.4: Complex Call Chains)
+
+// Simple building blocks
+func square(n)
+  _return _getvar(n) * _getvar(n)
+endfunc
+
+func halve(n)
+  _return _getvar(n) / 2
+endfunc
+
+func negate(n)
+  _return _getvar(n) * -1
+endfunc
+
+// Complex pipeline using building blocks
+func transform(n)
+  // n -> square -> halve -> increment -> negate
+  _setvar(s1, square(_getvar(n)))
+  _setvar(s2, halve(_getvar(s1)))
+  _setvar(s3, increment(_getvar(s2)))
+  _setvar(s4, negate(_getvar(s3)))
+  _return _getvar(s4)
+endfunc
+
+// 10 -> 100 -> 50 -> 51 -> -51
+_setvar(r, transform(10))
+_print <color=#aaaaaa>  transform(10): 10->100->50->51->-51 =</color> _getvar(r)
+assert(transform(10) is -51, _getvar(r), -51)
+
+// 4 -> 16 -> 8 -> 9 -> -9
+_setvar(r, transform(4))
+assert(transform(4) is -9, _getvar(r), -9)
+
+// ===================================================================
+// LESSON 10.5 - DIAMOND CALL PATTERN
+// ===================================================================
+// Multiple paths through different functions converge.
+// ===================================================================
+
+printLesson(Lesson 10.5: Diamond Call Pattern)
+
+func pathA(n)
+  _return _getvar(n) * 2
+endfunc
+
+func pathB(n)
+  _return _getvar(n) * 3
+endfunc
+
+func merge(n)
+  _setvar(left, pathA(_getvar(n)))
+  _setvar(right, pathB(_getvar(n)))
+  _return _getvar(left) + _getvar(right)
+endfunc
+
+// merge(10): pathA(10)=20, pathB(10)=30, 20+30=50
+_setvar(r, merge(10))
+assert(diamond merge(10) is 50, _getvar(r), 50)
+
+// Deeper diamond
+func deepMerge(n)
+  _setvar(m, merge(_getvar(n)))
+  _setvar(s, square(_getvar(n)))
+  _return _getvar(m) + _getvar(s)
+endfunc
+
+// deepMerge(5): merge(5)=10+15=25, square(5)=25, 25+25=50
+_setvar(r, deepMerge(5))
+assert(deepMerge(5) is 50, _getvar(r), 50)
+
+printTip(Complex programs are just simple functions combined in creative ways.)
+
+// ###############################################################
+//
+//   CHAPTER 11: BUILTIN CHAINING & NESTING
+//   Using builtins inside expressions and other builtins
+//
+// ###############################################################
+
+printHeader(CHAPTER 11: BUILTIN CHAINING)
+
+printLesson(Lesson 11.1: Nested Builtin Calls)
+
+// upper of a substr result
+func upperFirst3(s)
+  _return upper(substr(_getvar(s), 0, 3))
+endfunc
+
+_setvar(r, upperFirst3(hello))
+assert(upper first 3 of hello is HEL, _getvar(r), HEL)
+_setvar(r, upperFirst3(world))
+assert(upper first 3 of world is WOR, _getvar(r), WOR)
+
+// lower of upper (roundtrip)
+func caseRoundtrip(s)
+  _return lower(upper(_getvar(s)))
+endfunc
+
+_setvar(r, caseRoundtrip(Hello))
+assert(lower+upper roundtrip is hello, _getvar(r), hello)
+
+// len in arithmetic
+func lenSum(a, b)
+  _return len(_getvar(a)) + len(_getvar(b))
+endfunc
+
+_setvar(r, lenSum(hello, world))
+assert(lenSum hello+world is 10, _getvar(r), 10)
+
+// concat with to_string
+func labeledNum(label, num)
+  _return concat(_getvar(label), :, to_string(_getvar(num)))
+endfunc
+
+_setvar(r, labeledNum(score, 100))
+assert(labeledNum score 100, _getvar(r), score:100)
+
+// len of to_string
+func digitCount(num)
+  _return len(to_string(_getvar(num)))
+endfunc
+
+_setvar(r, digitCount(12345))
+assert(12345 has 5 digits, _getvar(r), 5)
+_setvar(r, digitCount(7))
+assert(7 has 1 digit, _getvar(r), 1)
+_setvar(r, digitCount(100))
+assert(100 has 3 digits, _getvar(r), 3)
+
+// Chained math builtins
+func clampedAbs(n, lo, hi)
+  _setvar(a, abs(_getvar(n)))
+  _setvar(b, max(_getvar(a), _getvar(lo)))
+  _return min(_getvar(b), _getvar(hi))
+endfunc
+
+_setvar(r, clampedAbs(-50, 0, 10))
+assert(clampAbs neg50 0 10 is 10, _getvar(r), 10)
+_setvar(r, clampedAbs(-3, 0, 10))
+assert(clampAbs neg3 0 10 is 3, _getvar(r), 3)
+_setvar(r, clampedAbs(7, 0, 10))
+assert(clampAbs 7 0 10 is 7, _getvar(r), 7)
+
+// Multiple builtins in one expression
+_setvar(r, abs(-7) + abs(3))
+assert(absNeg7 plus abs3 is 10, _getvar(r), 10)
+
+_setvar(r, max(min(abs(-10), 7), floor(3.9)))
+assert(complex nested math is 7, _getvar(r), 7)
+
+_setvar(r, floor(abs(-7) + ceil(2.1)))
+assert(floor+abs+ceil combo is 10, _getvar(r), 10)
+
+printTip(Builtins can be nested: e.g. upper + substr chained together works!)
+
+// ###############################################################
+//
+//   CHAPTER 12: RECON TOOLKIT
+//   Building practical scanning & recon functions
+//
+// ###############################################################
+
+printHeader(CHAPTER 12: RECON TOOLKIT)
+
+// ===================================================================
+// LESSON 12.1 - PORT SCANNER WRAPPER
+// ===================================================================
+// Wrap the scanning builtins in friendly functions.
+// ===================================================================
+
+printLesson(Lesson 12.1: Recon Wrapper Functions)
+
+// Formatted port count for a target
+func portCount(ip)
+  _setvar(ports, _net_ports _getvar(ip))
+  if _getvar(ports)
+    _return len(_getvar(ports))
+  else
+    _return 0
+  endif
+endfunc
+
+_setvar(myIP, get_publicIP())
+_setvar(r, portCount(_getvar(myIP)))
+_print <color=#aaaaaa>  Ports open on self:</color> _getvar(r)
+if _getvar(r) > 0
+  _print <color=#00ff00>  [PASS] Found at least 1 open port on self</color>
+else
+  _print <color=#ffff00>  [NOTE] No ports found (host may be firewalled)</color>
+endif
+
+// Security assessment function
+func assessTarget(ip)
+  _print <color=#00bfff>  [RECON] Assessing:</color> _getvar(ip)
+  _setvar(reachable, _net_ping _getvar(ip))
+  if _getvar(reachable) != 1
+    _print <color=#ff0000>  Host unreachable</color>
+    _return unreachable
+  endif
+  _print <color=#00ff00>  Host is up</color>
+
+  _setvar(ports, _net_ports _getvar(ip))
+  if _getvar(ports)
+    _setvar(numPorts, len(_getvar(ports)))
+    _print <color=#aaaaaa>  Open ports:</color> _getvar(numPorts)
+  else
+    _setvar(numPorts, 0)
+    _print <color=#aaaaaa>  No open ports found</color>
+  endif
+
+  if _getvar(numPorts) > 5
+    _return high-exposure
+  elif _getvar(numPorts) > 2
+    _return moderate
+  elif _getvar(numPorts) > 0
+    _return low-exposure
+  else
+    _return stealthy
+  endif
+endfunc
+
+_setvar(assessment, assessTarget(_getvar(myIP)))
+_print <color=#eb0cc6>  Assessment:</color> _getvar(assessment)
+
+printTip(Wrap system calls in functions for cleaner, reusable code.)
+
+// ===================================================================
+// LESSON 12.2 - FIREWALL AND ROUTER INFO
+// ===================================================================
+
+printLesson(Lesson 12.2: Router & Firewall Info)
+
+func routerReport(ip)
+  _print <color=#00bfff>  [ROUTER] Checking:</color> _getvar(ip)
+  _setvar(info, _net_router _getvar(ip))
+  if _getvar(info)
+    _print <color=#00ff00>  Router info retrieved</color>
+  else
+    _print <color=#aaaaaa>  No router info available</color>
+  endif
+
+  _setvar(rules, _net_fwrules _getvar(ip))
+  if _getvar(rules)
+    _setvar(ruleCount, len(_getvar(rules)))
+    _print <color=#aaaaaa>  Firewall rules:</color> _getvar(ruleCount)
+  else
+    _print <color=#aaaaaa>  No firewall rules found</color>
+  endif
+endfunc
+
+routerReport(get_publicIP())
+
+printTip(_net_router and _net_fwrules return structured data.)
+
+// ###############################################################
+//
+//   CHAPTER 13: PROCESS MANAGEMENT
+//   List and manage running processes
+//
+// ###############################################################
+
+printHeader(CHAPTER 13: PROCESS MANAGEMENT)
+
+printLesson(Lesson 13.1: Listing Processes)
+
+func processDemo()
+  _print <color=#aaaaaa>  Current running processes:</color>
+  _sys_procs
+  _print
+  printNote(Use _sys_kill <pid> to terminate a process.)
+endfunc
+
+processDemo()
+
+// ===================================================================
+// LESSON 13.2 - SLEEP / TIMING
+// ===================================================================
+
+printLesson(Lesson 13.2: Sleep and Timing)
+
+func timingDemo()
+  _setvar(before, timestamp())
+  _print <color=#aaaaaa>  Timestamp before sleep:</color> _getvar(before)
+
+  sleep 1
+
+  _setvar(after, timestamp())
+  _print <color=#aaaaaa>  Timestamp after 1s sleep:</color> _getvar(after)
+
+  _setvar(elapsed, _getvar(after) - _getvar(before))
+  _print <color=#aaaaaa>  Elapsed:</color> _getvar(elapsed)
+endfunc
+
+timingDemo()
+
+_pause
+printTip(sleep N suspends the script for N seconds. Useful for timed operations.)
+printTip(The timestamp builtin returns Unix time - use it to measure how long things take.)
+
+// ###############################################################
+//
+//   CHAPTER 14: PUTTING IT ALL TOGETHER
+//   Complex programs that use everything we've learned
+//
+// ###############################################################
+
+printHeader(CHAPTER 14: PUTTING IT ALL TOGETHER)
+
+// ===================================================================
+// LESSON 14.1 - NETWORK INVENTORY TOOL
+// ===================================================================
+// Combine scanning + file writing + formatting
+// ===================================================================
+
+printLesson(Lesson 14.1: Network Inventory Builder)
+
+func buildInventory()
+  _setvar(myIP, get_publicIP())
+  _setvar(myLAN, get_lanIP())
+  _setvar(user, get_user())
+  _setvar(dt, date())
+
+  _print <color=#eb0cc6>  +=== NETWORK INVENTORY ===+</color>
+  _print <color=#aaaaaa>  Generated:</color> _getvar(dt)
+  _print <color=#aaaaaa>  User:</color> _getvar(user)
+  _print <color=#aaaaaa>  LAN:</color> _getvar(myLAN)
+  _print <color=#aaaaaa>  Public:</color> _getvar(myIP)
+
+  _setvar(ports, _net_ports _getvar(myIP))
+  if _getvar(ports)
+    _setvar(portCount, len(_getvar(ports)))
+    _print <color=#aaaaaa>  Open ports:</color> _getvar(portCount)
+    for port in _getvar(ports)
+      _print <color=#00bfff>    -</color> _getvar(port)
+    endfor
+  else
+    _print <color=#aaaaaa>  No open ports found</color>
+  endif
+
+  _print <color=#eb0cc6>  +=== END INVENTORY ===+</color>
+endfunc
+
+buildInventory()
+
+printTip(This combines: networking, looping, switch, formatting, and functions.)
+
+// ===================================================================
+// LESSON 14.2 - MEGA FUNCTION CHAIN
+// ===================================================================
+// One huge chain: create a value, transform it through 7 functions.
+// ===================================================================
+
+printLesson(Lesson 14.2: Mega Function Chain)
+
+_setvar(v, 3)
+_print <color=#aaaaaa>  Start: _getvar(v)</color>
+
+_setvar(v, square(_getvar(v)))
+_print <color=#aaaaaa>  -> square: _getvar(v)</color>
+
+_setvar(v, increment(_getvar(v)))
+_print <color=#aaaaaa>  -> increment: _getvar(v)</color>
+
+_setvar(v, doubleVal(_getvar(v)))
+_print <color=#aaaaaa>  -> double: _getvar(v)</color>
+
+_setvar(v, increment(_getvar(v)))
+_print <color=#aaaaaa>  -> increment: _getvar(v)</color>
+
+_setvar(v, halve(_getvar(v)))
+_print <color=#aaaaaa>  -> halve: _getvar(v)</color>
+
+// 3 -> 9 -> 10 -> 20 -> 21 -> 10
+_setvar(r, floor(_getvar(v)))
+_print <color=#00ff00>  Final (floored): _getvar(r)</color>
+assert(mega chain 3->9->10->20->21->10 is 10, _getvar(r), 10)
+
+// ===================================================================
+// LESSON 14.3 - COMPREHENSIVE VERIFICATION
+// ===================================================================
+// Final verification that key features work together.
+// ===================================================================
+
+printLesson(Lesson 14.3: Final Verification Suite)
+
+// Math + functions
+_setvar(r, factorial(6))
+assert(factorial(6) is 720, _getvar(r), 720)
+
+_setvar(r, fibonacci(15))
+assert(fibonacci(15) is 610, _getvar(r), 610)
+
+_setvar(r, gcd(84, 56))
+assert(gcd(84, 56) is 28, _getvar(r), 28)
+
+_setvar(r, lcm(6, 10))
+assert(lcm(6, 10) is 30, _getvar(r), 30)
+
+_setvar(r, power(2, 8))
+assert(power(2, 8) is 256, _getvar(r), 256)
+
+// String + functions
+_setvar(r, reverseStr(abcdef))
+assert(reverse abcdef is fedcba, _getvar(r), fedcba)
+
+_setvar(r, isPalindrome(elle))
+assert(elle is palindrome, _getvar(r), 1)
+
+_setvar(r, repeatStr(xo, 3))
+assert(repeat xo 3 is xoxoxo, _getvar(r), xoxoxo)
+
+_setvar(r, startsWith(helloworld, hello))
+assert(helloworld starts with hello, _getvar(r), 1)
+
+// List + functions
+_setvar(data, [5, 1, 9, 3, 7])
+_setvar(r, listMin(_getvar(data)))
+assert(list min is 1, _getvar(r), 1)
+_setvar(r, listMax(_getvar(data)))
+assert(list max is 9, _getvar(r), 9)
+_setvar(r, listSum(_getvar(data)))
+assert(list sum is 25, _getvar(r), 25)
+
+// Prime checks
+_setvar(r, isPrime(97))
+assert(97 is prime, _getvar(r), 1)
+_setvar(r, isPrime(100))
+assert(100 is not prime, _getvar(r), 0)
+
+// Type checks
+_setvar(r, to_yesno(1))
+assert(toYesno 1 is yes, _getvar(r), yes)
+_setvar(r, to_truefalse(0))
+assert(toTrueFalse 0 is false, _getvar(r), false)
+
+// Nested builtins
+_setvar(r, len(concat(abc, def)))
+assert(len+concat gives 6, _getvar(r), 6)
+_setvar(r, upper(substr(testing, 0, 4)))
+assert(upper+substr gives TEST, _getvar(r), TEST)
+
+// Environment sanity
+_setvar(u, get_user())
+_setvar(h, get_home())
+if len(_getvar(u)) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(environment user exists, _getvar(pass), 1)
+if len(_getvar(h)) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(environment home exists, _getvar(pass), 1)
+
+
+// ###############################################################
+//
+//   CHAPTER 15: MAPS & JSON
+//   Key-value data structures and serialization
+//
+// ###############################################################
+
+printHeader(CHAPTER 15: MAPS & JSON)
+
+// ===================================================================
+// LESSON 15.1 - CREATING MAPS
+// ===================================================================
+// Maps store key-value pairs. Create them with map(k1, v1, k2, v2, ...)
+// Keys are always strings. Values can be any type.
+// ===================================================================
+
+printLesson(Lesson 15.1: Creating Maps)
+
+// Create a simple config map
+_setvar(cfg, map(""host"", ""10.0.0.1"", ""port"", 22, ""user"", ""root""))
+
+// Check the type
+_setvar(t, typeof_val(_getvar(cfg)))
+assert(15.1a map type is map, _getvar(t), map)
+
+// Check length
+_setvar(n, map_len(_getvar(cfg)))
+assert(15.1b map has 3 keys, _getvar(n), 3)
+
+printTip(Use alternating key-value pairs: mymap = map k1 v1 k2 v2)
+printNote(Keys are always converted to strings internally.)
+
+// ===================================================================
+// LESSON 15.2 - READING MAP VALUES
+// ===================================================================
+// map_get(map, key) retrieves a value by its key.
+// Returns """" if the key doesn't exist.
+// ===================================================================
+
+printLesson(Lesson 15.2: Reading Map Values)
+
+_setvar(h, map_get(_getvar(cfg), ""host""))
+assert(15.2a get host, _getvar(h), 10.0.0.1)
+
+_setvar(p, map_get(_getvar(cfg), ""port""))
+assert(15.2b get port, _getvar(p), 22)
+
+_setvar(u, map_get(_getvar(cfg), ""user""))
+assert(15.2c get user, _getvar(u), root)
+
+printTip(Use map_get to retrieve values by key. Missing keys return empty.)
+
+// ===================================================================
+// LESSON 15.3 - MODIFYING MAPS
+// ===================================================================
+// map_set(map, key, value) adds or updates a key in the map.
+// map_del(map, key) removes a key. Both return the modified map.
+// ===================================================================
+
+printLesson(Lesson 15.3: Modifying Maps)
+
+// Add a new key
+_setvar(cfg, map_set(_getvar(cfg), ""timeout"", 30))
+_setvar(n, map_len(_getvar(cfg)))
+assert(15.3a set adds key, _getvar(n), 4)
+
+_setvar(tv, map_get(_getvar(cfg), ""timeout""))
+assert(15.3b new key value, _getvar(tv), 30)
+
+// Update existing key
+_setvar(cfg, map_set(_getvar(cfg), ""port"", 8080))
+_setvar(p, map_get(_getvar(cfg), ""port""))
+assert(15.3c update existing key, _getvar(p), 8080)
+
+// Delete a key
+_setvar(cfg, map_del(_getvar(cfg), ""timeout""))
+_setvar(n, map_len(_getvar(cfg)))
+assert(15.3d delete shrinks map, _getvar(n), 3)
+
+printTip(map_set returns the modified map - always reassign it!)
+printNote(map_del also returns the modified map with the key removed.)
+
+// ===================================================================
+// LESSON 15.4 - INSPECTING MAPS
+// ===================================================================
+// map_has(map, key) checks if a key exists (1 or 0).
+// map_keys(map) returns a list of all keys.
+// map_values(map) returns a list of all values.
+// ===================================================================
+
+printLesson(Lesson 15.4: Inspecting Maps)
+
+_setvar(has_host, map_has(_getvar(cfg), ""host""))
+_print   map_has(cfg, ""host"") -> _getvar(has_host)  (key exists)
+assert(15.4a has existing key, _getvar(has_host), 1)
+
+_setvar(has_foo, map_has(_getvar(cfg), ""foo""))
+_print   map_has(cfg, ""foo"")  -> _getvar(has_foo)  (key missing)
+assert(15.4b missing key returns 0, _getvar(has_foo), 0)
+
+_setvar(ks, map_keys(_getvar(cfg)))
+_setvar(kl, len(_getvar(ks)))
+_print   map_keys(cfg) -> _getvar(ks)  (count: _getvar(kl))
+assert(15.4c keys count matches len, _getvar(kl), 3)
+
+_setvar(vs, map_values(_getvar(cfg)))
+_setvar(vl, len(_getvar(vs)))
+_print   map_values(cfg) -> _getvar(vs)  (count: _getvar(vl))
+assert(15.4d values count matches len, _getvar(vl), 3)
+
+printTip(map_has returns 1 or 0 - useful in if conditions.)
+printNote(map_keys and map_values return lists you can loop over.)
+
+// ===================================================================
+// LESSON 15.5 - MAPS AND FUNCTIONS
+// ===================================================================
+// Maps can be passed to and returned from functions.
+// This lets you build structured data.
+// ===================================================================
+
+printLesson(Lesson 15.5: Maps and Functions)
+
+// Function that builds a map from pre-set variables
+func makeTarget(myip, myport)
+  _setvar(t, map(""ip"", ""placeholder"", ""port"", 0, ""status"", ""unknown""))
+  _setvar(t, map_set(_getvar(t), ""ip"", _getvar(myip)))
+  _setvar(t, map_set(_getvar(t), ""port"", _getvar(myport)))
+  _return _getvar(t)
+endfunc
+
+_setvar(target, makeTarget(""192.168.0.5"", 443))
+_setvar(tt, typeof_val(_getvar(target)))
+assert(15.5a function returns map, _getvar(tt), map)
+
+_setvar(taddr, map_get(_getvar(target), ""ip""))
+assert(15.5b returned map ip, _getvar(taddr), 192.168.0.5)
+
+_setvar(tport, map_get(_getvar(target), ""port""))
+assert(15.5c returned map port, _getvar(tport), 443)
+
+// Function that updates a map
+// Yield before next func block
+_sleep 0.01
+
+func markScanned(tgt)
+  _setvar(tgt, map_set(_getvar(tgt), ""status"", ""scanned""))
+  _return _getvar(tgt)
+endfunc
+
+_setvar(target, markScanned(_getvar(target)))
+_setvar(st, map_get(_getvar(target), ""status""))
+assert(15.5d updated via function, _getvar(st), scanned)
+
+printTip(Functions can build and return maps - great for structured data.)
+
+// ===================================================================
+// LESSON 15.6 - JSON SERIALIZATION
+// ===================================================================
+// json(map) converts a map to a JSON string.
+// json_parse(string) converts a JSON string back to a map.
+// Round-tripping preserves all keys and values.
+// ===================================================================
+
+printLesson(Lesson 15.6: JSON Serialization)
+
+// Create a test map
+_setvar(data, map(""name"", ""server1"", ""ip"", ""10.0.0.5"", ""port"", 22))
+
+// Serialize to JSON
+_setvar(j, json(_getvar(data)))
+_setvar(jt, typeof_val(_getvar(j)))
+assert(15.6a json returns string, _getvar(jt), string)
+_print <color=#aaaaaa>  JSON output:</color> _getvar(j)
+
+// Parse it back
+_setvar(parsed, json_parse(_getvar(j)))
+_setvar(pt, typeof_val(_getvar(parsed)))
+assert(15.6b json_parse returns map, _getvar(pt), map)
+
+// Verify round-trip preserves values
+_setvar(pname, map_get(_getvar(parsed), ""name""))
+assert(15.6c round-trip name, _getvar(pname), server1)
+
+_setvar(pip, map_get(_getvar(parsed), ""ip""))
+assert(15.6d round-trip ip, _getvar(pip), 10.0.0.5)
+
+_setvar(pport, map_get(_getvar(parsed), ""port""))
+assert(15.6e round-trip port, _getvar(pport), 22)
+
+printTip(Use json to serialize a map to string. Use json_parse to deserialize back.)
+printNote(Round-tripping preserves all key-value data.)
+
+
+// ###############################################################
+//
+//   CHAPTER 16: MAP FILE PERSISTENCE
+//   Saving and loading maps to/from disk
+//
+// ###############################################################
+
+printHeader(CHAPTER 16: MAP FILE PERSISTENCE)
+
+// ===================================================================
+// LESSON 16.1 - SAVING MAPS TO FILES
+// ===================================================================
+// map_save(map, path) serializes a map to JSON and writes it to a file.
+// If the file doesn't exist, it will be created automatically.
+// Returns 1 on success, 0 on failure.
+// ===================================================================
+
+printLesson(Lesson 16.1: Saving Maps to Files)
+
+// Build a config map
+_setvar(svr, map(""host"", ""server1"", ""port"", 22, ""user"", ""root""))
+
+// Save it to disk
+_setvar(ok, map_save(_getvar(svr), ""learn_bash_test.json""))
+assert(16.1a map_save returns 1, _getvar(ok), 1)
+
+// Verify the file was created
+_setvar(exists, file_exists(""learn_bash_test.json""))
+assert(16.1b file was created, _getvar(exists), 1)
+
+// Read the raw file content to see the JSON
+_setvar(raw, file_read(""learn_bash_test.json""))
+_print <color=#aaaaaa>  Saved file content:</color> _getvar(raw)
+
+printTip(map_save handles JSON serialization and file creation automatically.)
+printNote(Relative paths are resolved from the current working directory.)
+
+// ===================================================================
+// LESSON 16.2 - LOADING MAPS FROM FILES
+// ===================================================================
+// map_load(path) reads a JSON file and parses it back into a map.
+// Returns """" if the file doesn't exist or can't be parsed.
+// ===================================================================
+
+printLesson(Lesson 16.2: Loading Maps from Files)
+
+// Load the file we just saved
+_setvar(loaded, map_load(""learn_bash_test.json""))
+_setvar(lt, typeof_val(_getvar(loaded)))
+assert(16.2a map_load returns map, _getvar(lt), map)
+
+// Verify the data survived the round-trip
+_setvar(lh, map_get(_getvar(loaded), ""host""))
+assert(16.2b loaded host matches, _getvar(lh), server1)
+
+_setvar(lp, map_get(_getvar(loaded), ""port""))
+assert(16.2c loaded port matches, _getvar(lp), 22)
+
+_setvar(lu, map_get(_getvar(loaded), ""user""))
+assert(16.2d loaded user matches, _getvar(lu), root)
+
+_setvar(ll, map_len(_getvar(loaded)))
+assert(16.2e loaded map has 3 keys, _getvar(ll), 3)
+
+printTip(map_load reads a JSON file and returns a parsed map.)
+
+// ===================================================================
+// LESSON 16.3 - ERROR HANDLING
+// ===================================================================
+// map_load returns """" for missing files - check before using the value.
+// ===================================================================
+
+printLesson(Lesson 16.3: Error Handling)
+
+_setvar(bad, map_load(""no_such_file_xyz.json""))
+assert(16.3a missing file returns empty, _getvar(bad), )
+
+// Pattern: Check before using
+_setvar(result, map_load(""learn_bash_test.json""))
+if typeof_val(_getvar(result)) == map
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(16.3b type-check pattern works, _getvar(pass), 1)
+
+printTip(Always check typeof_val before using a map_load result!)
+printNote(A missing or corrupt file returns empty string, not a map.)
+
+// ===================================================================
+// LESSON 16.4 - PRACTICAL EXAMPLE: CONFIG MANAGER
+// ===================================================================
+// Combine everything: build a config, save it, load it, modify it,
+// save again. This is a real-world pattern for persistent settings.
+// ===================================================================
+
+printLesson(Lesson 16.4: Practical Config Manager)
+
+// Step 1: Create initial config
+func createConfig(cname, cip, cport)
+  _setvar(c, map(""name"", ""tmp"", ""ip"", ""tmp"", ""port"", 0))
+  _setvar(c, map_set(_getvar(c), ""name"", _getvar(cname)))
+  _setvar(c, map_set(_getvar(c), ""ip"", _getvar(cip)))
+  _setvar(c, map_set(_getvar(c), ""port"", _getvar(cport)))
+  _setvar(today, date())
+  _setvar(c, map_set(_getvar(c), ""created"", _getvar(today)))
+  _return _getvar(c)
+endfunc
+
+_setvar(cfgname, prod-server)
+_setvar(cfgip, 10.0.0.100)
+_setvar(myconf, createConfig(_getvar(cfgname), _getvar(cfgip), 443))
+_setvar(ct, typeof_val(_getvar(myconf)))
+assert(16.4a config is map, _getvar(ct), map)
+
+// Step 2: Save to disk
+_setvar(ok, map_save(_getvar(myconf), ""learn_bash_config.json""))
+assert(16.4b save config ok, _getvar(ok), 1)
+
+// Step 3: Load it back (simulating a fresh session)
+_setvar(restored, map_load(""learn_bash_config.json""))
+_setvar(rn, map_get(_getvar(restored), ""name""))
+assert(16.4c restored name, _getvar(rn), prod-server)
+
+// Step 4: Modify and re-save
+_setvar(restored, map_set(_getvar(restored), ""port"", 8443))
+_setvar(ok, map_save(_getvar(restored), ""learn_bash_config.json""))
+assert(16.4d re-save ok, _getvar(ok), 1)
+
+// Step 5: Verify the update persisted
+_setvar(final, map_load(""learn_bash_config.json""))
+_setvar(fp, map_get(_getvar(final), ""port""))
+assert(16.4e updated port persisted, _getvar(fp), 8443)
+
+_print <color=#aaaaaa>  Config manager pattern complete - save, load, modify, repeat!</color>
+
+printTip(This save-load-modify-save pattern is how real configs work.)
+printNote(You can use this for scan results, target lists, credentials, etc.)
+
+_sleep 0.01
+
+_print
+_print <color=#eb0cc6>============================================================</color>
+_print <color=#eb0cc6>    TUTORIAL COMPLETE!</color>
+_print <color=#eb0cc6>============================================================</color>
+_print
+_print <color=#00ff00>  Congratulations! You've completed the x bash tutorial.</color>
+_print <color=#aaaaaa>  Topics covered:</color>
+_print <color=#aaaaaa>    - Variables, types, arithmetic</color>
+_print <color=#aaaaaa>    - Functions: params, return values, void, scope</color>
+_print <color=#aaaaaa>    - Control flow: if/elif/else, for, while, until, switch</color>
+_print <color=#aaaaaa>    - String manipulation: len, upper, lower, substr, and more</color>
+_print <color=#aaaaaa>    - Math builtins: floor, ceil, abs, round, min, max, random</color>
+_print <color=#aaaaaa>    - Type casting and checking</color>
+_print <color=#aaaaaa>    - File system operations</color>
+_print <color=#aaaaaa>    - Network scanning and recon</color>
+_print <color=#aaaaaa>    - Process management and timing</color>
+_print <color=#aaaaaa>    - Color formatting</color>
+_print <color=#aaaaaa>    - Recursion and advanced patterns</color>
+_print <color=#aaaaaa>    - Practical algorithms: primes, fibonacci, GCD, and more</color>
+_print <color=#aaaaaa>    - Maps, JSON serialization, and key-value operations</color>
+_print <color=#aaaaaa>    - Map file persistence: save, load, and config management</color>
+_print
+_print <color=#ffff00>  Read the source of this file to learn how each example works!</color>
+_print <color=#ffff00>  Modify it, break it, fix it - that's how you learn.</color>
+_print"

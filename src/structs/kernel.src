@@ -1,0 +1,26 @@
+// =============================================================================
+// KERNEL
+// Core authentication, versioning, and encryption key configuration.
+// =============================================================================
+Kernel={
+  "password":"",
+  "version":"0.9.8.1",
+  "key":"nopassx",
+  "zip":"SDQaBWeq43PCKXB"
+}
+//Alternative configuration profile 1 (Standard security)
+//Uncomment to activate
+// Kernel={
+//   "password":"",
+//   "version":"0.9.8.1",
+//   "key":"",
+//   "zip":""
+// }
+//Alternative configuration profile 2 (Enhanced security)
+//Uncomment to activate
+// Kernel={
+//   "password":"xyzzy",
+//   "version":"0.9.8.1",
+//   "key":"FUj!VnRm9.pPEaZeAs&^x+zJspnG^8<CDh.:dj.a+pm:27yjE.@w^YktXQhhEcrk",
+//   "zip":"SdQaBW1q43PCKXB"
+// }

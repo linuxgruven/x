@@ -1,0 +1,69 @@
+// =============================================================================
+// CAT
+// Display file contents; syntax-highlights .src files, -n line numbers, -p pages.
+// =============================================================================
+Command.cat=function(Obj,argv)
+	hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+	if not argv and not hasPipeInput then return Man.help(["cat"])
+	if hasPipeInput and not argv then
+		for line in globals.G_pipe.stdin.split(char(10));if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,line) else print white(line);end for
+		return
+	end if
+	_p=ArgumentParser.init
+	_p.addArgument("post",true,"flag")  // Long flag: --post
+	_p.addArgument("f",false,"flag")    // Force syntax highlighting
+	_p.addArgument("n",false,"flag")    // Show line numbers
+	_p.addArgument("name",true,"flag") // Show filename as header
+	argv=_p.parse("cat",argv,Obj)
+	if argv isa Error then return
+	files=[]
+	if hasIndex(argv,"files") and argv.files and len(argv.files)>0 then
+		files=argv.files
+	else if argv.rest and len(argv.rest)>0 then
+		for restPath in argv.rest
+			file=Io._getFile(Obj,restPath)
+			if file isa Error then continue
+			push(files,file)
+		end for
+	else
+		return Error.set("Missing file argument")
+	end if
+	for file in files
+		if not file or file isa Error then continue
+		if not has_permission(file,"r") then
+			Error.set(Info.message.NOR)
+			continue
+		end if
+		if Io.isBinFolder(file) then
+			Error.set("Invalid file type")
+			continue
+		end if
+		// Automatically highlight .src files, or use -f flag for other types
+		isSrcFile=path(file)[-3:]=="src"
+		useSyntaxHighlight=isSrcFile or argv.f
+		content=uncolorString(get_content(file))
+		// Preserve escaped newlines by temporarily replacing them
+		// \n becomes \<b></b>n to prevent interpretation as actual newline
+		content=content.replace("\\n","\<b></b>n")
+		if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+			if hasIndex(globals.G_bash,"DEBUG") and globals.G_bash.DEBUG then print cyan("[cat] PIPE_MODE detected - adding to PIPE_OUTPUT")
+			lines=split(content,char(10))
+			for line in lines;push(globals.G_pipe.stdout,line);end for
+		else if _p.write then
+			argv.data=file
+			_p.out(Obj,argv)
+		else
+			if argv.name then print ""; print bold(yellow("==> "+path(file)+" <=="))
+			if useSyntaxHighlight then
+				highlighted=parseSyntax(content,argv.n)
+				lines=split(highlighted,char(10))
+				pageSize=400
+				pageCount=ceil(len(lines)/pageSize)
+				pageIndex=0;while pageIndex<pageCount;startLine=pageIndex*pageSize;endLine=(pageIndex+1)*pageSize;print join(lines[startLine:endLine],char(10));pageIndex+=1;end while
+			else
+				lines=split(content,char(10))
+				_len=len(lines);lineIndex=0;while lineIndex<_len;print white(lines[lineIndex]);lineIndex+=1;end while
+			end if
+		end if
+	end for
+end function

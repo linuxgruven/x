@@ -1,0 +1,2386 @@
+// =============================================================================
+// IO
+// File system I/O library; reading, writing, manipulation, and filesystem operations.
+// =============================================================================
+Io={
+  "names":{
+    "Mail.txt":0,
+    "Bank.txt":0,
+    "passwd":0
+  },
+  "rfs":{"bin":0,"boot":0,"etc":0,"home":0,"lib":0,"root":0,"sys":0,"usr":0,"var":0,"server":0,"Public":0},
+  "_mimeMap":null
+}
+//isBinFolder - Check if file is binary or folder
+//Args: f (file object)
+//Returns: true if binary or folder, nothing otherwise
+Io.isBinFolder=function(f)
+  //Return true if file is folder or binary
+  if is_folder(f) or is_binary(f) then return true
+end function
+// Generate a random 1-20 char hidden filename (e.g. ".qrt") for temp build files
+Io.tmpName=function
+  _s=".";_l=1+floor(rnd*20)
+  while _l>0;_s=_s+char(97+floor(rnd*26));_l=_l-1;end while
+  return _s
+end function
+Io.checkRW=function(f)
+  if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+  if not has_permission(f,"w") then return Error.set(Info.message.NOW)
+  return true
+end function
+//getTime - Get formatted time string HH:MM:SS
+//Args: none (uses global time)
+//Returns: formatted time string
+Io.getTime=function
+  //Round time to nearest second
+  t=round(time,0)
+  //Calculate hours
+  h=str(floor(t/3600))
+  //Calculate minutes
+  m=str(floor(t%3600/60))
+  //Calculate seconds
+  s=str(t%60)
+  //Pad hours with leading zero
+  if len(h)==1 then h="0"+h
+  //Pad minutes with leading zero
+  if len(m)==1 then m="0"+m
+  //Pad seconds with leading zero
+  if len(s)==1 then s="0"+s
+  //Return formatted time
+  return(h+":"+m+":"+s)
+end function
+//getFileObj - Get file object from path
+//Args: Obj (object with type/computer/root), p (path string)
+//Returns: file object or Error
+Io.getFileObj=function(Obj,p)
+	//Handle computer or shell objects
+	if Obj.type=="computer" or indexOf(Obj.type,"shell")!=null then
+    //Get file directly from computer
+    f=File(Obj.computer,p)
+    //Return file or error
+    if f then return f else return Error.set("","",true)
+  end if
+	//Handle file objects
+	if Obj.type=="file" then
+		//Return root if path is /
+		if p=="/" then return Obj.root
+    //Search all files in root
+    for f in Io.getAll(Obj.root);if path(f)==p or name(f)==p then return f;end for
+    //File not found
+    return Error.set("","",true)
+	end if
+end function
+//getFileObjEx - Get file object from shell, computer, or file
+//Args: ex (shell/computer/file object), p (path string)
+//Returns: file object or Error
+Io.getFileObjEx=function(ex,p)
+	//Get object type
+	obj=typeof(ex)
+  //Handle computer objects
+  if obj=="computer" then return File(ex,p)
+  //Handle shell objects
+  if indexOf(obj,"shell")!=null then return File(host_computer(ex),p)
+	//Handle file objects - search all files from root
+	for f in Io.getAll(FileHelper.toRootEx(ex));if path(f)==p or name(f)==p then return f;end for
+  //File not found
+  return Error.set("","",true)
+end function
+//getFile - Search multiple locations for file
+//Args: Obj (object), p (path/name), s (show error, default true)
+//Returns: file object or Error
+//safePath - Safely get path string from a file object, returns null if object is deleted
+//Args: f (file object)
+//Returns: path string or null
+Io.safePath=function(f)
+  if not f then return null
+  p=path(f)
+  if p=="" then return null
+  return p
+end function
+//matchName - Match a filename against a pattern using regex auto-detection.
+//If the pattern contains regex metacharacters it uses is_match(), otherwise
+//falls back to a substring indexOf check (Option C behaviour).
+//Args: n (string filename), pattern (string)
+//Returns: true if matched, null/false otherwise
+Io.matchName=function(n,pattern)
+  if is_match(pattern,"[.*+?^${}()|[\]\\]") then return is_match(n,pattern)
+  return indexOf(n,pattern)!=null
+end function
+Io.getFile=function(Obj,p,s=true)
+	//Search common directories in order
+	dirs=["/lib","/bin","/usr/bin"]
+	_cp=Io.safePath(Obj.dir.current);if _cp then dirs=insert(dirs,0,_cp)
+	_hp=Io.safePath(Obj.user.home);if _hp then dirs=insert(dirs,1,_hp)
+	for q in dirs;f=File(Obj.computer,q+"/"+p);if f then return f;end for
+	//Search all files in root as fallback
+	for f in Io.getAll(Obj.root);if path(f)==p or name(f)==p then return f;end for
+	//Return error if requested and not found
+	if s then return Error.set("Could not find requested file: "+p)
+end function
+//getExe - Find executable by name, searching recursively from root
+//Args: root (root folder object), n (exe name)
+//Returns: file object or Error
+Io.getExe=function(r,p);for f in self.getAll(r);if name(f)==p then return f;end for;return Error.set("","",true);end function
+//  _getPath - Resolve path with special character support
+//Args: Obj (object), p (path string)
+//Returns: resolved absolute path
+Io._getPath=function(Obj,p)
+  if not p or p=="" then return Error.set("Invalid path")
+  curPath=Io.safePath(Obj.dir.current)
+  homePath=Io.safePath(Obj.user.home)
+  //Handle ~ home directory expansion
+  if p[0]=="~" then
+    if not homePath then return Error.set("Home directory no longer exists")
+    r=homePath+p[1:]
+  //Handle relative paths with ../
+  else if indexOf(p,"../")!=null then
+    if not curPath then return Error.set("Current directory no longer exists")
+    r=get_abs_path(p,curPath)
+  //Handle paths with ./ prefix
+  else if indexOf(p,"./")!=null then
+    if not curPath then return Error.set("Current directory no longer exists")
+    r=p.replace("\./",curPath+"/")
+  //Handle paths without / (current directory)
+  else if indexOf(p,"/")==null then
+    if not curPath then return Error.set("Current directory no longer exists")
+    r=curPath+"/"+p
+  //Use path as-is if absolute
+  else
+    r=p
+  end if
+  //Return resolved path
+  return r
+end function
+Io._getFile=function(Obj,p,q=false,l=false)
+  if not p or p=="" then return Error.set("Invalid path")
+  curPath=Io.safePath(Obj.dir.current)
+  homePath=Io.safePath(Obj.user.home)
+  if p=="./" then
+    if not curPath then return Error.set("Current directory no longer exists")
+    p=curPath
+  end if
+  if p[0]=="~" then
+    if not homePath then return Error.set("Home directory no longer exists")
+    p=homePath+p[1:]
+  end if
+  if indexOf(p,"../")!=null then
+    if not curPath then return Error.set("Current directory no longer exists")
+    p=get_abs_path(p,curPath)
+  end if
+  if indexOf(p,"./")!=null then
+    if not curPath then return Error.set("Current directory no longer exists")
+    p=p.replace("\./",curPath+"/")
+  end if
+  if p[0]!="/" then
+    if not curPath then return Error.set("Current directory no longer exists")
+    if hasIndex(self.rfs,split(p,"/")[-1]) then p="/"+p else p=curPath+"/"+p
+  end if
+  if indexOf(p,"/")!=null then
+    f=Io.getFileObj(Obj,p)
+  else
+    if not curPath then return Error.set("Current directory no longer exists")
+    f=Io.getFileObj(Obj,curPath+"/"+p)
+  end if
+  if f isa Error then
+    if p[-1]=="/" then
+      if indexOf(p,"/")!=null then
+        f=Io.getFileObj(Obj,p[:-1])
+      else
+        if not curPath then return Error.set("Current directory no longer exists")
+        f=Io.getFileObj(Obj,curPath+"/"+p[:-1])
+      end if
+    end if
+  end if
+	if f isa Error then
+    if indexOf(p,"/root")!=null then
+      p=p.replace("/root","")
+      f=Io.getFileObj(Obj,p)
+      if f isa Error then
+        if not q then return f
+        return Error.set("Could not find requested file: "+p)
+      end if
+      return f
+    end if
+    if not q then return f
+    return Error.set("Could not find requested file: "+p)
+  end if
+  if is_symlink(f) then
+    if not l then return Io.getFileObj(Obj,path(f,true))
+  end if
+  return f
+end function
+//color - Get color code based on file permissions
+//Args: f (file object)
+//Returns: hex color code string
+Io.color=function(f)
+  //Red for null/invalid file
+  if not f then return("ff8888")
+	// Cache permission checks
+	canRead=has_permission(f,"r")
+	canWrite=has_permission(f,"w")
+	//White for read and write
+	if canRead and canWrite then return("ffffff")
+	//Blue for read only
+	if canRead then return("8888ff")
+	//Green for write only
+	if canWrite then return("88ff88")
+	//Red for no permissions
+	return("ff8888")
+end function
+//fileMime - Get MIME type indicator for file
+//Args: f (file object)
+//Returns: colored MIME type string
+Io.fileMime=function(f)
+  //Build extension map once on first call
+  if not self._mimeMap then
+    self._mimeMap={
+      ".exe":green("<exe>"),".bin":green("<bin>"),".sh":green("<sh>"),".src":green("<src>"),".so":green("<lib>"),
+      ".zip":red("<zip>"),".gz":red("<gz>"),".tar":red("<tar>"),".rar":red("<rar>"),".7z":red("<7z>"),".bz2":red("<bz2>"),".xz":red("<xz>"),
+      ".jpg":magenta("<jpg>"),".jpeg":magenta("<jpg>"),".png":magenta("<png>"),".gif":magenta("<gif>"),".bmp":magenta("<bmp>"),".svg":magenta("<svg>"),".ico":magenta("<ico>"),
+      ".mp3":magenta("<mp3>"),".wav":magenta("<wav>"),".ogg":magenta("<ogg>"),".flac":magenta("<flac>"),".mp4":magenta("<mp4>"),".avi":magenta("<avi>"),".mkv":magenta("<mkv>"),".mov":magenta("<mov>"),
+      ".txt":white("<txt>"),".log":white("<log>"),".md":white("<md>"),".json":white("<json>"),".xml":white("<xml>"),".yaml":white("<yaml>"),".yml":white("<yml>"),".conf":white("<cfg>"),".cfg":white("<cfg>"),".ini":white("<ini>"),
+      ".sys":red("<sys>"),".map":red("<map>"),".img":red("<img>"),
+      ".pdf":cyan("<pdf>"),".html":cyan("<web>"),".htm":cyan("<web>"),
+      ".db":blue("<sql>"),".sql":blue("<sql>"),
+      ".dat":grey("<dat>"),".bck":grey("<bck>"),".bak":grey("<bak>")
+    }
+  end if
+  n=name(f)
+  //Check if file has extension
+  dotIdx=indexOf(n,".")
+  if dotIdx!=null then
+    //Extract extension (last dot onwards)
+    lastDot=null
+    i=len(n)-1;while i>=0;if n[i]=="." then;lastDot=i;break;end if;i-=1;end while
+    if lastDot!=null then
+      ext=n[lastDot:]
+      if hasIndex(self._mimeMap,ext) then return self._mimeMap[ext]
+    end if
+    return yellow("<ukn>")
+  end if
+  //Files without extension - check type
+  if is_symlink(f) then return cyan("<lnk>")
+  if not is_binary(f) then return white("<txt>")
+  return green("<bin>")
+end function
+//size - Format bytes as human-readable size
+//Args: b (bytes as number)
+//Returns: formatted size string (e.g., "1.5MB")
+Io.size=function(b)
+	//Array of size units
+	s=[
+    "B",
+    "KB",
+    "MB",
+    "GB",
+    "TB",
+    "PB",
+    "EB",
+    "ZB",
+    "YB",
+    ]
+	//Start at bytes
+	i=0
+	//Divide by 1024 until under 1024
+	while b>1024;b/=1024;i+=1;end while
+	//Return rounded value with unit
+	return round(b,2)+s[i]
+end function
+//octal - Convert permission string to octal notation
+//Args: n (permission string like "rwxr-xr-x")
+//Returns: octal string (e.g., "0755")
+Io.octal=function(n)
+  //Helper to convert single permission char to value
+  getOcatal=function(r)
+    //Read permission = 4
+    if r=="r" then
+      return 4
+    //Write permission = 2
+    else if r=="w" then
+      return 2
+    //Execute permission = 1
+    else if r=="x" then
+      return 1
+    //No permission = 0
+    else
+      return 0
+    end if
+  end function
+	//Convert string to list and reverse
+	l=n.toList
+  l.reverse
+	//Start with special permissions digit (leftmost char, which is now at end after reverse)
+	r=[l[-1]]
+	//Process user, group, other permissions (working backwards through reversed list)
+	//After reverse: [x,w,r, x,-,r, x,-,r, -]
+	//Indices:        0,1,2, 3,4,5, 6,7,8, 9
+	//Other perms: l[0-2], Group perms: l[3-5], User perms: l[6-8]
+	//But we need to output in order: special, user, group, other
+	i=2;while i>=0  //Process backwards: 2,1,0 (user, group, other)
+		offset=i*3
+		a=getOcatal(l[offset])
+		b=getOcatal(l[offset+1])
+		c=getOcatal(l[offset+2])
+		push(r,a+b+c)
+	i-=1;end while
+	//Join digits and return
+	return join(r,"")
+end function
+//_mv - Interactive file move operation
+//Args: Obj (object), f (file to move)
+//Returns: move result or Error
+Io._fileOpInteractive=function(Obj,f,op)
+	_r=self.checkRW(f)
+	if _r!=true then return _r
+	if op=="copy" then lbl="Copy" else lbl="Move"
+	Info.info(lbl+" "+name(f)+" to:")
+	d=self.folder(Obj,Obj.user.home,"Select a directory:")
+	if not d then return Error.set(Info.message.EXPF+"NULL")
+	Info.info(lbl+"ing "+name(f)+" to: "+path(d)+"/"+name(f))
+	if op=="copy" then return copy(f,path(d),name(f)) else return move(f,path(d),name(f))
+end function
+Io._mv=function(Obj,f);return self._fileOpInteractive(Obj,f,"move");end function
+//_cp - Interactive file copy operation
+//Args: Obj (object), f (file to copy)
+//Returns: copy result or Error
+Io._cp=function(Obj,f);return self._fileOpInteractive(Obj,f,"copy");end function
+//_get - Download file from remote to local system
+//Args: Obj (object), f (file to download), argv (arguments, "y" skips prompt)
+//Returns: result or Error
+Io._get=function(Obj,f,argv)
+	//Check read permission
+	if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+  //Check if skip prompt flag set
+  if argv and argv[0]=="y" then Arg1=true else Arg1=false
+  //Prompt for destination directory (or use default)
+  d=null
+  if not Arg1 then
+    if Gui.yesNo("The default download to location is: "+white(path(globals.G_main.dir.current))+" use this directory?") then d=File(globals.G_main.computer,path(globals.G_main.dir.current)) else d=Io.folder(globals.G_main,globals.G_main.user.home,"Select a directory:")
+  end if
+  if d isa Warning then
+    Info.info("Using default download location: "+green(path(globals.G_main.dir.current)))
+    d=File(globals.G_main.computer,path(globals.G_main.dir.current))
+  end if
+	//Handle shell objects (use scp)
+	if indexOf(Obj.type,"shell")!=null then
+		Info.info("Saving "+name(f)+" to: "+path(d)+"/"+name(f))
+		return scp(Obj.shell,path(f),path(d),globals.G_main.shell)
+	end if
+	if is_binary(f) then return Error.set(Info.message.binaryFiles)
+	touch(globals.G_main.computer,path(d),name(f))
+	Info.info("Saving "+name(f)+" to: "+path(d)+"/"+name(f))
+	return set_content(File(globals.G_main.computer,path(d)+"/"+name(f)),get_content(f))
+end function
+//_view - Display file contents to console
+//Args: f (file object)
+//Returns: nothing or Error
+Io._view=function(f)
+	//Check read permission
+	if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+	//Reject binary files
+	if is_binary(f) then return Error.set(Info.message.binaryFiles)
+	//Handle empty files
+	_ct=get_content(f);if not _ct then return Info.info("The file: "+name(f)+" is empty")
+	//Display file header
+	Info.info("Contents of file: "+name(f))
+	//Print each line in white
+	for l in split(_ct,char(10));print white(l);end for
+end function
+// walkApply - Apply owner/group/chmod per-node and report child denials
+// XFIX1.0: Engine recursive set_owner/set_group re-checks each child and swallows failures.
+// Walk with recursive=0 so denials are visible. op: "owner"|"group"|"chmod"|"chog"
+// method=true uses f.set_owner/f.chmod (pfile); false uses globals (shell File).
+// Returns map {ok, fails} (fails = list of "path: err" strings)
+Io.walkApply=function(root,op,value,method=false)
+  if not root then return {"ok":0,"fails":["(null root)"]}
+  fails=[]
+  ok=0
+  applyOne=function(f)
+    if outer.op=="owner" then
+      if outer.method then return f.set_owner(outer.value,0)
+      return set_owner(f,outer.value,0)
+    else if outer.op=="group" then
+      if outer.method then return f.set_group(outer.value,0)
+      return set_group(f,outer.value,0)
+    else if outer.op=="chog" then
+      if outer.method then
+        r=f.chmod("u+rwx",0)
+        if r isa string and len(r)>0 then return r
+        r=f.chmod("g+rwx",0)
+        if r isa string and len(r)>0 then return r
+        r=f.set_owner(outer.value,0)
+        if r isa string and len(r)>0 then return r
+        return f.set_group(outer.value,0)
+      end if
+      r=chmod(f,"u+rwx",0)
+      if r isa string and len(r)>0 then return r
+      r=chmod(f,"g+rwx",0)
+      if r isa string and len(r)>0 then return r
+      r=set_owner(f,outer.value,0)
+      if r isa string and len(r)>0 then return r
+      return set_group(f,outer.value,0)
+    else if outer.op=="chmod" then
+      m=outer.value
+      if to_int(m) isa number then
+        if len(m)!=3 then return "Invalid octal mode (must be 3 digits: ugo)"
+        for entry in [[to_int(m[0]),"u"],[to_int(m[1]),"g"],[to_int(m[2]),"o"]]
+          bits=entry[0]
+          who=entry[1]
+          if outer.method then r=f.chmod(who+"-rwx",0) else r=chmod(f,who+"-rwx",0)
+          if r isa string and len(r)>0 then return r
+          if bitAnd(bits,4) then
+            if outer.method then r=f.chmod(who+"+r",0) else r=chmod(f,who+"+r",0)
+            if r isa string and len(r)>0 then return r
+          end if
+          if bitAnd(bits,2) then
+            if outer.method then r=f.chmod(who+"+w",0) else r=chmod(f,who+"+w",0)
+            if r isa string and len(r)>0 then return r
+          end if
+          if bitAnd(bits,1) then
+            if outer.method then r=f.chmod(who+"+x",0) else r=chmod(f,who+"+x",0)
+            if r isa string and len(r)>0 then return r
+          end if
+        end for
+        return ""
+      end if
+      if outer.method then return f.chmod(m,0)
+      return chmod(f,m,0)
+    end if
+    return "unknown op"
+  end function
+  seen={}
+  done=0
+  Info.info(op+": walking tree...")
+  walk=function(f)
+    if not f then return
+    if outer.method then p=f.path else p=path(f)
+    if not p then
+      if outer.method then p=f.name else p=name(f)
+    end if
+    p=str(p)
+    if hasIndex(outer.seen,p) then return
+    outer.seen[p]=1
+    r=applyOne(f)
+    if r==null then
+      push(outer.fails,p+": unavailable")
+    else if r isa string and len(r)>0 then
+      push(outer.fails,p+": "+r)
+    else
+      outer.ok=outer.ok+1
+    end if
+    outer.done=outer.done+1
+    if outer.done%50==0 then Info.info(outer.op+": "+str(outer.done)+" processed...")
+    if outer.method then isDir=f.is_folder else isDir=is_folder(f)
+    if not isDir then return
+    if outer.method then files=f.get_files else files=get_files(f)
+    if files then
+      for c in files;walk(c);end for
+    end if
+    if outer.method then folders=f.get_folders else folders=get_folders(f)
+    if folders then
+      for d in folders
+        if outer.method then syn=d.is_symlink else syn=is_symlink(d)
+        if syn then continue
+        walk(d)
+      end for
+    end if
+  end function
+  walk(root)
+  if fails then
+    Info.warning(op+": "+str(ok)+" ok, "+str(len(fails))+" failed")
+    shown=0
+    for e in fails
+      Info.error("  "+e)
+      shown=shown+1
+      if shown>=25 then
+        Info.warning("  ... +"+str(len(fails)-25)+" more")
+        break
+      end if
+    end for
+  else
+    Info.info(op+": done ("+str(ok)+" items)")
+  end if
+  return {"ok":ok,"fails":fails}
+end function
+//_chog - Change owner, group, and grant full permissions
+//Args: f (file object), argv (arguments with -r flag and username)
+//Returns: nothing or Error
+Io._chog=function(f,argv)
+	_p=ArgumentParser.init
+  //Add recursive flag
+  _p.addArgument("r",false,"flag")
+  argv=_p.parseArgs("chog",argv)
+  if argv isa Error then return
+  //Require username argument
+  if not argv.rest then return Man.help(["chog"])
+  Arg1=argv.rest[0]
+  if argv.r then return self.walkApply(f,"chog",Arg1,false)
+  //Grant user full permissions
+  r=chmod(f,"u+rwx",0)
+  if r then return Error.set(r)
+  //Grant group full permissions
+  r=chmod(f,"g+rwx",0)
+  if r then return Error.set(r)
+  //Set file owner
+  r=set_owner(f,Arg1,0)
+  if r then return Error.set(r)
+  //Set file group
+  r=set_group(f,Arg1,0)
+  if r then return Error.set(r)
+end function
+//_chown - Change file owner
+//Args: f (file object), argv (arguments with -r flag and username)
+//Returns: nothing or Error
+Io._chown=function(f,argv)
+	_p=ArgumentParser.init
+  //Add recursive flag
+  _p.addArgument("r",false,"flag")
+  argv=_p.parseArgs("chown",argv)
+  if argv isa Error then return
+  //Require username argument
+  if not argv.rest then return Man.help(["chown"])
+  if argv.r then return self.walkApply(f,"owner",argv.rest[0],false)
+  r=set_owner(f,argv.rest[0],0)
+  if r then Info.error(r)
+end function
+//_chmod - Change file permissions (supports octal and symbolic)
+//Args: f (file object), argv (arguments with -r flag and mode)
+//Returns: nothing or Error
+Io._chmod=function(f,argv)
+	_p=ArgumentParser.init
+  //Add recursive flag
+  _p.addArgument("r",false,"flag")
+  argv=_p.parseArgs("chmod",argv)
+  if argv isa Error then return
+  //Require mode argument
+  if not argv.rest then return Man.help(["chmod"])
+  // chmod -r uses engine recurse (boot payload chmod must stay fast)
+  if argv.r then r=1 else r=0
+  //Handle octal mode (e.g., 755)
+  if to_int(argv.rest[0]) isa number then
+    //Get mode string
+    m=argv.rest[-1]
+    //Validate 3-digit octal
+    if len(m)!=3 then return Error.set("umask error")
+    //Process user, group, other permissions
+    for op in [[to_int(m[0]),"u"],[to_int(m[1]),"g"],[to_int(m[2]),"o"]];z=chmod(f,op[1]+"-rwx",r);if z then return Error.set(z);if bitAnd(op[0],4) then chmod(f,op[1]+"+r",r);if bitAnd(op[0],2) then chmod(f,op[1]+"+w",r);if bitAnd(op[0],1) then chmod(f,op[1]+"+x",r);end for
+    return
+  end if
+	//Handle symbolic mode (e.g., u+rwx)
+	return chmod(f,argv.rest[0],r)
+end function
+//_chgrp - Change file group
+//Args: f (file object), argv (arguments with group name)
+//Returns: nothing or Error
+Io._chgrp=function(f,argv)
+	_p=ArgumentParser.init
+  //Add recursive flag
+  _p.addArgument("r",false,"flag")
+  argv=_p.parseArgs("chgrp",argv)
+  if argv isa Error then return
+  //Require group name argument
+  if not argv.rest then return Man.help(["chgrp"])
+  if argv.r then return self.walkApply(f,"group",argv.rest[0],false)
+  r=set_group(f,argv.rest[0],0)
+  if r then Info.error(r)
+end function
+//_rn - Rename file
+//Args: f (file object), argv (new name or null for prompt)
+//Returns: rename result or Error
+Io._rn=function(f,argv)
+  //Check write permission
+  if not has_permission(f,"w") then return Error.set(Info.message.NOW)
+  //Get new name from args or prompt
+  if argv then n=argv[-1] else n=Gui.input({"text":"Enter new name"})
+	//Handle user abort
+	if n==null then return Info.info("User Aborted","i",false)
+	//Execute rename
+	return rename(f,n)
+end function
+//_set - Replace file contents
+//Args: f (file object), argv (new content or null for prompt)
+//Returns: result or Error
+Io._set=function(f,argv)
+  //Join arguments as content
+  t=join(argv," ")
+	//Check write permission
+	if not has_permission(f,"w") then return Error.set(Info.message.NOW)
+	//Prompt if no content provided
+	if not t then t=Gui.input({"text":"Please enter what you would like to replace the contents of this file with"})+char(10)
+	//Set file content
+	return set_content(f,t)
+end function
+//_echo - Append content to file
+//Args: f (file object), argv (content to append or null for prompt)
+//Returns: result or Error
+Io._echo=function(f,argv)
+  //Join arguments as content
+  t=join(argv," ")
+	//Reject binary files
+	if is_binary(f) then return Error.set("Can not edit binary files")
+	_r=self.checkRW(f)
+	if _r!=true then return _r
+	//Prompt if no content provided
+	if not t then t=Gui.input({"text":"Please enter what you would like to add to the contents of this file"})
+	//Append content with newline
+	return set_content(f,get_content(f)+char(10)+t)
+end function
+//_scan - Scan file for passwords
+//Args: Obj (object), f (file to scan)
+//Returns: nothing or Error
+Io._scan=function(Obj,f)
+	//Check read permission
+	if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+	//Reject binary files
+	if is_binary(f) then return Error.set(Info.message.binaryFiles)
+	//Display scanning message
+	Info.info("Scanning contents...")
+	//Execute password scan
+	Crack.password(Obj,f)
+end function
+//_lock - Lock file with encryption
+//Args: Obj (object - must be shell), f (file to lock)
+//Returns: nothing or Error
+Io._lock=function(Obj,f)
+	//Require shell object
+	if Obj.type=="computer" or Obj.type=="file" then return Error.set("Need a shell object to lock files")
+	_r=self.checkRW(f)
+	if _r!=true then return _r
+	//Execute file locking
+	Io.lock(Obj,[f])
+end function
+//_zip - Compress file into archive
+//Args: Obj (object - must be shell), f (file to compress)
+//Returns: nothing or Error
+Io._zip=function(Obj,f)
+	//Require shell object
+	if Obj.type=="computer" or Obj.type=="file" then return Error.set("Need a shell object to zip files")
+	_r=self.checkRW(f)
+	if _r!=true then return _r
+	//Execute compression
+	Io.zip(Obj,[f])
+end function
+//_post - Post file contents to server
+//Args: f (file to post)
+//Returns: nothing or Error
+Io._post=function(f)
+	//Check read permission
+	if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+	//Reject binary files
+	if is_binary(f) then return Error.set(Info.message.binaryFiles)
+	//Post file content
+	Command.post([get_content(f)])
+end function
+//_enc - Encrypt file
+//Args: Obj (object), f (file to encrypt)
+//Returns: nothing or Error
+Io._enc=function(Obj,f)
+	_r=self.checkRW(f)
+	if _r!=true then return _r
+	//Execute encryption
+	Encryption.encrFile(Obj,[f])
+end function
+//_dec - Decrypt file
+//Args: Obj (object), f (file to decrypt)
+//Returns: nothing or Error
+Io._dec=function(Obj,f)
+	_r=self.checkRW(f)
+	if _r!=true then return _r
+	//Execute decryption
+	Encryption.decrFile(Obj,[f])
+end function
+//_edit - Open file in editor
+//Args: Obj (object), f (file to edit)
+//Returns: nothing or Error
+Io._edit=function(Obj,f)
+	_r=self.checkRW(f)
+	if _r!=true then return _r
+	//Open editor
+	Utility.editor(Obj,[path(f)])
+end function
+//_man - Display manual pages for browse commands
+//Args: Obj (object), argv (command arguments)
+//Returns: nothing or Error
+Io._man=function(Obj,argv)
+  //Require arguments
+  if not argv then return Error.set("No arguments provided")
+	//Handle get command (shell vs non-shell)
+	if argv[0]=="get" then
+		//Use different help for shells
+		if indexOf(Obj.type,"shell")!=null then return Man.browseFiles(["get"]) else return Man.browseFiles(["get2"])
+	end if
+	//Display help for command
+	Man.browseFiles(argv)
+end function
+//Interactive File Browser and Manager (MC)
+Io.browse=function(Obj,argv)
+  _p=ArgumentParser.init
+  // Add dual panel flag
+  _p.addArgument("d",false,"flag")
+  argv=_p.parseArgs("mc",argv)
+  if argv isa Error then return
+  // Initialize display toggles: octalMode=octal permissions, showSymlinks=symlink display, s=sort mode
+  octalMode=false
+  showSymlinks=false
+  dualPanel=argv.d
+  rightPanelDir=Obj.dir.current
+  activePanel="left"
+  showHidden=true
+  sortMode="name"
+  sortReverse=false
+  filterText=""
+  // Track panel objects - Obj is always G_main base, panel objects can become SSH
+  leftPanelObj=Obj
+  rightPanelObj=Obj
+  leftPanelConnected=false
+  rightPanelConnected=false
+  // Store current directory as last for navigation history
+  Obj.dir.last=Obj.dir.current
+  // Handle optional starting path parameter(s)
+  if argv.rest and len(argv.rest)>0 then
+    Arg1=self._getFile(Obj,argv.rest[0])
+    // Change to directory if valid folder provided
+    if Arg1 and is_folder(Arg1) then Obj.dir.current=Arg1
+    // Handle second path for right panel in dual mode
+    if len(argv.rest)==2 and dualPanel then
+      Arg2=self._getFile(Obj,argv.rest[1])
+      if Arg2 and is_folder(Arg2) then rightPanelDir=Arg2
+    end if
+  end if
+  // Initialize file target and sort flag
+  selectedItem=null
+  sortEnabled=true
+  // Helper: Sort a file list by current sort mode
+  sortList=function(list)
+    if not outer.sortEnabled then return list
+    if outer.sortMode=="name" then
+      sort(list,"key")
+    else if outer.sortMode=="size" then
+      tmp=[]
+      for item in list;push(tmp,{"key":size(item.value),"value":item.value,"name":item.key});end for
+      sort(tmp,"key")
+      list=[]
+      for item in tmp;push(list,{"key":item.name,"value":item.value});end for
+    else if outer.sortMode=="date" then
+      sort(list,"key")
+    end if
+    if outer.sortReverse then
+      reversed=[]
+      i=len(list)-1;while i>=0;push(reversed,list[i]);i-=1;end while
+      list=reversed
+    end if
+    return list
+  end function
+  // Helper: Build a panel header string
+  buildPanelHeader=function(side,isActive,panelObj,panelDir,isConnected)
+    maxLen=38
+    if isActive then
+      indicator="["+green("X")+"] "
+      visualIndicator="[X] "
+    else
+      indicator="[] "
+      visualIndicator="[] "
+    end if
+    label=upper(side[0])+side[1:]
+    if isConnected and hasIndex(panelObj,"shell") then
+      sshInfo=panelObj.user.name+"@"+panelObj.meta.public_ip
+      if len(sshInfo)>maxLen then
+        parts=split(sshInfo,"@")
+        ipPart="@"+parts[1]
+        userLen=maxLen-len(ipPart)-3
+        if userLen>0 then sshInfo=parts[0][:userLen]+"..."+ipPart else sshInfo=sshInfo[:maxLen]
+      end if
+      content=label+": SSH "+sshInfo
+    else
+      content=label+": "+path(panelDir)
+    end if
+    pad=48-len(visualIndicator+content)
+    if pad<0 then pad=0
+    return indicator+content+(" "*pad)
+  end function
+  // Helper: Build a dual panel file entry string
+  buildPanelEntry=function(f)
+    b="NA"
+    c="NA"
+    x="----------"
+    fileName=name(f.value)
+    if owner(f.value) then
+      b=owner(f.value)
+      c=group(f.value)
+      if outer.octalMode then x=Io.octal(permissions(f.value)) else x=permissions(f.value)
+      if outer.showSymlinks and is_symlink(f.value) then fileName=fileName+" -->"
+    else
+      if outer.showSymlinks and is_symlink(f.value) then fileName=fileName+" -->"
+    end if
+    if not is_folder(f.value) and is_binary(f.value) then fileName="*"+fileName
+    return "<color=#"+Io.color(f.value)+">"+ljust(x+" "+ljust(b[:8],8)+" "+ljust(c[:8],8)+" "+fileName,48)+"</color>"
+  end function
+  // Helper: Connect a panel to SSH, returns [newObj, success]
+  sshConnect=function(panelLabel)
+    sshIp=Gui.input({"text":"Enter SSH IP address:"})
+    if not sshIp or sshIp=="" then return null
+    sshPort=Gui.input({"text":"Enter SSH port:","default":"22"})
+    if not sshPort or sshPort=="" then sshPort="22"
+    sshPort=to_int(sshPort)
+    sshUser=Gui.input({"text":"Enter SSH username:","default":"root"})
+    if not sshUser or sshUser=="" then sshUser="root"
+    sshPass=Gui.inputPass("Enter SSH password:")
+    if not sshPass or sshPass=="" then return null
+    Info.info("Connecting to "+sshUser+"@"+sshIp+"...","i",false)
+    shell=connect_service(globals.G_main.shell,sshIp,sshPort,sshUser,sshPass,"ssh")
+    if shell and not(shell isa string) then
+      newObj=Exploit.getShell(shell,false,[],true)
+      if newObj and not(newObj isa Error) and hasIndex(newObj,"shell") then
+        Info.info("Connected to SSH on "+panelLabel+" panel","s",false)
+        return newObj
+      else
+        Info.error("Failed to create shell object")
+      end if
+    else
+      if shell isa string then Info.error(shell) else Info.error("Failed to connect to SSH")
+    end if
+    return null
+  end function
+  // Helper: Transfer files between panels (copy or move)
+  transferFiles=function(srcPanelObj,destPanelObj,destDir,sourceFiles,isMove)
+    opName="copy"
+    opVerb="Copying"
+    if isMove then
+      opName="move"
+      opVerb="Moving"
+    end if
+    if len(sourceFiles)==0 then return Info.info("No files in active panel","i",false)
+    destHasShell=hasIndex(destPanelObj,"shell")
+    srcHasShell=hasIndex(srcPanelObj,"shell")
+    if (srcHasShell or destHasShell) and not(srcHasShell and destHasShell) then return Info.warning("Cross-panel "+opName+" with SSH requires both panels to have shell access")
+    fileCH=[white("Select files to "+opName+" to "+path(destDir)+":")]
+    for f in sourceFiles;if is_folder(f.value) then push(fileCH,"<color=#"+Io.color(f.value)+">"+name(f.value)+"/</color>") else push(fileCH,"<color=#"+Io.color(f.value)+">"+name(f.value)+"</color>");end for
+    push(fileCH,green("--- Select All"))
+    push(fileCH,red("--- Cancel"))
+    fileChoice=Gui.choiceHybrid(fileCH,{},1)
+    if fileChoice==len(fileCH)-1 then return
+    selectedFiles=null
+    if fileChoice==len(fileCH)-2 then
+      selectedFiles=sourceFiles
+    else if fileChoice>0 then
+      selectedFiles=[sourceFiles[fileChoice-1]]
+    end if
+    if not selectedFiles then return
+    successCount=0
+    failCount=0
+    print white(opVerb+" "+len(selectedFiles)+" file(s)...")
+    for sf in selectedFiles
+      print white("  "+opVerb+": "+name(sf.value)+"...")
+      if srcHasShell and destHasShell then
+        result=scp(srcPanelObj.shell,path(sf.value),path(destDir),destPanelObj.shell)
+        if result isa string then
+          Info.error("Failed to "+opName+" "+name(sf.value)+": "+result)
+          failCount+=1
+        else
+          if isMove then
+            deleteResult=srcPanelObj.shell.host_computer.File(path(sf.value)).delete
+            if deleteResult isa string then Info.warning("Copied but failed to delete source "+name(sf.value)+": "+deleteResult)
+          end if
+          successCount+=1
+        end if
+      else
+        if isMove then result=move(sf.value,path(destDir),name(sf.value)) else result=copy(sf.value,path(destDir),name(sf.value))
+        if result and result!=1 then
+          Info.error("Failed to "+opName+" "+name(sf.value)+": "+result)
+          failCount+=1
+        else
+          successCount+=1
+        end if
+      end if
+    end for
+    capName=upper(opName[0])+opName[1:]
+    if failCount>0 then Info.info(capName+" completed: "+successCount+" succeeded, "+failCount+" failed","i",false) else Info.info(capName+" completed: "+successCount+" file(s) "+opName+"d","s",false)
+  end function
+  // Helper: Get filtered file list for a directory
+  getFilteredFiles=function(dir,panelSide)
+    files=get_files(dir)
+    folders=get_folders(dir)
+    all=files+folders
+    if not outer.showHidden then
+      filtered=[]
+      for f in all;if name(f)[0]!="." then push(filtered,f);end for
+      all=filtered
+    end if
+    if outer.filterText and (not outer.dualPanel or outer.activePanel==panelSide) then
+      filtered=[]
+      lFilter=lower(outer.filterText)
+      for f in all;if indexOf(lower(name(f)),lFilter)!=null then push(filtered,f);end for
+      all=filtered
+    end if
+    return {"files":files,"folders":folders,"all":all}
+  end function
+  // File operation command handler - interactive loop for selected file
+  run=function(Obj,f)
+    X=true
+    // Command implementations with outer scope control
+    man=function(arg);Io._man(Obj,arg);end function
+    vfile=function(arg);Session.putFile(Obj,[f]);outer.X=false;end function
+    share=function(arg);Share.putFile(Obj,[f]);outer.X=false;end function
+    libs=function(arg);SavedLibs.putFile(Obj,[f]);outer.X=false;end function
+    edit=function(arg);Io._edit(Obj,f);outer.X=false;end function
+    dec=function(arg);Io._dec(Obj,f);outer.X=false;end function
+    enc=function(arg);Io._enc(Obj,f);outer.X=false;end function
+    post=function(arg);Io._post(f);outer.X=false;end function
+    zip=function(arg);Io._zip(Obj,f);outer.X=false;end function
+    lock=function(arg);Io._lock(Obj,f);outer.X=false;end function
+    doScan=function(arg);Io._scan(Obj,f);outer.X=false;end function
+    // Echo with error handling - exit loop only on success
+    echo=function(arg);r=Io._echo(f,arg);if r isa string then return Error.set(r) else outer.X=false;end function
+    // Remove with write permission check
+    rm=function(arg);Gui.delPrompt(f);outer.X=false;end function
+    // Set content with error handling
+    set=function(arg);r=Io._set(f,arg);if r isa string then return Error.set(r) else outer.X=false;end function
+    // Rename with error handling
+    rn=function(arg);r=Io._rn(f,arg);if r then return Error.set(r) else outer.X=false;end function
+    // Copy with error handling
+    cp=function(arg);r=Io._cp(Obj,f);if r isa string then return Error.set(r) else outer.X=false;end function
+    // Move with error handling
+    mv=function(arg);r=Io._mv(Obj,f);if r isa string then return Error.set(r) else outer.X=false;end function
+    // Get/download with error handling
+    get=function(arg);r=Io._get(Obj,f,arg);if r isa string then return Error.set(r) else outer.X=false;end function
+    info=function(arg);Command.file(Obj,[path(f)]);outer.X=false;end function
+    view=function(arg);Io._view(f);outer.X=false;end function
+    help=function(arg);Man.commands(["browsefiles"]);end function
+    // Change owner/group with error handling
+    chog=function(arg);r=Io._chog(f,arg);if r then return Error.set(r) else outer.X=false;end function
+    // Change owner with error handling
+    runChown=function(arg);r=Io._chown(f,arg);if r then Info.error(r) else outer.X=false;end function
+    // Change permissions with error handling
+    runChmod=function(arg);r=Io._chmod(f,arg);if r then Info.error(r) else outer.X=false;end function
+    // Change group with error handling
+    runChgrp=function(arg);r=Io._chgrp(f,arg);if r then return Error.set(r) else outer.X=false;end function
+    qrm=function(arg);Command.qrm(Obj,[f]);outer.X=false;end function
+    // Command dispatch map - links command strings to handler functions
+    commands={"qrm":@qrm,"man":@man,"libs":@libs,"vfile":@vfile,"share":@share,"edit":@edit,"dec":@dec,"enc":@enc,"post":@post,"info":@info,"zip":@zip,"lock":@lock,"?":@help,"help":@help,"cmds":@help,"view":@view,"peek":@view,"get":@get,"mv":@mv,"cp":@cp,"rn":@rn,"set":@set,"rm":@rm,"echo":@echo,"scan":@doScan,"chog":@chog,"chown":@runChown,"chmod":@runChmod,"chgrp":@runChgrp}
+    // Command processing loop - prompt for commands until 'x' entered
+    while X
+      Info.info("What would you like to do with the file: "+yellow(name(f))+" ?")
+      i=split(trim(user_input(Gui.closeNR))," ")
+      if not i then continue
+      if i[0]=="x" then return
+      // Execute command if valid, otherwise show error
+      if hasIndex(commands,i[0]) then commands[i[0]](i[1:]) else Info.error(Text.msg.command+i[0]+" ]")
+    end while
+  end function
+  // Create new directory with name prompt and validation
+  newDirectory=function
+    if dualPanel then
+      if activePanel=="right" then
+        currentDir=rightPanelDir
+        currentObj=rightPanelObj
+      else
+        currentDir=leftPanelObj.dir.current
+        currentObj=leftPanelObj
+      end if
+    else
+      currentDir=Obj.dir.current
+      currentObj=Obj
+    end if
+    n=Gui.input({"text":"Enter a new directory name"})
+    if n==null then return Error.set("Missing directory name")
+    // Handle file-type connections using temporary folder copy
+    if currentObj.type=="file" then
+      d=FileHelper.useFolder(currentObj)
+      if d isa Error then return
+      copy(d,path(currentDir),n)
+      f=Io.getFileObj(currentObj,path(currentDir)+"/"+n)
+      if f isa Error then return Info.error("Failed to create Directory: "+n)
+      // Clear any existing contents from template folder
+      if f and is_folder(f) then
+        for _ in get_files(f)+get_folders(f);delete(_);end for
+      end if
+      return
+    end if
+    // Standard directory creation for non-file connections
+    r=create_folder(currentObj.computer,path(currentDir),n)
+    if r!=1 then return Error.set(r)
+  end function
+  // Remove directory with interactive selection and confirmation
+  removeDirectory=function
+    while true
+      if dualPanel then
+        if activePanel=="right" then currentDir=rightPanelDir else currentDir=leftPanelObj.dir.current
+      else
+        currentDir=Obj.dir.current
+      end if
+      // Get all files and folders
+      allFiles=get_files(currentDir)+get_folders(currentDir)
+      CH=[yellow("Select a file or folder to delete:")]
+      for f in allFiles;if is_folder(f) then push(CH,white(name(f)+"/")) else push(CH,white(name(f)));end for
+      push(CH,red("--- Delete All"))
+      push(CH,iyellow("I changed my mind"))
+      UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+      if UCH==len(CH)-1 then break
+      if UCH==len(CH)-2 then
+        // Delete all files and folders
+        for f in allFiles;r=delete(f);if r then Info.error("Failed to delete "+name(f)+": "+r);end for
+        return
+      end if
+      // Delete selected file
+      r=delete(allFiles[UCH-1])
+      // Return on success or error (exits loop)
+      if r then return Error.set(r) else return
+    end while
+  end function
+  // Create new file with name prompt and validation
+  newFile=function
+    if dualPanel then
+      if activePanel=="right" then
+        currentDir=rightPanelDir
+        currentObj=rightPanelObj
+      else
+        currentDir=leftPanelObj.dir.current
+        currentObj=leftPanelObj
+      end if
+    else
+      currentDir=Obj.dir.current
+      currentObj=Obj
+    end if
+    n=Gui.input({"text":"Enter a new file name"})
+    if n==null then return Error.set("Missing file name")
+    // Handle file-type and ftpshell connections using temporary file copy
+    if currentObj.type=="file" or currentObj.type=="ftpshell" then
+      f=FileHelper.useFile(currentObj)
+      if f isa Error then return
+      copy(f,path(currentDir),n)
+      f=Io.getFileObj(currentObj,path(currentDir)+"/"+n)
+      if f isa Error then return Info.error("Failed to create file: "+n)
+      // Clear template file content to create empty file
+      return set_content(f,"")
+    end if
+    // Standard file creation for regular connections
+    r=touch(currentObj.computer,path(currentDir),n)
+    if r isa string then return Error.set(r)
+  end function
+  // Rename file or folder
+  renameFile=function
+    if dualPanel then
+      if activePanel=="right" then
+        currentDir=rightPanelDir
+        fileList=q2
+      else
+        currentDir=leftPanelObj.dir.current
+        fileList=q
+      end if
+    else
+      currentDir=Obj.dir.current
+      fileList=q
+    end if
+    // Get all files and folders
+    allFiles=get_files(currentDir)+get_folders(currentDir)
+    CH=[yellow("Select a file or folder to rename:")]
+    for f in allFiles;if is_folder(f) then push(CH,white(name(f)+"/")) else push(CH,white(name(f)));end for
+    push(CH,iyellow("Cancel"))
+    UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+    if UCH==len(CH)-1 then return
+    targetFile=allFiles[UCH-1]
+    newName=Gui.input({"text":"Enter new name for: "+name(targetFile),"default":name(targetFile)})
+    if newName==null or newName=="" then return
+    r=targetFile.rename(newName)
+    if r then return Error.set(r)
+  end function
+  // Change file permissions (chmod)
+  chmodFile=function
+    if dualPanel then
+      if activePanel=="right" then currentDir=rightPanelDir else currentDir=leftPanelObj.dir.current
+    else
+      currentDir=Obj.dir.current
+    end if
+    // Get all files and folders
+    allFiles=get_files(currentDir)+get_folders(currentDir)
+    CH=[yellow("Select a file or folder to change permissions:")]
+    for f in allFiles;perms=permissions(f);if is_folder(f) then push(CH,white(perms+" "+name(f)+"/")) else push(CH,white(perms+" "+name(f)));end for
+    push(CH,iyellow("Cancel"))
+    UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+    if UCH==len(CH)-1 then return
+    targetFile=allFiles[UCH-1]
+    currentPerms=permissions(targetFile)
+    newPerms=Gui.input({"text":"Enter permissions (e.g. 755, -r 644 or u+x, -R o-w):","default":""})
+    if newPerms==null or newPerms=="" then return
+    // Check for recursive flag
+    isRecursive=0
+    if len(newPerms)>=2 then
+      if newPerms[:2]=="-r" or newPerms[:2]=="-R" then
+        isRecursive=1
+        newPerms=newPerms[3:]
+        newPerms=trim(newPerms)
+      end if
+    end if
+    // Check if input is octal (all digits)
+    isOctal=true
+    _len=len(newPerms);i=0;while i<_len;if newPerms[i]<"0" or newPerms[i]>"7" then;isOctal=false;break;end if;i+=1;end while
+    if isOctal then
+      // Convert octal string to permissions using bitwise operations
+      if len(newPerms)==3 then
+        for owner in [[to_int(newPerms[0]),"u"],[to_int(newPerms[1]),"g"],[to_int(newPerms[2]),"o"]]
+          value=owner[0]
+          who=owner[1]
+          // Clear all permissions first
+          result=targetFile.chmod(who+"-rwx",isRecursive)
+          if result then return Error.set(result)
+          // Set permissions based on octal value
+          if bitAnd(value,4) then
+            result=targetFile.chmod(who+"+r",isRecursive)
+            if result then return Error.set(result)
+          end if
+          if bitAnd(value,2) then
+            result=targetFile.chmod(who+"+w",isRecursive)
+            if result then return Error.set(result)
+          end if
+          if bitAnd(value,1) then
+            result=targetFile.chmod(who+"+x",isRecursive)
+            if result then return Error.set(result)
+          end if
+        end for
+      else
+        return Error.set("Octal must be 3 digits (e.g. 755)")
+      end if
+    else
+      r=targetFile.chmod(newPerms,isRecursive)
+      if r then return Error.set(r)
+    end if
+  end function
+  // Main browser loop - display and navigate file system
+  while true
+    // Validate file structure stability - reset to root if corrupted
+    if len(get_folders(Obj.root))<=3 then
+      if not Obj.crp then
+        Info.warning("Unstable file structure setting current directory to /")
+        Obj.dir.current=Obj.root
+        Obj.dir.last=Obj.root
+        Obj.user.home=Obj.root
+        Obj.crp=1
+      end if
+    end if
+    // Build file/folder listing with map for name-based indexing
+    m={}
+    q=[]
+    if dualPanel then
+      leftData=getFilteredFiles(leftPanelObj.dir.current,"left")
+      files=leftData.files
+      folders=leftData.folders
+      allFiles=leftData.all
+      rightData=getFilteredFiles(rightPanelDir,"right")
+      files2=rightData.files
+      folders2=rightData.folders
+      allFiles2=rightData.all
+    else
+      leftData=getFilteredFiles(Obj.dir.current,"left")
+      files=leftData.files
+      folders=leftData.folders
+      allFiles=leftData.all
+    end if
+    // Display file and folder counts with size
+    if dualPanel then
+      if activePanel=="left" then
+        dirSize=0
+        for f in allFiles;dirSize=dirSize+val(size(f));end for
+        if files then print white("  Files: "+len(files))
+        if folders then print white("Folders: "+len(folders))
+        print white("   Size: "+Io.size(dirSize))
+      else
+        dirSize2=0
+        for f in allFiles2;dirSize2=dirSize2+val(size(f));end for
+        if files2 then print white("  Files: "+len(files2))
+        if folders2 then print white("Folders: "+len(folders2))
+        print white("   Size: "+Io.size(dirSize2))
+      end if
+    else
+      dirSize=0
+      for f in allFiles;dirSize=dirSize+val(size(f));end for
+      if files then print white("  Files: "+len(files))
+      if folders then print white("Folders: "+len(folders))
+      print white("   Size: "+Io.size(dirSize))
+    end if
+    for f in allFiles;m[name(f)]=f;end for
+    // Convert map to sortable list
+    for f in m;push(q,f);end for
+    q=sortList(q)
+    // Get current directory permissions (octal or symbolic based on toggle)
+    if octalMode then x=Io.octal(permissions(leftPanelObj.dir.current)) else x=permissions(leftPanelObj.dir.current)
+    // Initialize choice list with current directory info
+    if dualPanel then
+      // Build right panel data
+      m2={}
+      q2=[]
+      for f in allFiles2;m2[name(f)]=f;end for
+      for f in m2;push(q2,f);end for
+      q2=sortList(q2)
+      // Get right panel permissions
+      if octalMode then x2=Io.octal(permissions(rightPanelDir)) else x2=permissions(rightPanelDir)
+      // Create dual panel header with SSH connection info
+      leftHeader=buildPanelHeader("left",activePanel=="left",leftPanelObj,leftPanelObj.dir.current,leftPanelConnected)
+      rightHeader=buildPanelHeader("right",activePanel=="right",rightPanelObj,rightPanelDir,rightPanelConnected)
+      CH=["      "+leftHeader+"  "+"      "+rightHeader]
+      // Build dual panel display
+      if len(q)>len(q2) then maxRows=len(q)+1 else maxRows=len(q2)+1
+      r=(path(leftPanelObj.dir.current)=="/")
+      r2=(path(rightPanelDir)=="/")
+      // Add parent directory rows
+      if not r then
+        if octalMode then leftEntry="<color=#"+Io.color(parent(leftPanelObj.dir.current))+">"+ljust(Io.octal(permissions(parent(leftPanelObj.dir.current)))+" <..>",48)+"</color>" else leftEntry="<color=#"+Io.color(parent(leftPanelObj.dir.current))+">"+ljust(permissions(parent(leftPanelObj.dir.current))+" <..>",48)+"</color>"
+      else
+        leftEntry="<color=#"+Io.color(leftPanelObj.dir.current)+">"+ljust(x+" <.>",48)+"</color>"
+      end if
+      if not r2 then
+        if octalMode then rightEntry="<color=#"+Io.color(parent(rightPanelDir))+">"+ljust(Io.octal(permissions(parent(rightPanelDir)))+" <..>",48)+"</color>" else rightEntry="<color=#"+Io.color(parent(rightPanelDir))+">"+ljust(permissions(parent(rightPanelDir))+" <..>",48)+"</color>"
+      else
+        if octalMode then rightEntry="<color=#"+Io.color(rightPanelDir)+">"+ljust(x2+" <.>",48)+"</color>" else rightEntry="<color=#"+Io.color(rightPanelDir)+">"+ljust(x2+" <.>",48)+"</color>"
+      end if
+      // Add row number to active panel (colored) and inactive panel (uncolored)
+      if activePanel=="left" then push(CH,"<color=#7e17e6>[</color><color=#ffffff>1</color><color=#7e17e6>]</color>   "+leftEntry+"  "+"[1]   "+rightEntry) else push(CH,"[1]   "+leftEntry+"  "+"<color=#7e17e6>[</color><color=#ffffff>1</color><color=#7e17e6>]</color>   "+rightEntry)
+      // Build file list rows
+      leftIndexMap={}
+      rightIndexMap={}
+      chIndex=2
+      i=0;while i<maxRows
+        leftEntry=""
+        rightEntry=""
+        // Track which sides have actual content based on array bounds
+        hasLeftContent=(i<len(q))
+        hasRightContent=(i<len(q2))
+        if i<len(q) then leftEntry=buildPanelEntry(q[i])
+        if i<len(q2) then rightEntry=buildPanelEntry(q2[i])
+        if leftEntry or rightEntry then
+          if i<len(q) and leftEntry then leftIndexMap[chIndex]=i
+          if i<len(q2) and rightEntry then rightIndexMap[chIndex]=i
+          // Add row numbers: colored for active panel, uncolored for inactive
+          coloredNum="<color=#7e17e6>[</color><color=#ffffff>"+str(chIndex)+"</color><color=#7e17e6>]</color>"
+          plainNum="["+str(chIndex)+"]"
+          // Add spacing: 3 for single digit, 2 for double digit, 1 for triple digit
+          if chIndex<10 then
+            spacing="   "
+          else if chIndex<100 then
+            spacing="  "
+          else
+            spacing=" "
+          end if
+          // Build sides with row numbers only if content exists
+          if activePanel=="left" then
+            // Active panel is left
+            if hasLeftContent then leftSide=coloredNum+spacing+leftEntry else leftSide=" "*54
+            if hasRightContent then rightSide=plainNum+spacing+rightEntry else rightSide=" "*54
+          else
+            // Active panel is right
+            if hasLeftContent then leftSide=plainNum+spacing+leftEntry else leftSide=" "*54
+            if hasRightContent then rightSide=coloredNum+spacing+rightEntry else rightSide=" "*54
+          end if
+          push(CH,leftSide+"  "+rightSide)
+          chIndex+=1
+        end if
+      i+=1;end while
+    else
+      CH=[green("Contents of ")+white(path(Obj.dir.current)+":")+char(10)+"      <color=#"+Io.color(Obj.dir.current)+">"+x+" <.></color>"]
+    end if
+    r=(path(Obj.dir.current)=="/")
+    // Add parent directory entry if not at root (single panel mode only)
+    if not dualPanel and not r then
+      if octalMode then x=Io.octal(permissions(parent(Obj.dir.current))) else x=permissions(parent(Obj.dir.current))
+      push(CH,"<color=#"+Io.color(parent(Obj.dir.current))+">"+x+" <..></color>")
+    end if
+    // Build display entries for each file/folder with color-coded info (single panel mode only)
+    if not dualPanel then
+      for f in q
+      // Initialize default values for inaccessible files
+      b="NA"
+      c="NA"
+      y=""
+      x="----------"
+      // Get owner/group/permissions if accessible
+      if owner(f.value) then
+        b=owner(f.value)
+        c=group(f.value)
+        if octalMode then x=Io.octal(permissions(f.value)) else x=permissions(f.value)
+        // Show symlink target if enabled and is symlink
+        if showSymlinks and is_symlink(f.value) then y=" -> "+path(f.value,true)
+      else
+        // Show broken symlink indicator if symlink display enabled
+        if showSymlinks and is_symlink(f.value) then y=" -> "+red(path(f.value,true))
+      end if
+      // Format and add entry (different display for folders vs files) - filename last
+      if is_folder(f.value) then push(CH,"<color=#"+Io.color(f.value)+">"+x+" "+ljust(b,15)+" "+ljust(c,15)+" "+rjust(Io.size(val(size(f.value))),8)+"  "+cyan("[dir]")+" "+name(f.value)+"/</color>"+y) else push(CH,"<color=#"+Io.color(f.value)+">"+x+" "+ljust(b,15)+" "+ljust(c,15)+" "+rjust(Io.size(val(size(f.value))),8)+"  "+Io.fileMime(f.value)+" "+name(f.value)+"</color>"+y)
+      end for
+    end if
+    // Add options menu entry at the bottom
+    push(CH,yellow("--- Options Menu (o) ---"))
+    // Display menu and get user choice with shortcuts: 'o' for options, 'p' for panel switch
+    mainShortcuts={"o":len(CH)-1}
+    if dualPanel then mainShortcuts["p"]=-1
+    // Use skipNum only for dual panel mode since only dual panel embeds numbers
+    if dualPanel then UCH=Gui.choiceHybrid(CH,mainShortcuts,1,true) else UCH=Gui.choiceHybrid(CH,mainShortcuts,1,false)
+    // Check if panel switch shortcut was pressed
+    if dualPanel and UCH==-1 then
+      if activePanel=="left" then activePanel="right" else activePanel="left"
+      continue
+    end if
+    // Check if options menu was selected
+    if UCH==len(CH)-1 then
+      // Show options menu
+      optCH=[white("      File Browser Options:")]
+      optShortcuts={}
+      optIdx=1
+      if dualPanel then
+        push(optCH,yellow("Move Files... (m)"))
+        optShortcuts["m"]=optIdx
+        optIdx+=1
+      end if
+      if dualPanel then
+        push(optCH,yellow("Copy Files... (c)"))
+        optShortcuts["c"]=optIdx
+        optIdx+=1
+      end if
+      if dualPanel and hasIndex(Obj,"shell") then
+        if activePanel=="left" and leftPanelConnected then
+          push(optCH,red("Disconnect SSH (Left) (d)"))
+          optShortcuts["d"]=optIdx
+          optIdx+=1
+        else if activePanel=="right" and rightPanelConnected then
+          push(optCH,red("Disconnect SSH (Right) (d)"))
+          optShortcuts["d"]=optIdx
+          optIdx+=1
+        end if
+        // Always show option to connect the active panel to SSH
+        if activePanel=="left" then
+          push(optCH,green("Connect to SSH... (Left) (s)"))
+          optShortcuts["s"]=optIdx
+          optIdx+=1
+        else if activePanel=="right" then
+          push(optCH,green("Connect to SSH... (Right) (s)"))
+          optShortcuts["s"]=optIdx
+          optIdx+=1
+        end if
+      end if
+      if dualPanel then
+        push(optCH,yellow("Switch Panel (p)"))
+        optShortcuts["p"]=optIdx
+        optIdx+=1
+      end if
+      if dualPanel then
+        push(optCH,yellow("Single Panel (i)"))
+        optShortcuts["i"]=optIdx
+        optIdx+=1
+      else
+        push(optCH,yellow("Dual Panel (t)"))
+        optShortcuts["t"]=optIdx
+        optIdx+=1
+      end if
+      if indexOf(Obj.type,"shell")!=null then
+        push(optCH,yellow("Exec... (e)"))
+        optShortcuts["e"]=optIdx
+        optIdx+=1
+      end if
+      if showSymlinks then push(optCH,green("Hide Symlinks (l)")) else push(optCH,yellow("Show Symlinks (l)"))
+      optShortcuts["l"]=optIdx
+      optIdx+=1
+      if showHidden then push(optCH,yellow("Hide Hidden Files (h)")) else push(optCH,green("Show Hidden Files (h)"))
+      optShortcuts["h"]=optIdx
+      optIdx+=1
+      if octalMode then push(optCH,green("Symbolic Perms (o)")) else push(optCH,yellow("Octal Perms (o)"))
+      optShortcuts["o"]=optIdx
+      optIdx+=1
+      push(optCH,yellow("CD... (C)"))
+      optShortcuts["C"]=optIdx
+      optIdx+=1
+      push(optCH,yellow("Quick Nav... (q)"))
+      optShortcuts["q"]=optIdx
+      optIdx+=1
+      push(optCH,yellow("Search for File... (f)"))
+      optShortcuts["f"]=optIdx
+      optIdx+=1
+      if filterText then push(optCH,green("Clear Filter (F)")) else push(optCH,yellow("Filter... (F)"))
+      optShortcuts["F"]=optIdx
+      optIdx+=1
+      push(optCH,yellow("Sort By: "+sortMode.upper+" (S)"))
+      optShortcuts["S"]=optIdx
+      optIdx+=1
+      if sortReverse then push(optCH,green("Normal Order (r)")) else push(optCH,yellow("Reverse Order (r)"))
+      optShortcuts["r"]=optIdx
+      optIdx+=1
+      if sortEnabled then push(optCH,yellow("Un-Sort (u)")) else push(optCH,green("Sort (u)"))
+      optShortcuts["u"]=optIdx
+      optIdx+=1
+      push(optCH,yellow("Rename File... (R)"))
+      optShortcuts["R"]=optIdx
+      optIdx+=1
+      push(optCH,yellow("Change Permissions... (P)"))
+      optShortcuts["P"]=optIdx
+      optIdx+=1
+      push(optCH,yellow("New File... (n)"))
+      optShortcuts["n"]=optIdx
+      optIdx+=1
+      push(optCH,yellow("New Directory... (N)"))
+      optShortcuts["N"]=optIdx
+      optIdx+=1
+      push(optCH,yellow("Delete Files... (D)"))
+      optShortcuts["D"]=optIdx
+      optIdx+=1
+      push(optCH,red("Exit File Browser (x)"))
+      optShortcuts["x"]=optIdx
+      optIdx+=1
+      push(optCH,iyellow("Back to Files (b)"))
+      optShortcuts["b"]=optIdx
+      optChoice=Gui.choiceHybrid(optCH,optShortcuts,len(optCH)-1)
+      // Handle options menu selection
+      if optChoice==0 then continue
+      selectedOption=optCH[optChoice]
+      // Check by option text instead of position
+      if indexOf(selectedOption,"Back to Files")!=null then
+        continue
+      else if indexOf(selectedOption,"Exit File Browser")!=null then
+        return
+      else if indexOf(selectedOption,"Delete Files...")!=null then
+        removeDirectory
+        continue
+      else if indexOf(selectedOption,"New Directory...")!=null then
+        newDirectory
+        continue
+      else if indexOf(selectedOption,"New File...")!=null then
+        newFile
+        continue
+      else if indexOf(selectedOption,"Change Permissions...")!=null then
+        chmodFile
+        continue
+      else if indexOf(selectedOption,"Rename File...")!=null then
+        renameFile
+        continue
+      else if indexOf(selectedOption,"Un-Sort")!=null or indexOf(selectedOption,"Sort (u)")!=null then
+        sortEnabled=not sortEnabled
+        continue
+      else if indexOf(selectedOption,"Normal Order")!=null or indexOf(selectedOption,"Reverse Order")!=null then
+        sortReverse=not sortReverse
+        continue
+      else if indexOf(selectedOption,"Sort By:")!=null then
+        // Cycle through sort modes
+        if sortMode=="name" then
+          sortMode="size"
+        else
+          if sortMode=="size" then sortMode="date" else sortMode="name"
+        end if
+        continue
+      else if dualPanel and hasIndex(Obj,"shell") and (indexOf(selectedOption,"SSH")!=null or indexOf(selectedOption,"Disconnect")!=null) then
+        // SSH Operations - check by option content
+        if indexOf(selectedOption,"Disconnect SSH")!=null then
+          // Disconnect active panel
+          if activePanel=="left" and leftPanelConnected then
+            // Disconnect left panel - restore to base Obj
+            leftPanelObj=Obj
+            leftPanelConnected=false
+            Info.info("Disconnected SSH from left panel","s",false)
+          else if activePanel=="right" and rightPanelConnected then
+            // Disconnect right panel - restore to base Obj
+            rightPanelObj=Obj
+            rightPanelConnected=false
+            // Return to home directory
+            rightPanelDir=Obj.user.home
+            Info.info("Disconnected SSH from right panel","s",false)
+          end if
+          continue
+        else if indexOf(selectedOption,"Connect to SSH... (Left)")!=null then
+          newObj=sshConnect("left")
+          if newObj then
+            leftPanelObj=newObj
+            leftPanelConnected=true
+          end if
+        else if indexOf(selectedOption,"Connect to SSH... (Right)")!=null then
+          newObj=sshConnect("right")
+          if newObj then
+            rightPanelObj=newObj
+            rightPanelConnected=true
+            rightPanelDir=rightPanelObj.dir.current
+          end if
+        end if
+      else if indexOf(selectedOption,"Hide Symlinks")!=null or indexOf(selectedOption,"Show Symlinks")!=null then
+        showSymlinks=not showSymlinks
+        continue
+      else if indexOf(selectedOption,"Hide Hidden Files")!=null or indexOf(selectedOption,"Show Hidden Files")!=null then
+        showHidden=not showHidden
+        continue
+      else if indexOf(selectedOption,"Symbolic Perms")!=null or indexOf(selectedOption,"Octal Perms")!=null then
+        octalMode=not octalMode
+        continue
+      else if indexOf(selectedOption,"CD...")!=null then
+        cdPath=Gui.input({"text":yellow("Enter a path to cd to")})
+        if cdPath==null or cdPath=="" then
+          if dualPanel then
+            if activePanel=="right" then rightPanelDir=rightPanelObj.user.home else leftPanelObj.dir.current=leftPanelObj.user.home
+          else
+            Obj.dir.current=Obj.user.home
+          end if
+        else
+          if dualPanel then
+            if activePanel=="right" then
+              Command.cd(rightPanelObj,[cdPath])
+              rightPanelDir=rightPanelObj.dir.current
+            else
+              Command.cd(leftPanelObj,[cdPath])
+            end if
+          else
+            Command.cd(Obj,[cdPath])
+          end if
+        end if
+        continue
+      else if indexOf(selectedOption,"Quick Nav...")!=null then
+        // Quick navigation
+        navCH=[yellow("Quick Navigation:")]
+        push(navCH,white("Go to /"))
+        push(navCH,white("Go to Home"))
+        if dualPanel and activePanel=="left" then
+          push(navCH,white("Go to Right Panel"))
+        else if dualPanel then
+          push(navCH,white("Go to Left Panel"))
+        end if
+        push(navCH,iyellow("Cancel"))
+        navChoice=Gui.choiceHybrid(navCH,{},len(navCH)-1)
+        if navChoice==1 then
+          if dualPanel then
+            if activePanel=="right" then rightPanelDir=rightPanelObj.root else leftPanelObj.dir.current=leftPanelObj.root
+          else
+            Obj.dir.current=Obj.root
+          end if
+        else if navChoice==2 then
+          if dualPanel then
+            if activePanel=="right" then rightPanelDir=rightPanelObj.user.home else leftPanelObj.dir.current=leftPanelObj.user.home
+          else
+            Obj.dir.current=Obj.user.home
+          end if
+        else if navChoice==3 and dualPanel then
+          if activePanel=="left" then leftPanelObj.dir.current=rightPanelDir else rightPanelDir=leftPanelObj.dir.current
+        end if
+        continue
+      else if indexOf(selectedOption,"Search for File...")!=null then
+        // Search for file  
+        searchPrompt="Enter filename to search for:"
+        searchTerm=Gui.input({"text":searchPrompt})
+        if searchTerm and searchTerm!="" then
+          print "Searching for '"+searchTerm+"'..."
+          // Search in active panel's filesystem
+          if dualPanel then
+            if activePanel=="right" then foundFile=Io.findPartial(rightPanelObj.root,searchTerm) else foundFile=Io.findPartial(leftPanelObj.root,searchTerm)
+          else
+            foundFile=Io.findPartial(Obj.root,searchTerm)
+          end if
+          if foundFile and not(foundFile isa Error) then
+            print "Found: "+path(foundFile)
+            foundDir=parent(foundFile)
+            if foundDir then
+              if dualPanel then
+                if activePanel=="right" then rightPanelDir=foundDir else leftPanelObj.dir.current=foundDir
+              else
+                Obj.dir.current=foundDir
+              end if
+            else
+              print "Could not navigate to parent directory"
+            end if
+          else
+            print "File not found"
+          end if
+        end if
+        continue
+      else if indexOf(selectedOption,"Clear Filter")!=null or indexOf(selectedOption,"Filter...")!=null then
+        // Filter files
+        if filterText then
+          // Clear filter
+          filterText=""
+        else
+          // Set filter
+          filterPrompt="Enter filter text:"
+          newFilter=Gui.input({"text":filterPrompt})
+          if newFilter and newFilter!="" then filterText=newFilter
+        end if
+        continue
+      else if indexOf(selectedOption,"Exec...")!=null then
+        if dualPanel then
+          if activePanel=="right" then Command.exec(rightPanelObj,split(Gui.input({"text":yellow("Enter a command to execute")})," ")) else Command.exec(leftPanelObj,split(Gui.input({"text":yellow("Enter a command to execute")})," "))
+        else
+          Command.exec(Obj,split(Gui.input({"text":yellow("Enter a command to execute")})," "))
+        end if
+      else if indexOf(selectedOption,"Dual Panel")!=null then
+        dualPanel=true
+        rightPanelDir=leftPanelObj.dir.current
+        continue
+      else if indexOf(selectedOption,"Single Panel")!=null then
+        // Switch to single panel - disconnect any SSH
+        if leftPanelConnected then
+          leftPanelObj=Obj
+          leftPanelConnected=false
+        end if
+        if rightPanelConnected then
+          rightPanelObj=Obj
+          rightPanelConnected=false
+        end if
+        dualPanel=false
+        continue
+      else if indexOf(selectedOption,"Switch Panel")!=null then
+        if activePanel=="left" then activePanel="right" else activePanel="left"
+        continue
+      else if dualPanel and (indexOf(optCH[optChoice],"Copy Files...")!=null or indexOf(optCH[optChoice],"Move Files...")!=null) then
+        isMove=(indexOf(optCH[optChoice],"Move Files...")!=null)
+        sourceFiles=[]
+        if activePanel=="left" then
+          srcPanelObj=leftPanelObj
+          destPanelObj=rightPanelObj
+          destDir=rightPanelDir
+          for f in q;push(sourceFiles,{"key":name(f.value),"value":f.value});end for
+        else
+          srcPanelObj=rightPanelObj
+          destPanelObj=leftPanelObj
+          destDir=leftPanelObj.dir.current
+          for f in q2;push(sourceFiles,{"key":name(f.value),"value":f.value});end for
+        end if
+        transferFiles(srcPanelObj,destPanelObj,destDir,sourceFiles,isMove)
+      end if
+    else
+      // File navigation
+      if dualPanel then
+        if activePanel=="left" and hasIndex(leftIndexMap,UCH) then
+          idx=leftIndexMap[UCH]
+          selectedItem=q[idx].value
+          // Resolve symlink if necessary
+          if is_symlink(selectedItem) then
+            resolvedPath=path(selectedItem,true)
+            resolvedItem=Io.getFileObj(leftPanelObj,resolvedPath)
+            if resolvedItem and not(resolvedItem isa Error) then selectedItem=resolvedItem
+          end if
+          if is_folder(selectedItem) then leftPanelObj.dir.current=selectedItem else run(leftPanelObj,selectedItem)
+        else if activePanel=="right" and hasIndex(rightIndexMap,UCH) then
+          idx=rightIndexMap[UCH]
+          selectedItem=q2[idx].value
+          // Resolve symlink if necessary
+          if is_symlink(selectedItem) then
+            resolvedPath=path(selectedItem,true)
+            resolvedItem=Io.getFileObj(rightPanelObj,resolvedPath)
+            if resolvedItem and not(resolvedItem isa Error) then selectedItem=resolvedItem
+          end if
+          if is_folder(selectedItem) then rightPanelDir=selectedItem else run(rightPanelObj,selectedItem)
+        else if UCH==1 then
+          if activePanel=="left" then
+            if path(leftPanelObj.dir.current)!="/" then leftPanelObj.dir.current=parent(leftPanelObj.dir.current)
+          else
+            if path(rightPanelDir)!="/" then rightPanelDir=parent(rightPanelDir)
+          end if
+        end if
+      else
+        r=(path(Obj.dir.current)=="/")
+        if UCH==1 and not r then
+          Obj.dir.current=parent(Obj.dir.current)
+        else if UCH>1 or (UCH==1 and r) then
+          if r then idx=UCH-1 else idx=UCH-2
+          if idx>=0 and idx<len(q) then
+            selectedItem=q[idx].value
+            // Resolve symlink if necessary
+            if is_symlink(selectedItem) then
+              resolvedPath=path(selectedItem,true)
+              resolvedItem=Io.getFileObj(Obj,resolvedPath)
+              if resolvedItem and not(resolvedItem isa Error) then selectedItem=resolvedItem
+            end if
+            if is_folder(selectedItem) then Obj.dir.current=selectedItem else run(Obj,selectedItem)
+          end if
+        end if
+      end if
+    end if
+  end while
+end function
+Io.folderEX=function(S,d,g="")
+	if not d then return
+	sortEnabled=true
+	octalMode=false
+	R=File(host_computer(S),"/root")
+	while true
+		m={}
+		q=[]
+		if len(g) then print yellow(g)
+		z=get_folders(d)
+		// Calculate directory size
+		dirSize=0
+		for f in z;dirSize=dirSize+val(size(f));end for
+		print white("Folders: "+len(z))
+		print white("   Size: "+Io.size(dirSize))
+		for f in z;m[name(f)]=f;end for
+		for f in m;push(q,f);end for
+		if sortEnabled then sort(q,"key")
+		if octalMode then x=Io.octal(permissions(d)) else x=permissions(d)
+		CH=[green("Contents of ")+white(path(d)+":")+char(10)+"      <color=#"+Io.color(d)+">"+x+" <.></color>"]
+		r=(path(d)=="/")
+		if not r then
+			if octalMode then x=Io.octal(permissions(parent(R))) else x=permissions(parent(R))
+			push(CH,"<color=#"+Io.color(parent(R))+">"+x+" <..></color>")
+		end if
+		for f in q
+			b="NA"
+			c="NA"
+			y=""
+			if octalMode then x=Io.octal(permissions(f.value)) else x=permissions(f.value)
+			if owner(f.value) then
+				b=owner(f.value)
+				c=group(f.value)
+			end if
+			push(CH,"<color=#"+Io.color(f.value)+">"+x+" "+ljust(b,12)+" "+ljust(c,12)+" "+rjust(Io.size(val(size(f.value))),8)+"  "+cyan("[dir]")+" "+name(f.value)+"/</color>")
+		end for
+		push(CH,bold(green("--- USE: ")+white(path(d))+green(" ---")))
+		if octalMode then push(CH,green("--- Symbolic Perms")) else push(CH,yellow("--- Octal Perms"))
+		if sortEnabled then push(CH,yellow("--- Un-Sort")) else push(CH,green("--- Sort"))
+		push(CH,blue("--- New Directory..."))
+		push(CH,iyellow("--- Stop browsing directories"))
+		UCH=Gui.choiceHybrid(CH,{},1)
+		if UCH==len(CH)-1 then return Warning.set("No directory selected")
+		if UCH==len(CH)-2 then
+			n=Gui.input({"text":"Enter a new directory name"})
+			if n==null then continue
+			create_folder(host_computer(S),path(d),n)
+		else if UCH==len(CH)-3 then
+			sortEnabled=not sortEnabled
+		else if UCH==len(CH)-4 then
+			octalMode=not octalMode
+		else if UCH==len(CH)-5 then
+			return d
+		else if (not r and UCH==1) then
+			d=parent(d)
+		else if (len(q)>0 and r and UCH<=len(q)) or (len(q)>0 and not r and UCH<=(1+len(q))) then
+			if r then d=q[UCH-len(q)-1].value else d=q[UCH-len(q)-2].value
+		end if
+	end while
+end function
+Io.folder=function(Obj,d,g="")
+	if not d then return
+	sortEnabled=true
+	octalMode=false
+	while true
+		m={}
+		q=[]
+		if len(g) then print yellow(g)
+		z=get_folders(d)
+		// Calculate directory size
+		dirSize=0
+		for f in z;dirSize=dirSize+val(size(f));end for
+		print white("Folders: "+len(z))
+		print white("   Size: "+Io.size(dirSize))
+		for f in z;m[name(f)]=f;end for
+		for f in m;push(q,f);end for
+		if sortEnabled then sort(q,"key")
+		if octalMode then x=Io.octal(permissions(d)) else x=permissions(d)
+		CH=[green("Contents of ")+white(path(d)+":")+char(10)+"      <color=#"+Io.color(d)+">"+x+" <.></color>"]
+		r=(path(d)=="/")
+		if not r then
+			if octalMode then x=Io.octal(permissions(parent(Obj.dir.current))) else x=permissions(parent(Obj.dir.current))
+			push(CH,"<color=#"+Io.color(parent(Obj.dir.current))+">"+x+" <..></color>")
+		end if
+		for f in q
+			b="NA"
+			c="NA"
+			y=""
+			if octalMode then x=Io.octal(permissions(f.value)) else x=permissions(f.value)
+			if owner(f.value) then
+				b=owner(f.value)
+				c=group(f.value)
+			end if
+			push(CH,"<color=#"+Io.color(f.value)+">"+x+" "+ljust(b,12)+" "+ljust(c,12)+" "+rjust(Io.size(val(size(f.value))),8)+"  "+cyan("[dir]")+" "+name(f.value)+"/</color>")
+		end for
+		push(CH,bold(green("--- USE: ")+white(path(d))+green(" ---")))
+		if octalMode then push(CH,green("--- Symbolic Perms")) else push(CH,yellow("--- Octal Perms"))
+		if sortEnabled then push(CH,yellow("--- Un-Sort")) else push(CH,green("--- Sort"))
+		push(CH,blue("--- New Directory..."))
+		push(CH,iyellow("--- Stop browsing directories"))
+		UCH=Gui.choiceHybrid(CH,{},1)
+		if UCH==len(CH)-1 then return Warning.set("No directory selected")
+		if UCH==len(CH)-2 then
+			n=Gui.input({"text":"Enter a new directory name"})
+			if n==null then continue
+			if Obj.type=="file" then
+				e=FileHelper.useFolder(Obj)
+				if e isa Error then continue
+				copy(e,path(d),n)
+				f=Io.getFileObj(Obj,path(d)+"/"+n)
+				if f and is_folder(f) then
+					for _ in get_files(f)+get_folders(f);delete(_);end for
+				end if
+				continue
+			end if
+			create_folder(Obj.computer,path(d),n)
+		else if UCH==len(CH)-3 then
+			sortEnabled=not sortEnabled
+		else if UCH==len(CH)-4 then
+			octalMode=not octalMode
+		else if UCH==len(CH)-5 then
+			return d
+		else if (not r and UCH==1) then
+			d=parent(d)
+		else if (len(q)>0 and r and UCH<=len(q)) or (len(q)>0 and not r and UCH<=(1+len(q))) then
+			if r then d=q[UCH-len(q)-1].value else d=q[UCH-len(q)-2].value
+		end if
+	end while
+end function
+Io.file=function(Obj,d,g="")
+	if not d then return
+	sortEnabled=true
+	octalMode=false
+	symlinkMode=false
+	while true
+		m={}
+		q=[]
+		if len(g) then print yellow(g)
+		z=get_folders(d)
+		files=get_files(d)
+		dirSize=0
+		for f in z+files;m[name(f)]=f;dirSize+=val(size(f));end for
+		for f in m;push(q,f);end for
+		if sortEnabled then sort(q,"key")
+		r=(path(d)=="/")
+		CH=[green("Contents of ")+white(path(d)+":")+"\n"+white(len(files)+" files, "+len(z)+" folders ("+Io.size(dirSize)+")")]
+		if not r then push(CH,"<color=#"+self.color(parent(d))+">"+cyan("[dir]")+" ../</color>")
+		for f in q
+			b=owner(f.value)
+			c=group(f.value)
+			symlink=""
+			if is_folder(f.value) then
+				if symlinkMode and is_symlink(f.value) then
+					if b then symlink=" "+white("-->"+path(f.value,true)) else symlink=" "+white(red("X->")+path(f.value,true))
+				end if
+				if octalMode then x=Io.octal(permissions(f.value)) else x=permissions(f.value)
+				if not b then b="NA"
+				if not c then c="NA"
+				push(CH,"<color=#"+Io.color(f.value)+">"+x+" "+ljust(b,10)+" "+ljust(c,10)+" "+rjust(Io.size(val(size(f.value))),8)+" "+cyan("[dir]")+" "+name(f.value)+"/</color>"+symlink)
+				continue
+			end if
+			if symlinkMode and is_symlink(f.value) then
+				if b then symlink=" "+white("-->"+path(f.value,true)) else symlink=" "+white(red("X->")+path(f.value,true))
+			end if
+			if octalMode then x=Io.octal(permissions(f.value)) else x=permissions(f.value)
+			if not b then b="NA"
+			if not c then c="NA"
+			push(CH,"<color=#"+Io.color(f.value)+">"+x+" "+ljust(b,10)+" "+ljust(c,10)+" "+rjust(Io.size(val(size(f.value))),8)+" "+ljust(Io.fileMime(f.value),6)+" "+name(f.value)+"</color>"+symlink)
+		end for
+		if symlinkMode then push(CH,green("--- Hide Symlinks")) else push(CH,yellow("--- Show Symlinks"))
+		if octalMode then push(CH,green("--- Perms")) else push(CH,yellow("--- Octal"))
+		if sortEnabled then push(CH,yellow("--- Un-Sort")) else push(CH,green("--- Sort"))
+		push(CH,yellow("--- New File..."))
+		push(CH,iyellow("--- Stop browsing files"))
+		UCH=Gui.choiceHybrid(CH,{},1)
+		if UCH==len(CH)-1 then return Warning.set("No file selected")
+		if UCH==len(CH)-2 then
+			n=Gui.input({"text":"Enter a new file name"})
+			if not n isa string then continue
+			if Obj.type=="file" then
+				f=FileHelper.useFile(Obj)
+				if f isa Error then continue
+				copy(f,path(d),n)
+				set_content(self.getFileObj(Obj,path(d)+"/"+n),"")
+				continue
+			end if
+			touch(Obj.computer,path(d),n)
+		else if UCH==len(CH)-3 then
+			sortEnabled=not sortEnabled
+		else if UCH==len(CH)-4 then
+			octalMode=not octalMode
+		else if UCH==len(CH)-5 then
+			symlinkMode=not symlinkMode
+		else if (not r and UCH==1) then
+			d=parent(d)
+		else if (len(q)>0 and r and UCH<=len(q)) or (len(q)>0 and not r and UCH<=(1+len(q))) then
+			if r then d=q[UCH-1].value else d=q[UCH-2].value
+			if not is_folder(d) then return d
+		end if
+	end while
+end function
+Io.lock=function(Obj,argv)
+	if not argv then
+		f=self.file(Obj,Obj.user.home,"Select file to zip:")
+		if typeof(f)!="file" then return
+  else if argv[0] isa string then
+    f=self._getFile(Obj,argv[0])
+    if not f then return Error.set("File not found: "+argv[0])
+  else if typeof(argv[0])=="file" then
+    f=argv[0]
+  else
+    return Error.set("Invalid argument")
+  end if
+	if is_binary(f) then return Error.set("Cannot lock binary files")
+	z=Command.touch(Obj,[parent_path(path(f))+"/"+name(f)+".src"])
+  if z isa Error then return
+	if len(argv)>=2 then p=argv[1] else p=Gui.inputPass("Enter password:")
+	s=[]
+	push(s,"hpw="""+p+"""")
+	push(s,char(10)+"pw=user_input(""Password:"",1)"+char(10))
+	push(s,"if pw==hpw then"+char(10))
+	push(s,"text="""+get_content(f)+"""")
+	push(s,char(10)+"print text")
+	push(s,char(10)+"end if")
+	set_content(z,join(s,""))
+	build(Obj.shell,parent_path(path(f))+"/"+name(f)+".src",parent_path(path(f)))
+	wait 0.2
+	Command.qrm(Obj,[z])
+	Info.info("Data Locked")
+end function
+Io.zip=function(Obj,argv)
+  if not argv then
+		f=self.file(Obj,Obj.user.home,"Select file to zip:")
+		if typeof(f)!="file" then return
+  else if argv[0] isa string then
+    f=self._getFile(Obj,argv[0])
+    if not f then return Error.set("File not found: "+argv[0])
+  else if typeof(argv[0])=="file" then
+    f=argv[0]
+  else
+    return Error.set("Invalid argument")
+  end if
+	if is_binary(f) then return Error.set("Cannot zip binary files")
+	t=""
+	if Gui.yesNo("Is compression important?") then
+    // XFIX1.0: dddd / name-based compile size no longer shrinks script binaries; size ≈ 0.65 * source
+    if Gui.yesNo("Use a custome build name?",false) then
+      t=Gui.input({"text":"Enter the name you would like to use","default":"dddd"})
+      if t==null then return Warning.set("No name provided")
+    else
+      t="dddd"
+    end if
+  end if
+	if not len(t) then z=Command.touch(Obj,[parent_path(path(f))+"/"+name(f)+".src"]) else z=Command.touch(Obj,[parent_path(path(f))+"/"+t+".src"])
+	if z isa Error then return
+  s=[]
+	push(s,"text="""+get_content(f)+"""")
+	push(s,char(10)+"print text")
+	set_content(z,join(s,""))
+	if not len(t) then
+		build(Obj.shell,parent_path(path(f))+"/"+name(f)+".src",parent_path(path(f)))
+		a=File(Obj.computer,parent_path(path(f))+"/"+name(f))
+		y=""
+		if indexOf(name(f),".") then y=name(f)[:len(name(f))-3]+"zip" else y=name(f)+".zip"
+		if a then rename(a,y)
+	else
+		build(Obj.shell,parent_path(path(f))+"/"+t+".src",parent_path(path(f)))
+		a=File(Obj.computer,parent_path(path(f))+"/"+t)
+		y=""
+		if indexOf(name(f),".") then y=name(f)[:len(name(f))-3]+"zip" else y=name(f)+".zip"
+		if a then rename(a,y)
+	end if
+	wait 0.2
+	Command.qrm(Obj,[z])
+	Info.info("Data zipped")
+end function
+// XFIX1.0: DROP — name-based compile size is gone on Grey Hack 1.0.
+// XFIX1.0: Built scripts size ≈ 0.65 * source length (SetContenido), so bestSize / get -z / dddd are obsolete.
+// XFIX1.0: return Warning.set("bestSize is obsolete on Grey Hack 1.0 (compile size follows source length)")
+Io.bestSize=function(b=1,cont=0)
+  // XFIX1.0: return Warning.set("bestSize is obsolete on Grey Hack 1.0 (compile size follows source length)")
+  st=time
+  Info.info("Optimizing file name algorithm...")
+  Info.info("Testing/Comparing...")
+  // Predicate: weighted char-code sum (c.code*pos, 1-indexed) divisible by 1000
+  // produces minimal compiled file size in Grey Hack (pre-1.0). Lengths 1-3 are
+  // unreachable (max printable-ASCII sums are 127, 381, 762).
+  // Strategy: iterate the first L-1 chars, then SOLVE for the last char's
+  // code algebraically: needCode = ((1000 - partial%1000) % 1000) / L
+  alphabet=[]
+  c=97;while c<=122;push(alphabet,char(c));c+=1;end while
+  c=48;while c<=57;push(alphabet,char(c));c+=1;end while
+  _len=len(alphabet)
+  // Build a fast lookup for "is this code a valid filename char?"
+  validCode=function(k);if k>=97 and k<=122 then return true;if k>=48 and k<=57 then return true;return false;end function
+  found=null
+  stop=false
+  L=4
+  while true
+    if stop then break
+    // Iterate prefixes of length L-1 via base-_len odometer, then solve
+    P=L-1
+    total=_len^P
+    n=0
+    while n<total
+      if cont and not poll_input!="q" then;stop=true;break;end if
+      // Decode prefix and compute its weighted partial sum
+      partial=0
+      x=n
+      pos=1
+      prefix=""
+      j=0
+      while j<P
+        ch=alphabet[x%_len]
+        prefix=ch+prefix
+        x=floor(x/_len)
+        j+=1
+      end while
+      j=0
+      while j<P;partial+=(prefix[j].code*(j+1));j+=1;end while
+      // Solve for last char code so total ≡ 0 mod 1000
+      need=(1000-partial%1000)%1000
+      if need%L==0 then
+        k=need/L
+        if validCode(k) then
+          s=prefix+char(k)
+          if not found or len(s)<=len(found) then
+            found=s
+            if b then print ("Found '"+yellow(s)+"' to be the best file name size")
+            if not cont then
+              if b then print yellow("Proccess took: "+round(time-st)+" seconds")
+              return s
+            end if
+          end if
+        end if
+      end if
+      n+=1
+    end while
+    L+=1
+    if L>6 then break
+  end while
+  if b then print yellow("Proccess took: "+round(time-st)+" seconds")
+  return found
+end function
+//getLib - Find and load library file
+//Args: Obj (object), n (library name), m (expected type)
+//Returns: library object or nothing
+Io.getLib=function(Obj,n,m)
+  //Try data directory first
+  l=include_lib(path(Obj.dir.data)+"/"+n)
+	if l and typeof(l)==m then return l
+	//Try /lib directory
+	l=include_lib("/lib/"+n)
+	if l and typeof(l)==m then return l
+  //Search all files in root
+  for f in self.getAll(Obj.root);if name(f)==n then;l=include_lib(path(f));if l and typeof(l)==m then return l;end if;end for
+end function
+//getAll - Get all files and folders recursively
+//Args: s (starting folder), excludeNames (optional list of folder names to skip)
+//Returns: list of all file objects or Error
+Io.getAll=function(s,excludeNames=null)
+  //Initialize result list
+  l=[]
+  //Recursive helper function
+  _=function(f)
+    //Add all files in current folder
+    for z in get_files(f);push(l,z);end for;for d in get_folders(f);if excludeNames and indexOf(excludeNames,d.name)!=null then continue;if is_symlink(d) then;push(l,d);continue;end if;push(l,d);_(d);end for
+  end function
+  //Start recursion
+  _(s)
+  //Return list or error
+  if not l then return Error.set("","",true) else return l
+end function
+//findFile - Find file by name recursively
+//Args: s (starting folder), n (file name)
+//Returns: file object or Error
+Io.findFile=function(s,n)
+  //Get all files recursively
+  l=self.getAll(s)
+  if l isa Error then return l
+  for f in l;if is_folder(f) then continue;if name(f)==n then return f;end for
+  //File not found
+  return Error.set("","",true)
+end function
+//findPartial - Find file or folder by partial name match recursively
+//Args: s (starting folder), search (partial name to find)
+//Returns: file/folder object or Error
+Io.findPartial=function(s,search)
+  //Get all files and folders recursively
+  l=self.getAll(s)
+  if l isa Error then return l
+  //Search for partial name match (case-insensitive)
+  lSearch=lower(search)
+  for f in l;if indexOf(lower(name(f)),lSearch)!=null then return f;end for
+  return Error.set("","",true)
+end function
+//getAllFolders - Get all folders recursively
+//Args: s (starting folder)
+//Returns: list of all folder objects or Error
+Io.getAllFolders=function(s)
+  //Initialize with starting folder
+  l=[s]
+  //Recursive helper function
+  _=function(f)
+    //Process all subfolders
+    for d in get_folders(f);if is_symlink(d) then;push(l,d);continue;end if;push(l,d);_(d);end for
+  end function
+  //Start recursion
+  _(s)
+  //Return list or error
+  if not l then return Error.set("","",true) else return l
+end function
+Io.anon=function(Obj,r=false)
+	f=File(Obj.computer,path(Obj.dir.data)+"/anon")
+	if r and f then globals.G_attributes.anon=true
+	if not globals.G_attributes.anon then
+		if f then return delete(f)
+	end if
+	if globals.G_attributes.anon then
+		if f then return
+		touch(Obj.computer,path(Obj.dir.data),"anon")
+	end if
+end function
+Io.count=function(p,b=null,w=null)
+	d=0
+	f=0
+  for c in Io.getAll(p);if is_folder(c) then d+=1 else f+=1;end for
+	t=d+f
+	if t<2000 then t=green(str(t))
+	if t>2000 and t<2800 then t=yellow(str(t))
+	if t>3000 then t=red(str(t))
+	if b then return {"t":t,"f":f,"d":d}
+	print yellow("There are "+t+" files out of "+red(str(3125))+" max")
+	print yellow("There are "+white(str(3125-(d+f)))+" files left to be created")
+	print yellow("There are "+white(str(d))+" directories")
+	print yellow("There are "+white(str(f))+" files")
+  if w=="lms" then print (yellow("There are "+white(str(len(globals.G_libraryCache)))+" librarys on this server"))
+end function
+Io.rm=function(Obj,argv)
+  _verbose=argv.v
+  if hasIndex(argv,"filter") or hasIndex(argv,"files") then
+    for f in argv.files;if argv.i then;if not Gui.yesNo("Remove : '"+name(f)+"' ?") then continue;end if;_n=path(f);r=delete(f);if r then Info.error(r);if not r and _verbose then print "removed '"+_n+"'";end for
+  else if argv.r then
+    if not argv.rest then return Error.set("Missing source file")
+    Arg1=argv.rest[0]
+    d=self._getFile(Obj,Arg1)
+    if not d then return Error.set("Source file not found: "+Arg1)
+    if hasIndex(argv,"i") then
+      if not Gui.yesNo("Remove : '"+name(d)+"' ?") then return Info.info("Deletion canceled")
+    end if
+    _n=path(d)
+    r=delete(d)
+    if r then Info.error(r)
+    if not r and _verbose then Info.info("removed '"+_n+"'")
+  else if argv.l then
+    while argv.rest
+      d=pop(argv.rest)
+      f=self._getFile(Obj,d)
+      if not f then
+        Info.warning("File not found: "+d)
+        continue
+      end if
+      if argv.i then
+        if not Gui.yesNo("Remove : '"+name(f)+"' ?") then continue
+      end if
+      _n=path(f)
+      r=delete(f)
+      if r then Info.error(r)
+      if not r and _verbose then Info.info("removed '"+_n+"'")
+    end while
+  else if argv.z then
+    if argv.rest then Arg1=argv.rest[-1] else Arg1=path(Obj.dir.current)
+    d=self._getFile(Obj,Arg1)
+    if not d then return Error.set("Source directory not found: "+Arg1)
+    if not is_folder(d) then return Error.set("Not a directory: "+Arg1)
+    z=get_folders(d)+get_files(d)
+    Info.response("Select a range to remove:")
+    listFN(z)
+    Info.info("Format:startIndex-endIndex")
+    x=Gui.input({"text":"Enter a range"})
+    if x==null then return Error.set("No range entered")
+    _=split(x,"-")
+    if len(_)!=2 then return Error.set("Invalid data")
+    st=to_int(_[0])
+    ed=to_int(_[1])
+    if not st isa number or not ed isa number then return Error.set("Must use numbers")
+    idx=st;while idx<=ed;if hasIndex(z,idx) then;_f=z[idx];_n=path(_f);r=delete(_f);if r then Info.error(r);if not r and _verbose then Info.info("removed '"+_n+"'");end if;idx+=1;end while
+  else
+    Info.error("Invalid params")
+  end if
+end function
+// Shared file operation logic for cp/mv
+// Args: Obj (context), argv (parsed args), op ("copy" or "move")
+Io._fileOp=function(Obj,argv,op)
+  if op=="copy" then lbl="Copy" else lbl="Move"
+  if hasIndex(argv,"files") then
+    if not argv.rest then return Error.set("Missing destination directory")
+    Arg1=argv.rest[0]
+    dest=self._getFile(Obj,Arg1)
+    if not dest then return Error.set("Destination directory not found: "+Arg1)
+    if not is_folder(dest) then return Error.set("Not a directory: "+Arg1)
+    _destPath=path(dest)
+    for f in argv.files
+      if argv.i then
+        existing=self._getFile(Obj,_destPath+"/"+name(f))
+        if existing and not (existing isa Error) then
+          if not Gui.yesNo("Overwrite '"+name(f)+"'?",false) then continue
+        end if
+      end if
+      if op=="copy" then r=copy(f,_destPath,name(f)) else r=move(f,_destPath,name(f))
+      if r isa string then Info.error(r)
+    end for
+    Info.info(lbl+" complete")
+  else if argv.r then
+    if not len(argv.rest)>=2 then return Error.set("Missing source|destination directory params")
+    if hasIndex(argv,"n") then n=argv.n else n=""
+    Arg1=argv.rest[-1]
+    dest=self._getFile(Obj,Arg1)
+    if not dest then return Error.set("Destination directory not found: "+Arg1)
+    if not is_folder(dest) then return Error.set("Not a directory: "+Arg1)
+    Arg2=argv.rest[0]
+    src=self._getFile(Obj,Arg2)
+    if not src then return Error.set("Source directory not found: "+Arg2)
+    if not is_folder(src) then return Error.set("Not a directory: "+Arg2)
+    if not n then n=name(src)
+    if n=="/" then n="root"
+    if op=="copy" then r=copy(src,path(dest),n) else r=move(src,path(dest),n)
+    if r isa string then Info.error(r)
+    Info.info(lbl+" complete")
+  else if argv.l then
+    Arg1=pop(argv.rest)
+    if not Arg1 then return Error.set("Missing destination directory")
+    dest=self._getFile(Obj,Arg1)
+    if not dest then return Error.set("Destination directory not found: "+Arg1)
+    if not is_folder(dest) then return Error.set("Not a directory: "+Arg1)
+    _destPath=path(dest)
+    while argv.rest
+      item=pop(argv.rest)
+      if item=="/" then
+        Info.info("Not funny: /")
+        continue
+      end if
+      f=self._getFile(Obj,item)
+      if not f then
+        Info.warning("File not found: "+item)
+        continue
+      end if
+      if argv.i then
+        existing=self._getFile(Obj,_destPath+"/"+name(f))
+        if existing and not (existing isa Error) then
+          if not Gui.yesNo("Overwrite '"+name(f)+"'?",false) then continue
+        end if
+      end if
+      if op=="copy" then r=copy(f,_destPath,name(f)) else r=move(f,_destPath,name(f))
+      if r isa string then Info.error(r)
+    end while
+    Info.info(lbl+" complete")
+  else if argv.z then
+    if not len(argv.rest)>=2 then return Error.set("Missing source|destination directory params")
+    Arg2=argv.rest[-1]
+    src=self._getFile(Obj,Arg2)
+    if not src then return Error.set("Source directory not found: "+Arg2)
+    if path(src)=="/" then return Info.info("Not funny: /")
+    if not is_folder(src) then return Error.set("Not a directory: "+Arg2)
+    Arg1=argv.rest[0]
+    dest=self._getFile(Obj,Arg1)
+    if not dest then return Error.set("Destination directory not found: "+Arg1)
+    if not is_folder(dest) then return Error.set("Not a directory: "+Arg1)
+    z=get_folders(src)+get_files(src)
+    Info.info("Format:startIndex-endIndex")
+    Info.response("Select a range to copy:")
+    listFN(z)
+    x=Gui.input({"text":"Enter a range"})
+    if x==null then return Error.set("No range entered")
+    parts=split(x,"-")
+    if len(parts)!=2 then return Error.set("Invalid data")
+    st=to_int(parts[0])
+    ed=to_int(parts[1])
+    if not st isa number or not ed isa number then return Error.set("Must use numbers")
+    _destPath=path(dest)
+    idx=st;while idx<=ed
+      if hasIndex(z,idx) then
+        _f=z[idx]
+        if argv.i then
+          existing=self._getFile(Obj,_destPath+"/"+name(_f))
+          if existing and not (existing isa Error) then
+            if not Gui.yesNo("Overwrite '"+name(_f)+"'?",false) then idx+=1;continue
+          end if
+        end if
+        if op=="copy" then r=copy(_f,_destPath,name(_f)) else r=move(_f,_destPath,name(_f))
+        if r isa string then Info.error(r)
+      end if
+    idx+=1;end while
+    Info.info(lbl+" complete")
+  else if hasIndex(argv,"n") then
+    if not len(argv.rest)>=2 then return Error.set("Missing source|destination directory params")
+    n=argv.n
+    Arg1=argv.rest[-1]
+    dest=self._getFile(Obj,Arg1)
+    Arg2=argv.rest[0]
+    src=self._getFile(Obj,Arg2)
+    if not src then return Error.set("Source file not found: "+Arg2)
+    if not n then n=name(src)
+    if n=="/" then n="root"
+    if op=="copy" then r=copy(src,path(dest),n) else r=move(src,path(dest),n)
+    if r isa string then return Error.set(r)
+    Info.info(lbl+" complete")
+  else
+    Info.error("Invalid params")
+  end if
+end function
+Io.cp=function(Obj,argv);return self._fileOp(Obj,argv,"copy");end function
+Io.mv=function(Obj,argv);return self._fileOp(Obj,argv,"move");end function
+Io.upload=function(Obj,argv)
+  if not argv then return Error.set("No file(s) selected")
+  _p=ArgumentParser.init
+  _p.addArgument("p",false,"store")
+  _p.addArgument("log",true,"flag")
+  argv=_p.parseArgs("main",argv)
+  if argv isa Error then return
+  if argv["log"] then return self.uploadLog(Obj,argv)
+  if not argv.p then argv.p=path(Obj.dir.current)
+  while argv.rest
+    s=pop(argv.rest)
+    f=self._getFile(globals.G_main,s)
+    if not f or f isa Error then return Error.set(s+" not found")
+    if indexOf(Obj.type,"shell")==null then
+      if self.isBinFolder(f) then return Warning.set(Obj.type+" objects are unable to download folders/binarys")
+      Info.info("Uploading "+name(f)+"...","+")
+      r=Command.touch(Obj,[argv.p+"/"+name(f)])
+      if r isa Error then return
+      set_content(r,get_content(f))
+    else if indexOf(Obj.type,"shell")!=null then
+      Info.info("Uploading "+name(f)+"...","+")
+      r=scp(globals.G_main.shell,path(f),argv.p,Obj.shell)
+      if r isa string then Info.error(r)
+    end if
+  end while
+  Info.info("Uploading complete")
+end function
+Io.download=function(Obj,argv)
+  if not argv then return Error.set("No file(s) selected")
+  _p=ArgumentParser.init
+  _p.addArgument("p",false,"store")
+  _p.addArgument("log",true,"flag")
+  argv=_p.parseArgs("main",argv)
+  if argv isa Error then return
+  if not argv.p then argv.p=path(globals.G_main.dir.current)
+  if argv["log"] then return self.downloadLog(Obj,argv)
+  while argv.rest
+    s=pop(argv.rest)
+    f=self._getFile(Obj,s)
+    if not f or f isa Error then return Error.set(s+" not found")
+    if indexOf(Obj.type,"shell")==null then
+      if self.isBinFolder(f) then return Warning.set(Obj.type+" objects are unable to upload folders/binarys")
+      Info.info("Downloading "+name(f)+"...")
+      r=Command.touch(globals.G_main,[argv.p+"/"+name(f)])
+      if r isa Error then return
+      set_content(r,get_content(f))
+    else if indexOf(Obj.type,"shell")!=null then
+      Info.info("Downloading "+name(f)+"...")
+      r=scp(Obj.shell,path(f),argv.p,globals.G_main.shell)
+      if r isa string then Info.error(r)
+    end if
+  end while
+  Info.info("Downloading complete")
+end function
+Io.uploadLog=function(Obj,argv)
+  if indexOf(Obj.type,"shell")==null then return Warning.set(Obj.type+" object unable to download binarys")
+  r=null
+  if not argv.p then argv.p=path(globals.G_main.dir.current)
+  t=File(globals.G_main.computer,argv.p+"/system.log")
+  if not t then return Info.info("No system.log file found in: "+argv.p)
+  f=self._getFile(globals.G_main,path(t))
+  Info.info("Uploading system.log...","+")
+  t=File(Obj.computer,"/var/system.log")
+  if has_permission(t,"w") then
+    Command.qrm(Obj,[t])
+    r=scp(globals.G_main.shell,path(f),"/var",Obj.shell)
+  else
+    Info.info("Uploading to "+path(Obj.user.home))
+    r=scp(globals.G_main.shell,path(f),path(Obj.user.home)+"/",Obj.shell)
+    if r isa string then
+      Info.warning(r)
+      Info.info("Uploading to /home/guest")
+      r=scp(globals.G_main.shell,path(f),"/home/guest/",Obj.shell)
+    end if
+  end if
+  if r isa string then Error.set(r) else Info.info("Finished")
+end function
+Io.downloadLog=function(Obj,argv)
+  if indexOf(Obj.type,"shell")==null then return Warning.set(Obj.type+" object unable to upload binarys")
+  if argv.rest then s=argv.rest[0] else s="/var/system.log"
+  f=self._getFile(Obj,s)
+  Info.info("Downloading system.log...")
+  r=scp(Obj.shell,path(f),argv.p,globals.G_main.shell)
+  if r isa string then Info.error(r) else Info.info("Finished, saved to: "+argv.p+"/"+name(f))
+end function

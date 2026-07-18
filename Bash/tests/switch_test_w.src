@@ -1,0 +1,644 @@
+testSwitchTest="// Bash Switch/Case Test Script
+// Thorough coverage of switch/case: basic matching, default,
+// numbers, empty values, nested switches, complex bodies,
+// many cases, expressions, and integration with other constructs.
+
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>[PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>[FAIL]</color> _getvar(label) <color=#ffff00> expected:</color>_getvar(expected) <color=#ffff00> got:</color>_getvar(actual)
+  endif
+endfunc
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>       BASH SWITCH/CASE TESTS</color>
+_print <color=#eb0cc6>============================================</color>
+_print
+
+// ===================================================================
+// SECTION 1 - BASIC STRING MATCHING
+// ===================================================================
+_print <color=#00bfff>--- Section 1: Basic String Matching ---</color>
+
+// Match first case
+_setvar(r, miss)
+switch alpha
+  case alpha
+    _setvar(r, hit_alpha)
+  case beta
+    _setvar(r, hit_beta)
+endswitch
+assert(literal alpha matches case alpha, _getvar(r), hit_alpha)
+
+// Match middle case
+_setvar(r, miss)
+switch beta
+  case alpha
+    _setvar(r, hit_alpha)
+  case beta
+    _setvar(r, hit_beta)
+  case gamma
+    _setvar(r, hit_gamma)
+endswitch
+assert(literal beta matches case beta, _getvar(r), hit_beta)
+
+// Match last case
+_setvar(r, miss)
+switch gamma
+  case alpha
+    _setvar(r, hit_alpha)
+  case beta
+    _setvar(r, hit_beta)
+  case gamma
+    _setvar(r, hit_gamma)
+endswitch
+assert(literal gamma matches case gamma, _getvar(r), hit_gamma)
+
+// No match no default stays at initial value
+_setvar(r, untouched)
+switch delta
+  case alpha
+    _setvar(r, hit_alpha)
+  case beta
+    _setvar(r, hit_beta)
+endswitch
+assert(no match and no default leaves var untouched, _getvar(r), untouched)
+
+// Match via variable
+_setvar(val, cherry)
+_setvar(r, miss)
+switch _getvar(val)
+  case apple
+    _setvar(r, apple)
+  case cherry
+    _setvar(r, cherry)
+  case banana
+    _setvar(r, banana)
+endswitch
+assert(variable cherry matches case cherry, _getvar(r), cherry)
+
+_print
+
+// ===================================================================
+// SECTION 2 - DEFAULT CASE
+// ===================================================================
+_print <color=#00bfff>--- Section 2: Default Case ---</color>
+
+// Default fires when no match
+_setvar(r, miss)
+switch unknown
+  case a
+    _setvar(r, a)
+  case b
+    _setvar(r, b)
+  default
+    _setvar(r, default_hit)
+endswitch
+assert(no match hits default, _getvar(r), default_hit)
+
+// Default with single case
+_setvar(r, miss)
+switch x
+  case y
+    _setvar(r, y)
+  default
+    _setvar(r, default_single)
+endswitch
+assert(single case miss hits default, _getvar(r), default_single)
+
+// Only default no cases
+_setvar(r, miss)
+switch anything
+  default
+    _setvar(r, only_default)
+endswitch
+assert(only default always fires, _getvar(r), only_default)
+
+// Default not reached when match found
+_setvar(r, miss)
+switch match_me
+  case match_me
+    _setvar(r, matched)
+  default
+    _setvar(r, should_not_reach)
+endswitch
+assert(match found so default skipped, _getvar(r), matched)
+
+_print
+
+// ===================================================================
+// SECTION 3 - NUMERIC MATCHING
+// ===================================================================
+_print <color=#00bfff>--- Section 3: Numeric Matching ---</color>
+
+// Integer match
+_setvar(n, 42)
+_setvar(r, miss)
+switch _getvar(n)
+  case 41
+    _setvar(r, wrong)
+  case 42
+    _setvar(r, forty_two)
+  case 43
+    _setvar(r, wrong)
+endswitch
+assert(switch on 42 matches case 42, _getvar(r), forty_two)
+
+// Zero match
+_setvar(n, 0)
+_setvar(r, miss)
+switch _getvar(n)
+  case 0
+    _setvar(r, zero)
+  case 1
+    _setvar(r, one)
+endswitch
+assert(switch on 0 matches case 0, _getvar(r), zero)
+
+// Negative number match
+_setvar(n, -5)
+_setvar(r, miss)
+switch _getvar(n)
+  case 5
+    _setvar(r, positive)
+  case -5
+    _setvar(r, negative)
+  default
+    _setvar(r, default)
+endswitch
+assert(switch on -5 matches case -5, _getvar(r), negative)
+
+// Large number
+_setvar(n, 9999)
+_setvar(r, miss)
+switch _getvar(n)
+  case 1
+    _setvar(r, small)
+  case 9999
+    _setvar(r, big)
+endswitch
+assert(switch on 9999 matches case 9999, _getvar(r), big)
+
+_print
+
+// ===================================================================
+// SECTION 4 - EMPTY AND EDGE VALUES
+// ===================================================================
+_print <color=#00bfff>--- Section 4: Empty and Edge Values ---</color>
+
+// Empty string to default
+_setvar(val, )
+_setvar(r, miss)
+switch _getvar(val)
+  case hello
+    _setvar(r, hello)
+  default
+    _setvar(r, empty_default)
+endswitch
+assert(empty string hits default, _getvar(r), empty_default)
+
+// Single character match
+_setvar(val, x)
+_setvar(r, miss)
+switch _getvar(val)
+  case a
+    _setvar(r, a)
+  case x
+    _setvar(r, x)
+  case z
+    _setvar(r, z)
+endswitch
+assert(single char x matches case x, _getvar(r), x)
+
+// String with spaces
+_setvar(val, hello world)
+_setvar(r, miss)
+switch _getvar(val)
+  case hello
+    _setvar(r, just_hello)
+  case hello world
+    _setvar(r, hello_world)
+  default
+    _setvar(r, default)
+endswitch
+assert(string with space matches, _getvar(r), hello_world)
+
+_print
+
+// ===================================================================
+// SECTION 5 - COMPLEX CASE BODIES
+// ===================================================================
+_print <color=#00bfff>--- Section 5: Complex Case Bodies ---</color>
+
+// If/else inside a case
+_setvar(mode, advanced)
+_setvar(level, 10)
+_setvar(r, miss)
+switch _getvar(mode)
+  case basic
+    _setvar(r, basic)
+  case advanced
+    if _getvar(level) > 5
+      _setvar(r, advanced_high)
+    else
+      _setvar(r, advanced_low)
+    endif
+  default
+    _setvar(r, default)
+endswitch
+assert(if inside case evaluates correctly, _getvar(r), advanced_high)
+
+// For loop inside a case
+_setvar(action, sum)
+_setvar(r, 0)
+switch _getvar(action)
+  case sum
+    for i in range(1, 5)
+      _setvar(r, _getvar(r) + _getvar(i))
+    endfor
+  default
+    _setvar(r, -1)
+endswitch
+assert(for loop inside case sums 1 to 5 as 15, _getvar(r), 15)
+
+// Multiple statements in a case
+_setvar(op, init)
+_setvar(a, 0)
+_setvar(b, 0)
+switch _getvar(op)
+  case init
+    _setvar(a, 10)
+    _setvar(b, 20)
+  case reset
+    _setvar(a, 0)
+    _setvar(b, 0)
+endswitch
+_setvar(r, _getvar(a) + _getvar(b))
+assert(multiple stmts in case set a=10 b=20 sum=30, _getvar(r), 30)
+
+// While loop inside a case
+_setvar(action, count)
+_setvar(n, 0)
+switch _getvar(action)
+  case count
+    while _getvar(n) < 3
+      _setvar(n, _getvar(n) + 1)
+    endwhile
+  default
+    _setvar(n, -1)
+endswitch
+assert(while loop inside case counts to 3, _getvar(n), 3)
+
+_print
+
+// ===================================================================
+// SECTION 6 - NESTED SWITCHES
+// ===================================================================
+_print <color=#00bfff>--- Section 6: Nested Switches ---</color>
+
+// Switch inside switch
+_setvar(category, fruit)
+_setvar(item, apple)
+_setvar(r, miss)
+switch _getvar(category)
+  case fruit
+    switch _getvar(item)
+      case apple
+        _setvar(r, red_fruit)
+      case banana
+        _setvar(r, yellow_fruit)
+      default
+        _setvar(r, unknown_fruit)
+    endswitch
+  case veggie
+    _setvar(r, vegetable)
+  default
+    _setvar(r, unknown_category)
+endswitch
+assert(nested switch fruit+apple is red_fruit, _getvar(r), red_fruit)
+
+// Inner switch hits default
+_setvar(category, fruit)
+_setvar(item, grape)
+_setvar(r, miss)
+switch _getvar(category)
+  case fruit
+    switch _getvar(item)
+      case apple
+        _setvar(r, apple)
+      default
+        _setvar(r, other_fruit)
+    endswitch
+  default
+    _setvar(r, not_fruit)
+endswitch
+assert(nested switch fruit+grape hits inner default, _getvar(r), other_fruit)
+
+// Outer default (inner switch never entered)
+_setvar(category, mineral)
+_setvar(item, gold)
+_setvar(r, miss)
+switch _getvar(category)
+  case fruit
+    switch _getvar(item)
+      case apple
+        _setvar(r, apple)
+    endswitch
+  default
+    _setvar(r, not_fruit)
+endswitch
+assert(outer default when category is mineral, _getvar(r), not_fruit)
+
+_print
+
+// ===================================================================
+// SECTION 7 - SWITCH IN LOOPS
+// ===================================================================
+_print <color=#00bfff>--- Section 7: Switch in Loops ---</color>
+
+// Switch inside a for loop
+_setvar(total, 0)
+for cmd in [add, add, sub, add, sub]
+  switch _getvar(cmd)
+    case add
+      _setvar(total, _getvar(total) + 1)
+    case sub
+      _setvar(total, _getvar(total) - 1)
+  endswitch
+endfor
+assert(switch in for loop 3 adds 2 subs equals 1, _getvar(total), 1)
+
+// Switch inside while
+_setvar(i, 0)
+_setvar(r, )
+while _getvar(i) < 3
+  switch _getvar(i)
+    case 0
+      _setvar(r, concat(_getvar(r), A))
+    case 1
+      _setvar(r, concat(_getvar(r), B))
+    case 2
+      _setvar(r, concat(_getvar(r), C))
+  endswitch
+  _setvar(i, _getvar(i) + 1)
+endwhile
+assert(switch in while builds ABC, _getvar(r), ABC)
+
+_print
+
+// ===================================================================
+// SECTION 8 - SWITCH IN FUNCTIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 8: Switch in Functions ---</color>
+
+// Function with switch return
+func grade(score)
+  _setvar(result, F)
+  switch _getvar(score)
+    case 4
+      _setvar(result, A)
+    case 3
+      _setvar(result, B)
+    case 2
+      _setvar(result, C)
+    case 1
+      _setvar(result, D)
+    default
+      _setvar(result, F)
+  endswitch
+  _return _getvar(result)
+endfunc
+
+_setvar(r, grade(4))
+assert(grade 4 returns A, _getvar(r), A)
+_setvar(r, grade(2))
+assert(grade 2 returns C, _getvar(r), C)
+_setvar(r, grade(0))
+assert(grade 0 returns F via default, _getvar(r), F)
+
+// Function with switch calling another function
+func classify(val)
+  _setvar(result, unknown)
+  switch _getvar(val)
+    case positive
+      _setvar(result, grade(4))
+    case neutral
+      _setvar(result, grade(2))
+    case negative
+      _setvar(result, grade(0))
+  endswitch
+  _return _getvar(result)
+endfunc
+
+_setvar(r, classify(positive))
+assert(classify positive calls grade 4 gets A, _getvar(r), A)
+_setvar(r, classify(negative))
+assert(classify negative calls grade 0 gets F, _getvar(r), F)
+
+_print
+
+// ===================================================================
+// SECTION 9 - MANY CASES
+// ===================================================================
+_print <color=#00bfff>--- Section 9: Many Cases ---</color>
+
+// 10-case switch
+_setvar(n, 7)
+_setvar(r, miss)
+switch _getvar(n)
+  case 1
+    _setvar(r, one)
+  case 2
+    _setvar(r, two)
+  case 3
+    _setvar(r, three)
+  case 4
+    _setvar(r, four)
+  case 5
+    _setvar(r, five)
+  case 6
+    _setvar(r, six)
+  case 7
+    _setvar(r, seven)
+  case 8
+    _setvar(r, eight)
+  case 9
+    _setvar(r, nine)
+  case 10
+    _setvar(r, ten)
+endswitch
+assert(10 cases match 7 as seven, _getvar(r), seven)
+
+// Last of 10 cases
+_setvar(n, 10)
+_setvar(r, miss)
+switch _getvar(n)
+  case 1
+    _setvar(r, one)
+  case 2
+    _setvar(r, two)
+  case 3
+    _setvar(r, three)
+  case 4
+    _setvar(r, four)
+  case 5
+    _setvar(r, five)
+  case 6
+    _setvar(r, six)
+  case 7
+    _setvar(r, seven)
+  case 8
+    _setvar(r, eight)
+  case 9
+    _setvar(r, nine)
+  case 10
+    _setvar(r, ten)
+endswitch
+assert(10 cases match last case 10 as ten, _getvar(r), ten)
+
+// No match in 10 cases hits default
+_setvar(n, 99)
+_setvar(r, miss)
+switch _getvar(n)
+  case 1
+    _setvar(r, one)
+  case 2
+    _setvar(r, two)
+  case 3
+    _setvar(r, three)
+  case 4
+    _setvar(r, four)
+  case 5
+    _setvar(r, five)
+  case 6
+    _setvar(r, six)
+  case 7
+    _setvar(r, seven)
+  case 8
+    _setvar(r, eight)
+  case 9
+    _setvar(r, nine)
+  case 10
+    _setvar(r, ten)
+  default
+    _setvar(r, out_of_range)
+endswitch
+assert(10 cases no match 99 hits default, _getvar(r), out_of_range)
+
+_print
+
+// ===================================================================
+// SECTION 10 - FIRST MATCH WINS
+// ===================================================================
+_print <color=#00bfff>--- Section 10: First Match Wins ---</color>
+
+// No fall-through: first match wins and stops
+_setvar(r, miss)
+switch hello
+  case hello
+    _setvar(r, first)
+  case hello
+    _setvar(r, second)
+endswitch
+assert(duplicate cases first one wins, _getvar(r), first)
+
+_print
+
+// ===================================================================
+// SECTION 11 - SWITCH AFTER OTHER CONSTRUCTS
+// ===================================================================
+_print <color=#00bfff>--- Section 11: Switch After Other Constructs ---</color>
+
+// Switch after if
+_setvar(mode, beta)
+if 1 == 1
+  _setvar(mode, beta)
+endif
+_setvar(r, miss)
+switch _getvar(mode)
+  case alpha
+    _setvar(r, alpha)
+  case beta
+    _setvar(r, bravo)
+  default
+    _setvar(r, default)
+endswitch
+assert(switch after if picks bravo, _getvar(r), bravo)
+
+// Switch after for
+_setvar(total, 0)
+for i in range(1, 3)
+  _setvar(total, _getvar(total) + _getvar(i))
+endfor
+_setvar(r, miss)
+switch _getvar(total)
+  case 5
+    _setvar(r, five)
+  case 6
+    _setvar(r, six)
+  case 7
+    _setvar(r, seven)
+  default
+    _setvar(r, other)
+endswitch
+assert(switch on sum 1+2+3=6 matches six, _getvar(r), six)
+
+// Switch after function call
+func getMode()
+  _return turbo
+endfunc
+_setvar(m, getMode())
+_setvar(r, miss)
+switch _getvar(m)
+  case normal
+    _setvar(r, normal)
+  case turbo
+    _setvar(r, turbo)
+  default
+    _setvar(r, default)
+endswitch
+assert(switch on func return turbo matches, _getvar(r), turbo)
+
+_print
+
+// ===================================================================
+// SECTION 12 - VARIABLE MUTATION IN CASES
+// ===================================================================
+_print <color=#00bfff>--- Section 12: Variable Mutation in Cases ---</color>
+
+// Case body modifies external variable
+_setvar(state, idle)
+_setvar(counter, 0)
+switch _getvar(state)
+  case idle
+    _setvar(counter, _getvar(counter) + 10)
+    _setvar(state, running)
+  case running
+    _setvar(counter, _getvar(counter) + 100)
+endswitch
+assert(case body increments counter to 10, _getvar(counter), 10)
+
+// Array operations in case body
+_setvar(action, push)
+_setvar(arr, [])
+switch _getvar(action)
+  case push
+    _push arr one
+    _push arr two
+    _push arr three
+  case pop
+    _pop arr
+  default
+    _setvar(arr, [])
+endswitch
+_setvar(r, len(_getvar(arr)))
+assert(push 3 items in case body gives len 3, _getvar(r), 3)
+
+_print
+
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>       SWITCH/CASE TESTS COMPLETE</color>
+_print <color=#eb0cc6>============================================</color>
+_print"

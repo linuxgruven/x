@@ -1,0 +1,51 @@
+// Man page for touch
+manTouch="TOUCH(1)                         X Shell Manual                         TOUCH(1)
+
+<b>NAME</b>
+    touch - used to create new files
+<b>SYNOPSIS</b>
+    <b>touch </b>[<b>-y</b>|<b>-x</b>] <b>PATH</b> [PATH...]
+    <b>touch </b><b>-l</b> (<b>-p</b> [<b>FULL_PATH</b>]) <b>NAME NAME NAME...</b>
+<b>DESCRIPTION</b>
+    Create empty files on remote systems. Use -y to overwrite existing files.
+    Use -l for creating multiple files at once with optional path specification.
+    Supports glob patterns: <b>touch *.bak</b>, <b>touch log/*.old</b>
+<b>OPTIONS</b>
+    <b>-y</b>
+    Overwrite if exists
+    Delete and recreate the file
+
+    <b>-x</b>
+    Return existing file
+    If file exists, return it without overwriting
+
+    <b>-l</b>
+    Create multiple files
+    Space-separated names
+
+    <b>-p PATH</b>
+    Target directory
+    Use with -l flag
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Single File</color>
+    <b>touch test.txt</b>
+    Create test.txt
+
+    <b>touch /home/tux/data.dat</b>
+    Create at path
+
+    <color=#e4ff34># Overwrite Mode</color>
+    <b>touch -y /home/tux/test.txt</b>
+    Force overwrite
+
+    <color=#e4ff34># Multiple Files</color>
+    <b>touch -l test1.txt test2.txt test3.txt</b>
+    Create 3 files in cwd
+
+    <b>touch -l -p /home/tux file1 file2 file3</b>
+    Create in /home/tux
+
+    <b>touch -l log.txt data.txt config.txt</b>
+    Batch creation
+<b>SEE ALSO</b>
+    <b>mkdir</b>, <b>write</b>"

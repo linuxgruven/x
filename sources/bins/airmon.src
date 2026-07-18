@@ -1,0 +1,13 @@
+binAirmon="cryptools=include_lib(""/lib/crypto.so"")
+if not cryptools then exit(""Error: Missing crypto library"")
+if len(params)>0 and (len(params)!=2 or params[0]==""-h"" or params[0]==""--help"") then exit(command_info(""airmon_usage""))
+computer=host_computer(get_shell)
+formatOutput=""Interface Chipset Monitor_Mode\n""
+if len(params)==0 then exit(format_columns(formatOutput+network_devices(computer)))
+option=params[0]
+device=params[1]
+if option!=""start"" and option!=""stop"" then exit(command_info(""airmon_usage""))
+output=airmon(cryptools,option,device)
+if not output then exit(""airmon: ""+device+"" not found"")
+if typeof(output)==""string"" then exit(output)
+print(format_columns(formatOutput+network_devices(computer)))"

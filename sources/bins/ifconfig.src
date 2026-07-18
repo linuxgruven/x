@@ -1,0 +1,31 @@
+binIfconfig="if len(params)!=0 and (len(params)!=4 or params[0]==""-h"" or params[0]==""--help"") then exit(command_info(""ifconfig_usage""))
+computer=host_computer(get_shell)
+if len(params)==0 then
+	router=get_router
+	if is_network_active(computer) then
+		lip=local_ip(computer)
+		pip=public_ip(router)
+		gw=network_gateway(computer)
+		if active_net_card(computer)==""WIFI"" then
+			if local_ip(router)!=gw then router=get_router(gw)
+			output=char(10)+""Connected to Wi-Fi:""+char(10)+""Essid: ""+essid_name(router)+char(10)+""Bssid: ""+bssid_name(router)
+		else
+			output=char(10)+""Ethernet connection:""
+		end if
+	else
+		lip=""0.0.0.0""
+		pip=""0.0.0.0""
+		gw=""0.0.0.0""
+		output=char(10)+""Not connected to the network.""
+	end if
+	print(output+char(10)+""----------------""+char(10)+""Public IP: ""+pip+char(10)+""Local IP: ""+lip+char(10)+""Gateway: ""+gw+char(10))
+else
+	if params[2]!=""gateway"" then exit(command_info(""ifconfig_usage""))
+	device=params[0]
+	address=params[1]
+	gateway=params[3]
+	if not is_valid_ip(address) then exit(""ifconfig: invalid ip address"")
+	if not is_valid_ip(gateway) then exit(""ifconfig: invalid gateway"")
+	output=connect_ethernet(computer,device,address,gateway)
+	if len(output)>0 then print(output)
+end if"

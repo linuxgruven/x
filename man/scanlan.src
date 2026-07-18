@@ -1,0 +1,20 @@
+// Man page for scanlan
+manScanlan="SCANLAN(1)                       X Shell Manual                       SCANLAN(1)
+
+<b>NAME</b>
+    scanlan - Graphical LAN topology scanner
+<b>SYNOPSIS</b>
+    <b>scanlan</b>
+<b>DESCRIPTION</b>
+    The scanlan utility provides a graphical interface for in-depth LAN
+    network analysis. It displays network topology, connected devices,
+    and relationship mapping in an interactive visual format.
+<b>OPTIONS</b>
+    <b>scanlan</b> - Display LAN Topology
+      Launch graphical LAN scanner showing complete network topology.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Network Topology</color>
+    <b>scanlan</b>
+    Display graphical LAN topology map
+<b>SEE ALSO</b>
+    <b>dig</b>, <b>nmap</b>, <b>ifconfig</b>"

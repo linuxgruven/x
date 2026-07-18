@@ -1,0 +1,48 @@
+// Man page for build
+manBuild="BUILD(1)                         X Shell Manual                         BUILD(1)
+
+<b>NAME</b>
+    build - build source files
+<b>SYNOPSIS</b>
+    <b>build</b> (<b>-a</b>) (<b>-r</b>) SOURCE DESTINATION
+    <b>find</b> PATTERN | <b>build</b> <b>DESTINATION</b>
+<b>DESCRIPTION</b>
+    Use to build .src files. Can pass the -a flag to set allow import.
+    Can pass the -r flag to run the built program.
+    Accepts source file paths from stdin via pipe — destination is passed
+    as the argument. Each piped source is compiled to the same output directory.
+<b>OPTIONS</b>
+    <b>SOURCE DESTINATION</b> - Build Program
+      Builds a new program.
+
+    <b>-a</b> - Allow Import
+      Set allow import flag.
+
+    <b>-r</b> - Run After Build
+      Run the built program automatically.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Build</color>
+    <b>build helloworld.src /home/tux/Desktop</b>
+    Build source to desktop
+
+    <b>build script.src /bin</b>
+    Build to bin directory
+
+    <color=#e4ff34># With Flags</color>
+    <b>build -a myscript.src /usr/bin</b>
+    Build with allow import
+
+    <b>build -r program.src /home/tux</b>
+    Build and run immediately
+
+    <b>build -a -r tool.src /usr/local/bin</b>
+    Build with import and run
+
+    <color=#e4ff34># Pipe Support</color>
+    <b>find *.src | build /home/user/bin</b>
+    Compile all matched source files to /home/user/bin
+
+    <b>find /root/payload *.src | build -a /usr/local/bin</b>
+    Batch compile with allow import
+<b>SEE ALSO</b>
+    <b>make</b>, <b>pacman</b>"

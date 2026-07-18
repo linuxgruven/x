@@ -1,0 +1,88 @@
+// =============================================================================
+// PASTE
+// Merge lines of files side by side with a delimiter (default: tab).
+// =============================================================================
+Command.paste=function(Obj,argv)
+  if not argv or len(argv)==0 then return Man.help(["paste"])
+  _p=ArgumentParser.init
+  _p.addArgument("d",false,"store")
+  _p.addArgument("s",false,"flag")
+  argv=_p.parseArgs("paste",argv)
+  if argv isa Error then return
+  argv=_p.checkRedirect(Obj,"paste",argv)
+  if argv isa Error then return
+  _pArgs=argv
+  argv=argv.rest
+  // Check for stdin from pipe
+  usePipedInput=false
+  stdinLines=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    usePipedInput=true
+    stdinData=globals.G_pipe.stdin
+    if stdinData isa string then
+      stdinLines=split(stdinData,char(10))
+    else if stdinData isa list then
+      stdinLines=stdinData
+    else
+      stdinLines=[str(stdinData)]
+    end if
+  end if
+  // Get -d delimiter and -s serial flags from parsed args
+  delim=char(9)  // default: tab
+  if _pArgs.d!="" then
+    delim=_pArgs.d
+    if delim=="\t" then delim=char(9)
+    if delim=="\n" then delim=char(10)
+  end if
+  serialMode=(_pArgs.s==true)
+  // Collect all column sources
+  columns=[]
+  if usePipedInput and len(argv)==0 then
+    // Just stdin, nothing to paste with — output as-is
+    push(columns,stdinLines)
+  else if usePipedInput then
+    push(columns,stdinLines)
+  end if
+  // Load files
+  for filePath in argv
+    fileObj=Io._getFile(Obj,filePath)
+    if fileObj isa Error then return fileObj
+    content=get_content(fileObj)
+    if not content then push(columns,[]) else push(columns,split(content,char(10)))
+  end for
+  if len(columns)==0 then return Man.help(["paste"])
+  isPipe=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  if serialMode then
+    // -s: merge all lines of each column into one tab-separated line
+    results=[]
+    for col in columns;push(results,join(col,delim));end for
+    if isPipe then
+      for line in results;push(globals.G_pipe.stdout,line);end for
+    else if _p.write then
+      _pArgs["data"]=join(results,char(10))
+      _p.out(Obj,_pArgs)
+    else
+      for line in results;print line;end for
+    end if
+    return
+  end if
+  // Default: zip columns side by side
+  // Find max row count across all columns
+  maxRows=0
+  for col in columns;if len(col)>maxRows then maxRows=len(col);end for
+  results=[]
+  row=0;while row<maxRows
+    parts=[]
+    for col in columns;if row<len(col) then push(parts,col[row]) else push(parts,"");end for
+    push(results,join(parts,delim))
+    row+=1
+  end while
+  if isPipe then
+    for line in results;push(globals.G_pipe.stdout,line);end for
+  else if _p.write then
+    _pArgs["data"]=join(results,char(10))
+    _p.out(Obj,_pArgs)
+  else
+    for line in results;print line;end for
+  end if
+end function

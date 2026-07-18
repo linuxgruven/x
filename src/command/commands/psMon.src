@@ -1,0 +1,48 @@
+// =============================================================================
+// PSMON
+// Monitor the process list in real-time; alerts on launch and termination.
+// =============================================================================
+Command.psMon=function(Obj,argv)
+  processId=null
+  currentProcs={}  // Current cycle process snapshot
+  trackedProcs={}  // Baseline of all known processes
+  previousProcs={} // Previous cycle process snapshot
+  procLines=split(show_procs(Obj.computer),char(10))
+  for line in procLines[:-1]
+    // Parse process data (skip last line)
+    fields=split(line," ")[:-1]
+    pid=fields[0]
+    name=fields[-1]
+    previousProcs[pid]=name
+    trackedProcs[pid]=name
+  end for
+  Info.info("Monitoring system processes...")
+  Utility.pressQ
+  while poll_input!="q"
+    procLines=split(show_procs(Obj.computer),char(10))
+    for line in procLines[:-1];fields=split(line," ")[:-1];currentProcs[fields[0]]=fields[-1];end for
+    for proc in currentProcs
+      processId=proc.key
+      // Check if PID exists in tracked baseline (hasIndex returns 0 if missing)
+      isNewProcess=(hasIndex(trackedProcs,processId)==0)
+      if isNewProcess then
+        print green(yellow(str(processId))+" "+proc.value+" LAUNCHED!")
+        trackedProcs[processId]=proc.value
+      end if
+    end for
+    // Detect process terminations (optimization: only check if count decreased)
+    if len(currentProcs)<len(previousProcs) then
+      for proc in previousProcs
+        isTerminated=(hasIndex(currentProcs,proc.key)==0)
+        if isTerminated then
+          print red(yellow(str(proc.key))+" "+proc.value+" CLOSED!")
+          trackedProcs.remove(proc.key)
+          break
+        end if
+      end for
+    end if
+    previousProcs=currentProcs
+    currentProcs={}
+  end while
+  Info.info("ps monitor shutting down...")
+end function

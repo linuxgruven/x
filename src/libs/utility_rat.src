@@ -1,0 +1,198 @@
+// =============================================================================
+// UTILITY_RAT
+// Remote Access Tool: file editor on remote server via SSH.
+// =============================================================================
+// Function: rat
+// Purpose: Remote Access Tool file editor on remote server via SSH
+// Args:
+//   argv - Arguments array [ip, port, password] (prompts if not provided)
+// Returns: null (interactive loop until user exits)
+Utility.rat=function(argv)
+  //Parse arguments if 3 provided (ip, port, password)
+  if len(argv)==3 then
+    w=argv[2]
+    //Convert port to integer
+    p=to_int(argv[1])
+    //Validate port is a number
+    if not p isa number then return Error.set("Malformed port")
+    i=argv[0]
+  //Prompt for connection details if not provided
+  else
+    //Prompt for rat server IP address
+    i=Gui.inputIP({"text":"Rat server ip"})
+    if i==null then return Error.set("Missing rat server ip")
+    //Prompt for rat server port (default 22 for SSH)
+    p=Gui.inputInt({"text":"Rat server port","default":22})
+    if not p isa number then return Error.set("Missing rat server port")
+    //Prompt for root password
+    w=Gui.inputPassNS("Root password")
+  end if
+  //Connect to remote server as root
+  s=connect_service(globals.G_main.shell,i,p,"root",w)
+  //Verify connection succeeded (shell object returned)
+  if typeof(s)!="shell" then return
+  //Show success message
+  Info.info("Server connection verified")
+  //Array to hold rat file lines
+  y=[]
+  //Get remote computer object
+  c=host_computer(s)
+  //Get rat file from remote server /root directory
+  r=File(host_computer(s),"/root/rat")
+  //Enable syntax highlighting by default
+  F=true
+  //Main rat editor loop
+  while true
+    //Define rat editor menu options
+    m={
+      "n":"New item...",
+      "a":"Append to line...",
+      "e":"Edit a line...",
+      "r":"Remove a line...",
+      "d":"Dump rat data to :"+path(globals.G_main.dir.current),
+      "c":"Clear all",
+      "f":"Un|Format",
+      "x":"--- Done editing rat ---"
+    }
+    //Create rat file if it doesn't exist
+    if not r then
+			//Create new rat file in /root
+			r=Command.touch(c,"/root/rat")
+      if r isa Error then return
+      //Verify file was created
+      if not r then return Error.set("Failed to create rat")
+		end if
+		//Split rat file into lines array
+		y=split(get_content(r),char(10))
+		//Set menu header
+		CH=[green("What would you like to do with the rat file?")]
+		//Check if rat file is empty
+		if not get_content(r) then
+			print red("Add something...")
+		//Display rat content
+		else
+      //Display without syntax highlighting
+      if not F then
+        disp=uncolorString(get_content(r)).replace("\\n","\<b></b>n")
+        p=split(disp,char(10))
+        _len=len(p);l=0;while l<_len;push(CH,green(p[l]));l+=1;end while
+        //Display with syntax highlighting
+      else
+        disp=parseSyntax(uncolorString(get_content(r)),false).replace("\\n","\<b></b>n")
+        p=split(disp,char(10))
+        _len=len(p);l=0;while l<_len;push(CH,p[l]);l+=1;end while
+      end if
+			//Display line count
+			print blue("Line Item Count:")+yellow(str(len(y)))
+		end if
+		//Show menu and get user choice
+		UCH=lower(Gui.choiceAlpha(CH,m,"x"))
+		//Exit rat editor if user chose x
+		if UCH=="x" then break
+		//Command: n - Add new rat line
+		if UCH=="n" then
+			//Prompt for rat content
+			a=Gui.input({"text":"Add What?"})
+			//Skip if user cancelled
+			if a==null then continue
+			//Add line to array
+			push(y,a)
+			//Write updated content to remote file
+			set_content(r,trim(join(y,char(10))))
+		//Command: a - Append to existing line
+		else if UCH=="a" then
+			//Skip if no lines
+			if not len(y) then continue
+      if len(y)==1 and y[0]=="" then continue
+			//Prompt for line number (convert to 0-indexed)
+			n=Gui.inputInt({"text":"What line to append?"})-1
+      //Skip if invalid number
+      if not n isa number then continue
+			//Validate line number in range
+			if n>=0 and n<len(y) then
+				//Store original line
+				t=y[n]
+				//Prompt for text to append
+				d=Gui.input({"text":"What would you like to append?"})
+        //Skip if user cancelled
+        if d==null then continue
+				//Skip if same as original
+				if d==t then continue
+				//Append text with space separator
+				y[n]=y[n]+" "+trim(d)
+				//Write updated content
+				set_content(r,trim(join(y,char(10))))
+			end if
+		//Command: e - Edit existing line (replace)
+		else if UCH=="e" then
+			//Skip if no lines
+			if not len(y) then continue
+      if len(y)==1 and y[0]=="" then continue
+			//Prompt for line number (convert to 0-indexed)
+			n=Gui.inputInt({"text":"What line to edit?"})-1
+      //Skip if invalid number
+      if not n isa number then continue
+			//Validate line number in range
+			if n>=0 and n<len(y) then
+				//Store original line
+				t=y[n]
+				//Show current line in orange
+				print orange(t)
+				//Prompt for replacement text
+				j=Gui.input({"text":"What changes do you want to make?"})
+        //Skip if user cancelled
+        if j==null then continue
+				//Skip if same as original
+				if j==t then continue
+				//Replace line with new text
+				y[n]=trim(j)
+				//Write updated content
+				set_content(r,trim(join(y,char(10))))
+			end if
+		//Command: r - Remove line by number
+		else if UCH=="r" then
+			//Skip if no lines
+			if not len(y) then continue
+      if len(y)==1 and y[0]=="" then continue
+			//Prompt for line number (convert to 0-indexed)
+			n=Gui.inputInt({"text":"What line do you want to remove?"})-1
+      //Skip if invalid number
+      if not n isa number then continue
+			//Validate line number in range
+			if n>=0 and n<len(y) then
+				//Remove line from array
+				remove(y,n)
+				//Write updated content
+				set_content(r,trim(join(y,char(10))))
+			end if
+		//Command: c - Clear all rat content
+		else if UCH=="c" then
+			//Skip if no lines
+			if not len(y) then continue
+      if len(y)==1 and y[0]=="" then continue
+			//Clear file content
+			set_content(r,"")
+    //Command: d - Dump rat to current directory
+    else if UCH=="d" then
+      //Skip if no lines
+      if not len(y) then continue
+      if len(y)==1 and y[0]=="" then continue
+      //Create rat file in current directory
+      r=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/rat")
+      //Append to existing file if it exists
+      if r then return set_content(r,get_content(r)+char(10)+join(y,char(10)))
+      //Create new rat file
+      r=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/rat"])
+			//Write rat to file and show success message
+			if not r isa Error then
+				set_content(r,join(y,char(10)))
+				Info.info("Rat writen out to "+path(globals.G_main.dir.current)+"/rat")
+			end if
+    //Command: f - Toggle syntax highlighting
+    else if UCH=="f" then
+      //Toggle format flag
+      F=not F
+		end if
+	//End of main rat editor loop
+	end while
+end function

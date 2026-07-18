@@ -1,0 +1,120 @@
+// Man page for proxy
+manProxy="PROXY(1)                         X Shell Manual                         PROXY(1)
+
+<b>NAME</b>
+    proxy - x proxy framework
+<b>SYNOPSIS</b>
+    <b>proxy -a</b>
+    <b>proxy -x</b>
+    <b>proxy -q</b>
+    <b>proxy -c</b>
+    <b>proxy -p</b>
+    <b>proxy -m</b>
+    <b>proxy -r</b><b> (</b><b>-s</b><b>)</b> COUNT
+    <b>proxy -n</b>
+    <b>proxy -ri</b><b> (</b>FILE<b>)</b>
+    <b>proxy -wo</b><b> (</b>NAME<b>)</b>
+    <b>proxy -h -c</b> COUNT
+    <b>proxy -d</b><b> (-r) (-i</b> ID <b>| -n</b> NAME<b>)</b>
+<b>DESCRIPTION</b>
+    If supplied the (-s) flag will enable the use of shells.
+    On initial setup you will be prompted for an end point, use this if you need to
+    end at a specific IP. If you do not need to end at a specific IP, just enter
+    n. Once a connection is established will return an active shell. 
+    All the logs are wiped from the inital connection to the last connection.
+    Create proxy.dat using vi. Once inside of vi issue the ne command. ne proxy.dat
+    proxy.dat format is as follows: ip:port:user:password, one per line and DO not
+    forget the : separator. Switches -p -m and -r will accept y to skip prompts.
+    Using proxy -q in conjunction with config -y will save a proxy file in your data
+    folder. If x should crash or something happens to the connection, you can
+    you can instantly re-establish the connection using the proxy file by running
+    proxy -q again. If you need more that one quick proxy hop just use the -h flag.
+<b>OPTIONS</b>
+    <b>-a</b> - Standard Proxy
+      Starts a proxy chain using either proxy.dat or Map.conf. Will favor proxy.dat.
+
+    <b>-x</b> - Combined Proxy
+      Combines IPs from both proxy.dat and Map.conf.
+
+    <b>-q</b> - Quick Proxy
+      Starts a quick router single hop proxy.
+
+    <b>-c</b> - Count Hops
+      Returns an IP address count from the proxy chain(s).
+
+    <b>-p</b> - Proxy.dat
+      Starts a proxy chain using proxy.dat.
+
+    <b>-m</b> - Map.conf
+      Starts a proxy chain using Map.conf.
+
+    <b>-r COUNT (-s)</b> - Random Chain
+      Will fetch [COUNT] of random ips to use as a proxy chain.
+
+    <b>-n</b> - New Map
+      Creates a new empty Map.conf file. Will overwrite your existing
+      Map.conf file so use caution.
+
+    <b>-ri (FILE)</b> - Read Import
+      Will read in a map_ips.dat file and add the records to Map.conf.
+      if a (FILE) is entered, will use that for importing.
+
+    <b>-wo (NAME)</b> - Write Out
+      Will write out the contents of Map.conf to a map_ips.dat file in
+      your current directory. If a name (NAME) is passed then (NAME) will
+      be used instead of map_ips.dat
+
+    <b>-h -c COUNT</b> - Hop Count
+      Use to specify the number of hops [COUNT] for the proxy chain. If 1 is
+      passed for the -c flag then will use proxy -q. You will also have access
+      to the hops command.
+
+    <b>-d (-r) (-i ID | -n NAME)</b> - Decoy
+      Create a decoy to catch crashes. Use decoy to absorb crashes when using
+      reboot or get a io error. After a crash you will want to use this command
+      to setup another decoy. You are not able to interact with the decoys in
+      any way, except to be closed with sess. If you want to return to a specific
+      session you can use the -i or the -n flag to specify the session by id or
+      name. Default is the calling object. Use the -r flag to remove a active decoy
+      and setup a new one.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Standard Proxy</color>
+    <b>proxy -a</b>
+    Start proxy chain with proxy.dat or Map.conf
+
+    <b>proxy -p y</b>
+    Start proxy.dat chain, skip prompts
+
+    <color=#e4ff34># Random Chain</color>
+    <b>proxy -r 5 y</b>
+    Random chain with 5 hops
+
+    <b>proxy -h -c 10</b>
+    Create 10-hop proxy chain
+
+    <color=#e4ff34># Quick Proxy</color>
+    <b>proxy -q</b>
+    Single hop router proxy
+
+    <color=#e4ff34># Chain Management</color>
+    <b>proxy -c</b>
+    Count hops in chain
+
+    <b>proxy -x</b>
+    Combined proxy.dat and Map.conf
+
+    <color=#e4ff34># Map Management</color>
+    <b>proxy -ri custom_ips.dat</b>
+    Import IPs to Map.conf
+
+    <b>proxy -wo backup</b>
+    Export Map.conf to backup file
+
+    <color=#e4ff34># Decoy</color>
+    <b>proxy -d</b>
+    Create crash decoy
+
+    <b>proxy -d -r</b>
+    Remove and recreate decoy
+<b>SEE ALSO</b>
+    <b>hops</b>, <b>pivot</b>"

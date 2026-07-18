@@ -1,0 +1,12 @@
+// =============================================================================
+// GROUPS
+// List group memberships for a user.
+// =============================================================================
+Command.groups=function(Obj,argv)
+  if not argv then return Man.help(["groups"])
+  username=argv[0]
+  result=groups(Obj.computer,username)
+  if indexOf(result,":")!=null then return Error.set("User ["+username+"] does not exist")
+  isPipe=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  for groupName in split(result,char(10));if not groupName then continue;if isPipe then push(globals.G_pipe.stdout,groupName) else print white(groupName);end for
+end function

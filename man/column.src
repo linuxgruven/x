@@ -1,0 +1,36 @@
+// Man page for column
+manColumn="COLUMN(1)                        X Shell Manual                        COLUMN(1)
+
+<b>NAME</b>
+    column - Format text into aligned columns
+<b>SYNOPSIS</b>
+    <b>column</b> [<b>-s</b> SEP] FILE
+    <b>column</b> [<b>-s</b> SEP] [<b>-t</b>]
+<b>DESCRIPTION</b>
+    Format lines of text into aligned columns. Each line is split into
+    fields and padded so that all fields in the same column align
+    vertically. Useful for making tab-separated or whitespace-separated
+    data readable. Reads from piped stdin or a file argument.
+<b>OPTIONS</b>
+    <b>-s SEP</b> - Field Separator
+      Use SEP as the field delimiter instead of whitespace.
+      Example: <b>column -s :</b> to split on colons.
+
+    <b>-t</b> - Auto-Table
+      Enable auto-table mode. This is the default behavior when no
+      separator is specified. Fields are split on whitespace runs.
+<b>NOTES</b>
+    When used in a pipeline, aligned output lines are pushed to stdout
+    for the next command to consume. The last field on each row is
+    never padded, preserving trailing content.
+<b>EXAMPLE:</b>
+    <b>cat /etc/passwd | column -s :</b>
+    Display passwd entries with each colon-separated field aligned
+
+    <b>cat /etc/apt/sources.txt | column -s :</b>
+    Align any colon-delimited config file
+
+    <b>column -s : /etc/passwd</b>
+    Read file directly without piping
+<b>SEE ALSO</b>
+    <b>awk</b>, <b>cut</b>, <b>sort</b>"

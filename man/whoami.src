@@ -1,0 +1,20 @@
+// Man page for whoami
+manWhoami="WHOAMI(1)                        X Shell Manual                        WHOAMI(1)
+
+<b>NAME</b>
+    whoami - Display current user information
+<b>SYNOPSIS</b>
+    <b>whoami</b>
+<b>DESCRIPTION</b>
+    Display the current user name or permission level.
+<b>OPTIONS</b>
+    <b>whoami</b>
+    Display current user name
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Display Username</color>
+    <b>whoami</b>
+    Show current user
+
+<b>SEE ALSO</b>
+    <b>whatami</b>, <b>pwd</b>, <b>stat</b>"

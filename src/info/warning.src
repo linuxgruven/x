@@ -1,0 +1,16 @@
+// =============================================================================
+// WARNING
+// Print a formatted warning message and return a Warning object for type-checking.
+// =============================================================================
+Warning={}
+// Print warning and return Warning object
+Warning.set=function(message,indicator="!",ipc=false)
+  self.WARN={
+    "__isa":self
+  }
+  warningObj=new self
+  if ipc then return warningObj
+  print white(bold("["+yellow(indicator)+"] ")+message)
+  if globals.G_bash.RUN then Bash.errorHandle(warningObj)
+  return warningObj
+end function

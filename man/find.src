@@ -1,0 +1,163 @@
+// Man page for find
+manFind="FIND(1)                          X Shell Manual                          FIND(1)
+
+<b>NAME</b>
+    find - search the filesystem for files, folders, links, or text content
+<b>SYNOPSIS</b>
+    <b>find</b> PATTERN [PATTERN ...] [OPTIONS]
+    <b>find</b> PATH PATTERN [PATTERN ...] [OPTIONS]
+    <b>find</b> PATH [OPTIONS]
+    <b>find</b> [<b>-n</b> PATTERN] [<b>-p</b> PATH] [<b>-t</b> TYPE] [<b>-i</b>] [<b>-e</b>] [<b>-c</b>] [<b>-r</b>] [<b>-w</b>] [<b>-x</b>] [<b>-X</b> PATTERN] [<b>--exclude</b> FOLDERS] [<b>--post</b>]
+<b>DESCRIPTION</b>
+    Search the filesystem for files, folders, links, or text content.
+    Supports case-insensitive, exact, wildcard, and regex matching.
+    Can search inside file contents with -c. Supports redirect and post output.
+
+    Multiple patterns can be given as bare positionals. A file matches if it
+    satisfies ANY of the patterns (OR logic). Each pattern independently
+    detects wildcards and regex metacharacters.
+
+    Patterns with regex metacharacters ( . * + ? ^ $ { } ( ) | [ ] \ )
+    are automatically treated as regex. All others use substring matching.
+<b>OPTIONS</b>
+    <b>PATTERN [PATTERN ...]</b>
+    One or more name patterns to search for (positional, no flag needed)
+    Each supports wildcards (*), regex, or plain substring
+    Multiple patterns use OR logic — a file matching any pattern is returned
+
+    <b>PATH</b>
+    Absolute path to limit the search to (positional)
+    When only a path is given, lists all files under it
+
+    <b>-n, --name PATTERN</b>
+    Explicit name pattern flag (same as positional PATTERN)
+
+    <b>-p PATH</b>
+    Explicit search path flag (same as positional PATH)
+
+    <b>-t TYPE</b>
+    Filter by file type. TYPE is one of:
+      bin, binary   Binary files only
+      text          Text files only
+      folder, dir   Folders only
+      link          Symbolic links only
+
+    <b>--binary</b>  Filter to binary files (same as -t bin)
+    <b>--folder</b>  Filter to folders (same as -t folder)
+    <b>--text</b>    Filter to text files (same as -t text)
+    <b>--link</b>    Filter to symbolic links (same as -t link)
+
+    <b>-i</b>
+    Case insensitive matching
+
+    <b>-e</b>
+    Exact match (cannot combine with -i)
+
+    <b>-c</b>
+    Search inside file contents (text files only)
+
+    <b>-r, -w, -x</b>
+    Filter by permissions: readable, writable, executable
+
+    <b>--exclude FOLDERS</b>
+    Colon-delimited list of folder names to skip during traversal
+
+    <b>-X PATTERN</b>
+    Exclude files matching PATTERN from results. Supports wildcards (*).
+    Colon-delimited for multiple patterns: -X system.log:error.log
+    Uses case-sensitive exact match for plain names, wildcard match for patterns with *
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man find</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>find</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLES</b>
+    <color=#e4ff34># Natural positional usage</color>
+    <b>find passwd</b>
+    Find anything named passwd
+
+    <b>find /etc passwd</b>
+    Find passwd under /etc
+
+    <b>find /home</b>
+    List all files under /home
+
+    <color=#e4ff34># Multiple patterns (OR logic)</color>
+    <b>find chat .pdf</b>
+    Find files matching 'chat' or '.pdf'
+
+    <b>find passwd shadow config</b>
+    Find any file matching passwd, shadow, or config
+
+    <b>find /home *.log *.cfg</b>
+    Find .log or .cfg files under /home
+
+    <color=#e4ff34># Type filters</color>
+    <b>find tool -t bin</b>
+    Find binary named tool
+
+    <b>find Documents -t dir</b>
+    Find folder named Documents
+
+    <b>find config.txt -t text</b>
+    Find text file named config.txt
+
+    <color=#e4ff34># Regex patterns (auto-detected)</color>
+    <b>find \.so$</b>
+    Find files ending in .so
+
+    <b>find ^log -t text</b>
+    Find text files starting with log
+
+    <color=#e4ff34># Content search</color>
+    <b>find password -c</b>
+    Search file contents for 'password'
+
+    <b>find config -c -i</b>
+    Search contents (case insensitive)
+
+    <color=#e4ff34># Permission filters</color>
+    <b>find tool -t bin -x</b>
+    Find executable binary named tool
+
+    <b>find config -r -w</b>
+    Find readable+writable file named config
+
+    <b>find -n * -p /home</b>
+    Search only in /home
+
+    <color=#e4ff34># Permissions</color>
+    <b>find -n * -w</b>
+    Find writable files
+
+    <b>find -n * --binary -x</b>
+    Find executable binaries
+
+    <color=#e4ff34># Exclude files from results</color>
+    <b>find *.log -X system.log</b>
+    Find .log files, excluding system.log
+
+    <b>find *.log -X system.log:error.log</b>
+    Exclude multiple files (colon-separated)
+
+    <b>find *.log -X *.bak</b>
+    Exclude files matching a wildcard pattern
+
+    <b>find *.log -X system.log | open -l</b>
+    Open all .log files except system.log in the log viewer
+
+    <color=#e4ff34># Exclude Folders from traversal</color>
+    <b>find -n password --exclude tables:.Trash</b>
+    Search all files, skipping tables and .Trash
+
+    <b>find -n *.so -p /home --exclude .Trash</b>
+    Find .so files in /home, skipping .Trash folders
+
+    <color=#e4ff34># Redirects</color>
+    <b>find -n params --post</b>
+    POST formatted results
+<b>SEE ALSO</b>
+    <b>locate</b>, <b>ls</b>, <b>tree</b>, <b>file</b>"

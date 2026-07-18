@@ -1,0 +1,203 @@
+// Bash Pipe and Chain Operator Test Script
+// Tests operator precedence: && and ; should be checked BEFORE pipes
+// This ensures commands like (a pipe b) && (c pipe d) parse correctly
+
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>  BASH PIPE & CHAIN OPERATOR TESTS</color>
+_print <color=#00ff00>========================================</color>
+_print
+
+// Test 1: Simple chain operators
+_print <color=#00bfff>[Test 1]</color> Simple chain with AND operator
+echo Step 1 && echo Step 2 && echo Step 3
+_print
+
+// Test 2: Semicolon chain (unconditional)
+_print <color=#00bfff>[Test 2]</color> Semicolon chain - always executes
+echo First ; echo Second ; echo Third
+_print
+
+// Test 3: Mixed && and ;
+_print <color=#00bfff>[Test 3]</color> Mixed AND and semicolon operators
+echo Success && echo Conditional ; echo Unconditional
+_print
+
+// Test 4: Simple pipe
+_print <color=#00bfff>[Test 4]</color> Simple pipe operation
+echo hello world | rev
+_print
+
+// Test 5: Pipe chain
+_print <color=#00bfff>[Test 5]</color> Multiple pipes in sequence
+echo 3 1 2 | tr " " "\n" | sort | tr "\n" " "
+_print
+
+// Test 6: Pipe THEN conditional chain
+_print <color=#00bfff>[Test 6]</color> Pipe followed by AND
+echo test | rev && echo Previous pipe succeeded
+_print
+
+// Test 7: Pipe with && between segments
+_print <color=#00bfff>[Test 7]</color> Multiple pipe stages with AND between
+echo hello | rev && echo world | rev && echo Done
+_print
+
+// Test 8: Extract from passwd file
+_print <color=#00bfff>[Test 8]</color> Passwd file grep
+cat /etc/passwd | grep root
+_print
+
+// Test 9: Pipe chain with grep
+_print <color=#00bfff>[Test 9]</color> Multiple grep filters
+cat /etc/passwd | grep root | grep -v "#" | cut -d: -f1
+_print
+
+// Test 10: Pipe with conditional success
+_print <color=#00bfff>[Test 10]</color> Conditional after pipe
+cat /etc/passwd | grep root && echo Found root user
+_print
+
+// Test 11: Sort and unique
+_print <color=#00bfff>[Test 11]</color> Sort with pipes
+echo 3 1 2 1 3 | tr " " "\n" | sort | uniq | tr "\n" " "
+_print
+
+// Test 12: Text transformation chain
+_print <color=#00bfff>[Test 12]</color> Text transformation
+echo hello world | rev | tr "a-z" "A-Z"
+_print
+
+// Test 13: Awk field extraction
+_print <color=#00bfff>[Test 13]</color> Awk field extraction from passwd
+cat /etc/passwd | awk -F: '{print $1}'
+_print
+
+// Test 14: Cut with multiple fields
+_print <color=#00bfff>[Test 14]</color> Cut multiple fields
+cat /etc/passwd | cut -d: -f1,3,6 | grep root
+_print
+
+// Test 15: Sed replacement
+_print <color=#00bfff>[Test 15]</color> Sed find and replace
+echo hello world | sed world universe && echo Success
+_print
+
+// Test 16: Character translation
+_print <color=#00bfff>[Test 16]</color> Character translation with tr
+echo HELLO | tr "A-Z" "a-z" && echo Lowercased
+_print
+
+// Test 17: Word counting
+_print <color=#00bfff>[Test 17]</color> Line counting
+cat /etc/passwd | wc -l
+_print
+
+// Test 18: Grep variants
+_print <color=#00bfff>[Test 18]</color> Case-insensitive search
+cat /etc/passwd | grep -i ROOT
+_print
+
+// Test 19: Inverted grep
+_print <color=#00bfff>[Test 19]</color> Inverted match using grep -v
+cat /etc/passwd | grep -v root | wc -l
+_print
+
+// Test 20: Trim whitespace
+_print <color=#00bfff>[Test 20]</color> Trim whitespace
+echo "  hello world  " | trim | rev
+_print
+
+// Test 21: Split and join
+_print <color=#00bfff>[Test 21]</color> Split and rejoin
+echo a:b:c:d | split : | sort | join ,
+_print
+
+// Test 22: Calculator functions
+_print <color=#00bfff>[Test 22]</color> Calculator with functions
+echo "sqrt 16" | bc && echo "abs -5" | bc && echo "pi * 2" | bc
+_print
+
+// Test 23: Complex passwd parsing
+_print <color=#00bfff>[Test 23]</color> Extract root user info
+cat /etc/passwd | grep root | cut -d: -f1,3,6 && echo Found root user
+_print
+
+// Test 24: Chained text processing
+_print <color=#00bfff>[Test 24]</color> Multiple text transformations
+echo "hello WORLD" | tr "A-Z" "a-z" | rev | tr "a-z" "A-Z"
+_print
+
+// Test 25: Deduplication
+_print <color=#00bfff>[Test 25]</color> Remove duplicates
+echo 1 2 1 3 2 4 | tr " " "\n" | uniq -s | tr "\n" " "
+_print
+
+// Test 26: Grep with line numbers
+_print <color=#00bfff>[Test 26]</color> Grep with line numbers
+cat /etc/passwd | grep -n root | cut -d: -f1,2
+_print
+
+// Test 27: Multiple pipes then &&
+_print <color=#00bfff>[Test 27]</color> Pipe chain then conditional
+cat /etc/passwd | cut -d: -f1 | grep root && echo Success
+_print
+
+// Test 28: All operators together
+_print <color=#00bfff>[Test 28]</color> Pipes, AND, and semicolon mixed
+echo A && echo B | rev ; echo C | tr "a-z" "A-Z" && echo D
+_print
+
+// Test 29: Process listing
+_print <color=#00bfff>[Test 29]</color> Process filtering
+ps | grep -i shell | wc -l
+_print
+
+// Test 30: Multiple conditionals
+_print <color=#00bfff>[Test 30]</color> Multiple AND chains
+echo First && echo Second && echo Third && echo Fourth
+_print
+
+// Test 31: Variable assignment from pipe
+_print <color=#00bfff>[Test 31]</color> Set variable then use in grep
+_setvar(TEST_USER, root)
+cat /etc/passwd | grep _getvar(TEST_USER) | cut -d: -f1
+_print
+
+// Test 32: Multiple variable operations
+_print <color=#00bfff>[Test 32]</color> Chain variable assignments
+_setvar(VAR1, hello) && _setvar(VAR2, world) && echo _getvar(VAR1) _getvar(VAR2)
+_print
+
+// Test 33: Long pipe chain
+_print <color=#00bfff>[Test 33]</color> Five-stage pipe chain
+cat /etc/passwd | cut -d: -f1 | sort | rev | tr "a-z" "A-Z" | head -n 1
+_print
+
+// Test 34: Head and tail operations
+_print <color=#00bfff>[Test 34]</color> Tail last line then cut username
+cat /etc/passwd | tail -q -n 1 | cut -d: -f1
+_print
+
+// Test 35: Complex filtering chain
+_print <color=#00bfff>[Test 35]</color> Multiple filters in sequence
+echo 10 20 30 40 50 | tr " " "\n" | grep 0 | grep -v 1 | sort | tr "\n" " "
+_print
+
+// Test 36: Awk with multiple fields
+_print <color=#00bfff>[Test 36]</color> Awk extract multiple fields
+cat /etc/passwd | awk -F: '{print $1, $NF}' | grep root
+_print
+
+// Test 37: Combination of all operators
+_print <color=#00bfff>[Test 37]</color> Complex mix: pipes, AND, and semicolons
+echo hello | rev && echo success ; echo world | tr "a-z" "A-Z" | rev && echo done
+_print
+
+// Test 38: Variable with conditional  
+_print <color=#00bfff>[Test 38]</color> Variable assignment then conditional
+_setvar(COUNT, 5) && echo Count is: _getvar(COUNT) && echo Assignment succeeded
+_print
+
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>  ALL 38 TESTS COMPLETE</color>
+_print <color=#00ff00>========================================</color>

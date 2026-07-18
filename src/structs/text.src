@@ -1,0 +1,59 @@
+// =============================================================================
+// TEXT
+// Centralized string constants: error messages, buffer codes, and ASCII art.
+// =============================================================================
+Text={
+  //Network error: port unavailable or service down
+  "badport":"Bad port or service is down",
+  //Network error: no active connection detected
+  "nonet":"No active network connection",
+  //Command syntax error message prefixes
+  "msg":{
+    //Invalid command name error prefix
+    "command":"Check your syntax, there is no command [ ",
+    //Invalid command flag/option error prefix
+    "flag":"Check your syntax, there is no flag [ "
+  },
+  //Operation result status messages with buffer codes
+  "buffer":{
+    //Success: firewall disabled (SF = Success Firewall)
+    "SF":"Firewall was successfully disabled",
+    //Success: password changed (SP = Success Password)
+    "SP":"Password was successfully changed",
+    //Failure: firewall disable failed (FF = Failure Firewall)
+    "FF":"Failed to disable the firewall",
+    //Failure: password change failed (FP = Failure Password)
+    "FP":"Failed to change password"
+  },
+  //File extensions requiring special handling (map for O(1) hasIndex lookups)
+  "specialFiles":{
+    "bin":1,
+    "pdf":1,
+    "txt":1,
+    "jpg":1,
+    "log":1
+  },
+  //APT package manager configuration template (JSON format)
+  "aptConf":[
+    "{",
+    """official_server"": true,",
+    """sourceList"": {}",
+    "}"
+    ],
+  //ASCII art logo for X shell branding (11 lines)
+  "logMSG":[
+    " .----------------. ",
+    "| .--------------. |",
+    "| |  ____  ____  | |",
+    "| | |_  _||_  _| | |",
+    "| |   \ \  / /   | |",
+    "| |    > `' <    | |",
+    "| |  _/ /'`\ \_  | |",
+    "| | |____||____| | |",
+    "| |              | |",
+    "| '--------------' |",
+    " '----------------' "
+  ],
+  //Email rate limiting error message
+  "emailError":"The mail could not be sent. Wait a moment before sending another email."
+}

@@ -1,0 +1,30 @@
+// Man page for groupadd
+manGroupadd="GROUPADD(8)                      X Shell Manual                      GROUPADD(8)
+
+<b>NAME</b>
+    groupadd - used to add a user to a group
+<b>SYNOPSIS</b>
+    <b>groupadd </b><b>USER </b><b>GROUP</b>
+<b>DESCRIPTION</b>
+    Add user to specified group. Create and manage group memberships.
+    Essential for permission management and access control configuration.
+<b>OPTIONS</b>
+    <b>USER</b>
+    Username to add
+    Grant group access
+
+    <b>GROUP</b>
+    Target group name
+    Group to join
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Add to Group</color>
+    <b>groupadd tux staff</b>
+    Add tux to staff
+
+    <b>groupadd guest users</b>
+    Add guest to users
+
+    <b>groupadd hacker admin</b>
+    Grant admin access
+<b>SEE ALSO</b>
+    <b>groupdel</b>, <b>groups</b>, <b>useradd</b>"

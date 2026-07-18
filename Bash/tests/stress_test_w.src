@@ -1,0 +1,568 @@
+testStressTest="// Bash Stress Test Script
+// Exercises all major bash features: variables, arithmetic, control flow,
+// functions, loops, arrays, builtins, type casting, and edge cases.
+
+// -------------------------------------------------------------------
+// HELPER: check result vs expected (display only)
+// IMPORTANT: Pass VALUES via _getvar(), not variable names!
+//   Correct:   assert(my test, _getvar(r), 42)
+//   Wrong:     assert(my test, r, 42)
+// Note: Counters can't live inside function (scope restore reverts them)
+// -------------------------------------------------------------------
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>[PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>[FAIL]</color> _getvar(label) <color=#ffff00> expected=</color>_getvar(expected) <color=#ffff00> got=</color>_getvar(actual)
+  endif
+endfunc
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>         BASH ENGINE STRESS TEST</color>
+_print <color=#eb0cc6>============================================</color>
+_print
+
+// ===================================================================
+// SECTION 1 - VARIABLES & TYPES
+// ===================================================================
+_print <color=#00bfff>--- Section 1: Variables & Types ---</color>
+
+_setvar(str1, hello)
+assert(set str1 to hello then get should be hello, _getvar(str1), hello)
+
+_setvar(num1, 42)
+assert(set num1 to 42 then get should be 42, _getvar(num1), 42)
+
+_setvar(dec1, 3.14)
+assert(set dec1 to 3.14 then get should be 3.14, _getvar(dec1), 3.14)
+
+_setvar(empty, )
+assert(set empty to blank then get should be blank, _getvar(empty), )
+
+// Overwrite variable
+_setvar(str1, world)
+assert(overwrite str1 to world should replace hello, _getvar(str1), world)
+
+_print
+
+// ===================================================================
+// SECTION 2 - ARITHMETIC
+// ===================================================================
+_print <color=#00bfff>--- Section 2: Arithmetic ---</color>
+
+_setvar(a, 10 + 5)
+assert(10 + 5 should be 15, _getvar(a), 15)
+
+_setvar(b, 20 - 7)
+assert(20 - 7 should be 13, _getvar(b), 13)
+
+_setvar(c, 6 * 7)
+assert(6 * 7 should be 42, _getvar(c), 42)
+
+_setvar(d, 100 / 4)
+assert(100 / 4 should be 25, _getvar(d), 25)
+
+_setvar(e, 17 % 5)
+assert(17 modulo 5 should be 2, _getvar(e), 2)
+
+_setvar(f, 2 ** 10)
+assert(2 ** 10 should be 1024, _getvar(f), 1024)
+
+// Nested arithmetic
+_setvar(g, (3 + 2) * 4)
+assert(grouped 3+2 times 4 should be 20, _getvar(g), 20)
+
+// Negative result
+_setvar(h, 5 - 10)
+assert(5 - 10 should be -5, _getvar(h), -5)
+
+// Arithmetic with variables
+_setvar(x, 10)
+_setvar(y, _getvar(x) + 5)
+assert(x set to 10 then x + 5 should be 15, _getvar(y), 15)
+
+_print
+
+// ===================================================================
+// SECTION 3 - STRING BUILTINS
+// ===================================================================
+_print <color=#00bfff>--- Section 3: String Builtins ---</color>
+
+_setvar(s, Hello World)
+_setvar(r, len(_getvar(s)))
+assert(len of Hello World should be 11, _getvar(r), 11)
+
+_setvar(r, upper(_getvar(s)))
+assert(upper Hello World should be HELLO WORLD, _getvar(r), HELLO WORLD)
+
+_setvar(r, lower(_getvar(s)))
+assert(lower Hello World should be hello world, _getvar(r), hello world)
+
+_setvar(r, substr(_getvar(s), 0, 5))
+assert(substr 0-5 of Hello World should be Hello, _getvar(r), Hello)
+
+_setvar(r, contains(_getvar(s), World))
+assert(contains World in Hello World should be 1, _getvar(r), 1)
+
+_setvar(r, contains(_getvar(s), xyz))
+assert(contains xyz in Hello World should be 0, _getvar(r), 0)
+
+_setvar(r, replace(_getvar(s), World, Bash))
+assert(replace World with Bash should be Hello Bash, _getvar(r), Hello Bash)
+
+// concat
+_setvar(r, concat(foo, bar))
+assert(concat foo+bar should be foobar, _getvar(r), foobar)
+
+// trim_str
+_setvar(r, trim_str(  padded  ))
+assert(trim_str padded should remove spaces, _getvar(r), padded)
+
+// split_str and join round-trip
+_setvar(parts, split_str(a-b-c, -))
+_setvar(r, join(_getvar(parts), -))
+assert(split a-b-c by dash then join should be a-b-c, _getvar(r), a-b-c)
+
+_setvar(r, len(_getvar(parts)))
+assert(split a-b-c should give 3 parts, _getvar(r), 3)
+
+_print
+
+// ===================================================================
+// SECTION 4 - MATH BUILTINS
+// ===================================================================
+_print <color=#00bfff>--- Section 4: Math Builtins ---</color>
+
+_setvar(r, floor(3.9))
+assert(floor 3.9 should be 3, _getvar(r), 3)
+
+_setvar(r, ceil(3.1))
+assert(ceil 3.1 should be 4, _getvar(r), 4)
+
+_setvar(r, round(3.5))
+assert(round 3.5 should be 4, _getvar(r), 4)
+
+_setvar(r, abs(-7))
+assert(abs -7 should be 7, _getvar(r), 7)
+
+_setvar(r, min(5, 9))
+assert(min of 5 and 9 should be 5, _getvar(r), 5)
+
+_setvar(r, max(5, 9))
+assert(max of 5 and 9 should be 9, _getvar(r), 9)
+
+_print
+
+// ===================================================================
+// SECTION 5 - TYPE CASTING
+// ===================================================================
+_print <color=#00bfff>--- Section 5: Type Casting ---</color>
+
+_setvar(r, to_string(42))
+assert(to_string 42 should be 42 as string, _getvar(r), 42)
+
+_setvar(r, to_int(3.9))
+assert(to_int 3.9 should truncate to 3, _getvar(r), 3)
+
+_setvar(r, to_float(7))
+assert(to_float 7 should be 7 as float, _getvar(r), 7)
+
+_setvar(r, to_yesno(1))
+assert(to_yesno 1 should be yes, _getvar(r), yes)
+
+_setvar(r, to_yesno(0))
+assert(to_yesno 0 should be no, _getvar(r), no)
+
+_setvar(r, to_truefalse(1))
+assert(to_truefalse 1 should be true, _getvar(r), true)
+
+_setvar(r, to_truefalse(0))
+assert(to_truefalse 0 should be false, _getvar(r), false)
+
+_print
+
+// ===================================================================
+// SECTION 6 - IF / ELIF / ELSE
+// ===================================================================
+_print <color=#00bfff>--- Section 6: Conditionals ---</color>
+
+// Basic if true
+_setvar(result, none)
+if 1 == 1
+  _setvar(result, yes)
+endif
+assert(if 1 is 1 should set result to yes, _getvar(result), yes)
+
+// Basic if false
+_setvar(result, none)
+if 1 == 2
+  _setvar(result, wrong)
+endif
+assert(if 1 is 2 should not run body so result stays none, _getvar(result), none)
+
+// If-else
+_setvar(result, none)
+if 5 > 10
+  _setvar(result, wrong)
+else
+  _setvar(result, else)
+endif
+assert(if 5 gt 10 false so else branch should run, _getvar(result), else)
+
+// If-elif-else chain
+_setvar(val, 50)
+_setvar(result, none)
+if _getvar(val) < 10
+  _setvar(result, low)
+elif _getvar(val) < 100
+  _setvar(result, mid)
+else
+  _setvar(result, high)
+endif
+assert(elif val 50 under 100 should be mid, _getvar(result), mid)
+
+// Comparison operators
+_setvar(result, none)
+if 3 != 4
+  _setvar(result, yes)
+endif
+assert(3 not-equal 4 should be true, _getvar(result), yes)
+
+_setvar(result, none)
+if 5 <= 5
+  _setvar(result, yes)
+endif
+assert(5 lte 5 should be true, _getvar(result), yes)
+
+_setvar(result, none)
+if 10 >= 10
+  _setvar(result, yes)
+endif
+assert(10 gte 10 should be true, _getvar(result), yes)
+
+// Logical AND
+_setvar(result, none)
+if 1 == 1 and 2 == 2
+  _setvar(result, yes)
+endif
+assert(1 is 1 and 2 is 2 both true should pass, _getvar(result), yes)
+
+// Logical OR
+_setvar(result, none)
+if 1 == 2 or 3 == 3
+  _setvar(result, yes)
+endif
+assert(1 is 2 false or 3 is 3 true should pass, _getvar(result), yes)
+
+// Logical NOT
+_setvar(result, none)
+if not 1 == 2
+  _setvar(result, yes)
+endif
+assert(not 1 is 2 should negate to true, _getvar(result), yes)
+
+_print
+
+// ===================================================================
+// SECTION 7 - FOR LOOPS
+// ===================================================================
+_print <color=#00bfff>--- Section 7: For Loops ---</color>
+
+// Range loop
+_setvar(sum, 0)
+for i in range(1, 5)
+  _setvar(sum, _getvar(sum) + _getvar(i))
+endfor
+assert(for i in range 1-5 sum should be 15, _getvar(sum), 15)
+
+// Range with step (0-based iteration count)
+_setvar(count, 0)
+for i in range(0, 3)
+  _setvar(count, _getvar(count) + 1)
+endfor
+assert(for i in range 0-3 should iterate 4 times, _getvar(count), 4)
+
+// List literal loop
+_setvar(r, )
+for item in [alpha, beta, gamma]
+  _setvar(r, concat(_getvar(r), _getvar(item)))
+endfor
+assert(for in list concat should be alphabetagamma, _getvar(r), alphabetagamma)
+
+// Nested for loops
+_setvar(count, 0)
+for i in range(1, 3)
+  for j in range(1, 3)
+    _setvar(count, _getvar(count) + 1)
+  endfor
+endfor
+assert(nested 3x3 for should count to 9, _getvar(count), 9)
+
+_print
+
+// ===================================================================
+// SECTION 8 - WHILE / UNTIL LOOPS
+// ===================================================================
+_print <color=#00bfff>--- Section 8: While & Until ---</color>
+
+// While loop
+_setvar(n, 0)
+while _getvar(n) < 5
+  _setvar(n, _getvar(n) + 1)
+endwhile
+assert(while n under 5 incrementing should end at 5, _getvar(n), 5)
+
+// Until loop (inverse condition)
+_setvar(n, 0)
+until _getvar(n) == 5
+  _setvar(n, _getvar(n) + 1)
+enduntil
+assert(until n is 5 incrementing should end at 5, _getvar(n), 5)
+
+_print
+
+// ===================================================================
+// SECTION 9 - BREAK / CONTINUE
+// ===================================================================
+_print <color=#00bfff>--- Section 9: Break & Continue ---</color>
+
+// Break out of loop early
+_setvar(n, 0)
+for i in range(1, 100)
+  _setvar(n, _getvar(n) + 1)
+  if _getvar(n) == 3
+    break
+  endif
+endfor
+assert(break when n is 3 should stop at 3, _getvar(n), 3)
+
+// Continue to skip iterations
+_setvar(sum, 0)
+for i in range(1, 5)
+  if _getvar(i) == 3
+    continue
+  endif
+  _setvar(sum, _getvar(sum) + _getvar(i))
+endfor
+// sum = 1+2+4+5 = 12
+assert(continue skip i is 3 so 1+2+4+5 should be 12, _getvar(sum), 12)
+
+_print
+
+// ===================================================================
+// SECTION 10 - SWITCH / CASE
+// ===================================================================
+_print <color=#00bfff>--- Section 10: Switch/Case ---</color>
+
+_setvar(color, blue)
+_setvar(result, none)
+switch _getvar(color)
+  case red
+    _setvar(result, red)
+  case blue
+    _setvar(result, blue)
+  case green
+    _setvar(result, green)
+  default
+    _setvar(result, unknown)
+endswitch
+assert(switch blue should match case blue, _getvar(result), blue)
+
+// Default case
+_setvar(color, purple)
+_setvar(result, none)
+switch _getvar(color)
+  case red
+    _setvar(result, red)
+  default
+    _setvar(result, default)
+endswitch
+assert(switch purple has no case so default runs, _getvar(result), default)
+
+_print
+
+// ===================================================================
+// SECTION 11 - FUNCTIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 11: Functions ---</color>
+
+// Simple function with _return
+func greet(name)
+  _return concat(Hello, _getvar(name))
+endfunc
+_setvar(r, greet(World))
+assert(greet World should return HelloWorld, _getvar(r), HelloWorld)
+
+// Function with _return
+func add(a, b)
+  _return _getvar(a) + _getvar(b)
+endfunc
+_setvar(r, add(7, 3))
+assert(add 7+3 should return 10, _getvar(r), 10)
+
+// Function with local scope (vars restored after call)
+_setvar(x, outer)
+func scopeTest()
+  _setvar(x, inner)
+endfunc
+scopeTest()
+assert(x is outer then scopeTest sets inner but x should restore to outer, _getvar(x), outer)
+
+// Function calling another function
+func double(v)
+  _return _getvar(v) * 2
+endfunc
+func quadruple(v)
+  _setvar(tmp, double(_getvar(v)))
+  _return _getvar(tmp) * 2
+endfunc
+_setvar(r, quadruple(5))
+assert(quadruple 5 calls double then *2 should be 20, _getvar(r), 20)
+
+// Recursive function
+func factorial(n)
+  if _getvar(n) <= 1
+    _return 1
+  else
+    _setvar(prev, factorial(_getvar(n) - 1))
+    _return _getvar(n) * _getvar(prev)
+  endif
+endfunc
+_setvar(r, factorial(5))
+assert(factorial 5 recursive 5*4*3*2*1 should be 120, _getvar(r), 120)
+
+_print
+
+// ===================================================================
+// SECTION 12 - ARRAYS
+// ===================================================================
+_print <color=#00bfff>--- Section 12: Arrays ---</color>
+
+_setvar(arr, [])
+
+_push arr one
+_push arr two
+_push arr three
+
+_setvar(r, len(_getvar(arr)))
+assert(push 3 items to arr then len should be 3, _getvar(r), 3)
+
+_pop arr
+_setvar(r, len(_getvar(arr)))
+assert(_pop removes last so len should be 2, _getvar(r), 2)
+
+_pull arr
+_setvar(r, len(_getvar(arr)))
+assert(_pull removes first so len should be 1, _getvar(r), 1)
+
+// Array from list literal
+_setvar(list, [x, y, z])
+_setvar(r, len(_getvar(list)))
+assert(list literal [x y z] len should be 3, _getvar(r), 3)
+
+// _in check
+_setvar(items, [apple, banana, cherry])
+_setvar(r, _in(_getvar(items), banana))
+assert(_in banana in [apple banana cherry] should be 1, _getvar(r), 1)
+
+_setvar(r, _in(_getvar(items), grape))
+assert(_in grape not in list should be 0, _getvar(r), 0)
+
+_print
+
+// ===================================================================
+// SECTION 13 - SYSTEM CONTEXT BUILTINS
+// ===================================================================
+_print <color=#00bfff>--- Section 13: System Context ---</color>
+
+// These just need to not crash - verify they return something
+_setvar(sysuser, get_user())
+_setvar(check, len(_getvar(sysuser)))
+if _getvar(check) > 0
+  _print <color=#00ff00>[PASS]</color> get_user returned: _getvar(sysuser)
+else
+  _print <color=#ff0000>[FAIL]</color> get_user returned empty
+endif
+
+_setvar(syshome, get_home())
+_setvar(check, len(_getvar(syshome)))
+if _getvar(check) > 0
+  _print <color=#00ff00>[PASS]</color> get_home returned: _getvar(syshome)
+else
+  _print <color=#ff0000>[FAIL]</color> get_home returned empty
+endif
+
+_setvar(systime, timestamp())
+_setvar(check, len(to_string(_getvar(systime))))
+if _getvar(check) > 0
+  _print <color=#00ff00>[PASS]</color> timestamp returned: _getvar(systime)
+else
+  _print <color=#ff0000>[FAIL]</color> timestamp returned empty
+endif
+
+_setvar(sysdate, date())
+_setvar(check, len(_getvar(sysdate)))
+if _getvar(check) > 0
+  _print <color=#00ff00>[PASS]</color> date returned: _getvar(sysdate)
+else
+  _print <color=#ff0000>[FAIL]</color> date returned empty
+endif
+
+_print
+
+// ===================================================================
+// SECTION 14 - EDGE CASES
+// ===================================================================
+_print <color=#00bfff>--- Section 14: Edge Cases ---</color>
+
+// Arithmetic with zero
+_setvar(r, 0 + 0)
+assert(0 + 0 should be 0, _getvar(r), 0)
+
+_setvar(r, 0 * 999)
+assert(0 * 999 should be 0, _getvar(r), 0)
+
+// Large loop
+_setvar(sum, 0)
+for i in range(1, 100)
+  _setvar(sum, _getvar(sum) + _getvar(i))
+endfor
+assert(sum of 1 to 100 should be 5050, _getvar(sum), 5050)
+
+// Deep nesting
+_setvar(r, none)
+if 1 == 1
+  if 2 == 2
+    if 3 == 3
+      _setvar(r, deep)
+    endif
+  endif
+endif
+assert(3 nested ifs all true should reach deep, _getvar(r), deep)
+
+// Overwrite in loop
+_setvar(last, )
+for i in range(1, 5)
+  _setvar(last, _getvar(i))
+endfor
+assert(last var overwritten each loop should end at 5, _getvar(last), 5)
+
+// String with numbers
+_setvar(s, test123)
+_setvar(r, len(_getvar(s)))
+assert(len of test123 should be 7, _getvar(r), 7)
+
+// Boolean-style checks
+_setvar(flag, 1)
+_setvar(result, none)
+if _getvar(flag)
+  _setvar(result, truthy)
+endif
+assert(if flag is 1 truthy check should pass, _getvar(result), truthy)
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>         STRESS TEST COMPLETE</color>
+_print <color=#eb0cc6>============================================</color>
+_print"

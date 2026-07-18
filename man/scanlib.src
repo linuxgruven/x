@@ -1,0 +1,17 @@
+// Man page for scanlib
+manScanlib="SCANLIB(1)                       X Shell Manual                       SCANLIB(1)
+
+<b>NAME</b>
+    scanlib - Analyze library for vulnerabilities
+<b>SYNOPSIS</b>
+    <b>scanlib</b> PATH
+<b>DESCRIPTION</b>
+    Analyze library files to search for security vulnerabilities and exploits.
+<b>EXAMPLE:</b>
+    <b>scanlib /lib/libcrypto.so</b>
+    Scan crypto library
+
+    <b>scanlib /lib/aptclient.so</b>
+    Scan apt client library
+<b>SEE ALSO</b>
+    <b>0day</b>, <b>lms</b>"

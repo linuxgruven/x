@@ -1,0 +1,56 @@
+// Man page for locate
+manLocate="LOCATE(1)                        X Shell Manual                        LOCATE(1)
+
+<b>NAME</b>
+    locate - Fast file and folder finder
+<b>SYNOPSIS</b>
+    <b>locate</b> (<b>-s</b>) (<b>-x FOLDERS</b>) <b>PATTERN</b> [PATTERN...]
+<b>DESCRIPTION</b>
+    Fast file search tool that searches the entire system for files
+    matching a specified pattern. By default uses substring matching; use
+    -s for strict exact-name searching.
+    Multiple patterns can be specified; any file matching at least one
+    pattern will be shown.
+
+    Patterns containing regex metacharacters ( . * + ? ^ $ { } ( ) | [ ] \\ )
+    are automatically treated as regex. All others use substring matching.
+<b>OPTIONS</b>
+    <b>PATTERN [PATTERN...]</b> - Search
+      Substring, regex, or glob match against filename.
+      Patterns with regex metacharacters auto-enable regex mode.
+
+    <b>-s PATTERN</b> - Strict/Exact Search
+      Search for exact filename match only.
+
+    <b>-x|--exclude FOLDERS</b> - Exclude Folders
+      Skip specified folders during search.
+      Folder names are colon-delimited.
+      Excluded folders and their contents are not searched.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Fuzzy/substring search</color>
+    <b>locate pass</b>
+    Find files containing pass (passwd, passwords, etc)
+
+    <color=#e4ff34># Regex (auto-detected)</color>
+    <b>locate ^passwd$</b>
+    Find only passwd (regex exact match)
+
+    <b>locate \.txt$</b>
+    Find all .txt files
+
+    <color=#e4ff34># Multiple Patterns</color>
+    <b>locate passwd shadow</b>
+    Find files matching either passwd or shadow
+
+    <b>locate Bank.txt Mail.txt</b>
+    Locate either credential file
+
+    <color=#e4ff34># Exact Match</color>
+    <b>locate -s passwd</b>
+    Find only passwd exactly
+
+    <color=#e4ff34># Exclude Folders</color>
+    <b>locate -x tables:.Trash passwd</b>
+    Find passwd, skipping tables and .Trash
+<b>SEE ALSO</b>
+    <b>find</b>, <b>grep</b>"

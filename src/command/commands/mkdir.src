@@ -1,0 +1,74 @@
+// =============================================================================
+// MKDIR
+// Create a directory; -f force-overwrites, -b batch mode, -p prefix path.
+// =============================================================================
+Command.mkdir=function(Obj,argv,R=null)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  if not argv and not hasPipeInput then return Man.help(["mkdir"])
+  argv=ArgumentParser.check(argv)
+  _p=ArgumentParser.init
+  _p.addArgument("y",false,"flag")    // Overwrite existing
+  _p.addArgument("l",false,"flag")    // Loop/batch mode
+  _p.addArgument("p",false,"store")   // Prefix path
+  argv=_p.parseArgs("mkdir",argv)
+  if argv isa Error then return
+  if argv.p then
+    if argv.p[-1]!="/" then argv.p=argv.p+"/"
+  end if
+  if argv.l then
+    prefixPath=argv.p
+    for dirName in argv.rest;if prefixPath then self.mkdir(Obj,[prefixPath+dirName],R) else self.mkdir(Obj,[dirName],R);end for
+    return
+  end if
+  argv=_p.parsePath(Obj,argv)
+  if argv isa Error then return
+  if hasIndex(argv,"useAI") then
+    targetDir=Io.folder(Obj,Obj.dir.current,"Choose a directory to create a new folder in:")
+    if targetDir isa Warning then return targetDir
+    folderName=Gui.input({"text":"What are we to name the new folder?"})
+    if folderName==null then return Error.set("User Aborted")
+    push(argv.rest,path(targetDir)+"/"+folderName)
+  end if
+  overwrite=false
+  if argv.y then overwrite=true
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin then
+    if not argv.rest then argv.rest=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(argv.rest,line);end for
+  end if
+  while argv.rest
+    dirPath=pull(argv.rest)
+    if not dirPath then return Man.help(["mkdir"])
+    if indexOf(dirPath,"/")==null then dirPath=path(Obj.dir.current)+"/"+dirPath
+    parentPath=parent_path(dirPath)
+    if parentPath==dirPath then parentPath=path(Obj.dir.current)
+    if Obj.type=="file" then
+      templateDir=FileHelper.useFolder(Obj)
+      if templateDir isa Error then return
+      pathParts=split(dirPath,"/")
+      copy(templateDir,parentPath,pathParts[-1])
+      newFolder=Io.getFileObj(Obj,parentPath+"/"+pathParts[-1])
+      if newFolder isa Error then return newFolder
+      if newFolder and is_folder(newFolder) then
+        for item in get_files(newFolder)+get_folders(newFolder);delete(item);end for
+        set_owner(newFolder,Obj.user.name)
+        set_group(newFolder,Obj.user.name)
+      else
+        return
+      end if
+      continue
+    end if
+    parentFolder=File(Obj.computer,parentPath)
+    if not has_permission(parentFolder,"w") then return Error.set("Permission denied")
+    pathParts=split(dirPath,"/")
+    existingFolder=File(Obj.computer,path(parentFolder)+"/"+pathParts[-1])
+    if existingFolder then
+      if overwrite then self.qrm(Obj,[existingFolder]) else return Error.set(path(existingFolder)+": directory exists")
+    end if
+    // Validate filename length (max 128 characters)
+    if len(pathParts[-1])>128 then return Error.set("Filename too long")
+    result=create_folder(Obj.computer,path(parentFolder),pathParts[-1])
+    if result isa string then return Error.set(result)
+    if R then return path(parentFolder)+"/"+pathParts[-1]
+  end while
+  return true
+end function

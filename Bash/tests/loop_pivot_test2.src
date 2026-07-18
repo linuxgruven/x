@@ -1,0 +1,16 @@
+// TEST 2: WHILE loop with pivot
+// Expected: Loop should iterate 3 times, with proxy -q running each time
+// Commands after proxy -q should execute in the proxy context
+
+_printnow <color=#ff0>== WHILE LOOP PIVOT TEST ==</color>
+
+_setvar(counter, 0)
+
+while _getvar(counter) < 3
+  _setvar(counter, _getvar(counter) + 1)
+  _printnow <color=#0f0>[ITERATION]</color> counter = _getvar(counter)
+  proxy -q
+  _printnow <color=#0f0>[AFTER PIVOT]</color> counter = _getvar(counter)
+endwhile
+
+_printnow <color=#ff0>== WHILE LOOP COMPLETE ==</color>

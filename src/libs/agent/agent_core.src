@@ -1,0 +1,338 @@
+// =============================================================================
+// AGENT_CORE
+// AI agent core; configuration, initialization, and knowledge system for the autonomous agent.
+// =============================================================================
+AgentCore={}
+//Shared constant: stop words as map for O(1) hasIndex lookup
+AgentCore._STOP_WORDS={"a":1,"an":1,"the":1,"is":1,"are":1,"was":1,"were":1,"be":1,"been":1,"being":1,"have":1,"has":1,"had":1,"do":1,"does":1,"did":1,"will":1,"would":1,"should":1,"could":1,"can":1,"may":1,"might":1,"must":1,"shall":1,"i":1,"you":1,"he":1,"she":1,"it":1,"we":1,"they":1,"me":1,"him":1,"her":1,"us":1,"them":1,"my":1,"your":1,"his":1,"its":1,"our":1,"their":1,"mine":1,"yours":1,"hers":1,"ours":1,"theirs":1,"this":1,"that":1,"these":1,"those":1,"what":1,"which":1,"who":1,"where":1,"when":1,"why":1,"how":1,"all":1,"each":1,"every":1,"both":1,"few":1,"more":1,"most":1,"other":1,"some":1,"such":1,"no":1,"nor":1,"not":1,"only":1,"own":1,"same":1,"so":1,"than":1,"too":1,"very":1,"just":1,"to":1,"of":1,"in":1,"for":1,"on":1,"with":1,"at":1,"by":1,"from":1,"as":1,"up":1,"about":1,"into":1,"through":1,"during":1,"before":1,"after":1,"above":1,"below":1,"between":1,"under":1,"again":1,"further":1,"then":1,"once":1,"please":1,"now":1,"much":1,"many":1,"any":1,"left":1,"remaining":1,"available":1,"used":1,"free":1,"total":1}
+AgentCore._ACTION_WORDS={"ai":1,"goto":1,"go":1,"crack":1,"break":1,"decrypt":1,"decipher":1,"list":1,"show":1,"display":1,"scan":1,"find":1,"search":1,"get":1,"fetch":1,"open":1,"read":1,"write":1,"create":1,"delete":1,"remove":1,"copy":1,"move":1,"change":1,"hash":1,"password":1,"file":1,"files":1,"network":1,"system":1,"disk":1,"memory":1,"process":1,"space":1}
+AgentCore._COMMON_DIRS={"root":"/root","etc":"/etc","var":"/var","usr":"/usr","bin":"/bin","lib":"/lib","opt":"/opt","srv":"/srv","boot":"/boot","sys":"/sys"}
+AgentCore._BOOL_KEYS=["debug","aggressive","stealth","dryRun","trainer","promptOnAttack","promptOnCritical","promptOnAmbiguous","promptOnSlow","promptOnDestructive","autoFallback"]
+AgentCore._NUMBER_KEYS=["maxRetries","timeout","maxTargets","maxDepth","outputLevel"]
+AgentCore._ESCALATION_BLACKLIST=["cal","date","uptime","clear","pwd","whoami","hostname","echo"]
+AgentCore._SUGGESTIONS=[{"keywords":["list file","show file","display file","ls"],"command":"ls"},{"keywords":["list account","show account","display account","show user"],"command":"list"},{"keywords":["change directory","go to","cd"],"command":"cd"},{"keywords":["show process","list process","ps"],"command":"ps"},{"keywords":["network","interface","ip address","ifconfig"],"command":"ifconfig"},{"keywords":["scan port","port scan","nmap"],"command":"nmap"},{"keywords":["connect ssh","ssh into"],"command":"ssh"},{"keywords":["connect ftp","ftp into"],"command":"ftp"},{"keywords":["download","get file","pull"],"command":"scp"},{"keywords":["upload","put file","push"],"command":"scp"},{"keywords":["find file","search file","locate"],"command":"find"},{"keywords":["read file","view file","cat","show content"],"command":"cat"},{"keywords":["edit file","modify file","vi","vim"],"command":"vi"},{"keywords":["remove file","delete file","rm"],"command":"rm"},{"keywords":["copy file","cp"],"command":"cp"},{"keywords":["move file","rename","mv"],"command":"mv"},{"keywords":["make directory","create dir","mkdir"],"command":"mkdir"},{"keywords":["crack password","break password"],"command":"crack"},{"keywords":["exploit","attack","hack"],"command":"scan"}]
+AgentCore._INTENT_MAPPINGS=[{"keywords":["all","hidden"],"flagPatterns":["a"],"desc":"show all/hidden"},{"keywords":["recursive","recursively","subdirectories","tree"],"flagPatterns":["R","r"],"desc":"recursive"},{"keywords":["size","sizes","file size"],"flagPatterns":["s"],"desc":"show sizes"},{"keywords":["long","detailed","details","verbose"],"flagPatterns":["l"],"desc":"long format"},{"keywords":["sort","sorted","order"],"flagPatterns":["S","t"],"desc":"sorting"},{"keywords":["reverse","reversed"],"flagPatterns":["r"],"desc":"reverse order"},{"keywords":["owner","owners","permissions","perms"],"flagPatterns":["l","o"],"desc":"show ownership"},{"keywords":["human readable","readable"],"flagPatterns":["h"],"desc":"human readable"},{"keywords":["only files","files only"],"flagPatterns":["f"],"desc":"files only"},{"keywords":["only directories","directories only","folders only"],"flagPatterns":["d"],"desc":"directories only"},{"keywords":["ports","port scan","services"],"flagPatterns":["p"],"desc":"port scan"},{"keywords":["lan","local network","network"],"flagPatterns":["n","l"],"desc":"LAN scan"},{"keywords":["fast","quick"],"flagPatterns":["f"],"desc":"fast scan"},{"keywords":["verbose","detailed"],"flagPatterns":["v"],"desc":"verbose"},{"keywords":["stealth","silent","quiet"],"flagPatterns":["s","q"],"desc":"stealth/quiet"},{"keywords":["brute","brute force","dictionary"],"flagPatterns":["b","d"],"desc":"brute force"},{"keywords":["overflow","buffer overflow"],"flagPatterns":["o"],"desc":"overflow"},{"keywords":["injection","sql","code"],"flagPatterns":["i"],"desc":"injection"}]
+AgentCore._COMMAND_MAPPINGS=[{"keywords":["list","show files","display files","ls"],"command":"list"},{"keywords":["scan","probe","enumerate"],"command":"scan"},{"keywords":["crack","break","brute"],"command":"crack"},{"keywords":["exploit","attack","compromise"],"command":"exploit"},{"keywords":["decipher","decrypt","decode"],"command":"decipher"},{"keywords":["build","compile"],"command":"build"}]
+//Default configuration with all available options
+AgentCore.config={
+  "outputLevel":1,  //0=silent, 1=normal, 2=verbose
+  "dryRun":false,
+  "aggressive":false,
+  "stealth":false,
+  "debug":false,
+  "trainer":false,
+  "maxRetries":3,
+  "timeout":30,
+  "promptOnCritical":false,
+  "promptOnAttack":true,
+  "promptOnAmbiguous":true,
+  "promptOnSlow":true,
+  "promptOnDestructive":true,
+  "autoFallback":false
+}
+//User prompt preferences cache
+AgentCore.promptPreferences={}
+//Initialize agent system
+AgentCore.init=function
+  //Reset config to defaults (already set above but can be modified)
+  globals.G_agent.config={
+    "outputLevel":1,  //0=silent, 1=normal, 2=verbose
+    "dryRun":false,
+    "aggressive":false,
+    "stealth":false,
+    "debug":false,
+    "trainer":false,
+    "maxRetries":3,
+    "timeout":30,
+    "promptOnCritical":false,
+    "promptOnAttack":true,
+    "promptOnAmbiguous":true,
+    "promptOnSlow":true,
+    "promptOnDestructive":true,
+    "autoFallback":false
+  }
+  //Try to load saved config (silently during init)
+  savedLevel=globals.G_agent.config.outputLevel
+  globals.G_agent.config.outputLevel=0
+  globals.G_agent.loadConfig
+  globals.G_agent.config.outputLevel=savedLevel
+  globals.G_agent.context={}
+  globals.G_agent.history=[]
+  globals.G_agent.activeSessions=[]
+  //Dialog state for multi-turn conversations
+  globals.G_agent.dialogState={
+    "active":false,
+    "context":null,
+    "question":null,
+    "expectedResponse":null,
+    "callback":null
+  }
+  //State snapshots for undo/rollback
+  globals.G_agent.stateSnapshots=[]
+  globals.G_agent.maxSnapshots=10
+  //Telemetry logging
+  globals.G_agent.telemetry={
+    "sessionStart":time,
+    "commands":[],
+    "decisions":[],
+    "outcomes":[]
+  }
+  //Session context for carryover between commands - now defined in globals.src as G_agentContext
+  //Just ensure storedObjects array exists (may not be present in older saved states)
+  if not hasIndex(globals.G_agentContext,"storedObjects") then globals.G_agentContext.storedObjects=[]
+  globals.G_agent.sessionContext=globals.G_agentContext
+  //Pattern reinforcement tracking
+  if not hasIndex(self,"patternScores") then globals.G_agent.patternScores={}
+  //User preferences (load from global)
+  if not hasIndex(self,"userPreferences") then globals.G_agent.userPreferences=globals.G_agent.sessionContext.userPreferences
+  //Initialize command knowledge cache
+  if not hasIndex(self,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
+  //Initialize lazy loading flag - knowledge loaded on-demand instead of at startup
+  if not hasIndex(self,"knowledgeFileLoaded") then globals.G_agent.knowledgeFileLoaded=false
+  //Load persisted learning data (patternScores, userPreferences, templates)
+  globals.G_agent.loadLearning
+  return true
+end function
+//Save agent configuration to disk
+AgentCore.saveConfig=function
+  outLvl=globals.G_agent.config.outputLevel
+  configFile=path(globals.G_main.dir.data)+"/agent_config.json"
+  if outLvl>=1 then print skyblue("Agent: Saving config to "+configFile)
+  //Build config data structure
+  configData={
+    "config":globals.G_agent.config,
+    "promptPreferences":globals.G_agent.promptPreferences
+  }
+  //Convert to JSON
+  jsonStr=System.toJSON(configData,1,0)
+  comp=G_main.computer
+  //Get or create file
+  f=File(comp,configFile)
+  if not f then
+    result=touch(comp,path(globals.G_main.dir.data),"agent_config.json")
+    if not result then return {"success":false,"error":"Failed to create config file"}
+    f=File(comp,configFile)
+  end if
+  //Write content
+  if f then
+    set_content(f,jsonStr)
+    if outLvl>=1 then print skyblue("Agent: Config saved successfully")
+  else
+    return {"success":false,"error":"Could not access config file"}
+  end if
+  return {"success":true}
+end function
+//Load agent configuration from disk
+AgentCore.loadConfig=function
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  configFile=path(globals.G_main.dir.data)+"/agent_config.json"
+  //Check if file exists
+  result=File(G_main.computer,configFile)
+  if not result then
+    if debug then print green("[DEBUG] Agent: No saved config found, using defaults")
+    return {"success":false,"error":"No config file found"}
+  end if
+  //Don't print "Loading" message yet - we don't know if loaded config has outputLevel=0
+  if debug then print green("[DEBUG] Agent: Loading config from "+configFile)
+  //Read file content
+  content=get_content(result)
+  if not content or len(content)==0 then
+    if debug then print green("[DEBUG] Agent: Config file is empty")
+    return {"success":false,"error":"Config file is empty"}
+  end if
+  //Parse JSON
+  configData=System.parse(content)
+  if not configData or typeof(configData)!="map" then
+    if debug then print green("[DEBUG] Agent: Could not parse config file")
+    return {"success":false,"error":"Invalid JSON format"}
+  end if
+  //Restore config (all keys automatically saved/loaded)
+  if hasIndex(configData,"config") and typeof(configData.config)=="map" then
+    //Boolean config keys that need normalization
+    boolKeys=self._BOOL_KEYS
+    for key in indexes(configData.config)
+      value=configData.config[key]
+      //Normalize 0/1 to false/true for boolean keys
+      if indexOf(boolKeys,key)!=null and typeof(value)=="number" then
+        if value then value=true else value=false
+      end if
+      globals.G_agent.config[key]=value
+    end for
+    if outLvl>=1 then print skyblue("Agent: Config loaded successfully ("+len(indexes(configData.config))+" settings)")
+  end if
+  //Restore prompt preferences
+  if hasIndex(configData,"promptPreferences") and typeof(configData.promptPreferences)=="map" then
+    globals.G_agent.promptPreferences=configData.promptPreferences
+    if outLvl>=1 then print skyblue("Agent: Loaded "+len(indexes(globals.G_agent.promptPreferences))+" prompt preferences")
+  end if
+  return {"success":true}
+end function
+//Set a config value and auto-save
+AgentCore.setConfig=function(key,value)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  if not hasIndex(globals.G_agent.config,key) then
+    print yellow("Agent: Unknown config key: "+key)
+    return {"success":false,"error":"Unknown config key"}
+  end if
+  //Validate value types and ranges
+  boolKeys=self._BOOL_KEYS
+  numberKeys=self._NUMBER_KEYS
+  if indexOf(boolKeys,key)!=null then
+    //Boolean config - must be true/false
+    if typeof(value)!="number" and value!=true and value!=false then
+      print yellow("Agent: Config '"+key+"' requires boolean value (true/false)")
+      return {"success":false,"error":"Invalid type: expected boolean"}
+    end if
+    //Normalize number booleans (1/0) to true/false
+    if typeof(value)=="number" then
+      if value then value=true else value=false
+    end if
+  else if indexOf(numberKeys,key)!=null then
+    //Number config - must be numeric
+    if typeof(value)!="number" then
+      //Try to parse string to number
+      if typeof(value)=="string" then
+        numVal=value.val
+        if numVal==null then
+          print yellow("Agent: Config '"+key+"' requires numeric value")
+          return {"success":false,"error":"Invalid type: expected number"}
+        end if
+        value=numVal
+      else
+        print yellow("Agent: Config '"+key+"' requires numeric value")
+        return {"success":false,"error":"Invalid type: expected number"}
+      end if
+    end if
+    //Range validation
+    if key=="maxRetries" or key=="timeout" or key=="maxTargets" or key=="maxDepth" then
+      if value<1 then
+        print yellow("Agent: Config '"+key+"' must be at least 1")
+        return {"success":false,"error":"Value out of range: minimum is 1"}
+      end if
+      if key=="maxRetries" and value>100 then
+        print yellow("Agent: Config '"+key+"' exceeds reasonable maximum (100)")
+        return {"success":false,"error":"Value out of range: maximum is 100"}
+      end if
+      if key=="timeout" and value>3600 then
+        print yellow("Agent: Config '"+key+"' exceeds reasonable maximum (3600 seconds)")
+        return {"success":false,"error":"Value out of range: maximum is 3600"}
+      end if
+      if key=="maxTargets" and value>1000 then
+        print yellow("Agent: Config '"+key+"' exceeds reasonable maximum (1000)")
+        return {"success":false,"error":"Value out of range: maximum is 1000"}
+      end if
+      if key=="maxDepth" and value>20 then
+        print yellow("Agent: Config '"+key+"' exceeds reasonable maximum (20)")
+        return {"success":false,"error":"Value out of range: maximum is 20"}
+      end if
+      if key=="outputLevel" and (value<0 or value>2) then
+        print yellow("Agent: Config 'outputLevel' must be 0 (silent), 1 (normal), or 2 (verbose)")
+        return {"success":false,"error":"Value out of range: must be 0-2"}
+      end if
+    end if
+  end if
+  oldValue=globals.G_agent.config[key]
+  globals.G_agent.config[key]=value
+  //Auto-save config
+  result=globals.G_agent.saveConfig
+  if result.success then print green("Agent: Config "+key+" changed from "+oldValue+" to "+value) else print yellow("Agent: Config changed but save failed: "+result.error)
+  return result
+end function
+//Show all config settings
+AgentCore.showConfig=function
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  print skyblue("=== Agent Configuration ===")
+  //Group by category
+  print white("Output:")
+  outputLevelName="normal"
+  if outLvl==0 then outputLevelName="silent"
+  if outLvl==2 then outputLevelName="verbose"
+  print "  outputLevel: "+outLvl+" ("+outputLevelName+")"
+  print "  debug: "+debug
+  print white("Behavior:")
+  print "  trainer: "+globals.G_agent.config.trainer
+  print white("Operation Modes:")
+  print "  dryRun: "+globals.G_agent.config.dryRun
+  print "  aggressive: "+globals.G_agent.config.aggressive
+  print "  stealth: "+globals.G_agent.config.stealth
+  print white("Limits:")
+  print "  maxRetries: "+globals.G_agent.config.maxRetries
+  print "  timeout: "+globals.G_agent.config.timeout
+  print white("User Prompts:")
+  print "  promptOnCritical: "+globals.G_agent.config.promptOnCritical
+  print "  promptOnAttack: "+globals.G_agent.config.promptOnAttack
+  print "  promptOnAmbiguous: "+globals.G_agent.config.promptOnAmbiguous
+  print "  promptOnSlow: "+globals.G_agent.config.promptOnSlow
+  print "  promptOnDestructive: "+globals.G_agent.config.promptOnDestructive
+  print "  autoFallback: "+globals.G_agent.config.autoFallback
+  print white("Cached Preferences: "+len(indexes(globals.G_agent.promptPreferences))+" saved")
+  return {"success":true}
+end function
+//Reset config to defaults
+AgentCore.resetConfig=function
+  globals.G_agent.config={
+    "outputLevel":1,  //0=silent, 1=normal, 2=verbose
+    "dryRun":false,
+    "aggressive":false,
+    "stealth":false,
+    "debug":false,
+    "trainer":false,
+    "maxRetries":3,
+    "timeout":30,
+    "promptOnCritical":false,
+    "promptOnAttack":true,
+    "promptOnAmbiguous":true,
+    "promptOnSlow":true,
+    "promptOnDestructive":true,
+    "autoFallback":false
+  }
+  globals.G_agent.promptPreferences={}
+  result=globals.G_agent.saveConfig
+  if result.success then print skyblue("Agent: Config reset to defaults and saved") else print yellow("Agent: Config reset but save failed: "+result.error)
+  return result
+end function
+//Prompt user with yes/no question and remember preference
+AgentCore.promptUser=function(question,context,allowRemember)
+  if allowRemember==null then allowRemember=true
+  //Generate hash of question for caching
+  questionHash=question
+  if context and hasIndex(context,"type") then questionHash=context.type+"_"+question
+  //Check if user has preference cached
+  if hasIndex(globals.G_agent.promptPreferences,questionHash) then
+    cachedPref=globals.G_agent.promptPreferences[questionHash]
+    if cachedPref=="always" then return true
+    if cachedPref=="never" then return false
+  end if
+  //Show prompt
+  print yellow("[!] "+question)
+  if context and hasIndex(context,"details") then
+    if typeof(context.details)=="list" then
+      for detail in context.details;print white("  - "+detail);end for
+    else
+      print white("  "+context.details)
+    end if
+  end if
+  //Build choices
+  choices=["Yes, continue","No, cancel"]
+  if allowRemember then
+    push(choices,"Always (don't ask again)")
+    push(choices,"Never (don't ask again)")
+  end if
+  choice=Gui.choiceHybrid(choices,{},len(choices),false,true)
+  //Handle remember preferences
+  if allowRemember then
+    if choice==3 then
+      globals.G_agent.promptPreferences[questionHash]="always"
+      globals.G_agent.saveConfig
+      return true
+    else if choice==4 then
+      globals.G_agent.promptPreferences[questionHash]="never"
+      globals.G_agent.saveConfig
+      return false
+    end if
+  end if
+  return choice==1
+end function

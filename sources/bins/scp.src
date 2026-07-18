@@ -1,0 +1,6 @@
+binScp="if len(params)!=3 or (params[0]!=""-u"" and params[0]!=""-d"") then exit(command_info(""scp_usage""))
+sourcePath=get_abs_path(params[1])
+destPath=get_abs_path(params[2])
+result=scp(get_shell,sourcePath,destPath,null,params[0]==""-u"")
+if result==null then exit(""scp: there is no active remote connections"")
+if result!=1 then print(result)"

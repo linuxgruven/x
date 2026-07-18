@@ -1,0 +1,32 @@
+// Man page for probe
+manProbe="PROBE(1)                         X Shell Manual                         PROBE(1)
+
+<b>NAME</b>
+    probe - System type detection utility
+<b>SYNOPSIS</b>
+    <b>probe</b>
+<b>DESCRIPTION</b>
+    System fingerprinting tool that identifies whether current system is
+    NPC-owned or player-controlled. Performs preliminary checks to determine
+    target classification. Most effective on workstations and personal
+    computers. Less reliable on server systems.
+<b>OPTIONS</b>
+    <b>probe</b>
+    Analyze system and report type
+    Identifies NPC vs player systems
+<b>EXAMPLE:</b>
+    <color=#e4ff34># System Analysis</color>
+    <b>probe</b>
+    Check current system type
+
+    <color=#e4ff34># Use Cases</color>
+    <b>probe</b>
+    Identify target before exploitation
+
+    <b>probe</b>
+    Verify compromised system type
+
+    <b>probe</b>
+    Determine defensive strategy
+<b>SEE ALSO</b>
+    <b>scan</b>, <b>info</b>, <b>stat</b>"

@@ -1,0 +1,454 @@
+// =============================================================================
+// AGENT_KNOWLEDGE
+// Knowledge system: man page parsing, command learning, knowledge persistence
+// =============================================================================
+//Get man page content for a command to help agent understand command capabilities
+AgentCore._getCommandHelp=function(commandName)
+  debug=globals.G_agent.config.debug
+  if not commandName or typeof(commandName)!="string" then return null
+  cmd=trim(lower(commandName))
+  if len(cmd)==0 then return null
+  //Check if Man object exists
+  if typeof(Man)!="map" then return null
+  //Use Man.getManPage for AI access - simple and direct
+  if hasIndex(Man,"getManPage") then
+    helpLines=Man.getManPage(cmd)
+    if helpLines and typeof(helpLines)=="list" and len(helpLines)>0 then
+      //Join lines and extract key information
+      helpText=join(helpLines,char(10))
+      //Extract description section (most useful for AI understanding)
+      descMarker=char(60)+"b"+char(62)+"DESCRIPTION"+char(60)+"/b"+char(62)
+      descStart=indexOf(helpText,descMarker)
+      if descStart!=null then
+        descSection=helpText[descStart:]
+        //Find next section marker
+        optMarker=char(60)+"b"+char(62)+"OPTIONS"+char(60)+"/b"+char(62)
+        nextSection=indexOf(descSection,optMarker)
+        if nextSection==null then
+          exMarker=char(60)+"b"+char(62)+"EXAMPLE"
+          nextSection=indexOf(descSection,exMarker)
+        end if
+        if nextSection==null then
+          seeMarker=char(60)+"b"+char(62)+"SEE ALSO"+char(60)+"/b"+char(62)
+          nextSection=indexOf(descSection,seeMarker)
+        end if
+        if nextSection!=null then descSection=descSection[:nextSection]
+        //Remove HTML tags for cleaner text
+        descSection=descSection.replace(descMarker,"")
+        descSection=descSection.replace(char(60)+"b"+char(62),"").replace(char(60)+"/b"+char(62),"")
+        descSection=descSection.replace(char(10)," ")
+        descSection=trim(descSection)
+        return {"command":cmd,"description":descSection,"fullHelp":helpText}
+      end if
+      //Learn flag mappings from man page
+      if hasIndex(AgentCommandRegistry,"learnFlagsFromManPage") then
+        learned=AgentCommandRegistry.learnFlagsFromManPage(cmd,helpText)
+        if learned and debug then print green("[DEBUG] Learned "+len(learned.indexes)+" flag mappings from man page for '"+cmd+"'")
+      end if
+      return {"command":cmd,"description":"","fullHelp":helpText}
+    end if
+  end if
+  return null
+end function
+//Strip color tags from text for clean knowledge storage
+AgentCore._stripColorTags=function(text)
+  if not text then return text
+  result=text
+  //Remove <color=#XXXXXX>...</color> tags
+  while true
+    startTag=indexOf(result,"<color=")
+    if startTag==null then break
+    endOfStartTag=indexOf(result,">",startTag)
+    if endOfStartTag==null then break
+    result=result[:startTag]+result[endOfStartTag+1:]
+  end while
+  //Remove </color> tags
+  result=result.replace("</color>","")
+  return result
+end function
+//Get command information to help with decision making
+//This can be called by the agent when uncertain about which command to use
+AgentCore.getCommandInfo=function(commandName)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  //Check cache first
+  if not hasIndex(self,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
+  //Lazy load knowledge file on first command request
+  if not hasIndex(self,"knowledgeFileLoaded") then globals.G_agent.knowledgeFileLoaded=false
+  if not globals.G_agent.knowledgeFileLoaded then
+    savedLevel=outLvl
+    outLvl=0
+    globals.G_agent.loadKnowledge
+    outLvl=savedLevel
+    globals.G_agent.knowledgeFileLoaded=true
+  end if
+  //Clean up any corrupted empty-key entries and reload
+  if hasIndex(globals.G_agent.commandKnowledgeCache,"") then
+    globals.G_agent.commandKnowledgeCache.remove("")
+    savedLevel=outLvl
+    outLvl=0
+    globals.G_agent.loadKnowledge
+    outLvl=savedLevel
+  end if
+  //Normalize command name to lowercase for consistent cache lookups
+  normalizedName=trim(lower(commandName))
+  if hasIndex(globals.G_agent.commandKnowledgeCache,normalizedName) then
+    if debug then print green("[DEBUG] Agent: I have already read the '"+normalizedName+"' man page")
+    return globals.G_agent.commandKnowledgeCache[normalizedName]
+  end if
+  help=globals.G_agent._getCommandHelp(commandName)
+  if help then
+    //Parse structured information from the description and full help
+    //Use normalized command name from help object for consistency
+    normalizedName=help.command
+    knowledge={"command":normalizedName,"raw":globals.G_agent._stripColorTags(help.description)}
+    fullText=lower(help.fullHelp)
+    desc=lower(help.description)
+    //Universal extraction - parse any man page intelligently
+    //Extract requirements
+    if indexOf(fullText,"must be executed from a router")!=null or indexOf(fullText,"*** router ***")!=null then knowledge.requiresRouter=true
+    if indexOf(fullText,"requires root")!=null or indexOf(fullText,"must be run as root")!=null then knowledge.requiresRoot=true
+    if indexOf(fullText,"lan")!=null or indexOf(fullText,"local network")!=null then knowledge.requiresLAN=true
+    if indexOf(fullText,"guest")!=null and indexOf(fullText,"cannot")!=null then knowledge.blockedFromGuest=true
+    if indexOf(fullText,"guest")!=null and indexOf(fullText,"can")!=null then knowledge.worksFromGuest=true
+    //Extract capabilities based on keywords
+    if indexOf(desc,"scan")!=null or indexOf(desc,"probe")!=null then knowledge.scansPorts=true
+    if indexOf(desc,"crack")!=null or indexOf(desc,"password")!=null then knowledge.cracksPasswords=true
+    if indexOf(desc,"exploit")!=null or indexOf(desc,"vulnerability")!=null then knowledge.exploits=true
+    if indexOf(desc,"overflow")!=null then knowledge.supportsOverflow=true
+    if indexOf(desc,"injection")!=null then knowledge.supportsInjection=true
+    if indexOf(desc,"privilege")!=null or indexOf(desc,"escalat")!=null then knowledge.canEscalate=true
+    if indexOf(desc,"root")!=null and (indexOf(desc,"escalat")!=null or indexOf(desc,"privilege")!=null) then knowledge.escalatesToRoot=true
+    if indexOf(desc,"stealth")!=null or indexOf(desc,"silent")!=null then knowledge.supportsStealth=true
+    if indexOf(desc,"decrypt")!=null or indexOf(desc,"decipher")!=null then knowledge.decrypts=true
+    if indexOf(desc,"compile")!=null or indexOf(desc,"build")!=null then knowledge.compiles=true
+    if indexOf(desc,"email")!=null then knowledge.extractsEmail=true
+    if indexOf(desc,"bank")!=null or indexOf(desc,"financial")!=null then knowledge.extractsBank=true
+    if indexOf(desc,"rshell")!=null or indexOf(desc,"remote shell")!=null then knowledge.extractsRshell=true
+    if indexOf(desc,"user")!=null or indexOf(desc,"account")!=null or indexOf(desc,"credential")!=null then knowledge.extractsUsers=true
+    if indexOf(desc,"file")!=null then knowledge.handlesFiles=true
+    if indexOf(desc,"network")!=null or indexOf(desc,"packet")!=null or indexOf(desc,"traffic")!=null then knowledge.handlesNetwork=true
+    if indexOf(desc,"system")!=null or indexOf(desc,"process")!=null then knowledge.handlesSystem=true
+    //Extract common flags from OPTIONS section
+    knowledge.flags={}
+    fullText=join(help.fullHelp,char(10))
+    optionsMarker=char(60)+"b"+char(62)+"OPTIONS"+char(60)+"/b"+char(62)
+    optionsIdx=indexOf(fullText,optionsMarker)
+    if debug then print green("[DEBUG]   OPTIONS section found at index: "+optionsIdx)
+    if optionsIdx!=null then
+      optionsSection=help.fullHelp[optionsIdx:]
+      //Find end of options (next section)
+      examplesIdx=indexOf(optionsSection,char(60)+"b"+char(62)+"EXAMPLE")
+      seeAlsoIdx=indexOf(optionsSection,char(60)+"b"+char(62)+"SEE ALSO"+char(60)+"/b"+char(62))
+      endIdx=null
+      if examplesIdx!=null then endIdx=examplesIdx
+      if seeAlsoIdx!=null and (endIdx==null or seeAlsoIdx<endIdx) then endIdx=seeAlsoIdx
+      if endIdx!=null then optionsSection=optionsSection[:endIdx]
+      //Parse flags from OPTIONS section
+      //Format in helpText: "    <b>-l</b>" (flag) then "        description" (8 spaces)
+      lines=split(optionsSection,char(10))
+      currentFlag=null
+      openBold=char(60)+"b"+char(62)
+      closeBold=char(60)+"/b"+char(62)
+      _len=len(lines);i=0;while i<_len
+        line=lines[i]
+        if len(line)==0 then
+          i+=1
+          continue
+        end if
+        //Check for flag line: starts with 4 spaces, has bold tags
+        if len(line)>=4 and line[:4]=="    " and indexOf(line,openBold)!=null then
+          //Extract flag from bold tags
+          boldStart=indexOf(line,openBold)
+          boldEnd=indexOf(line,closeBold)
+          if boldStart!=null and boldEnd!=null and boldEnd>boldStart then
+            flagContent=line[boldStart+3:boldEnd]
+            //Extract just the flag (before space or bracket)
+            spaceIdx=indexOf(flagContent," ")
+            bracketIdx=indexOf(flagContent,"[")
+            endIdx=null
+            if spaceIdx!=null then endIdx=spaceIdx
+            if bracketIdx!=null and (endIdx==null or bracketIdx<endIdx) then endIdx=bracketIdx
+            if endIdx!=null then currentFlag=trim(flagContent[:endIdx]) else currentFlag=trim(flagContent)
+            if len(currentFlag)>=2 and currentFlag[0]=="-" then
+              knowledge.flags[currentFlag]=""
+              //Check if description is on same line after bold tag
+              remainingLine=trim(line[boldEnd+4:])
+              if len(remainingLine)>0 and remainingLine[0]=="-" then remainingLine=trim(remainingLine[1:])
+              if len(remainingLine)>0 then knowledge.flags[currentFlag]=globals.G_agent._stripColorTags(remainingLine)
+              if debug then print green("[DEBUG]   Found flag: "+currentFlag+" desc: "+knowledge.flags[currentFlag])
+            else
+              currentFlag=null
+            end if
+          end if
+        else if currentFlag and len(line)>=8 and line[:8]=="        " then
+          //Description line: 8 spaces
+          desc=trim(line)
+          if len(desc)>0 then
+            desc=globals.G_agent._stripColorTags(desc)
+            if len(knowledge.flags[currentFlag])>0 then knowledge.flags[currentFlag]+=" "+desc else knowledge.flags[currentFlag]=desc
+            if len(knowledge.flags[currentFlag])>200 then
+              knowledge.flags[currentFlag]=knowledge.flags[currentFlag][:200]
+              currentFlag=null
+            end if
+          end if
+        else
+          currentFlag=null
+        end if
+      i+=1;end while
+      //Debug: show how many flags were parsed
+      if debug and len(indexes(knowledge.flags))>0 then print green("  Parsed "+len(indexes(knowledge.flags))+" flags: "+join(indexes(knowledge.flags),", "))
+    end if
+    //Command-specific knowledge extraction (only for special cases needing structured data)
+    if commandName=="scan" then
+      knowledge.purpose="network scanning and service enumeration"
+      //Extract port shortcuts: "router:0, ssh:22, ftp:21, http:80..."
+      if indexOf(help.description,"router:")!=null then
+        knowledge.ports={}
+        //Use actual port numbers - 0 is valid for router
+        //Note: In JSON output, these will appear as numbers: 0, 22, 21, etc.
+        knowledge.ports.router=0
+        knowledge.ports.ssh=22
+        knowledge.ports.ftp=21
+        knowledge.ports.http=80
+        knowledge.ports.chat=6667
+        knowledge.ports.rshell=1222
+        knowledge.ports.repo=1542
+        knowledge.ports.cam=37777
+        knowledge.ports.sql=3306
+        knowledge.ports.smtp=25
+      end if
+      //Extract object types: "s=shell access, c=computer object..."
+      if indexOf(help.description,"s=shell")!=null then
+        knowledge.objectTypes={}
+        knowledge.objectTypes.s="shell access"
+        knowledge.objectTypes.c="computer object"
+        knowledge.objectTypes.f="file object"
+        knowledge.objectTypes.l="lan bounce"
+        knowledge.objectTypes.i="internal lan bounce"
+        knowledge.objectTypes.d="disable firewall"
+        knowledge.objectTypes.p="change root password"
+        knowledge.objectTypes.w="change user password"
+      end if
+    end if
+    //Extract purpose from first sentence if not already set
+    if not hasIndex(knowledge,"purpose") or knowledge.purpose=="" then
+      desc=help.description
+      if len(desc)>0 then
+        periodIdx=indexOf(desc,".")
+        if periodIdx!=null and periodIdx<150 then
+          firstSentence=trim(desc[:periodIdx])
+          if len(firstSentence)>10 then knowledge.purpose=lower(firstSentence)
+        else if len(desc)<150 then
+          knowledge.purpose=lower(desc)
+        end if
+      end if
+      //Fallback
+      if not hasIndex(knowledge,"purpose") or knowledge.purpose=="" then knowledge.purpose="command utility"
+    end if
+    if debug then
+      print green("[DEBUG] Agent: Learning about '"+normalizedName+"' command")
+      print green("[DEBUG]   Purpose: "+knowledge.purpose)
+      if hasIndex(knowledge,"ports") then print green("[DEBUG]   Learned: "+len(indexes(knowledge.ports))+" port shortcuts")
+      if hasIndex(knowledge,"objectTypes") then print green("[DEBUG]   Learned: "+len(indexes(knowledge.objectTypes))+" object types")
+      //Show key capabilities learned
+      learnedCapabilities=[]
+      for key in indexes(knowledge);if typeof(knowledge[key])=="number" and knowledge[key]==true then push(learnedCapabilities,key);end for
+      if len(learnedCapabilities)>0 then print green("[DEBUG]   Capabilities: "+join(learnedCapabilities,", "))
+    end if
+    //Check if this is truly new knowledge before saving
+    isNewKnowledge=not hasIndex(globals.G_agent.commandKnowledgeCache,normalizedName)
+    //Store in cache (update or add)
+    globals.G_agent.commandKnowledgeCache[normalizedName]=knowledge
+    //Auto-save only if this was genuinely new knowledge AND not in batch mode
+    if isNewKnowledge and not hasIndex(globals.G_agent.config,"batchLearning") then
+      if outLvl>=1 then print skyblue("Agent: Auto-saving new command knowledge...")
+      globals.G_agent.saveKnowledge
+    else if isNewKnowledge and globals.G_agent.config.batchLearning then
+      if debug then print green("[DEBUG] Agent: Cached '"+normalizedName+"' (batch mode - will save at end)")
+    end if
+    return knowledge
+  end if
+  if debug then print green("[DEBUG] Agent: No help available for '"+normalizedName+"'")
+  return null
+end function
+//Manually trigger learning for a specific command
+AgentCore.learnCommand=function(Obj,commandName)
+  outLvl=globals.G_agent.config.outputLevel
+  if not commandName or len(commandName)==0 then return {"success":false,"error":"No command name provided"}
+  if not hasIndex(self,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
+  knowledge=globals.G_agent.getCommandInfo(commandName)
+  if not knowledge then return {"success":false,"error":"Could not find man page for: "+commandName}
+  if outLvl>=1 then print skyblue("Agent: Learned about '"+commandName+"' command")
+  return {"success":true,"command":commandName,"knowledge":knowledge}
+end function
+//Learn all available commands from the session
+AgentCore.learnAllCommands=function(Obj)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  if not hasIndex(self,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
+  //Clear existing cache to force complete regeneration
+  globals.G_agent.commandKnowledgeCache={}
+  //Delete existing knowledge files (all chunks) to ensure clean overwrite
+  dataPath=path(globals.G_main.dir.data)
+  comp=globals.G_main.computer
+  deletedCount=0
+  i=0;while i<=20  //Delete up to 20 old chunk files
+  oldFile=dataPath+"/agent_knowledge_"+i+".json"
+  f=File(comp,oldFile)
+  if f then
+    delete(f)
+    deletedCount+=1
+  end if
+  i+=1;end while
+  if deletedCount>0 and outLvl>=1 then print yellow("Agent: Deleted "+deletedCount+" existing knowledge files")
+  //Get list of all available man pages from disk
+  manDir=Man.getManDir
+  if not manDir and globals.G_main and globals.G_main.dir and globals.G_main.dir.man then manDir=globals.G_main.dir.man
+  if not manDir then return {"success":false,"error":"Man pages directory not found"}
+  manFiles=get_files(manDir)
+  if not manFiles then return {"success":false,"error":"No man pages found"}
+  //Extract command names from man page files
+  commandList=[]
+  for manFile in manFiles;cmdName=name(manFile);if cmdName and len(cmdName)>0 then push(commandList,cmdName);end for
+  if len(commandList)==0 then return {"success":false,"error":"No man pages found"}
+  //Enable batch mode to prevent auto-save after each command
+  globals.G_agent.config.batchLearning=true
+  learned=0
+  skipped=0
+  total=len(commandList)
+  if outLvl>=1 then print white("Regenerating knowledge base with "+total+" commands...")
+  //Only suppress debug output if debug wasn't already enabled
+  savedDebug=debug
+  suppressDebug=not savedDebug
+  if suppressDebug then debug=false
+  for cmdName in commandList
+    knowledge=globals.G_agent.getCommandInfo(cmdName)
+    if knowledge then
+      learned+=1
+      //Show progress every 25 commands (unless debug is on, then show everything)
+      if learned%25==0 and outLvl>=1 and not savedDebug then print yellow("  Progress: "+learned+"/"+total)
+    else
+      skipped+=1
+    end if
+  end for
+  //Restore debug setting if it was suppressed
+  if suppressDebug then debug=savedDebug
+  if outLvl>=1 then print skyblue("Agent: Learned "+learned+" commands ("+skipped+" skipped)")
+  //Disable batch mode
+  globals.G_agent.config.batchLearning=false
+  //Save all learned knowledge to disk once (overwrites existing file)
+  if learned>0 then
+    if outLvl>=1 then print skyblue("Agent: Writing knowledge file...")
+    globals.G_agent.saveKnowledge
+  end if
+  return {"success":true,"learned":learned,"skipped":skipped,"total":total}
+end function
+// Knowledge Persistence
+//Save learned command knowledge to disk (with automatic chunking for 160k limit)
+AgentCore.saveKnowledge=function
+  outLvl=globals.G_agent.config.outputLevel
+  if not hasIndex(self,"commandKnowledgeCache") then return {"success":false,"error":"No knowledge to save"}
+  maxFileSize=150000  //150k limit (leaving 10k buffer)
+  comp=globals.G_main.computer
+  //Clean the commands before saving
+  cleanedCommands={}
+  for cmdName in indexes(globals.G_agent.commandKnowledgeCache);cmd=globals.G_agent.commandKnowledgeCache[cmdName];cleanedCommands[cmdName]=cmd;end for
+  //Create base knowledge structure
+  baseData={"version":"1.0","timestamp":time}
+  //Convert each command to estimate size
+  commandEntries=[]
+  for cmdName in indexes(cleanedCommands);entry={"name":cmdName,"data":cleanedCommands[cmdName]};entry.size=len(System.toJSON(entry.data,1,0));push(commandEntries,entry);end for
+  //Sort by size (largest first) for better packing
+  commandEntries=commandEntries.sort("size",true)
+  //Pack into chunks
+  chunks=[]
+  currentChunk=[]
+  currentSize=len(System.toJSON(baseData,1,0))+50  //Base overhead
+  for entry in commandEntries
+    estimatedSize=currentSize+entry.size+50
+    if len(currentChunk)>0 and estimatedSize>maxFileSize then
+      //Start new chunk
+      push(chunks,currentChunk)
+      currentChunk=[]
+      currentSize=len(System.toJSON(baseData,1,0))+50
+    end if
+    push(currentChunk,entry)
+    currentSize=currentSize+entry.size+50
+  end for
+  if len(currentChunk)>0 then push(chunks,currentChunk)
+  //Delete old knowledge files before writing new ones
+  dataPath=path(globals.G_main.dir.data)
+  i=0;while i<=20;oldFile=dataPath+"/agent_knowledge_"+i+".json";f=File(comp,oldFile);if f then f.delete;i+=1;end while
+  //Write chunks to files
+  savedFiles=0
+  totalCommands=0
+  _len=len(chunks);chunkIdx=0;while chunkIdx<_len
+  chunkData=baseData
+  chunkData.chunk=chunkIdx
+  chunkData.totalChunks=len(chunks)
+  chunkData.commands={}
+  for entry in chunks[chunkIdx];chunkData.commands[entry.name]=entry.data;totalCommands+=1;end for
+  jsonStr=System.toJSON(chunkData,1,0)
+  fileName="agent_knowledge_"+chunkIdx+".json"
+  knowledgeFile=dataPath+"/"+fileName
+  f=File(comp,knowledgeFile)
+  if not f then
+    result=touch(comp,dataPath,fileName)
+    if not result then return {"success":false,"error":"Failed to create "+fileName}
+    f=File(comp,knowledgeFile)
+  end if
+  if f then
+    set_content(f,jsonStr)
+    savedFiles+=1
+    if outLvl>=1 then print skyblue("Agent: Saved chunk "+chunkIdx+" ("+len(jsonStr)+" bytes, "+len(indexes(chunkData.commands))+" commands)")
+  else
+    return {"success":false,"error":"Could not write "+fileName}
+  end if
+  chunkIdx+=1;end while
+  if outLvl>=1 then print skyblue("Agent: Knowledge saved ("+savedFiles+" files, "+totalCommands+" commands)")
+  return {"success":true,"commandCount":totalCommands,"fileCount":savedFiles}
+end function
+//Load learned command knowledge from disk (loads all chunk files)
+AgentCore.loadKnowledge=function
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  dataPath=path(globals.G_main.dir.data)
+  comp=globals.G_main.computer
+  //Try to load all chunk files (agent_knowledge_0.json, agent_knowledge_1.json, etc.)
+  if not hasIndex(self,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
+  loadedCommands=0
+  loadedFiles=0
+  chunkIdx=0;while chunkIdx<=20  //Try up to 20 chunks
+    knowledgeFile=dataPath+"/agent_knowledge_"+chunkIdx+".json"
+    f=File(comp,knowledgeFile)
+    if not f then
+      if chunkIdx==0 then
+        if debug then print green("[DEBUG] Agent: No saved knowledge found")
+        return {"success":false,"error":"No knowledge files found"}
+      end if
+      break  //No more chunks
+    end if
+    //Read and parse chunk
+    content=get_content(f)
+    if not content or len(content)==0 then
+      chunkIdx+=1
+      continue
+    end if
+    knowledgeData=System.parse(content)
+    if not knowledgeData or typeof(knowledgeData)!="map" then
+      if debug then print green("[DEBUG] Agent: Could not parse chunk "+chunkIdx)
+      chunkIdx+=1
+      continue
+    end if
+    //Merge commands from this chunk
+    if hasIndex(knowledgeData,"commands") and typeof(knowledgeData.commands)=="map" then
+      for cmdName in indexes(knowledgeData.commands);globals.G_agent.commandKnowledgeCache[cmdName]=knowledgeData.commands[cmdName];loadedCommands+=1;end for
+      loadedFiles+=1
+      if outLvl>=1 then print skyblue("Agent: Loaded chunk "+chunkIdx+" ("+len(indexes(knowledgeData.commands))+" commands)")
+    end if
+  chunkIdx+=1;end while
+  if loadedFiles==0 then return {"success":false,"error":"No valid knowledge files found"}
+  if outLvl>=1 then print skyblue("Agent: Loaded "+loadedCommands+" commands from "+loadedFiles+" files")
+  return {"success":true,"loaded":loadedCommands,"fileCount":loadedFiles}
+end function

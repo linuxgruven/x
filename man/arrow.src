@@ -1,0 +1,15 @@
+// Man page for arrow
+manArrow=">(1)                         X Shell Manual                         >(1)
+
+<b>NAME</b>
+    command > (filename) - Redirect output to file
+<b>DESCRIPTION</b>
+    Redirect command output to a new file. If no filename specified,
+    output saves to command_name.txt. All output goes to file, not
+    terminal. Overwrites existing files.
+<b>EXAMPLE:</b>
+    <b>ls > directory_list.txt</b>
+    Save directory listing to file
+
+    <b>nmap host.ip.addr ></b>
+    Save to nmap.txt automatically"

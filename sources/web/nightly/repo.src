@@ -1,0 +1,154 @@
+webRepo="<!doctype html>
+<style type='text/css'>
+html {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #090d12;
+}
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: #c7d6de;
+  font: 13px ""Trebuchet MS"", ""Segoe UI"", Arial, sans-serif;
+}
+.scroll-root {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  padding: 20px 0;
+}
+.page {
+  width: 860px;
+  max-width: 95%;
+  margin: 0 auto 18px auto;
+  border: 1px solid #1a2a34;
+  background: #0c141c;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.35);
+}
+.shell {
+  margin: 10px;
+  border: 1px solid #223845;
+  background: #101b24;
+}
+.topbar {
+  padding: 9px 12px;
+  border-bottom: 1px solid #1f3440;
+  background: #0f1921;
+  color: #6ca9bf;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+}
+.btn-group {
+  margin: 12px;
+  text-align: center;
+}
+.btn {
+  background-color: #101b22;
+  border: 1px solid #2c4a58;
+  color: #b7d7e7;
+  padding: 5px 6px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 11px;
+  width: 100px;
+  margin: 3px;
+}
+.btn-sel {
+  background-color: #1a2b36;
+  border-color: #3e6879;
+  color: #d2ecf8;
+}
+.btn-group button:hover {
+  background-color: #1a2b36;
+}
+.hero {
+  margin: 0 12px 12px 12px;
+  padding: 16px;
+  border: 1px solid #28424f;
+  background: linear-gradient(180deg, #122330 0%, #0f1c26 100%);
+  text-align: center;
+}
+.hero img {
+  display: block;
+  margin: 0 auto 8px auto;
+}
+.hero-title {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0.8px;
+  color: #9ad8ef;
+}
+.hero-copy {
+  margin: 8px 0 0 0;
+  color: #bed1dc;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.section-title {
+  margin: 0 12px 8px 12px;
+  color: #f0b86d;
+  font-size: 12px;
+  letter-spacing: 0.7px;
+}
+.panel {
+  margin: 0 12px 14px 12px;
+  border: 1px solid #26414d;
+  background: #0f1a23;
+  padding: 10px 12px;
+}
+.line {
+  margin: 0 0 7px 0;
+  color: #b3cad6;
+  font-size: 12px;
+}
+.line:last-child {
+  margin-bottom: 0;
+}
+.foot {
+  margin: 0 12px 12px 12px;
+  border-top: 1px solid #2c4755;
+  padding-top: 8px;
+  color: #6f8d9c;
+  font-size: 10px;
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .btn {
+    width: 94%;
+    max-width: 260px;
+  }
+}
+</style>
+<div class=""scroll-root"">
+  <div class=""page"">
+    <div class=""shell"">
+      <div class=""topbar"">UNLISTED ACCESS NODE HACKSHOP</div>
+      <div class=""btn-group"">
+        <button type=""button"" class=""btn btn-primary btn-sel"" id=""Main"">Main</button>
+        <button type=""button"" class=""btn btn-primary"" id=""HackShopTools"">Tools</button>
+        <button type=""button"" class=""btn btn-primary"" id=""HackShopExploits"">Exploits</button>
+        <button type=""button"" class=""btn btn-primary"" id=""Jobs"">Jobs</button>
+        <button type=""button"" class=""btn btn-primary"" id=""CTF"">CTF</button>
+      </div>
+      <div class=""hero"">
+        <img src=""gecko.png"" width=""80"" height=""80"" align=""center"">
+        <p class=""hero-title"">HackShop</p>
+        <p class=""hero-copy"">Private market for operators. Acquire tools, pick contracts, I will not ask questions.</p>
+      </div>
+      <p class=""section-title"">NETWORK NOTES</p>
+      <div class=""panel"">
+        <p class=""line"">- Restricted marketplace with rotating stock.</p>
+        <p class=""line"">- Jobs are prioritized by reputation and operational consistency.</p>
+        <p class=""line"">- CTF events are available for advanced training and field testing.</p>
+      </div>
+      <div class=""foot"">No index listing. No guarantees. No questions.</div>
+    </div>
+  </div>
+</div>"

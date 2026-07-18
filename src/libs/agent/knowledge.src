@@ -1,0 +1,238 @@
+// =============================================================================
+// KNOWLEDGE
+// AI knowledge base; persistent storage and retrieval for agent learning and memory.
+// =============================================================================
+Knowledge={}
+Knowledge.knowledgeFile=null
+Knowledge.entries=[]
+Knowledge.loaded=false
+// Initialize knowledge system
+Knowledge.init=function
+  if not globals.G_main or not hasIndex(globals.G_main,"computer") then return Error.set("Knowledge: G_main not initialized")
+  // Use payload/data/ai for consistency with AI system (folder already created by AI.init)
+  aiPath=path(globals.G_main.dir.data)+"/ai"
+  filepath=aiPath+"/knowledge.ai"
+  self.knowledgeFile=File(globals.G_main.computer,filepath)
+  if not self.knowledgeFile then
+    // File doesn't exist, create it
+    self.knowledgeFile=globals.G_main.computer.touch(aiPath,"knowledge.ai")
+    if not self.knowledgeFile then return Error.set("Knowledge: Failed to create knowledge file")
+  end if
+  // File exists or was just created, load it
+  self.load
+  return true
+end function
+// Load knowledge from file
+Knowledge.load=function
+  if not self.knowledgeFile then return false
+  content=get_content(self.knowledgeFile)
+  if not content or len(content)==0 then
+    self.entries=[]
+    self.loaded=true
+    return true
+  end if
+  // Parse JSON-like format: one entry per line
+  lines=split(content,char(10))
+  self.entries=[]
+  for line in lines;if not line or len(line)==0 then continue;entry=self.parseLine(line);if entry then push(self.entries,entry);end for
+  self.loaded=true
+  return true
+end function
+// Parse a line into an entry
+Knowledge.parseLine=function(line)
+  debug=globals.G_agent.config.debug
+  // Format: context|action|outcome|confidence|timestamp|useCount
+  if not line or len(line)==0 then return null
+  parts=split(line,"\|")
+  if not parts then return null
+  if len(parts)!=6 then
+    if debug then print red("Debug: Malformed knowledge entry - expected 6 parts, got "+len(parts))
+    return null
+  end if
+  // Extra validation - ensure all required parts exist and have content
+  if not parts[0] or not parts[1] or not parts[2] or not parts[3] or not parts[4] or not parts[5] then return null
+  entry={}
+  entry.context=parts[0]
+  entry.action=parts[1]
+  entry.outcome=parts[2]
+  entry.confidence=val(parts[3])
+  if entry.confidence==0 and parts[3]!="0" then entry.confidence=0.5
+  entry.timestamp=val(parts[4])
+  entry.useCount=val(parts[5])
+  return entry
+end function
+// Save knowledge to file
+Knowledge.save=function
+  debug=globals.G_agent.config.debug
+  if not self.knowledgeFile then
+    if debug then print red("Debug: Knowledge.save - no knowledgeFile")
+    return false
+  end if
+  // Build content
+  lines=[]
+  for entry in self.entries
+    // Validate entry has all required fields before saving
+    if not hasIndex(entry,"context") or not hasIndex(entry,"action") or not hasIndex(entry,"outcome") or not hasIndex(entry,"confidence") or not hasIndex(entry,"timestamp") or not hasIndex(entry,"useCount") then
+      if debug then print red("Debug: Skipping malformed entry missing fields")
+      continue
+    end if
+    line=entry.context+"|"+entry.action+"|"+entry.outcome+"|"+entry.confidence+"|"+entry.timestamp+"|"+entry.useCount
+    if debug then print cyan("Debug: Saving line: "+line)
+    push(lines,line)
+  end for
+  content=join(lines,char(10))
+  if debug then print cyan("Debug: Knowledge.save - writing "+len(self.entries)+" entries")
+  if debug then print cyan("Debug: knowledgeFile type: "+typeof(self.knowledgeFile))
+  // Reload file reference to ensure it's valid
+  dataAiPath=path(globals.G_main.dir.data)+"/ai"
+  filepath=dataAiPath+"/knowledge.ai"
+  freshFile=File(globals.G_main.computer,filepath)
+  if not freshFile then
+    if debug then print red("Debug: Could not get fresh file handle")
+    return false
+  end if
+  result=freshFile.set_content(content)
+  if result isa string then
+    if debug then print red("Debug: Knowledge.save failed: "+result)
+    return false
+  end if
+  if debug then print cyan("Debug: Knowledge.save - success")
+  return true
+end function
+// Query knowledge for a context
+// Returns best matching action or null
+Knowledge.query=function(context,minConfidence=0.5)
+  if not self.loaded then return null
+  if not context then return null
+  if not self.entries or len(self.entries)==0 then return null
+  contextLower=lower(context)
+  // Find matching entries
+  matches=[]
+  for entry in self.entries
+    // Skip malformed entries - be very defensive
+    if typeof(entry)!="map" then continue
+    if not hasIndex(entry,"context") or not hasIndex(entry,"action") or not hasIndex(entry,"confidence") then continue
+    if not entry.context or not entry.action then continue
+    if entry.confidence<minConfidence then continue
+    entryContextLower=lower(entry.context)
+    // Check for keyword overlap
+    score=self.calculateMatch(contextLower,entryContextLower)
+    if score>0.3 then
+      match={}
+      match.entry=entry
+      match.score=score*entry.confidence
+      push(matches,match)
+    end if
+  end for
+  if len(matches)==0 then return null
+  // Sort by score (descending)
+  matches=matches.sort("score",true)
+  // Return best match
+  if len(matches)==0 then return null
+  best=matches[0]
+  // Increment use count
+  best.entry.useCount=best.entry.useCount+1
+  self.save
+  return {"action":best.entry.action,"confidence":best.score,"entry":best.entry}
+end function
+// Calculate match score between two contexts
+Knowledge.calculateMatch=function(context1,context2)
+  // Simple keyword matching
+  words1=split(context1," ")
+  words2=split(context2," ")
+  matches=0
+  for word1 in words1
+    if len(word1)<3 then continue // Skip short words
+    for word2 in words2
+      if word1==word2 then
+        matches+=1
+        break
+      end if
+      // Partial match
+      if len(word1)>4 and len(word2)>4 then
+        if indexOf(word1,word2)!=null or indexOf(word2,word1)!=null then
+          matches=matches+0.5
+          break
+        end if
+      end if
+    end for
+  end for
+  maxWords=len(words1)
+  if len(words2)>maxWords then maxWords=len(words2)
+  if maxWords==0 then return 0
+  return matches/maxWords
+end function
+// Record a successful action
+Knowledge.record=function(context,action,outcome,initialConfidence=0.7)
+  debug=globals.G_agent.config.debug
+  if not self.loaded then return false
+  if not context or not action then return false
+  if debug then print cyan("Debug: Knowledge.record called - context: "+context+", action: "+action+", outcome: "+outcome)
+  // Check if entry already exists
+  existing=null
+  for entry in self.entries
+    if entry.context==context and entry.action==action then
+      existing=entry
+      break
+    end if
+  end for
+  if existing then
+    // Update existing entry
+    if outcome=="success" then
+      // Increase confidence
+      existing.confidence=existing.confidence+0.1
+      if existing.confidence>1.0 then existing.confidence=1.0
+    else
+      // Decrease confidence
+      existing.confidence=existing.confidence-0.2
+      if existing.confidence<0.1 then existing.confidence=0.1
+    end if
+    existing.outcome=outcome
+    existing.timestamp=time
+    existing.useCount=existing.useCount+1
+    if debug then print cyan("Debug: Updated existing entry - confidence: "+existing.confidence+", useCount: "+existing.useCount)
+  else
+    // Create new entry
+    entry={}
+    entry.context=context
+    entry.action=action
+    entry.outcome=outcome
+    entry.confidence=initialConfidence
+    entry.timestamp=time
+    entry.useCount=1
+    if debug then print cyan("Debug: Created new entry - all fields: context="+entry.context+", action="+entry.action+", outcome="+entry.outcome+", confidence="+entry.confidence+", timestamp="+entry.timestamp+", useCount="+entry.useCount)
+    push(self.entries,entry)
+    if debug then print cyan("Debug: Entry added to self.entries, total entries: "+len(self.entries))
+  end if
+  self.save
+  return true
+end function
+// Get all entries for inspection
+Knowledge.list=function(minConfidence=0)
+  results=[]
+  for entry in self.entries;if entry.confidence>=minConfidence then push(results,entry);end for
+  return results
+end function
+// Display knowledge statistics
+Knowledge.stats=function
+  if not self.loaded then return "Knowledge not loaded"
+  total=len(self.entries)
+  highConf=0
+  medConf=0
+  lowConf=0
+  for entry in self.entries
+    if entry.confidence>=0.8 then
+      highConf+=1
+    else if entry.confidence>=0.5 then
+      medConf+=1
+    else
+      lowConf+=1
+    end if
+  end for
+  result="Knowledge Statistics:"+char(10)
+  result=result+"Total entries: "+total+char(10)
+  result=result+"High confidence (>=0.8): "+highConf+char(10)
+  result=result+"Medium confidence (>=0.5): "+medConf+char(10)
+  result=result+"Low confidence (<0.5): "+lowConf
+  return result
+end function

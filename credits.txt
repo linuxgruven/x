@@ -1,0 +1,28 @@
+Thanks to those that inspired the creation of x
+fantom       ==> tball1 Discord:https://discord.gg/dkaMDj8c6b
+subnet       ==> subnet-gh Discord:https://discord.gg/z3kS2uvrM6
+microx       ==> skekHak https://github.com/skekHak
+Nyx          ==> Code snipets/correction
+3nigma       ==> Gui Inspiration
+KEKE         ==> Gui/Code Inspiration
+JoeStrout    ==> JSON Parser:https://forums.miniscript.org/d/117-a-json-parser-for-and-in-miniscript
+:D           ==> Log file handling and other attack vectors
+gk258        ==> Innovations
+Olipro       ==> Code innovations/correction
+bloodwhite   ==> Main Debbuger
+Jessa        ==> 0 day count down and 0day solver
+IDelta       ==> 0day solver
+GSQ          ==> PObject code snipets/correction
+tyy          ==> PObject code snipets
+Volk         ==> Server ssh encryption
+jhook        ==> Router cleaning (concept)
+usesPython   ==> Code snipets/correction
+mrrobotfan   ==> Email code snipet
+maho citrus  ==> Blockchain and REPL terminal
+redit0       ==> Email subject line display (concept)
+kotyKD       ==> Beta tester
+AkaB0B       ==> WatchDog Tool
+Clover       ==> Various crypto functions and other innovations
+Chrome       ==> https://steamcommunity.com/id/01043477120/ Minerva Owl Math/String.Lib
+JessaTehCrow ==> https://github.com/JessaTehCrow/crowsploit crowsploit Text formatting
+And many many others...thanks guys/gals awesome work!!!

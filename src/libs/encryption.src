@@ -1,0 +1,157 @@
+// =============================================================================
+// ENCRYPTION
+// Encryption library; file and system encryption/decryption using custom ciphers.
+// =============================================================================
+Encryption={}
+//pzip - Crypto library wrapper for file/directory encryption
+//Args: Obj (computer object), argv (command arguments)
+//Returns: null (displays results via Info/Error messages)
+Encryption.pzip=function(Obj,argv)
+  //Show help if no arguments provided
+  if not argv then return Man.help(["pzip"])
+  //Extract first argument (command flag)
+  Arg1=pull(argv)
+	_p=ArgumentParser.init
+  //Add -r flag for recursive mode
+  _p.addArgument("r",false,"flag")
+  //Add -p option for password
+  _p.addArgument("p",false,"store")
+  //Parse arguments with pzip context
+  argv=_p.parseArgs("pzip",argv)
+  if argv isa Error then return
+  //Get crypto library from pack or global Library
+	if hasIndex(Obj,"packCrypto") then C=Obj.packCrypto else C=Library.crypto
+  //Crypto library required for encryption operations
+  if not C then return Error.set("Crypto library is not available")
+  //Use provided password or default to Kernel.zip
+  if not argv.p then argv.p=Kernel.zip
+  getFolder=function(h);if not argv.rest then return Io.folder(Obj,Obj.dir.current,h) else return Io._getFile(Obj,argv.rest[0]);end function
+  getFile=function(h);if not argv.rest then return Io.file(Obj,Obj.dir.current,h) else return Io._getFile(Obj,argv.rest[0]);end function
+  _processAll=function(isEnc)
+    if isEnc then verb="encrypt" else verb="decrypt"
+    f=getFolder("Select a folder to "+verb+":")
+    if f isa Error then return f
+    if f isa Warning then return f
+    for z in Io.getAll(f)
+      if is_folder(z) then continue
+      if not has_permission(z,"r") then
+        Info.warning(Info.message.NOR)
+        continue
+      end if
+      if not has_permission(z,"w") then
+        Info.warning(Info.message.NOW)
+        continue
+      end if
+      if isEnc then r=encrypt(C,path(z),argv.p) else r=decrypt(C,path(z),argv.p)
+      if r isa number then Info.info(yellow(name(z))+" succesfully "+verb+"ed") else Error.set(r)
+    end for
+    Info.info("All files in "+yellow(name(f))+" succesfully "+verb+"ed")
+  end function
+  _processOne=function(isEnc)
+    if isEnc then verb="encrypt" else verb="decrypt"
+    if argv.r then return _processAll(isEnc)
+    f=getFile("Select a file to "+verb+":")
+    if f isa Error then return f
+    if f isa Warning then return f
+    if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+    if not has_permission(f,"w") then return Error.set(Info.message.NOW)
+    if isEnc then r=encrypt(C,path(f),argv.p) else r=decrypt(C,path(f),argv.p)
+    if r isa number then Info.info(yellow(name(f))+" succesfully "+verb+"ed") else Error.set(r)
+  end function
+  enc=function;return _processOne(true);end function
+  dec=function;return _processOne(false);end function
+  check=function
+    f=getFile("Select a file to check:")
+    if f isa Error then return f
+    if f isa Warning then return f
+    if is_encrypted(C,path(f)) then return Info.info("File is encrypted") else return Info.info("File is not encrypted")
+  end function
+  cmds={
+    "-e":@enc,
+    "-d":@dec,
+    "-c":@check
+  }
+  if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+  cmds[Arg1]
+end function
+//encrypt - Custom XOR-based cipher for text encryption/decryption
+//Args: t (text string), k (key string), e (true=encrypt, false=decrypt)
+//Returns: encrypted/decrypted string, null if invalid arguments
+Encryption.encrypt=function(t=null,k=null,e=true)
+  //Validate key is string
+  if not k or not k isa string then return
+  //Validate text is string
+  if not t or not t isa string then return
+  //Get key length for wrapping
+  z=len(k)
+  r=""
+  //Key position counter
+  c=0
+  if e then
+    //Encryption mode: (char + key[i]) % 55295
+		for i in t
+			//Get current key character
+			y=k[c]
+      //Add codes and wrap at Unicode limit
+      f=(i.code+y.code)%55295
+      r+=char(f)
+      //Cycle through key positions
+      c=(c+1)%z
+    end for
+  else
+    //Decryption mode: abs(char - key[i])
+    for i in t
+      //Get current key character
+      y=k[c]
+      //Subtract key code from character code
+      f=(i.code-y.code)
+      //Handle negative results
+      if f<0 then f=0-f
+      r+=char(f)
+      //Cycle through key positions
+      c=(c+1)%z
+    end for
+  end if
+  return r
+end function
+Encryption._cipherFile=function(Obj,argv,mode)
+  if mode then verb="encrypt" else verb="decrypt"
+	if not argv then
+		f=Io.file(Obj,Obj.dir.current,"Select a file to "+verb+":")
+		if f isa Warning then return f
+  else
+    f=Io._getFile(Obj,argv[0])
+		if f isa Error then return f
+	end if
+	if is_binary(f) then return Error.set("Cannot "+verb+" a binary file")
+	if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+	if not has_permission(f,"w") then return Error.set(Info.message.NOW)
+  if len(argv)>1 then x=argv[1] else x=Gui.inputPass("Enter a seed|key")
+	if not x then return Error.set("You must enter a seed|key")
+	z=[]
+	for a in split(get_content(f),char(10));push(z,self.encrypt(a,x,mode)+char(10));end for
+	set_content(f,trim(join(z,"")))
+	print yellow(name(f))+blue(" succesfully "+verb+"ed")
+end function
+Encryption.encrFile=function(Obj,argv);self._cipherFile(Obj,argv,true);end function
+Encryption.decrFile=function(Obj,argv);self._cipherFile(Obj,argv,false);end function
+Encryption._cipherSystem=function(Obj,mode)
+  if mode then verb="encrypt" else verb="decrypt"
+	s=Gui.input({"text":"Enter a directory to "+verb,"default":"/"})
+	if not Gui.yesNo("Confirm "+s+" "+verb+"ion:") then return
+	k=Gui.inputPass("Enter a seed/key. (default is Tux)")
+	if not k then k="Tux"
+  c=Io.getAll(Io.getFileObj(Obj,s))
+	if c isa Error then return
+	for f in c
+    if not f then continue
+    if name(f)=="/" then continue
+    if Io.isBinFolder(f) then continue
+    if not get_content(f) then continue
+		r=[]
+    for w in split(get_content(f),char(10));push(r,self.encrypt(w,k,mode)+char(10));end for
+		set_content(f,trim(join(r,"")))
+	end for
+end function
+Encryption.encryptSystem=function(Obj);self._cipherSystem(Obj,true);end function
+Encryption.decryptSystem=function(Obj);self._cipherSystem(Obj,false);end function

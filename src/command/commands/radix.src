@@ -1,0 +1,118 @@
+// =============================================================================
+// RADIX
+// Convert numbers between any two bases (2-36).
+// Direct:    radix FROM_BASE TO_BASE VALUE
+// Auto-base: radix TO_BASE 0xVALUE  (0x=hex, 0b=binary prefix auto-detected)
+// Pipe:      seq 1 255 | radix 10 16
+// =============================================================================
+Command.radix=function(Obj,argv)
+  digits="0123456789abcdefghijklmnopqrstuvwxyz"
+  // Detect base from 0x/0b prefix, return [base, stripped_value]
+  detectBase=function(s)
+    s=lower(trim(s))
+    if s[:2]=="0x" then return [16,s[2:]]
+    if s[:2]=="0b" then return [2,s[2:]]
+    return [null,s]
+  end function
+  toDecimal=function(fromBase,input)
+    dec=0
+    _len=len(input);i=0
+    while i<_len
+      ch=input[i]
+      d=indexOf(digits,ch)
+      if d==null or d>=fromBase then return Error.set("invalid digit '"+ch+"' for base "+str(fromBase))
+      dec=dec*fromBase+d
+      i+=1
+    end while
+    return dec
+  end function
+  fromDecimal=function(toBase,dec)
+    if dec==0 then return "0"
+    result=""
+    n=dec
+    while n>0;result=digits[n%toBase]+result;n=floor(n/toBase);end while
+    return result
+  end function
+  convertOne=function(fromBase,toBase,input)
+    input=lower(trim(input))
+    if not len(input) then return null
+    // Auto-detect base from prefix if fromBase not yet resolved
+    if fromBase==null then
+      detected=detectBase(input)
+      fromBase=detected[0]
+      input=detected[1]
+      if fromBase==null then return Error.set("no base prefix found (use 0x or 0b) or specify FROM_BASE explicitly")
+    end if
+    dec=toDecimal(fromBase,input)
+    if dec isa Error then return dec
+    return fromDecimal(toBase,dec)
+  end function
+  hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  isPipeOut=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  if not argv or len(argv)<2 then return Man.help(["radix"])
+  // Determine if first arg is a base number or a prefixed value
+  arg0=lower(trim(argv[0]))
+  fromBase=null
+  toBase=null
+  valueStart=null
+  if arg0[:2]=="0x" or arg0[:2]=="0b" then
+    // radix TO_BASE 0xVALUE  (single value with prefix)
+    if len(argv)<2 then return Man.help(["radix"])
+    toBase=to_int(argv[0])
+    // argv[0] is actually TO_BASE here — re-check
+    // If argv[0] has a prefix it IS the value — so: radix TO_BASE VALUE
+    // Handle: radix 10 0x2A99789D
+    toBase=to_int(argv[0])
+    fromBase=null
+    valueStart=1
+  else
+    toBase=to_int(argv[1])
+    if not (toBase isa number) or toBase<2 or toBase>36 then return Error.set("base must be 2-36, got: "+argv[1])
+    // Check if argv[1] looks like a base or a prefixed value
+    arg1=lower(trim(argv[1]))
+    if arg1[:2]=="0x" or arg1[:2]=="0b" then
+      // radix TO_BASE 0xVALUE
+      fromBase=null
+      valueStart=1
+    else
+      fromBase=to_int(argv[0])
+      if not (fromBase isa number) or fromBase<2 or fromBase>36 then return Error.set("base must be 2-36, got: "+argv[0])
+      toBase=to_int(argv[1])
+      if not (toBase isa number) or toBase<2 or toBase>36 then return Error.set("base must be 2-36, got: "+argv[1])
+      valueStart=2
+    end if
+  end if
+  values=[]
+  if hasPipeIn then
+    stdinData=globals.G_pipe.stdin
+    if stdinData isa list then
+      for item in stdinData;line=trim(str(item));if line then push(values,line);end for
+    else
+      for line in split(trim(str(stdinData)),char(10));line=trim(line);if line then push(values,line);end for
+    end if
+  else
+    if len(argv)<=valueStart then return Man.help(["radix"])
+    push(values,argv[valueStart])
+  end if
+  for v in values
+    origV=v
+    // Strip prefix and detect base if fromBase is null
+    _fb=fromBase
+    _v=lower(trim(v))
+    if _fb==null then
+      detected=detectBase(_v)
+      _fb=detected[0]
+      _v=detected[1]
+      if _fb==null then return Error.set("no base prefix on '"+v+"' — use 0x/0b or specify FROM_BASE")
+    end if
+    dec=toDecimal(_fb,_v)
+    if dec isa Error then return dec
+    r=fromDecimal(toBase,dec)
+    if r==null then continue
+    if isPipeOut then
+      push(globals.G_pipe.stdout,r)
+    else
+      print blue(origV)+" "+yellow("(base "+str(_fb)+")")+" = "+green(r)+" "+yellow("(base "+str(toBase)+")")
+    end if
+  end for
+end function

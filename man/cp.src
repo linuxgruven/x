@@ -1,0 +1,81 @@
+// Man page for cp
+manCp="CP(1)                            X Shell Manual                            CP(1)
+
+<b>NAME</b>
+    cp - Copy files and directories
+<b>SYNOPSIS</b>
+    <b>cp</b> [<b>OPTIONS</b>] <b>SOURCE DESTINATION</b>
+    <b>cp</b> [<b>-n </b><b>NAME</b>] <b>FILE DESTINATION</b>
+    <b>cp</b> <b>-z SOURCE DESTINATION</b>
+    <b>cp</b> <b>-r SOURCE DESTINATION</b>
+    <b>cp</b> <b>-l FILE FILE...DESTINATION</b>
+    <b>cp</b> <b>-L SOURCE DESTINATION</b>
+    <b>cp</b> <b>--follow SOURCE DESTINATION</b>
+    <b>cp</b> <b>-i SOURCE DESTINATION</b>
+    <b>find</b> PATTERN | <b>cp</b> <b>DESTINATION</b>
+<b>DESCRIPTION</b>
+    Copy files and directories. Supports recursive mode for directory
+    copying and various special modes for advanced operations.
+    Accepts filenames from stdin via pipe — piped paths become sources,
+    destination is passed as the argument after the command.
+<b>OPTIONS</b>
+    <b>cp SOURCE DESTINATION</b>
+    Copy file or directory to destination. If destination doesn't exist,
+    copies SOURCE with DESTINATION as the new name.
+
+    <b>cp -r SOURCE DESTINATION</b>
+    Recursively copy directory (automatic for directories).
+
+    <b>cp -z SOURCE DESTINATION</b>
+    Copy a range of files from a directory (special mode).
+
+    <b>cp -l FILE FILE...DESTINATION</b>
+    Copy multiple files to destination (list mode).
+
+    <b>cp -n NAME FILE DESTINATION</b>
+    Copy file with custom name (name mode).
+
+    <b>cp -L SOURCE DESTINATION</b>
+    <b>cp --follow SOURCE DESTINATION</b>
+    Follow symbolic links when copying (dereference symlinks).
+
+    <b>cp -i SOURCE DESTINATION</b>
+    Interactive mode. Prompt for confirmation before overwriting an
+    existing destination file.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Copy</color>
+    <b>cp file.txt /etc</b>
+    Copy file to /etc directory
+
+    <b>cp file.txt backup.txt</b>
+    Copy and rename in current directory
+
+    <b>cp Desktop/file.txt .</b>
+    Copy to current directory
+
+    <color=#e4ff34># Recursive Copy</color>
+    <b>cp -r /home/tux/Desktop/Folder /backup</b>
+    Copy directory and all contents
+
+    <color=#e4ff34># Special Modes</color>
+    <b>cp -z /home/tux/Desktop/Folder /docs</b>
+    Copy range of files
+
+    <color=#e4ff34># Pipe Support</color>
+    <b>find *.txt | cp /backup</b>
+    Copy all matched files to /backup
+
+    <b>find *.src | cp /home/user/sources</b>
+    Batch copy source files to a directory
+
+    <b>cp -l file1.txt file2.txt /backup</b>
+    Copy multiple files
+
+    <b>cp -n backup.txt file.txt /etc</b>
+    Copy as backup.txt
+
+    <color=#e4ff34># Interactive Copy</color>
+    <b>cp -i file.txt /etc</b>
+    Prompt before overwriting if file already exists
+<b>SEE ALSO</b>
+    <b>mv</b>, <b>rm</b>, <b>ln</b>"

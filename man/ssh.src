@@ -1,0 +1,100 @@
+// Man page for ssh
+manSsh="SSH(1)                           X Shell Manual                           SSH(1)
+
+<b>NAME</b>
+    ssh - use to securely access remote computers
+<b>SYNOPSIS</b>
+    <b>ssh</b> (<b>-l</b>) (<b>-t</b>) (<b>-d</b>) (<b>-p</b> [<b>PORT</b>]) (<b>-P</b> [<b>PASSWORD</b>]) (<b>--start</b> [<b>N</b>]) (<b>--stop</b> [<b>N</b>]) <b>USER@IP|DOMAIN</b>
+<b>DESCRIPTION</b>
+    Securely connect to remote computers via back door. Execute commands, navigate filesystem,
+    transfer files with scp. Interactive mode with HELP prompt or user@host format. SSH servers
+    can encrypt connections to prevent password capture by sniffers. Edit sshd.conf to enable
+    encryption and configure encode/decode scripts. Use -p for custom port, -P for password,
+    -t for tunneling to map public IP to current object, -l to force local main shell.
+    Use -d for dictionary attack mode (no password needed, uses saved wordlist).
+    LAN IPs automatically route through the current shell.
+<b>OPTIONS</b>
+    <b>USER@IP|DOMAIN</b>
+    Connect to remote machine
+    Download files: scp -d FILE
+    Upload files: scp -u FILE
+
+    <b>-p PORT</b>
+    Custom port number
+    Default: 22
+
+    <b>-P PASSWORD</b>
+    Provide password
+    Skip password prompt
+
+    <b>-t</b>
+    Enable tunneling
+    Map public IP to current object
+
+    <b>-l</b>
+    Force local main shell
+    Bypass proxy
+
+    <b>-d</b>
+    Dictionary attack mode
+    No password needed, uses saved wordlist
+
+    <b>--start N</b>
+    Start index in wordlist
+    Default: 0
+
+    <b>--stop N</b>
+    Stop index in wordlist
+    Default: end of list
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Connection</color>
+    <b>ssh tux@remotehost</b>
+    Password prompt
+
+    <b>ssh -P linux tux@remotehost</b>
+    With password flag
+
+    <b>ssh help</b>
+    Interactive mode
+
+    <color=#e4ff34># Custom Port</color>
+    <b>ssh -p 23 tux@remotehost</b>
+    Connect on port 23
+
+    <b>ssh -p 8022 admin@server.com</b>
+    Custom SSH port
+
+    <color=#e4ff34># With Password</color>
+    <b>ssh -P linux tux@remotehost</b>
+    Provide password via flag
+
+    <color=#e4ff34># Tunneling</color>
+    <b>ssh -t tux@remotehost</b>
+    Enable tunneling
+
+    <b>ssh -t -p 2222 -P mypass root@target</b>
+    Tunnel with custom port and password
+
+    <color=#e4ff34># Local Shell</color>
+    <b>ssh -l tux@remotehost</b>
+    Force local shell
+
+    <color=#e4ff34># Dictionary Attack</color>
+    <b>ssh -d root@remotehost</b>
+    Dict attack on port 22
+
+    <b>ssh -d -p 2222 root@remotehost</b>
+    Dict attack on custom port
+
+    <b>ssh -d --start 50 --stop 200 root@remotehost</b>
+    Dict attack with wordlist slice
+
+    <color=#e4ff34># File Transfer</color>
+    <b>scp -d file.txt</b>
+    Download file
+
+    <b>scp -u local.txt</b>
+    Upload file
+    
+<b>SEE ALSO</b>
+    <b>sssh</b>, <b>ftp</b>, <b>nmap</b>"

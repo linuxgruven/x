@@ -1,0 +1,38 @@
+// =============================================================================
+// DECIMAL
+// Convert decimal numbers to binary or hex.
+// Direct:  decimal -b 255       → 11111111
+//          decimal -h 255       → ff
+// Pipe:    seq 1 10 | decimal -b
+//          seq 1 255 | decimal -h
+// =============================================================================
+Command.decimal=function(Obj,argv)
+  hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  isPipeOut=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  if not argv or len(argv)==0 then return Man.help(["decimal"])
+  flag=lower(argv[0])
+  if flag!="-b" and flag!="-h" then return Error.set(Text.msg.flag+argv[0]+" ]")
+  convertOne=function(numStr)
+    n=val(numStr)
+    if flag=="-b" then return str(Math.decimalToBinary(n))
+    return str(n.toHex)
+  end function
+  if hasPipeIn then
+    stdinData=globals.G_pipe.stdin
+    if stdinData isa list then lines=stdinData else lines=split(trim(str(stdinData)),char(10))
+    for line in lines
+      line=trim(line)
+      if not line then continue
+      result=convertOne(line)
+      if isPipeOut then
+        push(globals.G_pipe.stdout,result)
+      else
+        if flag=="-b" then Info.info("The binary value of "+line+" is: "+result,"=") else Info.info("The hex value of "+line+" is: "+result,"=")
+      end if
+    end for
+  else
+    if len(argv)<2 then return Man.help(["decimal"])
+    result=convertOne(argv[1])
+    if flag=="-b" then Info.info("The binary value of "+argv[1]+" is: "+result,"=") else Info.info("The hex value of "+argv[1]+" is: "+result,"=")
+  end if
+end function

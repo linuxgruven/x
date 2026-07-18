@@ -1,0 +1,144 @@
+// =============================================================================
+// HEAD
+// Display the first N lines (or bytes) of a file; -p for periodic refresh.
+// =============================================================================
+Command.head=function(Obj,argv)
+  argv=ArgumentParser.check(argv)
+  _p=ArgumentParser.init
+  _p.addArgument("n",false,"storeNumber")  // Line count (default 10)
+  _p.addArgument("c",false,"storeNumber")  // Byte count mode
+  _p.addArgument("p",false,"storeNumber")  // Periodic refresh interval
+  _p.addArgument("q",false,"flag")    // Quiet mode (no headers)
+  _p.addArgument("v",false,"flag")    // Verbose mode (always show headers)
+  // Convert numeric shorthand (-1, -5, etc.) to -n N
+  if argv then
+    _len=len(argv)
+    i=0
+    while i<_len
+      if typeof(argv[i])=="string" and argv[i][0]=="-" and len(argv[i])>1 then
+        num=argv[i][1:]
+        if num.val>0 or num=="0" then
+          argv[i]="-n"
+          insert(argv,i+1,num)
+          i=i+2
+        else
+          i+=1
+        end if
+      else
+        i+=1
+      end if
+    end while
+  end if
+  argv=_p.parseArgs("head",argv)
+  if argv isa Error then return
+  if argv.q and argv.v then return Error.set("Cannot use -q and -v together")
+  usePipedInput=false
+  stdinContent=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinContent=globals.G_pipe.stdin
+    usePipedInput=true
+  end if
+  if not argv.rest or len(argv.rest)==0 then
+    if not usePipedInput then return Error.set("Missing file argument")
+  end if
+  content=null
+  lines=null
+  targetFile=null
+  if usePipedInput then
+    // Use piped stdin content
+    content=stdinContent
+    if typeof(content)!="string" then content=str(content)
+    lines=split(content,char(10))
+  else
+    // Handle glob expansion for file arguments
+    fileArgs=[]
+    for fileArg in argv.rest
+      if fileArg.indexOf("*")!=null then
+        expanded=Glob.expand(Obj,fileArg)
+        if expanded and len(expanded)>0 then
+          if len(expanded)==1 and expanded[0]==fileArg then fileArgs.push(fileArg) else fileArgs=fileArgs+expanded
+        else
+          fileArgs.push(fileArg)
+        end if
+      else
+        fileArgs.push(fileArg)
+      end if
+    end for
+    // Get target file object and validate it exists
+    targetFile=Io._getFile(Obj,fileArgs[0])
+    if targetFile isa Error then return
+    // Reject binary files and folders
+    if Io.isBinFolder(targetFile) then return Error.set("Invalid file type")
+    // Read file content
+    content=get_content(targetFile)
+    lines=split(content,char(10))
+  end if
+  if argv.n and argv.c then return Error.set("Cannot use both -n and -c flags")
+  byteMode=false
+  if argv.c then
+    byteMode=true
+  else
+    if not argv.n then argv.n=10
+  end if
+  displayLines=function
+    // Check if we're in pipe mode
+    inPipeMode=globals.G_pipe.PIPE_MODE
+    // Determine header display based on -q and -v flags
+    showHeader=true
+    if outer.argv.q then showHeader=false
+    if outer.argv.v then showHeader=true
+    // Byte mode
+    if outer.byteMode then
+      bytes=outer.content
+      outputBytes=null
+      if len(bytes)>outer.argv.c then
+        if showHeader and not inPipeMode and outer.targetFile then Info.info("Showing the first "+str(outer.argv.c)+" bytes of "+name(outer.targetFile))
+        outputBytes=bytes[:outer.argv.c]
+      else
+        if showHeader and not inPipeMode and outer.targetFile then Info.info("Showing all "+name(outer.targetFile))
+        outputBytes=bytes
+      end if
+      if inPipeMode then push(globals.G_pipe.stdout,outputBytes) else print white(outputBytes)
+    else
+      // Line mode
+      outputLines=[]
+      if len(outer.lines)>outer.argv.n then
+        // Show first N lines
+        if showHeader and not inPipeMode and outer.targetFile then Info.info("Showing the first "+str(outer.argv.n)+" lines of "+name(outer.targetFile))
+        outputLines=outer.lines[:outer.argv.n]
+      else
+        // Show all lines (file is shorter than requested count)
+        if showHeader and not inPipeMode and outer.targetFile then Info.info("Showing all "+name(outer.targetFile))
+        outputLines=outer.lines
+      end if
+      if inPipeMode then
+        for line in outputLines;push(globals.G_pipe.stdout,line);end for
+      else
+        for line in outputLines;print white(line);end for
+      end if
+    end if
+  end function
+  // Periodic refresh mode (monitors file with auto-refresh)
+  if argv.p then
+    // Ensure watcher app is running for background monitoring
+    // Continuous refresh loop (exits when poll_input!="q" becomes false)
+    Utility.pressQ
+    while poll_input!="q";clear_screen;displayLines;wait argv.p;end while
+  else
+    if usePipedInput then
+      displayLines
+    else
+      // Multi-file support: loop over all file arguments
+      for fa in fileArgs
+        f=Io._getFile(Obj,fa)
+        if f isa Error then continue
+        if Io.isBinFolder(f) then continue
+        targetFile=f
+        content=get_content(targetFile)
+        lines=split(content,char(10))
+        if len(fileArgs)>1 and not argv.q then print cyan("==> "+name(targetFile)+" <==")
+        displayLines
+      end for
+    end if
+  end if
+end function

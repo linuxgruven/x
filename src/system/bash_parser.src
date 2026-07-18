@@ -1,0 +1,1021 @@
+// =============================================================================
+// BASH_PARSER
+// Tokenizer, AST parser, expression evaluation, and function calls.
+// =============================================================================
+// TOKENIZER AND PARSER
+//Tokenize script with comment support
+Bash._tokenizeStructured=function(content)
+  //Split by newlines
+  lines=split(content,char(10))
+  tokens=[]
+  for line in lines
+    //Trim whitespace
+    line=trim(line)
+    //Skip empty lines
+    if not line then continue
+    //Split by semicolons if present (for multi-command lines)
+    //Uses lexer for quote-aware detection — operators inside strings are ignored
+    //NOTE: Only split on semicolons, NOT && — chains with && need conditional logic
+    //that is handled by _exec's chain handler which preserves operator semantics
+    if self._hasChain(line) then
+      //Don't split URLs
+      if indexOf(line,"http://")!=null or indexOf(line,"https://")!=null then
+        //Process as single line
+      else
+        //Check if this line only has semicolons (no &&) — those are safe to split
+        chainParts=self._splitChain(line)
+        hasAndOp=false
+        for part in chainParts
+          if part.op=="&&" then
+            hasAndOp=true
+            break
+          end if
+        end for
+        if not hasAndOp then
+          //Only semicolons — safe to split into individual commands
+          for part in chainParts
+            semiPart=trim(part.cmd)
+            if semiPart then
+              //Remove inline comments from each part
+              if indexOf(semiPart,"//")!=null then semiPart=trim(split(semiPart,"//")[0])
+              if semiPart then push(tokens,semiPart)
+            end if
+          end for
+          continue
+        end if
+        //Has && operators — keep as single line for _exec chain handler
+      end if
+    end if
+    //Remove inline comments (// comment)
+    if indexOf(line,"//")!=null then
+      //Check if line contains URL-like patterns (www. or http:// or https://)
+      hasURL=false
+      if indexOf(line,"www.")!=null or indexOf(line,"http://")!=null or indexOf(line,"https://")!=null then hasURL=true
+      if hasURL then
+        //Parse character by character to find comment that's not part of URL
+        idx=0
+        foundComment=false
+        _len=len(line)-1
+        while idx<_len
+          if line[idx:idx+2]=="//" then
+            //Check if this is part of a URL
+            if idx>=5 and line[idx-5:idx+2]=="http://" then
+              idx=idx+2
+              continue
+            else if idx>=6 and line[idx-6:idx+2]=="https://" then
+              idx=idx+2
+              continue
+            else
+              //This is a comment
+              line=trim(line[:idx])
+              foundComment=true
+              break
+            end if
+          end if
+          idx+=1
+        end while
+      else
+        //No URL, simple comment removal
+        line=trim(split(line,"//")[0])
+      end if
+    end if
+    //Skip if line became empty after comment removal
+    if not line then continue
+    //Add to tokens
+    push(tokens,line)
+  end for
+  return tokens
+end function
+//Parse list literal syntax: [a,b,c] -> ["a","b","c"]
+Bash._listLiteralToList=function(s)
+  //Remove brackets using string slicing
+  if s[0]=="[" and s[len(s)-1]=="]" then s=s[1:len(s)-1]
+  //Handle empty list
+  if len(s)==0 then return []
+  //Split by comma
+  parts=split(s,",")
+  result=[]
+  for p in parts;push(result,trim(p));end for
+  return result
+end function
+// EXPRESSION EVALUATION
+//Get value from variable or literal
+Bash._getVal=function(s,Obj=null)
+  gb=globals.G_bash
+  s=trim(s)
+  //Check if this is a preserved get_var placeholder - return actual value
+  if indexOf(s,"__GVPRES")==0 or indexOf(s,"__PROP")==0 then
+    if hasIndex(gb,"PRESERVED_GETVAR_VALUES") then
+      if hasIndex(gb.PRESERVED_GETVAR_VALUES,s) then
+        val=gb.PRESERVED_GETVAR_VALUES[s]
+        if gb.DEBUG then print yellow("_getVal resolving placeholder ")+s+yellow(" to ")+typeof(val)+yellow(" with length ")+str(len(val))
+        return val
+      end if
+    end if
+  end if
+  //Check if this is a _getvar call - extract variable directly to preserve type
+  if indexOf(s,"_getvar(")==0 then
+    parenStart=indexOf(s,"(")+1
+    parenEnd=indexOf(s,")")
+    if parenEnd!=null and parenEnd>parenStart then
+      varName=s[parenStart:parenEnd]
+      if hasIndex(gb.VARS,varName) then return gb.VARS[varName] else return null
+    end if
+  end if
+  //Check for property access (e.g., _getvar(x).name or varName.property)
+  //Need to handle this BEFORE function evaluation to support chained access
+  //Skip property detection if there's an opening paren before any closing paren
+  //(indicates we're evaluating a function call, not accessing properties)
+  //Check for IP address pattern BEFORE property access detection
+  //IP addresses have format: digit.digit.digit.digit
+  isIPAddress=false
+  dotIdx=indexOf(s,".")
+  if dotIdx!=null and dotIdx>0 and len(s)<20 then
+    //Quick check: if all characters are digits and dots, likely an IP
+    isNumericDotted=true
+    maxIter=20
+    iterCount=0
+    i=0;sLen=len(s)
+    while i<sLen
+      iterCount+=1
+      if iterCount>maxIter or i>=sLen then break
+      char=s[i]
+      if char!="." and (char<"0" or char>"9") then
+        isNumericDotted=false
+        break
+      end if
+      i+=1
+    end while
+    if isNumericDotted then isIPAddress=true
+  end if
+  openParenIdx=indexOf(s,"(")
+  closeParenIdx=indexOf(s,")")
+  //Only process property access if dot exists and EITHER:
+  //  - No parens at all (simple variable.property), OR
+  //  - Closing paren before dot (func.property pattern)
+  //AND it's not an IP address
+  hasPropertyAccess=false
+  if dotIdx!=null and dotIdx>0 and not isIPAddress then
+    if openParenIdx==null and closeParenIdx==null then
+      hasPropertyAccess=true
+    else if closeParenIdx!=null and closeParenIdx<dotIdx and (openParenIdx==null or openParenIdx<closeParenIdx) then
+      hasPropertyAccess=true
+    end if
+  end if
+  if hasPropertyAccess then
+    //Check if there's a closing ) before the dot (function call with property access)
+    parenIdx=indexOf(s,")")
+    if parenIdx!=null and parenIdx<dotIdx then
+      //This is like: _getvar(x).name
+      baseExpr=s[:dotIdx]
+      propertyPath=s[dotIdx+1:]
+      //Evaluate the base expression first
+      baseVal=self._getVal(baseExpr,Obj)
+      //Now access properties from baseVal
+      if typeof(baseVal)=="map" or typeof(baseVal)=="file" or typeof(baseVal)=="computer" or typeof(baseVal)=="shell" then
+        //Split property path by dots for nested access: .home.path
+        //Manual split to avoid GreyScript split("." ) bug
+        props=[]
+        currentProp=""
+        i=0;ppLen=len(propertyPath)
+        while i<ppLen
+          if propertyPath[i]=="." then
+            if currentProp then push(props,currentProp)
+            currentProp=""
+          else
+            currentProp=currentProp+propertyPath[i]
+          end if
+          i+=1
+        end while
+        if currentProp then push(props,currentProp)
+        currentVal=baseVal
+        for prop in props
+          prop=prop.trim
+          if typeof(currentVal)=="map" and hasIndex(currentVal,prop) then
+            currentVal=currentVal[prop]
+          else if typeof(currentVal)=="file" then
+            //File objects - manually call known methods
+            if prop=="path" then
+              currentVal=currentVal.path
+            else if prop=="name" then
+              currentVal=currentVal.name
+            else if prop=="permissions" then
+              currentVal=currentVal.permissions
+            else if prop=="owner" then
+              currentVal=currentVal.owner
+            else if prop=="group" then
+              currentVal=currentVal.group
+            else if prop=="size" then
+              currentVal=currentVal.size
+            else if prop=="is_folder" then
+              currentVal=currentVal.is_folder
+            else if prop=="is_binary" then
+              currentVal=currentVal.is_binary
+            else if prop=="is_symlink" then
+              currentVal=currentVal.is_symlink
+            else if prop=="parent" then
+              currentVal=currentVal.parent
+            else if prop=="allow_import" then
+              currentVal=currentVal.allow_import
+            else if prop=="get_content" then
+              currentVal=currentVal.get_content
+            else if prop=="get_files" then
+              currentVal=currentVal.get_files
+            else if prop=="get_folders" then
+              currentVal=currentVal.get_folders
+            else if prop=="delete" then
+              currentVal=currentVal.delete
+            else
+              return null
+            end if
+          else if typeof(currentVal)=="computer" then
+            //Computer objects - manually call known methods
+            if prop=="local_ip" then
+              currentVal=currentVal.local_ip
+            else if prop=="public_ip" then
+              currentVal=currentVal.public_ip
+            else if prop=="active_net_card" then
+              currentVal=currentVal.active_net_card
+            else if prop=="get_name" then
+              currentVal=currentVal.get_name
+            else if prop=="get_ports" then
+              currentVal=currentVal.get_ports
+            else if prop=="is_network_active" then
+              currentVal=currentVal.is_network_active
+            else if prop=="network_devices" then
+              currentVal=currentVal.network_devices
+            else if prop=="network_gateway" then
+              currentVal=currentVal.network_gateway
+            else if prop=="show_procs" then
+              currentVal=currentVal.show_procs
+            else
+              return null
+            end if
+          else if typeof(currentVal)=="shell" then
+            //Shell objects - manually call known methods
+            if prop=="host_computer" then currentVal=currentVal.host_computer else return null
+          else
+            //Property doesn't exist, return null
+            return null
+          end if
+        end for
+        return currentVal
+      end if
+    else if parenIdx==null then
+      //No parentheses, might be variable.property
+      baseExpr=s[:dotIdx]
+      propertyPath=s[dotIdx+1:]
+      //Check if base is a variable
+      if hasIndex(gb.VARS,baseExpr) then
+        baseVal=gb.VARS[baseExpr]
+        if typeof(baseVal)=="map" or typeof(baseVal)=="file" or typeof(baseVal)=="computer" or typeof(baseVal)=="shell" then
+          //Manual split to avoid GreyScript split(".") bug
+          props=[]
+          currentProp=""
+          i=0;ppLen=len(propertyPath)
+          while i<ppLen
+            if propertyPath[i]=="." then
+              if currentProp then push(props,currentProp)
+              currentProp=""
+            else
+              currentProp=currentProp+propertyPath[i]
+            end if
+            i+=1
+          end while
+          if currentProp then push(props,currentProp)
+          currentVal=baseVal
+          for prop in props
+            prop=prop.trim
+            if typeof(currentVal)=="map" and hasIndex(currentVal,prop) then
+              currentVal=currentVal[prop]
+            else if typeof(currentVal)=="file" then
+              //File objects - manually call known methods
+              if prop=="path" then
+                currentVal=currentVal.path
+              else if prop=="name" then
+                currentVal=currentVal.name
+              else if prop=="permissions" then
+                currentVal=currentVal.permissions
+              else if prop=="owner" then
+                currentVal=currentVal.owner
+              else if prop=="group" then
+                currentVal=currentVal.group
+              else if prop=="size" then
+                currentVal=currentVal.size
+              else if prop=="is_folder" then
+                currentVal=currentVal.is_folder
+              else if prop=="is_binary" then
+                currentVal=currentVal.is_binary
+              else if prop=="is_symlink" then
+                currentVal=currentVal.is_symlink
+              else if prop=="parent" then
+                currentVal=currentVal.parent
+              else if prop=="allow_import" then
+                currentVal=currentVal.allow_import
+              else if prop=="get_content" then
+                currentVal=currentVal.get_content
+              else if prop=="get_files" then
+                currentVal=currentVal.get_files
+              else if prop=="get_folders" then
+                currentVal=currentVal.get_folders
+              else if prop=="delete" then
+                currentVal=currentVal.delete
+              else
+                return null
+              end if
+            else if typeof(currentVal)=="computer" then
+              //Computer objects - manually call known methods
+              if prop=="local_ip" then
+                currentVal=currentVal.local_ip
+              else if prop=="public_ip" then
+                currentVal=currentVal.public_ip
+              else if prop=="active_net_card" then
+                currentVal=currentVal.active_net_card
+              else if prop=="get_name" then
+                currentVal=currentVal.get_name
+              else if prop=="get_ports" then
+                currentVal=currentVal.get_ports
+              else if prop=="is_network_active" then
+                currentVal=currentVal.is_network_active
+              else if prop=="network_devices" then
+                currentVal=currentVal.network_devices
+              else if prop=="network_gateway" then
+                currentVal=currentVal.network_gateway
+              else if prop=="show_procs" then
+                currentVal=currentVal.show_procs
+              else
+                return null
+              end if
+            else if typeof(currentVal)=="shell" then
+              //Shell objects - manually call known methods
+              if prop=="host_computer" then currentVal=currentVal.host_computer else return null
+            else
+              return null
+            end if
+          end for
+          return currentVal
+        end if
+      end if
+    end if
+  end if
+  //Check if it's a function call - evaluate it first
+  if indexOf(s,"(")!=null then
+    funcResult=self._evalFunc(s,Obj)
+    if funcResult!=s then return funcResult
+  end if
+  //Check if it's a quoted string literal and remove quotes
+  if len(s)>=2 and s[0]=="""" and s[len(s)-1]=="""" then return s[1:len(s)-1]
+  //Check if it's a variable reference
+  if hasIndex(gb.VARS,s) then return gb.VARS[s]
+  //Try to parse as number
+  //First check if it's zero
+  if s=="0" then return 0
+  //Try float/int conversion only if the string looks like a number
+  if typeof(s)=="string" and len(s)>0 and len(s)<50 then
+    //First check if it's an IP address (has exactly 3 dots and only digits/dots) - don't convert
+    dotCount=0
+    hasOtherChars=false
+    maxIterations=50
+    iterations=0
+    i=0;sLen=len(s)
+    while i<sLen
+      iterations+=1
+      if iterations>maxIterations then break
+      char=s[i]
+      if char=="." then
+        dotCount+=1
+      else if char<"0" or char>"9" then
+        hasOtherChars=true
+        break
+      end if
+      i+=1
+    end while
+    //If has exactly 3 dots and no other chars, it's an IP address
+    if dotCount==3 and not hasOtherChars then return s
+    //Check if string contains only digits, dot, minus, plus
+    isNumeric=true
+    iterations=0
+    maxIterations2=50
+    i=0;sLen2=len(s)
+    while i<sLen2
+      iterations+=1
+      if iterations>maxIterations2 then break
+      char=s[i]
+      if char!="0" and char!="1" and char!="2" and char!="3" and char!="4" and char!="5" and char!="6" and char!="7" and char!="8" and char!="9" and char!="." and char!="-" and char!="+" then
+        isNumeric=false
+        break
+      end if
+      i+=1
+    end while
+    if isNumeric then
+      numVal=val(s)
+      if numVal!=null then return numVal
+    end if
+  end if
+  //If string looks like an arithmetic expression (only digits, operators, spaces, dots, parens), evaluate it
+  if typeof(s)=="string" and len(s)>2 and (indexOf(s,"+")!=null or indexOf(s,"-")!=null or indexOf(s,"*")!=null or indexOf(s,"/")!=null or indexOf(s,"%")!=null) then
+    arithOK=true
+    hasDigit=false
+    arI=0;arLen=len(s)
+    while arI<arLen
+      arC=s[arI]
+      if arC>="0" and arC<="9" then hasDigit=true
+      if (arC>="a" and arC<="z") or (arC>="A" and arC<="Z") or arC=="_" then
+        arithOK=false
+        break
+      end if
+      arI+=1
+    end while
+    if arithOK and hasDigit then return self._evalArithmetic(s)
+  end if
+  //Return as-is (string, number, list, map, etc.)
+  return s
+end function
+//Evaluate condition for if/while statements
+Bash._evalCond=function(cond,Obj=null)
+  gb=globals.G_bash
+  if gb.DEBUG then
+    print cyan("  [_evalCond called]")
+    print cyan("    Condition: ")+white(cond)
+    if Obj then print cyan("    Obj ID: ")+yellow(Obj.id)
+  end if
+  cond=trim(cond)
+  //Process get_var substitutions first
+  cond=self.process(cond,Obj)
+  if cond isa Error then return false
+  //Handle NOT operator (! or not)
+  if len(cond)>0 and cond[0]=="!" then return not self._evalCond(trim(cond[1:]),Obj)
+  if indexOf(cond,"not ")==0 then return not self._evalCond(trim(cond[4:]),Obj)
+  //Handle logical OR operator
+  if indexOf(cond," or ")!=null then
+    parts=split(cond," or ")
+    for part in parts;if self._evalCond(part,Obj) then return true;end for
+    return false
+  end if
+  //Handle logical AND operator
+  if indexOf(cond," and ")!=null then
+    parts=split(cond," and ")
+    for part in parts;if not self._evalCond(part,Obj) then return false;end for
+    return true
+  end if
+  //Handle comparison operators: ==, !=, <, >, <=, >=
+  ops=self._ops
+  for op in ops
+    idx=indexOf(cond,op)
+    if idx!=null then
+      left=trim(cond[:idx])
+      right=trim(cond[idx+len(op):])
+      //Evaluate bash commands in left side
+      bashCmds=self._bashCmds3
+      leftIsBashFunc=false
+      //Check for function-style calls like whoami(true)
+      if indexOf(left,"(")!=null and indexOf(left,")")!=null then
+        funcName=trim(left[:indexOf(left,"(")])
+        if funcName=="whoami" then
+          left="_sys_whoami"
+          leftIsBashFunc=true
+        end if
+        if funcName=="whatami" then
+          left="_sys_whatami"
+          leftIsBashFunc=true
+        end if
+        if funcName=="pwd" then
+          left="_fs_pwd"
+          leftIsBashFunc=true
+        end if
+      end if
+      //Check if left is a bash command name (without args) or we just converted a function call
+      if bashCmds.indexOf(left)!=null or leftIsBashFunc then
+        bashCmd=self._prepareCommand(left,false,Obj)
+        if bashCmd and bashCmd!=null and not (bashCmd isa Error) then
+          bashResult=self._exec(Obj,bashCmd,false)
+          if bashResult!=null and bashResult!=false and bashResult!=true then left=str(bashResult)
+        end if
+      end if
+      //Evaluate bash commands in right side
+      rightIsBashFunc=false
+      //Check for function-style calls in right side
+      if indexOf(right,"(")!=null and indexOf(right,")")!=null then
+        funcName=trim(right[:indexOf(right,"(")])
+        if funcName=="whoami" then
+          right="_sys_whoami"
+          rightIsBashFunc=true
+        end if
+        if funcName=="whatami" then
+          right="_sys_whatami"
+          rightIsBashFunc=true
+        end if
+        if funcName=="pwd" then
+          right="_fs_pwd"
+          rightIsBashFunc=true
+        end if
+      end if
+      //Check if right is a bash command name (without args) or we just converted a function call
+      if bashCmds.indexOf(right)!=null or rightIsBashFunc then
+        bashCmd=self._prepareCommand(right,false,Obj)
+        if bashCmd and bashCmd!=null and not (bashCmd isa Error) then
+          bashResult=self._exec(Obj,bashCmd,false)
+          if bashResult!=null and bashResult!=false and bashResult!=true then right=str(bashResult)
+        end if
+      end if
+      lval=self._getVal(left)
+      //If _getVal couldn't resolve and it looks like arithmetic, try _evalArithmetic
+      _len=len(left)
+      if typeof(lval)=="string" and lval==left and _len>0 then
+        hasDigit=false
+        hasArithOp=false
+        i=0
+        while i<_len
+          c=left[i]
+          if c>="0" and c<="9" then hasDigit=true
+          if c=="%" or c=="*" or c=="/" or c=="+" then hasArithOp=true
+          i+=1
+        end while
+        if hasDigit and hasArithOp then lval=self._evalArithmetic(left,Obj)
+      end if
+      rval=self._getVal(right)
+      _len=len(right)
+      if typeof(rval)=="string" and rval==right and _len>0 then
+        hasDigit=false
+        hasArithOp=false
+        i=0
+        while i<_len
+          c=right[i]
+          if c>="0" and c<="9" then hasDigit=true
+          if c=="%" or c=="*" or c=="/" or c=="+" then hasArithOp=true
+          i+=1
+        end while
+        if hasDigit and hasArithOp then rval=self._evalArithmetic(right,Obj)
+      end if
+      if op=="==" then return lval==rval
+      if op=="!=" then return lval!=rval
+      if op=="<=" then return lval<=rval
+      if op==">=" then return lval>=rval
+      if op=="<" then return lval<rval
+      if op==">" then return lval>rval
+    end if
+  end for
+  //No operator, check truthiness
+  v=self._getVal(cond)
+  if v==0 or v=="" or v==null or v==false then return false
+  return true
+end function
+// STRUCTURED SCRIPT PARSER (Abstract Syntax Tree) (AST Builder)
+//Parse tokens into AST with structured blocks
+Bash._parseScript=function(tokens)
+  ast=[]
+  _len=len(tokens)
+  i=0
+  while i<_len
+    line=trim(tokens[i])
+    lineLower=lower(line)
+    //IF statement
+    if indexOf(lineLower,"if ")==0 then
+      cond=line[3:]
+      if indexOf(cond," then")!=null then cond=trim(split(cond," then")[0])
+      ifBlock={"type":"if","cond":cond,"thenBlock":[],"elif":[],"elseBlock":[]}
+      i+=1
+      depth=1
+      currentBlock="then"
+      while i<_len and depth>0
+        subLine=tokens[i]
+        subLower=lower(subLine)
+        if indexOf(subLower,"if ")==0 then depth+=1
+        if subLower=="endif" or subLower=="end if" then
+          depth-=1
+          if depth==0 then break
+        end if
+        if depth==1 then
+          if indexOf(subLower,"elif ")==0 then
+            elifCond=subLine[5:]
+            if indexOf(elifCond," then")!=null then elifCond=trim(split(elifCond," then")[0])
+            push(ifBlock.elif,{"cond":elifCond,"body":[]})
+            currentBlock="elif"
+            i+=1
+            continue
+          else if subLower=="else" then
+            currentBlock="else"
+            i+=1
+            continue
+          end if
+        end if
+        if currentBlock=="then" then
+          push(ifBlock.thenBlock,subLine)
+        else if currentBlock=="elif" then
+          push(ifBlock.elif[len(ifBlock.elif)-1].body,subLine)
+        else if currentBlock=="else" then
+          push(ifBlock.elseBlock,subLine)
+        end if
+        i+=1
+      end while
+      push(ast,ifBlock)
+      i+=1
+      continue
+    end if
+    //WHILE loop
+    if indexOf(lineLower,"while ")==0 then
+      cond=line[6:]
+      whileBlock={"type":"while","cond":cond,"body":[]}
+      i+=1
+      depth=1
+      while i<_len and depth>0
+        subLine=tokens[i]
+        subLower=lower(subLine)
+        if indexOf(subLower,"while ")==0 then depth+=1
+        if subLower=="endwhile" or subLower=="end while" then
+          depth-=1
+          if depth==0 then break
+        end if
+        //Add all lines to body, not just depth==1
+        push(whileBlock.body,subLine)
+        i+=1
+      end while
+      push(ast,whileBlock)
+      i+=1
+      continue
+    end if
+    //UNTIL loop (inverse of while - runs while condition is false)
+    if indexOf(lineLower,"until ")==0 then
+      cond=line[6:]
+      untilBlock={"type":"until","cond":cond,"body":[]}
+      i+=1
+      depth=1
+      while i<_len and depth>0
+        subLine=tokens[i]
+        subLower=lower(subLine)
+        if indexOf(subLower,"until ")==0 then depth+=1
+        if subLower=="enduntil" or subLower=="end until" then
+          depth-=1
+          if depth==0 then break
+        end if
+        //Add all lines to body, not just depth==1
+        push(untilBlock.body,subLine)
+        i+=1
+      end while
+      push(ast,untilBlock)
+      i+=1
+      continue
+    end if
+    //FOR loop
+    if indexOf(lineLower,"for ")==0 then
+      //Extract variable and list: for x in [1,2,3] or for x in mylist
+      parts=split(line[4:]," in ")
+      if len(parts)!=2 then
+        push(ast,{"type":"cmd","line":line})
+        i+=1
+        continue
+      end if
+      varName=trim(parts[0])
+      listExpr=trim(parts[1])
+      forBlock={"type":"for","var":varName,"list":listExpr,"body":[]}
+      i+=1
+      depth=1
+      while i<_len and depth>0
+        subLine=tokens[i]
+        subLower=lower(subLine)
+        if indexOf(subLower,"for ")==0 then depth+=1
+        if subLower=="endfor" or subLower=="end for" then
+          depth-=1
+          if depth==0 then break
+        end if
+        //Add all lines to body, not just depth==1
+        push(forBlock.body,subLine)
+        i+=1
+      end while
+      push(ast,forBlock)
+      i+=1
+      continue
+    end if
+    //SWITCH/CASE statement
+    if indexOf(lineLower,"switch ")==0 then
+      switchVar=trim(line[7:])
+      switchBlock={"type":"switch","var":switchVar,"cases":[],"default":[]}
+      i+=1
+      depth=1
+      currentCase=null
+      inDefault=false
+      while i<_len and depth>0
+        subLine=tokens[i]
+        subLower=lower(subLine)
+        if indexOf(subLower,"switch ")==0 then depth+=1
+        if subLower=="endswitch" or subLower=="end switch" then
+          depth-=1
+          if depth==0 then break
+        end if
+        if depth==1 then
+          if indexOf(subLower,"case ")==0 then
+            //New case
+            caseValue=trim(subLine[5:])
+            currentCase={"value":caseValue,"body":[]}
+            push(switchBlock.cases,currentCase)
+            inDefault=false
+            i+=1
+            continue
+          else if subLower=="default" or subLower=="default:" then
+            //Default case
+            inDefault=true
+            currentCase=null
+            i+=1
+            continue
+          end if
+        end if
+        //Add line to current case or default (collect at ALL depths
+        //so nested switch content is preserved for later re-parsing)
+        if inDefault then
+          push(switchBlock.default,subLine)
+        else if currentCase then
+          push(currentCase.body,subLine)
+        end if
+        i+=1
+      end while
+      push(ast,switchBlock)
+      i+=1
+      continue
+    end if
+    //TRY/CATCH statement
+    if lineLower=="try" then
+      tryBlock={"type":"try","body":[],"catch":[],"catchVar":""}
+      i+=1
+      depth=1
+      currentBlock="try"
+      while i<_len and depth>0
+        subLine=tokens[i]
+        subLower=lower(subLine)
+        if subLower=="try" then depth+=1
+        if subLower=="endtry" or subLower=="end try" then
+          depth-=1
+          if depth==0 then break
+        end if
+        if depth==1 then
+          if indexOf(subLower,"catch")==0 then
+            if len(subLine)>6 then tryBlock.catchVar=trim(subLine[6:])
+            currentBlock="catch"
+            i+=1
+            continue
+          end if
+        end if
+        if currentBlock=="try" then
+          push(tryBlock.body,subLine)
+        else if currentBlock=="catch" then
+          push(tryBlock.catch,subLine)
+        end if
+        i+=1
+      end while
+      push(ast,tryBlock)
+      i+=1
+      continue
+    end if
+    //FUNCTION definition
+    if indexOf(lineLower,"func ")==0 then
+      funcDef=trim(line[5:])
+      funcName=""
+      funcParams=[]
+      if indexOf(funcDef,"(")!=null then
+        funcName=trim(funcDef[:indexOf(funcDef,"(")])
+        paramStart=indexOf(funcDef,"(")+1
+        paramEnd=indexOf(funcDef,")")
+        if paramEnd!=null and paramEnd>paramStart then
+          paramStr=funcDef[paramStart:paramEnd]
+          if paramStr then
+            paramList=split(paramStr,",")
+            for p in paramList;push(funcParams,trim(p));end for
+          end if
+        end if
+      else
+        funcName=funcDef
+      end if
+      funcBlock={"type":"func","name":funcName,"params":funcParams,"body":[]}
+      i+=1
+      depth=1
+      while i<_len and depth>0
+        subLine=tokens[i]
+        //Fast path: only lower first few chars for keyword detection (avoid O(n) lower on full line)
+        sub0=subLine[0]
+        if sub0=="f" or sub0=="F" then
+          if lower(subLine[0:5])=="func " then depth+=1
+        else if sub0=="e" or sub0=="E" then
+          sl=lower(subLine[0:8])
+          if sl[0:7]=="endfunc" or sl=="end func" then
+            depth-=1
+            if depth==0 then break
+          end if
+        end if
+        if depth==1 then push(funcBlock.body,subLine)
+        i+=1
+      end while
+      push(ast,funcBlock)
+      i+=1
+      continue
+    end if
+    //BREAK statement
+    if lineLower=="break" then
+      push(ast,{"type":"break"})
+      i+=1
+      continue
+    end if
+    //CONTINUE statement
+    if lineLower=="continue" then
+      push(ast,{"type":"continue"})
+      i+=1
+      continue
+    end if
+    //RETURN_VALUE statement (sets return value without exiting)
+    if lineLower=="_return" or indexOf(lineLower,"_return ")==0 then
+      if len(line)>8 then value=trim(line[8:]) else value=""
+      push(ast,{"type":"return_value","value":value})
+      i+=1
+      continue
+    end if
+    //RETURN statement
+    if indexOf(lineLower,"return")==0 and indexOf(lineLower,"_return")!=0 then
+      //Extract optional message after return
+      msg=""
+      if len(line)>6 then msg=trim(line[7:])
+      push(ast,{"type":"return","msg":msg})
+      i+=1
+      continue
+    end if
+    //Regular command
+    push(ast,{"type":"cmd","line":line})
+    i+=1
+  end while
+  return ast
+end function
+// FUNCTION EXECUTION
+//Call user-defined function with arguments
+Bash._callFunc=function(Obj,name,args=[])
+  gb=globals.G_bash
+  if gb.DEBUG then
+    print blue("="*60)
+    print blue("Function Call->_callFunc")
+    print cyan("  Function Name: ")+white(name)
+    print cyan("  Arguments: ")+yellow(args)
+    print cyan("  Current Recursion: ")+yellow(gb.RECURSION)
+    print cyan("  Max Recursion: ")+yellow(gb.RECURSION_MAX)
+    print cyan("  Current Call Stack: ")+yellow(gb.CALLSTACK)
+  end if
+  //Check recursion depth
+  if gb.RECURSION>=gb.RECURSION_MAX then
+    if gb.DEBUG then print red("  ERROR: Maximum recursion depth exceeded!")
+    return Error.set("Maximum recursion depth exceeded")
+  end if
+  //Check if function exists
+  if not hasIndex(gb.FUNCS,name) then
+    if gb.DEBUG then
+      print red("  ERROR: Function not defined: "+name)
+      print red("  Available functions: ")+yellow(gb.FUNCS.indexes)
+    end if
+    return Error.set("Function not defined: "+name)
+  end if
+  //Get function definition
+  funcDef=gb.FUNCS[name]
+  params=[]
+  body=[]
+  //Handle both old format (just body) and new format (params+body)
+  if typeof(funcDef)=="map" then
+    params=funcDef.params
+    body=funcDef.body
+  else
+    body=funcDef
+  end if
+  //Evaluate arguments in CALLER's scope before saving/restoring variables
+  evaluatedArgs=[]
+  _len=len(args)
+  if _len>0 then
+    i=0
+    while i<_len
+      arg=args[i]
+      if typeof(arg)=="string" then
+        //Resolve get_var calls in the argument
+        resolvedGetVar=false
+        maxIter=20
+        iterCount=0
+        while indexOf(arg,"_getvar(")!=null
+          iterCount+=1
+          if iterCount>maxIter then break
+          gvStart=indexOf(arg,"_getvar(")
+          parenDepth=0
+          closeIdx=null
+          _len2=len(arg)
+          ci=gvStart+8
+          while ci<_len2
+            if arg[ci]=="(" then parenDepth+=1
+            if arg[ci]==")" then
+              if parenDepth==0 then
+                closeIdx=ci
+                break
+              else
+                parenDepth-=1
+              end if
+            end if
+            ci+=1
+          end while
+          if closeIdx!=null then
+            varName=arg[gvStart+8:closeIdx]
+            varValue=self._getVar(varName)
+            //If the entire arg is just _getvar(name), preserve the typed value (lists, maps, etc.)
+            if gvStart==0 and closeIdx+1>=len(arg) then
+              arg=varValue
+              break
+            end if
+            arg=arg[:gvStart]+str(varValue)+arg[closeIdx+1:]
+            resolvedGetVar=true
+          else
+            break
+          end if
+        end while
+        //Resolve any preserved get_var placeholders in the arg
+        if typeof(arg)=="string" and indexOf(arg,"__GVPRES")!=null then
+          if hasIndex(gb,"PRESERVED_GETVAR_VALUES") then
+            //If the entire arg is a single placeholder, preserve typed value (lists, maps, etc.)
+            if hasIndex(gb.PRESERVED_GETVAR_VALUES,arg) then
+              arg=gb.PRESERVED_GETVAR_VALUES[arg]
+            else
+              //Inline replace all placeholders with string values
+              for phKey in gb.PRESERVED_GETVAR_VALUES.indexes
+                while typeof(arg)=="string";phPos=indexOf(arg,phKey);if phPos==null then break;phVal=gb.PRESERVED_GETVAR_VALUES[phKey];arg=arg[:phPos]+str(phVal)+arg[phPos+len(phKey):];end while
+              end for
+            end if
+          end if
+        end if
+        //Convert list literal strings to actual lists (e.g. "[-3, -1, 5, 2]" -> list)
+        if typeof(arg)=="string" and len(arg)>1 and arg[0]=="[" and arg[len(arg)-1]=="]" then arg=self._listLiteralToList(arg)
+        //Evaluate arithmetic if the arg looks like a math expression (e.g. "5 - 1", "_getvar(n) - 1" -> "5 - 1")
+        //Only if it looks numeric (digits, spaces, operators, parens, dots - no letters)
+        if typeof(arg)=="string" and (indexOf(arg,"+")!=null or indexOf(arg,"-")!=null or indexOf(arg,"*")!=null or indexOf(arg,"/")!=null or indexOf(arg,"%")!=null) then
+          looksNumeric=true
+          hasDigitArg=false
+          _len2=len(arg)
+          ci=0
+          while ci<_len2
+            c=arg[ci]
+            if c>="0" and c<="9" then hasDigitArg=true
+            if (c>="a" and c<="z") or (c>="A" and c<="Z") or c=="_" then
+              looksNumeric=false
+              break
+            end if
+            ci+=1
+          end while
+          if not hasDigitArg then looksNumeric=false
+          if looksNumeric then
+            arithResult=self._evalArithmetic(arg)
+            if typeof(arithResult)=="number" then arg=arithResult
+          end if
+        end if
+        //Try numeric conversion for pure number strings (e.g. "7" -> 7)
+        if typeof(arg)=="string" then
+          numVal=val(arg)
+          if str(numVal)==trim(arg) then arg=numVal
+        end if
+      end if
+      push(evaluatedArgs,arg)
+      if gb.DEBUG then print green("    Evaluated arg["+i+"]: ")+white(args[i])+green(" -> ")+yellow(arg)
+      i+=1
+    end while
+  end if
+  //Save ALL current variables for true local scope
+  savedVars={}
+  for varName in gb.VARS.indexes;savedVars[varName]=gb.VARS[varName];end for
+  //Clear stale __return__ so empty functions don't return previous value
+  if hasIndex(gb.VARS,"__return__") then gb.VARS.remove("__return__")
+  //Bind evaluated arguments to parameters
+  _len=len(params)
+  if _len>0 then
+    i=0
+    while i<_len
+      if i<len(evaluatedArgs) then
+        gb.VARS[params[i]]=evaluatedArgs[i]
+        if gb.DEBUG then print green("    Param "+params[i]+" = ")+white(evaluatedArgs[i])
+      else
+        gb.VARS[params[i]]=null
+      end if
+      i+=1
+    end while
+  end if
+  //Increment recursion
+  gb.RECURSION=gb.RECURSION+1
+  push(gb.CALLSTACK,name)
+  if gb.DEBUG then
+    print green("  Entering function "+name)
+    print green("    New recursion depth: ")+yellow(gb.RECURSION)
+    print green("    Function body: ")+yellow(len(body)+" lines")
+  end if
+  //Parse the body into AST before executing
+  bodyAst=self._parseScript(body)
+  self._execBody(Obj,bodyAst,false)
+  //Get return value (use "" for no-return functions so _setVar doesn't silently skip)
+  returnVal=""
+  if hasIndex(gb.VARS,"__return__") then returnVal=gb.VARS["__return__"]
+  //Restore ALL variables to pre-call state
+  gb.VARS=savedVars
+  //Decrement recursion
+  pop(gb.CALLSTACK)
+  gb.RECURSION=gb.RECURSION-1
+  if gb.DEBUG then
+    print green("  Exiting function "+name)
+    print green("    Return value: ")+yellow(returnVal)
+    print green("    New recursion depth: ")+yellow(gb.RECURSION)
+    print green("    Remaining call stack: ")+yellow(gb.CALLSTACK)
+  end if
+  return returnVal
+end function

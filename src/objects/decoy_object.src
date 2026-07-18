@@ -1,0 +1,138 @@
+// =============================================================================
+// DECOY_OBJECT
+// Decoy crash session handler for exploitation framework remote shell access.
+// =============================================================================
+DecoyObject={}
+// Function: run
+// Purpose: Initialize and run decoy crash recovery session
+// Args:
+//   this - Reference to return as session object
+//   ex - Shell object or existing session object to restore
+//   goto - Redirect target (number for index, string for nickname, null for default)
+// Returns: null (redirects to another session)
+DecoyObject.run=function(this,ex,goto)
+  //Unload previous pivot CO from boot cache
+  Boot.pivotCOUnload
+	//Helper function: Initialize and load critical libraries
+	init=function(Obj)
+    libs=[["metaxploit.so","MetaxploitLib","metaxploit"],["crypto.so","cryptoLib","crypto"]]
+    for lib in libs
+      Obj[lib[2]]=Io.getLib(Obj,lib[0],lib[1])
+      if not Obj[lib[2]] then
+        m=Io.findFile(globals.G_main.root,lib[0])
+        if m then
+          Info.info("Fetching "+lib[2]+" library...")
+          scp(globals.G_main.shell,path(m),path(Obj.user.home)+"/payload/data",Obj.shell)
+          Obj[lib[2]]=include_lib(path(Obj.user.home)+"/payload/data/"+lib[0])
+        end if
+      end if
+      if Obj[lib[2]] then
+        Library[lib[2]]=Obj[lib[2]]
+        Info.info(lib[2]+" loaded","+")
+      else
+        Info.warning("Unable to load "+lib[2]+" library")
+      end if
+    end for
+    //Do NOT clear CO here — proxy_object.init clears it when the proxy boots.
+    //Clearing CO here would wipe the stash saved by proxy -q (Boot.pivotCOLoad),
+    //causing the proxy X process to read an empty CO, skip continueBash, and race
+    //to user_input before the main loop → terminal ends in [MAIN] instead of [PROXY].
+	end function
+  //Restore existing decoy session from ex object
+  if typeof(ex)!="shell" then
+    skipProps=["commands"]
+    for prop in indexes(ex);if skipProps.indexOf(prop)==null then self[prop]=ex[prop];end for
+    //Re-register libraries globally
+    Library.metaxploit=ex.metaxploit
+    Library.crypto=ex.crypto
+  else
+    //Create new decoy session from shell object
+    //Generate random session ID (1-100000)
+    self.id=floor(rnd*(100000-1+1)+1)
+    self.object=ex
+    self.type="shell"
+    self.rootShell=null
+    //Get host computer object from shell
+    self.computer=host_computer(ex)
+    self.shell=ex
+    //Store network metadata (public and local IPs)
+    self.meta={
+      "public_ip":public_ip_pc(self.computer),
+      "local_ip":self.computer.local_ip
+    }
+    //Get root directory File object
+    self.root=File(self.computer,"/")
+    if is_network_active(self.computer) then self.net=Net.initNetwork(self,get_router) else self.net=Net.initNetwork(self)
+    //Detect machine type
+    self.machineType=System.getMachine(self,self.meta.local_ip)
+    //Detect current user and home directory
+    self.user=Utility.getUser(self)
+    self.pwa=Gui.pwAccess(self)
+    //Set up directory structure with payload and data subdirectories
+    self.dir={
+      "current":self.user.home,
+      "last":self.user.home,
+      "payload":File(self.computer,path(self.user.home)+"/payload"),
+      "data":File(self.computer,path(self.user.home)+"/payload/data")
+    }
+    //Set hardware unit label (orange DECOY indicator)
+    self.hw_unit=orange("DECOY")
+    //Set session nickname with crash ID
+    self.nick="Decoy|Crash Session ID:"+self.id
+    //Set layer type as decoy
+    self.layer="decoy"
+    //Initialize temporary storage map
+    self.temp={}
+    //Initialize log tracking array
+    self.logTracker=[]
+    //Initialize library references as null
+    self.metaxploit=null
+    self.crypto=null
+    //Get computer hostname
+    self.compName=get_name(self.computer)
+    //Initialize libraries (will attempt to fetch if not loaded)
+    init(self)
+    //Set pivot flag to indicate pivot state
+    globals.G_hasPivoted=true
+  end if
+	//Function: __exit - Clean up and exit decoy session
+	__exit=function(argv)
+    //Remove session from IPC tracking
+    Ipc.removeObj(this.id)
+    //Remove from global sessions map if present
+    if hasIndex(globals.G_sessions,this.id) then globals.rmSession(this)
+	end function
+  //Commands map - only exit command available in decoy
+  self.commands={
+    "x":@__exit,
+  }
+  //Add session to IPC tracking
+  Ipc.addObject(self)
+  //Move program file to data directory as "x"
+  move(File(self.computer,program_path),path(self.dir.data),"x")
+  //Move payload directory to data directory as "bye"
+  move(self.dir.payload,path(self.dir.data),"bye")
+  //Track shell in log system
+  Log.shellLog(self.shell)
+  //Add session to session manager
+  Session.check(self)
+  //Do NOT clear CO here — proxy_object clears it when it boots.
+  //Navigate to specified session or default
+  //IMPORTANT: Reset back flag immediately after each navigation call.
+  //Session.use("main") sets globals.G_attributes.back=true via the shared CO reference,
+  //which would contaminate proxy_object's post-continueBash back check and cause proxy
+  //to exit without showing [PROXY] prompt.
+  if goto isa number then
+    //Navigate to session by index
+    Session.use(self,goto)
+    globals.G_attributes.back=false
+  else if goto isa string then
+    //Navigate to session by nickname (wrap string in array)
+    Session.goto(self,[goto])
+    globals.G_attributes.back=false
+  else
+    //Navigate to default session 0
+    Session.use(self,0)
+    globals.G_attributes.back=false
+  end if
+end function

@@ -1,0 +1,50 @@
+// =============================================================================
+// SYSTEMLOCK
+// Destructively lock down target filesystem: wipe binaries, permissions, home.
+// =============================================================================
+Command.systemLock=function(Obj)
+  hasWritePermission=has_permission(Obj.root,"w")
+  if not hasWritePermission then return Error.set("You do not have permission to lock the / file system")
+  isConfirmed=Gui.yesNo("Are you sure you want to lock this file system?",false)
+  if not isConfirmed then return
+  Info.info("Locking the file system...")
+  // File mode uses specialized FileHelper implementation
+  isFileMode=(Obj.type=="file")
+  if isFileMode then return FileHelper.systemLock(Obj)
+  computer=Obj.computer
+  binFolder=File(computer,"/bin")
+  binFileCount=len(get_files(binFolder))
+  hasBinFiles=(binFileCount>1)
+  if hasBinFiles then
+    Info.info("Removing all files from /bin...")
+    for fileObj in get_files(binFolder);Info.warning("Removing /bin/"+name(fileObj),"-");delete(fileObj);end for
+  end if
+  usrBinFolder=File(computer,"/usr/bin")
+  usrBinFileCount=len(get_files(usrBinFolder))
+  hasUsrBinFiles=(usrBinFileCount>1)
+  if hasUsrBinFiles then
+    Info.info("Removing all files from /usr/bin...")
+    for fileObj in get_files(usrBinFolder);Info.warning("Removing /usr/bin/"+name(fileObj),"-");delete(fileObj);end for
+  end if
+  Info.info("Removing file permissions from /...")
+  rootFolder=File(computer,"/")
+  set_owner(rootFolder,"root",1)
+  set_group(rootFolder,"root",1)
+  chmod(rootFolder,"o-wrx",1)
+  chmod(rootFolder,"u-wrx",1)
+  chmod(rootFolder,"g-wrx",1)
+  Info.info("Checking for unnecessary files...")
+  homeFolder=File(computer,"/home")
+  hasHomeFolder=(homeFolder!=null)
+  if hasHomeFolder then
+    Info.warning("Removing /home...","-")
+    delete(homeFolder)
+  end if
+  passwdFile=File(computer,"/etc/passwd")
+  hasPasswdFile=(passwdFile!=null)
+  if hasPasswdFile then
+    Info.warning("Removing the passwd file...","-")
+    delete(passwdFile)
+  end if
+  Info.info("File system locked :)")
+end function

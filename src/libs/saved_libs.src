@@ -1,0 +1,317 @@
+// =============================================================================
+// SAVED_LIBS
+// Saved libraries manager; stores, retrieves, installs, and manages GreyScript libraries.
+// =============================================================================
+SavedLibs={
+  "librarys":{
+    "blockchain.so":"block",
+    "libsmartappliance.so":"appliance",
+    "libtrafficnet.so":"traffic",
+    "librshell.so":"rshell",
+    "libssh.so":"ssh",
+    "libhttp.so":"http",
+    "librepository.so":"repo",
+    "libftp.so":"ftp",
+    "libchat.so":"chat"
+  }
+}
+//_libs - Get all saved library files and folders
+SavedLibs._libs=function;return get_files(globals.G_main.dir.savedLibs)+get_folders(globals.G_main.dir.savedLibs);end function
+//install - Install library from savedLibs to target system
+//Args: Obj (target object), argv (library name and optional -p path)
+//Returns: true on success, Error/Warning otherwise
+SavedLibs.install=function(Obj,argv)
+  //Require arguments
+  if not argv then return Man.help(["libs"])
+  _p=ArgumentParser.init
+  //Add path argument
+  _p.addArgument("p",false,"store")
+  argv=_p.parseArgs("libs",argv)
+  //Exit on parse error
+  if argv isa Error then return
+  //Default path to /lib
+  if not argv.p then argv.p="/lib"
+  //Get library name from arguments
+  l=argv.rest[0]
+	//Get all files and folders in savedLibs
+	z=self._libs
+	//Check if savedLibs is empty
+	if not len(z) then return Info.info("No libraries in the savedLibs folder")
+	//Initialize match variable
+  n=null
+	//Search for matching library
+	for a in z
+		//Check if name contains search string
+    if indexOf(name(a),l)!=null then
+			//Save matching library
+      n=z[__a_idx]
+			//Exit search loop
+      break
+    end if
+	end for
+	//Check if library found
+  if not n then return Warning.set("Unable to find: "+l)
+	//Remove version suffix
+  t=split(name(n),"V")[0]
+	//Get main system
+  sys=System.getSystem
+	//Copy library to target
+  r=scp(sys.shell,path(n),argv.p,Obj.object)
+	//Check for scp error
+  if r isa string then return Error.set(r)
+	//Get existing file without version
+  f=File(Obj.computer,argv.p+"/"+t)
+	//Remove old version if exists
+  if f then Command.qrm(Obj,[f])
+	//Get copied file with version suffix
+  j=File(Obj.computer,argv.p+"/"+name(n))
+	//Rename to remove version suffix
+  if j then rename(j,t)
+  //Check if system is valid for auto-start
+  if Utility.checkValid(Obj,true) then
+		//Handle shell layer
+    if Obj.layer=="shell" then
+			//Pack library for shell
+      l=Builder.packLibrary(Obj,path(j))
+      if l then
+				//Start service
+        start_service(l)
+				//Import rshell if librshell.so
+        if t=="librshell.so" then Rshell.import(host_computer(Obj.shell).public_ip,Obj)
+      end if
+    else
+			//Handle computer layer
+      if hasIndex(self.librarys,t) then
+				//Reload services
+        System.loadServices(Obj)
+				//Start service by name
+        Net.service(Obj,[self.librarys[t],"start"])
+				//Import rshell if librshell.so
+        if t=="librshell.so" then Rshell.import(Obj.meta.public_ip)
+				//Update nickname
+        Obj.nick="Rshell Server"
+      end if
+    end if
+  else
+		//Warn if manual start required
+    Info.warning("Service is not running, you need to pivot and start it manually")
+  end if
+	//Display success message if not in bash
+  if not globals.G_bash.ACTIVE then Info.info("Installed "+t+" into "+argv.p)
+	//Return success
+  return true
+end function
+//fileView - Display all saved libraries
+//Returns: nothing
+SavedLibs.fileView=function
+	//Get all files and folders in savedLibs
+	z=self._libs
+	//Check if savedLibs is empty
+	if not len(z) then return Info.info("No libraries in the savedLibs folder")
+	//Initialize display list
+  l=[]
+	//Build colored name list
+	for a in z;push(l,yellow(name(a)));end for
+	Info.info("You have the following libraries:")
+	//Display list without headers
+	listNHNC(l)
+end function
+//getFile - Download library from savedLibs to target
+//Args: Obj (target object), argv (library name/index and optional -p path)
+//Returns: nothing or Error
+SavedLibs.getFile=function(Obj,argv)
+	//Require shell object
+	if not indexOf(Obj.type,"shell")!=null then return Warning.set("Need a shell object to get a library")
+  _p=ArgumentParser.init
+	//Add path argument
+  _p.addArgument("p",false,"store")
+  argv=_p.parseArgs("libs",argv)
+	//Exit on parse error
+  if argv isa Error then return
+	//Default path flag
+  D=false
+	//Set default path if not specified
+  if not argv.p then
+    _cur=Io.safePath(Obj.dir.current)
+    if not _cur then return Error.set("Current directory no longer exists")
+    argv.p=_cur
+    D=true
+  end if
+	//file - Download single library
+  file=function(x)
+		//Get all savedLibs files
+    z=SavedLibs._libs
+		//Check if empty
+    if not len(z) then return Info.info("No libraries found")
+    //Initialize match variable
+    n=null
+		//Check if searching by name (not index)
+    if not x isa number then
+			//Use /lib if default path
+      if D then argv.p="/lib"
+			//Search for matching library Match on substring
+      for a in z;if indexOf(name(a),x)!=null then;n=z[__a_idx];break;end if;end for
+			//Check if found
+      if not n then return Warning.set("Unable to find: "+x)
+    else
+			//Validate range
+      if x<0 or x>len(z)-1 then return Error.set("Invalid library id")
+			//Validate index exists
+      if not hasIndex(z,x) then return Error.set("Invalid library id")
+			//Get library by index
+      n=z[x]
+    end if
+		//Remove version suffix
+    t=split(name(n),"V")[0]
+		//Fallback to full name
+    if not t then t=name(n)
+		//Get main system
+    sys=System.getSystem
+		//Copy library to target
+    r=scp(sys.shell,path(n),argv.p,Obj.object)
+		//Check for error
+    if r isa string then return Error.set(r)
+		//Get existing file
+    f=File(Obj.computer,argv.p+"/"+t)
+		//Remove old version
+    if f then Command.qrm(Obj,[f])
+		//Get copied file
+    j=File(Obj.computer,argv.p+"/"+name(n))
+		//Rename to remove version
+    if j then rename(j,t)
+  end function
+	//Handle single file
+  if len(argv.rest)==1 then
+    i=to_int(argv.rest[0])
+    if i isa number then return file(i) else return file(argv.rest[0])
+  end if
+	//Handle multiple files
+  while argv.rest;i=pop(argv.rest);x=to_int(i);if x isa number then file(x) else file(i);end while
+end function
+//putFile - Save library from target to savedLibs with version tag
+//Args: Obj (target object), argv (library path and optional -p path)
+//Returns: nothing or Error
+SavedLibs.putFile=function(Obj,argv)
+	//Require shell object
+	if not indexOf(Obj.type,"shell")!=null then return Warning.set("Need a shell object to put a library")
+  _p=ArgumentParser.init
+	//Add path argument
+  _p.addArgument("p",false,"store")
+  argv=_p.parseArgs("libs",argv)
+	//Exit on parse error
+  if argv isa Error then return
+	//file - Save single library
+  file=function(p)
+    //Build file path
+    _cur=Io.safePath(Obj.dir.current)
+    if not argv.p then
+			//Use relative or absolute path
+      if indexOf(p,"/")!=null then
+        f=Io._getFile(Obj,p)
+      else
+        if not _cur then return Error.set("Current directory no longer exists")
+        f=Io._getFile(Obj,_cur+"/"+p)
+      end if
+    else
+			//Use specified path
+      if indexOf(argv.p,"/")!=null then
+        f=Io._getFile(Obj,argv.p+"/"+p)
+      else
+        if not _cur then return Error.set("Current directory no longer exists")
+        f=Io._getFile(Obj,_cur+"/"+p)
+      end if
+    end if
+		//Exit if file not found
+    if f isa Error then return
+		//Check read permission
+    if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+		//Initialize version variable
+    v=null
+		//Library object variable
+    q=null
+		//Metaxploit library
+    metaxploit=null
+		//Get metaxploit for version detection
+    if Obj.layer=="shell" then
+			//Pack metaxploit if not available
+      if not Obj.packMetaxploit then _=Builder.packMetaxploit(Obj) else _=Obj.packMetaxploit
+			//Use packed metaxploit
+      if not _ isa Error then metaxploit=_ else return
+    else
+			//Use main metaxploit
+      metaxploit=Library.metaxploit
+    end if
+		//Helper: prompt user to enter version manually
+    promptVersion=function
+      print yellow("I am unable to determine the version of "+name(f)+". If you know the version then")
+      print yellow("enter it below or else just enter x")
+      inp=Gui.input({"text":"Enter version: "})
+      if inp!=null then return "V"+inp else return "V_unknown_version"
+    end function
+		//Set version from library if loadable, otherwise prompt
+    if not metaxploit then
+      v=promptVersion
+    else
+			//Try to load library
+      q=load(metaxploit,path(f))
+			//Use library version if loaded, otherwise prompt
+      if typeof(q)=="MetaLib" then v="V"+q.version else v=promptVersion
+    end if
+		//Get main system
+    sys=System.getSystem
+		//Copy library to savedLibs
+    e=scp(Obj.object,path(f),path(sys.dir.savedLibs),sys.shell)
+		//Check for error
+    if not e==1 then return Error.set(e)
+		//Get copied file
+    j=File(sys.computer,path(sys.dir.savedLibs)+"/"+name(f))
+		//Rename to add version tag
+    if j then rename(j,name(f)+v)
+		//Display success message
+    return Info.info("Added library: "+name(f))
+  end function
+	//Handle single file
+  if len(argv.rest)==1 then return file(argv.rest[0])
+	//Handle multiple files
+  while argv.rest;file(pop(argv.rest));end while
+end function
+//fileDel - Delete library from savedLibs by index
+//Args: argv (list of library indexes to delete)
+//Returns: nothing or Error
+SavedLibs.fileDel=function(argv)
+  //file - Delete single library
+  file=function(x)
+		//Get all savedLibs files
+    z=SavedLibs._libs
+		//Check if empty
+    if not len(z) then return Info.info("No libraries found")
+		//Validate is number
+    if not x isa number then return Error.set("Library id expected")
+		//Validate index exists
+    if not hasIndex(z,x) then return Error.set("Invalid library id")
+		//Save library name
+    n=name(z[x])
+		//Delete library
+    r=delete(z[x])
+		//Check for error
+    if not r=="" then return Error.set(r)
+		//Display success message
+    Info.info("Removed library: "+n)
+  end function
+	//Handle single file
+  if len(argv)==1 then return file(to_int(argv[0]))
+	//Handle multiple files
+  while argv;file(to_int(pop(argv)));end while
+end function
+//clear - Delete all libraries from savedLibs
+//Returns: nothing
+SavedLibs.clear=function
+	//Get all savedLibs files
+	z=self._libs
+	//Check if empty
+	if not len(z) then return Info.info("No libraries found")
+	//Delete all files
+  for f in z;delete(f);end for
+	//Display success message
+	Info.info("All libraries files cleared")
+end function

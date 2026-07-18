@@ -1,0 +1,52 @@
+// Man page for rev
+manRev="REV(1)                           X Shell Manual                           REV(1)
+
+<b>NAME</b>
+    rev - used to reverse text
+<b>SYNOPSIS</b>
+    <b>rev </b><b>FILE</b>
+    <b>rev </b>(<b>-t</b>) (<b>--text</b>) <b>FILE</b>
+    <b>rev </b>(<b>-o</b>) (<b>--order</b>) <b>FILE</b>
+<b>DESCRIPTION</b>
+    Reverse text content and line order of files. Three modes: full reverse,
+    text-only reverse, and order-only reverse. Useful for obfuscation and data manipulation.
+<b>OPTIONS</b>
+    <b>FILE</b>
+    Reverse text and order
+    Full reverse mode
+
+    <b>-t, --text</b>
+    Reverse text only
+    Line order unchanged
+
+    <b>-o, --order</b>
+    Reverse line order
+    Text unchanged
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man rev</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>rev</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Full Reverse</color>
+    <b>rev data.txt</b>
+    Reverse text and order
+
+    <color=#e4ff34># Text Only</color>
+    <b>rev -t message.txt</b>
+    Reverse characters
+
+    <b>rev --text file.log</b>
+    Mirror text content
+
+    <color=#e4ff34># Order Only</color>
+    <b>rev -o config.txt</b>
+    Reverse lines
+
+    <b>rev --order log.txt</b>
+    Flip upside down
+<b>SEE ALSO</b>
+    <b>cat</b>, <b>more</b>, <b>file</b>"

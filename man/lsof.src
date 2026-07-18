@@ -1,0 +1,53 @@
+// Man page for lsof
+manLsof="LSOF(1)                          X Shell Manual                          LSOF(1)
+
+<b>NAME</b>
+    lsof - list all running processes for the current user
+<b>SYNOPSIS</b>
+    <b>lsof</b>
+<b>DESCRIPTION</b>
+    Process monitoring tool that displays all running processes owned by the
+    current user with CPU and memory usage statistics. Shows visual progress
+    bars for total CPU and memory consumption, and detailed per-process metrics
+    in tabular format. Filters process list to only show current user's processes
+    with color-coded output for easy reading.
+<b>OUTPUT FORMAT</b>
+    Summary section:
+    - tasks: Total number of user processes
+    - cpu_usage: Visual bar showing aggregate CPU usage percentage
+    - mem_usage: Visual bar showing aggregate memory usage percentage
+
+    Process table columns:
+    - USER: Process owner (current user only)
+    - PID: Process ID number
+    - CPU: CPU usage percentage
+    - MEM: Memory usage percentage
+    - COMMAND: Process command name
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View your processes</color>
+    <b>lsof</b>
+    tasks: 8
+    cpu_usage: [####---------------------]==[14.2%]
+    mem_usage: [#####--------------------]==[16.8%]
+    USER  PID    CPU   MEM   COMMAND
+    guest 12345  5.2%  8.1%  /bin/service
+
+    <color=#e4ff34># Monitor system load</color>
+    <b>lsof</b>
+    Check CPU and memory usage
+
+    <color=#e4ff34># Identify process to kill</color>
+    <b>lsof</b>
+    Find PID of target process
+
+    <b>kill 12345</b>
+    Terminate process by PID
+
+    <color=#e4ff34># Compare with detailed view</color>
+    <b>lsof</b>
+    Quick overview
+
+    <b>htop</b>
+    Full system details
+<b>SEE ALSO</b>
+    <b>ps</b>, <b>htop</b>, <b>kill</b>, <b>top</b>"

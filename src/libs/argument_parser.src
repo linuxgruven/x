@@ -1,0 +1,380 @@
+// =============================================================================
+// ARGUMENT_PARSER
+// Command-line argument parser; handles flags, options, positional args, and type coercion.
+// =============================================================================
+ArgumentParser={}
+// Initialize new argument parser instance
+ArgumentParser.init=function
+  x=new self
+	x.arguments={}
+	x.write=false
+	return x
+end function
+// Add argument definition to parser
+ArgumentParser.addArgument=function(n,l=false,a="store",d=null)
+	// Create flag format (short -f or long --flag)
+	// For short flags, use full name if single char, otherwise first char only
+	if l then f="--"+n else f="-"+n[0]
+	if self.arguments.hasIndex(f) then return
+	// Store argument metadata
+	self.arguments[f]={
+    "aname":n,
+    "long":l,
+    "action":a,
+    "default":d
+  }
+end function
+// Expand combined short flags (-abc becomes -a -b -c)
+ArgumentParser.check=function(a)
+  r=[]
+  for f in a
+    // Check for combined short flags
+    if len(f)>2 and f[0]=="-" and f[1]!="-" then
+      _len=len(f);i=1;while i<_len;push(r,"-"+f[i]);i+=1;end while
+    else
+      push(r,f)
+    end if
+  end for
+  return r
+end function
+// Parse and handle file redirection operators (>, >>, post)
+ArgumentParser.checkRedirect=function(Obj,n,args)
+	// Handle single redirection (overwrite) >
+	if indexOf(args.rest,">")!=null then
+		self.write=true
+		args["redirect"]=true
+		args["single"]=true
+		i=indexOf(args.rest,">")
+		remove(args.rest,i)
+		// Parse output file path
+		if len(args.rest)>=i+1 then
+			z=args.rest[i]
+			remove(args.rest,i)
+			if z[0]=="~" then z=path(Obj.user.home)+z[1:]
+			if indexOf(z,"/")!=null then
+				args["redirectName"]=split(z,"/")[-1]
+				args["redirectPath"]=parent_path(z)
+			else
+				args["redirectName"]=z
+				args["redirectPath"]=path(Obj.dir.current)
+			end if
+		else
+			// Default output file
+			args["redirect"]=true
+			args["redirectName"]=n+".txt"
+			args["redirectPath"]=path(Obj.dir.current)
+		end if
+	// Handle append redirection >>
+	else if indexOf(args.rest,">>")!=null then
+		self.write=true
+		args["redirect"]=true
+		args["double"]=true
+		i=indexOf(args.rest,">>")
+		remove(args.rest,i)
+		// Parse output file path (required for append)
+		if len(args.rest)>=i+1 then
+			z=pop(args.rest)
+			if not z then return Error.set("No output file provided")
+			if z[0]=="~" then z=path(Obj.user.home)+z[1:]
+			if indexOf(z,"/")!=null then
+				args["redirectName"]=split(z,"/")[-1]
+				args["redirectPath"]=parent_path(z)
+			else
+				args["redirectName"]=z
+				args["redirectPath"]=path(Obj.dir.current)
+			end if
+		else
+			return Error.set("No output file provided")
+		end if
+	// Handle post command (write to notes)
+	else if indexOf(args.rest,"post")!=null then
+		self.write=true
+    remove(args.rest,indexOf(args.rest,"post"))
+  else if hasIndex(args,"post") and args.post then
+    self.write=true
+	end if
+	return args
+end function
+// Parse command-line arguments into structured object
+ArgumentParser.parseArgs=function(c,args)
+	p={}
+	// Initialize all defined arguments with default values
+	for a in indexes(self.arguments)
+		k=self.arguments[a]
+		n=k["aname"]
+		// Set default value based on action type
+		v={
+      "store":"",
+      "flag":false,
+      "storeNumber":null,
+      "storeArray":[]
+    }[k["action"]]
+		if v==null and k["action"]=="storeArray" then v=[]
+		if k["default"]!=null then v=k["default"]
+		p[n]=v
+	end for
+	// Collect positional arguments separately to allow flags anywhere
+	positional=[]
+	_len=len(args)
+	i=0
+	while i<_len
+		a=args[i]
+    if not a then
+			i+=1
+			continue
+		end if
+		// Handle help request
+		if a=="--help" then return self.printHelp(c)
+		// Handle AI assistance flag
+		if a=="?" then
+			p["useAI"]=true
+			i+=1
+			continue
+		end if
+		// Check if this is a flag
+		if a[0]!="-" then
+			// Not a flag - save as positional argument
+			push(positional,a)
+			i+=1
+			continue
+		end if
+		// Check if flag exists directly, or if value is attached (e.g., -d: instead of -d :)
+		flagKey=a
+		attachedValue=null
+		if not hasIndex(self.arguments,a) and len(a)>2 then
+			// Try extracting flag from first 2 chars (e.g., -d from -d:)
+			potentialFlag=a[:2]
+			if hasIndex(self.arguments,potentialFlag) then
+				flagKey=potentialFlag
+				attachedValue=a[2:]
+			end if
+		end if
+		if not hasIndex(self.arguments,flagKey) then return Error.set("Unknown flag: '"+a+"'")
+		k=self.arguments[flagKey]
+		n=k["aname"]
+		// Handle store action (string value)
+		if k["action"]=="store" then
+			if attachedValue!=null then
+				v=attachedValue
+			else
+				i+=1
+				if len(args)<=i then return Error.set("No parameter for flag: '"+flagKey+"'")
+				v=args[i]
+			end if
+		// Handle storeArray action (accumulate multiple values into a list)
+		// Consumes one or more following non-flag tokens: -e shell file == -e shell -e file
+		else if k["action"]=="storeArray" then
+			if not (p[n] isa list) then p[n]=[]
+			if attachedValue!=null then
+				push(p[n],attachedValue)
+			else
+				i+=1
+				if len(args)<=i then return Error.set("No parameter for flag: '"+flagKey+"'")
+				push(p[n],args[i])
+				// Consume additional non-flag tokens that follow
+				while i+1<len(args) and args[i+1][0]!="-"
+					i+=1
+					push(p[n],args[i])
+				end while
+			end if
+			i+=1
+			continue
+		// Handle storeNumber action (numeric value)
+		else if k["action"]=="storeNumber" then
+			if attachedValue!=null then
+				v=val(attachedValue)
+				if not v isa number then return Error.set("Invalid parameter (number) for flag: '"+flagKey+"'")
+			else
+				i+=1
+				if len(args)<=i then return Error.set("No parameter for flag: '"+flagKey+"'")
+				v=val(args[i])
+				if not v isa number then return Error.set("Invalid parameter (number) for flag: '"+flagKey+"'")
+			end if
+		// Handle flag action (boolean)
+		else if k["action"]=="flag" then
+			v=true
+		else
+			return Error.set("found invalid action: "+k["action"])
+		end if
+		p[n]=v
+		i+=1
+	end while
+	// Store positional arguments
+	p.rest=positional
+	return p
+end function
+// Write output to file or post based on redirect settings
+ArgumentParser.out=function(Obj,args)
+	// Convert data to string format
+	convert=function
+		if args.data isa string then return args.data
+		if args.data isa list then return trim(join(args.data,char(10)))
+		if typeof(args.data)=="file"then return get_content(args.data)
+		return ""
+	end function
+	//Resolve content once
+	v=convert
+	// Handle post command (write to notes)
+	if hasIndex(args,"post") and args.post then return Command.post([v],1)
+	// Handle file redirection
+	if hasIndex(args,"redirect") then
+    p=args.redirectPath+"/"+args.redirectName
+    // Use File directly to avoid Io._getFile printing errors on miss
+    if hasIndex(Obj,"computer") then
+      f=File(Obj.computer,p)
+    else
+      f=Io.getFileObj(Obj,p)
+      if f isa Error then f=null
+    end if
+    if f then
+      // Overwrite or append based on redirect type
+			if hasIndex(args,"single") then return set_content(f,v)
+			if len(get_content(f)) then set_content(f,get_content(f)+char(10)+v) else set_content(f,v)
+    else
+      // Create new file if it doesn't exist (requires a computer object)
+      if not hasIndex(Obj,"computer") then return Error.set("Cannot create file: no computer context available")
+      // mkdir-p: create parent directories if needed
+      if not File(Obj.computer,args.redirectPath) then
+        parts=split(args.redirectPath,"/")
+        cur=""
+        for part in parts
+          if part=="" then continue
+          cur=cur+"/"+part
+          if not File(Obj.computer,cur) then
+            pName=split(cur,"/")[-1]
+            pBase=cur[:len(cur)-len(pName)-1]
+            if pBase=="" then pBase="/"
+            create_folder(Obj.computer,pBase,pName)
+          end if
+        end for
+      end if
+      e=touch(Obj.computer,args.redirectPath,args.redirectName)
+			if e isa string then return Error.set(e)
+			set_content(File(Obj.computer,args.redirectPath+"/"+args.redirectName),v)
+    end if
+		return
+	end if
+	// Check if PIPE_MODE is enabled (for pipe chain support)
+	if globals.G_pipe.PIPE_MODE then
+		// Buffer output for next command in pipe chain
+		if args.data isa list then
+			for line in args.data;push(globals.G_pipe.stdout,str(line));end for
+		else
+			// Split multi-line strings into separate lines
+			if indexOf(v,char(10))!=null then
+				lines=split(v,char(10))
+				for line in lines;push(globals.G_pipe.stdout,line);end for
+			else
+				push(globals.G_pipe.stdout,v)
+			end if
+		end if
+		return
+	end if
+	// Normal output - print to screen
+	print v
+end function
+// Expand paths and wildcards in arguments
+ArgumentParser.parsePath=function(Obj,args)
+	if not args.rest then return args
+	if not(args.rest isa list) then args.rest=[]
+	if len(args.rest)==0 then return args
+	r=[]
+	// Process each path argument
+	while len(args.rest)>0
+		a=pull(args.rest)
+		if not a or a=="" then continue
+		// Expand ~ to home directory
+		if a[0]=="~" then
+			_hp=Io.safePath(Obj.user.home)
+			if not _hp then return Error.set("Home directory no longer exists")
+			a=_hp+a[1:]
+		end if
+		// Handle current directory (.)
+		if a=="." then
+			_cp=Io.safePath(Obj.dir.current)
+			if not _cp then return Error.set("Current directory no longer exists")
+			push(r,_cp)
+		// Handle parent directory (..)
+		else if a==".." then
+			_cp=Io.safePath(Obj.dir.current)
+			if not _cp then return Error.set("Current directory no longer exists")
+			push(r,parent_path(_cp))
+		// Handle relative paths with parent directory (../)
+		else if indexOf(a,"../")!=null then
+			_cp=Io.safePath(Obj.dir.current)
+			if not _cp then return Error.set("Current directory no longer exists")
+			j=get_abs_path(a,_cp)
+			push(r,j)
+		// Handle relative paths with current directory (./)
+		else if indexOf(a,"./")!=null then
+			_cp=Io.safePath(Obj.dir.current)
+			if not _cp then return Error.set("Current directory no longer exists")
+			j=a.replace("\./",_cp+"/")
+			push(r,j)
+		// Handle glob patterns with * wildcard
+		else if indexOf(a,"*")!=null then
+			// Use Glob library for clean expansion
+			expanded=Glob.expand(Obj,a)
+			if len(expanded)>1 or expanded[0]!=a then
+				// Glob expanded successfully
+				args["special"]=1
+				args["files"]=[]
+				for expandedPath in expanded;fileObj=Io._getFile(Obj,expandedPath);if fileObj and not fileObj isa Error then push(args["files"],fileObj);end for
+				// Don't add expanded paths to rest - old behavior kept rest minimal
+			else
+				// No expansion, treat as regular path
+				push(r,a)
+			end if
+		// Handle regular path
+		else
+			push(r,a)
+		end if
+	end while
+	// Store expanded paths
+	args.rest=r
+	return args
+end function
+// Display help for command and return IPC error
+ArgumentParser.printHelp=function(c);Man.help([c]);return Error.set("","",true);end function
+// =============================================================================
+// UNIFIED PARSING WRAPPER
+// =============================================================================
+// Parse arguments with all steps in one call and guaranteed consistent state
+// Usage: argv=parser.parse("commandName",argv,Obj)
+// Returns: Parsed argv map with guaranteed .rest list, or Error on failure
+// =============================================================================
+ArgumentParser.parse=function(commandName,argv,Obj=null,opts={})
+	// Validate input - ensure argv is a list
+	if argv==null then return Error.set("No arguments provided")
+	if not(argv isa list) then argv=[argv]
+	// Step 1: Expand combined short flags (-abc → -a -b -c)
+	argv=self.check(argv)
+	// Step 2: Parse flags into structured map
+	argv=self.parseArgs(commandName,argv)
+	if argv isa Error then return argv
+	// Step 3: Defensive initialization - guarantee rest is always a list
+	if not hasIndex(argv,"rest") then argv.rest=[]
+	if not(argv.rest isa list) then
+		// Convert to list if it's a single value
+		if argv.rest==null then argv.rest=[] else argv.rest=[argv.rest]
+	end if
+	// Step 4: Handle redirects if Obj provided
+	if Obj then
+		argv=self.checkRedirect(Obj,commandName,argv)
+		if argv isa Error then return argv
+	end if
+	// Step 5: Expand paths if Obj provided
+	if Obj then
+		argv=self.parsePath(Obj,argv)
+		if argv isa Error then return argv
+	end if
+	// Step 6: Final validation - ensure rest is still a list after all processing
+	if not hasIndex(argv,"rest") then argv.rest=[]
+	if not(argv.rest isa list) then argv.rest=[]
+	// Optional: Apply custom post-processing
+	if hasIndex(opts,"postProcess") and opts.postProcess isa funcRef then
+		argv=opts.postProcess(argv)
+		if argv isa Error then return argv
+	end if
+	return argv
+end function

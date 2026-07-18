@@ -1,0 +1,174 @@
+// Man page for list
+manList="LIST(1)                          X Shell Manual                          LIST(1)
+
+<b>NAME</b>
+    list - System information and vulnerability scanner
+<b>SYNOPSIS</b>
+    <b>list -l</b> [[PATH]]
+    <b>list -h</b> [--detail] [--bin]
+    <b>list -i</b> [[PATTERN]]
+    <b>list -hi</b> [--detail] [--bin]
+    <b>list -x</b>
+    <b>list -t</b>
+    <b>list --password</b>
+    <b>list -z</b>
+    <b>list -m</b>
+    <b>list -n</b>
+    <b>list -i</b>
+    <b>list -c</b>
+    <b>list -f</b>
+    <b>list -d</b>
+    <b>list -a</b>
+    <b>list -s</b>
+    <b>list -s -b</b> (-B | -D)
+    <b>list -s --password</b> (-B | -D)
+    <b>list -s -e</b> (-B | -D)
+<b>DESCRIPTION</b>
+    Comprehensive system information gathering and vulnerability scanning tool.
+    Searches for files, libraries, accounts, and configuration data. Scans for
+    vulnerable files and directories. Can crack discovered accounts using dictionary
+    attacks or decipher. Includes network topology and Map.conf viewing.
+<b>OPTIONS</b>
+    <b>-l ([PATH])</b>
+    List library versions
+    Default path is /lib
+
+    <b>-h</b> [--detail] [--bin]
+    Scan for special files
+    Finds: pdf, txt, jpg, log, exe, bin
+    Skips /bin by default (use --bin to include)
+
+    <b>-h --detail</b>
+    Detailed file information
+    Show metadata for found files
+
+    <b>-h --bin</b>
+    Include /bin in search
+    Also scan files inside /bin
+
+    <b>-i</b> [[PATTERN]]
+    View all text file contents with detailed metadata
+    Shows path, permissions, owner, group, size and contents
+    Optional PATTERN filters by filename (regex or substring)
+    Combine with -h: <b>list -hi</b> shows both special files and all text files
+
+    <b>-x</b>
+    Scan for special files
+    Same as -h flag
+
+    <b>-t</b>
+    Print text files
+    Display found txt content
+
+    <b>--password</b>
+    Print passwd file
+    Show account information
+
+    <b>-z</b>
+    Print hidden files
+    List all hidden content
+
+    <b>-m</b>
+    View Map.conf
+    Display configuration
+
+    <b>-n</b>
+    List local networks
+    Shows edge router nodes only
+    Use netcat for full topology
+
+    <b>-i</b>
+    View all text file contents with metadata
+    Shows path, permissions, owner, group, size and contents
+
+    <b>-c</b>
+    View Config folders
+    Display configuration files
+
+    <b>-f</b>
+    Scan for vulnerable files
+    Find exploitable content
+
+    <b>-d</b>
+    Scan for vulnerable directories
+    Find exploitable folders
+
+    <b>-a</b>
+    List all directories and files
+    Complete filesystem listing
+
+    <b>-s</b>
+    List accounts and hashes
+    Show all system accounts
+
+    <b>-s -b (-B | -D)</b>
+    List Bank accounts
+    -B for dictionary, -D for decipher
+
+    <b>-s --password (-B | -D)</b>
+    List passwd accounts
+    -B for dictionary, -D for decipher
+
+    <b>-s -e (-B | -D)</b>
+    List Mail accounts
+    -B for dictionary, -D for decipher
+<b>EXAMPLE:</b>
+    <color=#e4ff34># File Scanning</color>
+    <b>list -h</b>
+    Scan for special files
+
+    <b>list -h --detail</b>
+    Detailed file info with metadata
+
+    <b>list -h --bin</b>
+    Include /bin files in scan
+
+    <b>list -h --detail --bin</b>
+    Detailed info including /bin
+
+    <b>list -i</b>
+    Show all text files with metadata and contents
+
+    <b>list -hi</b>
+    Special files scan + all text file contents
+
+    <b>list -hi --detail</b>
+    Special files with metadata + all text file contents
+
+    <color=#e4ff34># System Information</color>
+    <b>list --password</b>
+    View passwd file
+
+    <b>list -m</b>
+    View Map.conf
+
+    <b>list -n</b>
+    List networks
+
+    <b>list -l</b>
+    List /lib versions
+
+    <color=#e4ff34># Vulnerability Scanning</color>
+    <b>list -f</b>
+    Scan vulnerable files
+
+    <b>list -d</b>
+    Scan vulnerable dirs
+
+    <color=#e4ff34># Account Cracking</color>
+    <b>list -s</b>
+    List all accounts
+
+    <b>list -s -D</b>
+    Decipher all accounts
+
+    <b>list -sB</b>
+    Dictionary all accounts
+
+    <b>list -spD</b>
+    Decipher passwd accounts
+
+    <b>list -s -b -B</b>
+    Dictionary bank accounts
+<b>SEE ALSO</b>
+    <b>recon</b>, <b>dig</b>, <b>ls</b>"

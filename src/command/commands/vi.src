@@ -1,0 +1,1231 @@
+// =============================================================================
+// VI
+// Interactive text editor with multiple buffers, syntax highlighting, and encryption.
+// =============================================================================
+Command.vi=function(Obj,argv)
+  // If a path flag has no value, inject pipe stdin as the argument
+  _pipeIn=globals.G_pipe.stdin
+  if _pipeIn and len(argv)>0 then
+    _last=argv[len(argv)-1]
+    if _last=="-n" or _last=="-o" or _last=="-l" then push(argv,trim(_pipeIn))
+  end if
+  _p=ArgumentParser.init
+  _p.addArgument("o",false,"store")  // Output file path override
+  _p.addArgument("n",false,"store")  // Starting line number
+  _p.addArgument("c",false,"flag")  // Clear screen on start
+  // Encryption enabled flag
+  _p.addArgument("e",false,"flag")  // Enable encryption
+  // Encryption key/passphrase
+  _p.addArgument("k",false,"store")  // Encryption key/passphrase
+  _p.addArgument("l",false,"store")  // Load file at specific line position
+  argv=_p.parse("vi",argv,Obj)
+  if argv isa Error then return
+  if argv.c then clear_screen
+  // Buffer array holds all open file objects
+  buffer=[]
+  // Current buffer index being edited
+  currentIndex=0
+  // Main editor loop control flag
+  running=true
+  // Display line numbers in editor view
+  showLineNumbers=true
+  // Editor mode: "normal", "insert", "command", "visual"
+  mode="normal"
+  // Cursor position in current file
+  cursorLine=0
+  cursorCol=0
+  // Visual mode start line
+  visualStart=0
+  // Undo stack for multi-level undo
+  undoStack=[]
+  // Redo stack
+  redoStack=[]
+  // Yank buffer
+  yankBuffer=[]
+  // Last command for repeat (.)
+  lastCommand=null
+  // Command count (e.g., 3dd) - no outer. prefix, just local
+  cmdCount=1
+  // File buffer prototype object structure
+  FileBuffer={
+    // File object reference
+    "file":null,
+    // Array of content lines
+    "content":[],
+    // Unsaved changes indicator
+    "dirty":false,
+    // Encryption enabled flag
+    "encrypted":false,
+    // Encryption key for file
+    "key":null,
+    // Single-line encryption mode
+    "singleLine":false,
+    // Syntax highlighting enabled
+    "format":false
+  }
+  // Retrieve kernel encryption key for system files
+  kernelKey=Kernel.key
+  // Map system files to kernel encryption key
+  systemFiles={
+    ".drc":kernelKey,
+    ".ldrc":kernelKey,
+    ".erc":kernelKey,
+    ".hrc":kernelKey,
+    ".orc":kernelKey,
+    "proxy.dat":kernelKey,
+    "cache.dat":kernelKey,
+    "shadow.dat":kernelKey,
+    "dirty.dat":kernelKey
+  }
+  // Helper: Load file content into buffer array (decrypt if encrypted)
+  loadFile=function(fileObj,encrypted,key)
+    content=get_content(fileObj)
+    if not content then return []
+    if not encrypted then return split(content,char(10))
+    lines=split(content,char(10))
+    result=[]
+    for line in lines;push(result,Encryption.encrypt(line,key,false));end for
+    return result
+  end function
+  // Helper: Save buffer content to file (encrypt if needed)
+  saveFile=function(buf)
+    if not buf.dirty then return true
+    content=""
+    if buf.encrypted then
+      // Handle single-line vs multi-line encryption
+      if buf.singleLine then
+        content=Encryption.encrypt(buf.content,buf.key)
+      else
+        encrypted=[]
+        for line in buf.content;push(encrypted,Encryption.encrypt(line,buf.key));end for
+        content=join(encrypted,char(10))
+      end if
+    else
+      content=join(buf.content,char(10))
+    end if
+    result=set_content(buf.file,content)
+    if result isa string then return Error.set(result)
+    buf.dirty=false
+    return true
+  end function
+  // Helper: Create new file buffer object
+  createBuffer=function(fileObj,encrypted,key)
+    buf=new FileBuffer
+    buf.file=fileObj
+    buf.encrypted=encrypted
+    buf.key=key
+    // Auto-enable syntax highlighting for .src files
+    buf.format=(path(fileObj)[-3:]=="src")
+    return buf
+  end function
+  // Helper: Save current state to undo stack
+  saveUndo=function
+    if not buffer then return
+    state={}
+    state.content=buffer[currentIndex].content[:]
+    push(outer.undoStack,state)
+    // Limit undo stack to 50 entries
+    if len(outer.undoStack)>50 then remove(outer.undoStack,0)
+    outer.redoStack=[]
+  end function
+  // Helper: Clamp cursor to valid position
+  clampCursor=function
+    if not buffer then return
+    if outer.cursorLine<0 then outer.cursorLine=0
+    if outer.cursorLine>=len(buffer[currentIndex].content) then
+      outer.cursorLine=len(buffer[currentIndex].content)-1
+      if outer.cursorLine<0 then outer.cursorLine=0
+    end if
+    if outer.cursorCol<0 then outer.cursorCol=0
+    if len(buffer[currentIndex].content)>0 then
+      lineLen=len(buffer[currentIndex].content[outer.cursorLine])
+      if lineLen>0 and outer.cursorCol>=lineLen then outer.cursorCol=lineLen-1
+    end if
+  end function
+  // Helper: Get encryption key from args, system files, or prompt
+  getEncryptionKey=function(fileName,providedKey)
+    if providedKey then return providedKey
+    // Use kernel key for system files
+    if hasIndex(systemFiles,fileName) then return systemFiles[fileName]
+    return Gui.input({"text":"Enter encryption key|passphrase"})
+  end function
+  if argv.n then
+    f=Command.touch(Obj,[argv.n])
+    if f isa Error or typeof(f)!="file" then return
+    buf=createBuffer(f,argv.e,argv.k)
+    if argv.rest then
+      buf.content=[join(argv.rest," ")]
+      buf.dirty=true
+    else
+      buf.content=[""]
+    end if
+    if argv.e and not buf.key then buf.key=getEncryptionKey(name(f),null)
+    push(buffer,buf)
+  else if argv.o then
+    f=Io._getFile(Obj,argv.o)
+    if f isa Error then return
+    // Prevent opening binary files
+    if is_binary(f) then return Error.set("Cannot open binary files with vi")
+    key=argv.k
+    if argv.e and not key then key=getEncryptionKey(name(f),null)
+    buf=createBuffer(f,argv.e,key)
+    buf.content=loadFile(f,argv.e,key)
+    // Ensure at least one empty line exists
+    if not buf.content or len(buf.content)==0 then buf.content=[""]
+    buf.dirty=false
+    push(buffer,buf)
+  else if argv.l then
+    f=Io._getFile(Obj,argv.l)
+    if f isa Error then return
+    if not is_folder(f) then return Error.set("You must specify a folder to open")
+    for file in get_files(f)
+      // Skip binary files and subdirectories
+      if is_binary(file) or is_folder(file) then continue
+      // Auto-detect system files for encryption
+      encrypted=hasIndex(systemFiles,name(file))
+      key=null
+      if encrypted then key=systemFiles[name(file)]
+      buf=createBuffer(file,encrypted,key)
+      buf.content=loadFile(file,encrypted,key)
+      // Ensure at least one empty line exists
+      if not buf.content or len(buf.content)==0 then buf.content=[""]
+      buf.dirty=false
+      push(buffer,buf)
+    end for
+  else if argv.hasIndex("files") and argv.files and len(argv.files)>0 then
+    for file in argv.files
+      if is_binary(file) or is_folder(file) then continue
+      // Auto-detect system files for encryption
+      encrypted=hasIndex(systemFiles,name(file))
+      key=null
+      if encrypted then key=systemFiles[name(file)]
+      buf=createBuffer(file,encrypted,key)
+      buf.content=loadFile(file,encrypted,key)
+      // Ensure at least one empty line exists
+      if not buf.content or len(buf.content)==0 then buf.content=[""]
+      buf.dirty=false
+      push(buffer,buf)
+    end for
+  end if
+  // Command: Open file interactively or from path
+  cmdOpen=function(args)
+    _p=ArgumentParser.init
+    _p.addArgument("e",false,"flag")  // Enable encryption for this file
+    _p.addArgument("k",false,"store")  // Encryption key for this file
+    args=_p.parseArgs("vi",args)
+    if args isa Error then return
+    f=null
+    if not args.rest then f=Io.file(Obj,Obj.dir.current,"Select a file to open:") else f=Io._getFile(Obj,args.rest[0])
+    if f isa Error or f isa Warning then return
+    // Prevent opening binary files
+    if is_binary(f) then return Error.set("Cannot open binary files with vi")
+    key=args.k
+    if args.e and not key then key=getEncryptionKey(name(f),null)
+    buf=createBuffer(f,args.e,key)
+    buf.content=loadFile(f,args.e,key)
+    // Ensure at least one empty line exists
+    if not buf.content or len(buf.content)==0 then buf.content=[""]
+    buf.dirty=false
+    push(outer.buffer,buf)
+    outer.currentIndex=len(outer.buffer)-1
+    outer.cursorLine=0
+    outer.cursorCol=0
+    outer.undoStack=[]
+    outer.redoStack=[]
+  end function
+  // Command: Create new file and add to buffer
+  cmdNew=function(args)
+    if not args then return Error.set("You must specify a file name")
+    f=Command.touch(Obj,args)
+    if f isa Error or typeof(f)!="file" then return
+    buf=createBuffer(f,argv.e,argv.k)
+    buf.content=[""]
+    buf.dirty=false
+    if argv.e and not buf.key then buf.key=getEncryptionKey(name(f),null)
+    push(outer.buffer,buf)
+    outer.currentIndex=len(outer.buffer)-1
+    outer.cursorLine=0
+    outer.cursorCol=0
+    outer.undoStack=[]
+    outer.redoStack=[]
+  end function
+  // Command: Enter insert mode at cursor (vi-style i)
+  cmdInsert=function(args)
+    if not buffer then return Error.set("No files opened")
+    saveUndo
+    outer.mode="insert"
+    if args then
+      text=join(args," ")
+      if len(buffer[currentIndex].content)==0 then
+        push(buffer[currentIndex].content,text)
+      else
+        line=buffer[currentIndex].content[outer.cursorLine]
+        buffer[currentIndex].content[outer.cursorLine]=line[:outer.cursorCol]+text+line[outer.cursorCol:]
+      end if
+      buffer[currentIndex].dirty=true
+      outer.mode="normal"
+    end if
+  end function
+  // Command: Append after cursor (vi-style a)
+  cmdAppendCursor=function(args)
+    if not buffer then return Error.set("No files opened")
+    saveUndo
+    outer.cursorCol+=1
+    clampCursor
+    outer.mode="insert"
+    if args then
+      text=join(args," ")
+      if len(buffer[currentIndex].content)==0 then
+        push(buffer[currentIndex].content,text)
+      else
+        line=buffer[currentIndex].content[outer.cursorLine]
+        buffer[currentIndex].content[outer.cursorLine]=line[:outer.cursorCol]+text+line[outer.cursorCol:]
+      end if
+      buffer[currentIndex].dirty=true
+      outer.mode="normal"
+    end if
+  end function
+  // Command: Open line below (vi-style o)
+  cmdOpenBelow=function(args)
+    if not buffer then return Error.set("No files opened")
+    saveUndo
+    if len(buffer[currentIndex].content)==0 then
+      push(buffer[currentIndex].content,"")
+    else
+      buffer[currentIndex].content.insert(outer.cursorLine+1,"")
+      outer.cursorLine+=1
+    end if
+    outer.cursorCol=0
+    outer.mode="insert"
+    if args then
+      buffer[currentIndex].content[outer.cursorLine]=join(args," ")
+      buffer[currentIndex].dirty=true
+      outer.mode="normal"
+    end if
+  end function
+  // Command: Open line above (vi-style O)
+  cmdOpenAbove=function(args)
+    if not buffer then return Error.set("No files opened")
+    saveUndo
+    if len(buffer[currentIndex].content)==0 then push(buffer[currentIndex].content,"") else buffer[currentIndex].content.insert(outer.cursorLine,"")
+    outer.cursorCol=0
+    outer.mode="insert"
+    if args then
+      buffer[currentIndex].content[outer.cursorLine]=join(args," ")
+      buffer[currentIndex].dirty=true
+      outer.mode="normal"
+    end if
+  end function
+  // Command: Set/replace entire line content (ex-style)
+  cmdSet=function(args)
+    if not buffer then return Error.set("No files opened")
+    saveUndo
+    if not args then return Error.set("You must specify a line to set")
+    lineNum=to_int(args[0])-1
+    if not lineNum isa number then return Error.set("Invalid line number")
+    if hasIndex(buffer[currentIndex].content,lineNum)==0 then return Error.set("Invalid line number: "+args[0])
+    text=""
+    if len(args)>1 then text=trim(join(args[1:]," ")) else text=Gui.input({"text":"Set line to"})
+    buffer[currentIndex].content[lineNum]=text
+    buffer[currentIndex].dirty=true
+  end function
+ //Command: Delete line (ex-style by number)
+  cmdDelete=function(args)
+    if not buffer then return Error.set("No files opened")
+    saveUndo
+    if not args then return Error.set("You must specify a line to remove")
+    lineNum=to_int(args[0])-1
+    if not lineNum isa number then return Error.set("Invalid line number")
+    if hasIndex(buffer[currentIndex].content,lineNum)==0 then return Error.set("Invalid line number: "+args[0])
+    remove(buffer[currentIndex].content,lineNum)
+    buffer[currentIndex].dirty=true
+  end function
+  // Command: Delete current line (vi-style dd)
+  cmdDeleteLine=function(args)
+    if not buffer then return Error.set("No files opened")
+    if len(buffer[currentIndex].content)==0 then return
+    saveUndo
+    // Yank deleted line
+    outer.yankBuffer=[buffer[currentIndex].content[outer.cursorLine]]
+    remove(buffer[currentIndex].content,outer.cursorLine)
+    if len(buffer[currentIndex].content)==0 then push(buffer[currentIndex].content,"")
+    clampCursor
+    buffer[currentIndex].dirty=true
+    outer.lastCommand={"cmd":"dd","count":outer.cmdCount}
+    outer.cmdCount=1
+  end function
+  // Command: Delete character at cursor (vi-style x)
+  cmdDeleteChar=function(args)
+    if not buffer then return Error.set("No files opened")
+    if len(buffer[currentIndex].content)==0 then return
+    saveUndo
+    line=buffer[currentIndex].content[outer.cursorLine]
+    if len(line)==0 then return
+    if outer.cursorCol>=len(line) then outer.cursorCol=len(line)-1
+    buffer[currentIndex].content[outer.cursorLine]=line[:outer.cursorCol]+line[outer.cursorCol+1:]
+    buffer[currentIndex].dirty=true
+    outer.lastCommand={"cmd":"x","count":1}
+  end function
+ //Command: Replace text in line (ex-style)
+  cmdReplace=function(args)
+    if not buffer then return Error.set("No files opened")
+    saveUndo
+    if not args or len(args)<3 then return Error.set("Invalid arguments")
+    lineNum=to_int(args[0])-1
+    if not lineNum isa number then return Error.set("Invalid line number")
+    if hasIndex(buffer[currentIndex].content,lineNum)==0 then return Error.set("Invalid line number: "+args[0])
+    oldText=args[1]
+    newText=join(args[2:]," ")
+    if not oldText then return Error.set("Old text cannot be empty")
+    if not newText then return Error.set("New text cannot be empty")
+    line=buffer[currentIndex].content[lineNum]
+    if indexOf(line,oldText)==null then return Error.set("Line "+args[0]+" does not contain: "+oldText)
+    buffer[currentIndex].content[lineNum]=line.replace(oldText,newText)
+    buffer[currentIndex].dirty=true
+  end function
+  // Command: Yank (copy) current line (vi-style yy)
+  cmdYankLine=function(args)
+    if not buffer then return Error.set("No files opened")
+    if len(buffer[currentIndex].content)==0 then return
+    outer.yankBuffer=[buffer[currentIndex].content[outer.cursorLine]]
+    Info.info("1 line yanked")
+    outer.lastCommand={"cmd":"yy","count":outer.cmdCount}
+    outer.cmdCount=1
+  end function
+  // Command: Put (paste) yanked text below (vi-style p)
+  cmdPutBelow=function(args)
+    if not buffer then return Error.set("No files opened")
+    if not yankBuffer then return Info.info("Nothing to put")
+    saveUndo
+    for line in yankBuffer;buffer[currentIndex].content.insert(outer.cursorLine+1,line);outer.cursorLine+=1;end for
+    buffer[currentIndex].dirty=true
+    outer.lastCommand={"cmd":"p","count":1}
+  end function
+  // Command: Put (paste) yanked text above (vi-style P)
+  cmdPutAbove=function(args)
+    if not buffer then return Error.set("No files opened")
+    if not yankBuffer then return Info.info("Nothing to put")
+    saveUndo
+    for line in yankBuffer;buffer[currentIndex].content.insert(outer.cursorLine,line);end for
+    buffer[currentIndex].dirty=true
+  end function
+  // Command: Change line (vi-style cc)
+  cmdChangeLine=function(args)
+    if not buffer then return Error.set("No files opened")
+    if len(buffer[currentIndex].content)==0 then return
+    saveUndo
+    outer.yankBuffer=[buffer[currentIndex].content[outer.cursorLine]]
+    buffer[currentIndex].content[outer.cursorLine]=""
+    outer.cursorCol=0
+    outer.mode="insert"
+    if args then
+      buffer[currentIndex].content[outer.cursorLine]=join(args," ")
+      buffer[currentIndex].dirty=true
+      outer.mode="normal"
+    end if
+  end function
+  // Command: Append text to end of line (ex-style)
+  cmdAppend=function(args)
+    if not buffer then return Error.set("No files opened")
+    saveUndo
+    if not args then return Error.set("You must specify a line to append")
+    lineNum=to_int(args[0])-1
+    if not lineNum isa number then return Error.set("Invalid line number")
+    if hasIndex(buffer[currentIndex].content,lineNum)==0 then return Error.set("Invalid line number: "+args[0])
+    text=""
+    if len(args)>1 then text=join(args[1:]," ") else text=Gui.input({"text":"Text to append to line"})
+    buffer[currentIndex].content[lineNum]=buffer[currentIndex].content[lineNum]+" "+text
+    buffer[currentIndex].dirty=true
+  end function
+  // Command: Prepend text to beginning of line (ex-style)
+  cmdPrepend=function(args)
+    if not buffer then return Error.set("No files opened")
+    saveUndo
+    if not args then return Error.set("You must specify a line to prepend")
+    lineNum=to_int(args[0])-1
+    if not lineNum isa number then return Error.set("Invalid line number")
+    if hasIndex(buffer[currentIndex].content,lineNum)==0 then return Error.set("Invalid line number: "+args[0])
+    text=""
+    if len(args)>1 then text=join(args[1:]," ") else text=Gui.input({"text":"Text to prepend to line"})
+    buffer[currentIndex].content[lineNum]=text+" "+buffer[currentIndex].content[lineNum]
+    buffer[currentIndex].dirty=true
+  end function
+  // Command: Write (save) current file to disk
+  cmdWrite=function(args)
+    if not buffer then return Error.set("No files opened")
+    if not buffer[currentIndex].dirty then return Warning.set("Nothing to write")
+    result=saveFile(buffer[currentIndex])
+    if result isa Error then return result
+    Info.info("File written: "+name(buffer[currentIndex].file))
+  end function
+  // Command: Undo last change (vi-style u with multi-level)
+  cmdUndo=function(args)
+    if not buffer then return Error.set("No files opened")
+    if not undoStack then return Info.info("Nothing to undo")
+    state={}
+    state.content=buffer[currentIndex].content[:]
+    push(outer.redoStack,state)
+    prevState=pop(outer.undoStack)
+    buffer[currentIndex].content=prevState.content
+    buffer[currentIndex].dirty=true
+    clampCursor
+    Info.info("Undo")
+  end function
+  // Command: Redo undone change (Ctrl+r style)
+  cmdRedo=function(args)
+    if not buffer then return Error.set("No files opened")
+    if not redoStack then return Info.info("Nothing to redo")
+    saveUndo
+    nextState=pop(outer.redoStack)
+    buffer[currentIndex].content=nextState.content
+    buffer[currentIndex].dirty=true
+    clampCursor
+    Info.info("Redo")
+  end function
+  // Command: Repeat last command (vi-style .)
+  cmdRepeat=function(args)
+    if not lastCommand then return Info.info("No command to repeat")
+    cmd=lastCommand.cmd
+    if cmd=="dd" then
+      cmdDeleteLine(args)
+    else if cmd=="yy" then
+      cmdYankLine(args)
+    else if cmd=="x" then
+      cmdDeleteChar(args)
+    else if cmd=="p" then
+      cmdPutBelow(args)
+    else if cmd=="cc" then
+      cmdChangeLine(args)
+    end if
+  end function
+  // Command: Move cursor down (vi-style j)
+  cmdMoveDown=function(args)
+    if not buffer then return
+    if len(buffer[currentIndex].content)==0 then return
+    outer.cursorLine+=outer.cmdCount
+    clampCursor
+    outer.cmdCount=1
+  end function
+  // Command: Move cursor up (vi-style k)
+  cmdMoveUp=function(args)
+    if not buffer then return
+    if len(buffer[currentIndex].content)==0 then return
+    outer.cursorLine-=outer.cmdCount
+    clampCursor
+    outer.cmdCount=1
+  end function
+  // Command: Move cursor left (vi-style h)
+  cmdMoveLeft=function(args)
+    if not buffer then return
+    if len(buffer[currentIndex].content)==0 then return
+    outer.cursorCol-=outer.cmdCount
+    clampCursor
+    outer.cmdCount=1
+  end function
+  // Command: Move cursor right (vi-style l)
+  cmdMoveRight=function(args)
+    if not buffer then return
+    if len(buffer[currentIndex].content)==0 then return
+    outer.cursorCol+=outer.cmdCount
+    clampCursor
+    outer.cmdCount=1
+  end function
+  // Command: Move to start of line (vi-style 0)
+  cmdLineStart=function(args);outer.cursorCol=0;end function
+  // Command: Move to end of line (vi-style $)
+  cmdLineEnd=function(args)
+    if not buffer then return
+    if len(buffer[currentIndex].content)==0 then return
+    outer.cursorCol=len(buffer[currentIndex].content[outer.cursorLine])
+  end function
+  // Command: Navigate to next file in buffer (wrap around)
+  cmdNext=function(args)
+    if not buffer then return Error.set("No files opened")
+    if len(buffer)==1 then return Info.info("Only one file opened")
+    outer.currentIndex+=1
+    if outer.currentIndex>len(buffer)-1 then outer.currentIndex=0
+    outer.cursorLine=0
+    outer.cursorCol=0
+    outer.undoStack=[]
+    outer.redoStack=[]
+    Info.info("Switched to file: "+name(buffer[currentIndex].file))
+  end function
+  // Command: Navigate to previous file in buffer (wrap around)
+  cmdPrevious=function(args)
+    if not buffer then return Error.set("No files opened")
+    if len(buffer)==1 then return Info.info("Only one file opened")
+    outer.currentIndex-=1
+    if outer.currentIndex<0 then outer.currentIndex=len(buffer)-1
+    outer.cursorLine=0
+    outer.cursorCol=0
+    outer.undoStack=[]
+    outer.redoStack=[]
+    Info.info("Switched to file: "+name(buffer[currentIndex].file))
+  end function
+  // Command: Close current file without saving changes
+  cmdCloseNoSave=function(args)
+    if not buffer then return Error.set("No files opened")
+    Info.info("Closing file: "+name(buffer[currentIndex].file))
+    remove(buffer,currentIndex)
+    if not buffer then
+      outer.currentIndex=0
+    else if currentIndex>len(buffer)-1 then
+      outer.currentIndex=len(buffer)-1
+    end if
+  end function
+ //Command: Close with save
+  cmdCloseSave=function(args)
+    if not buffer then return Error.set("No files opened")
+    Info.info("Saving and closing file: "+name(buffer[currentIndex].file))
+    if buffer[currentIndex].dirty then
+      result=saveFile(buffer[currentIndex])
+      if result isa Error then return result
+    end if
+    remove(buffer,currentIndex)
+    if not buffer then
+      outer.currentIndex=0
+    else if currentIndex>len(buffer)-1 then
+      outer.currentIndex=len(buffer)-1
+    end if
+  end function
+ //Command: Quit with save
+  cmdQuitSave=function(args)
+    if not buffer then
+      Info.info("Closing vi")
+      outer.running=false
+      return
+    end if
+    saved=false
+    for buf in buffer
+      if buf.dirty then
+        saved=true
+        result=saveFile(buf)
+        if result isa Error then Error.set(result)
+      end if
+    end for
+    if saved then Info.info("All files saved, closing vi") else Info.info("Closing vi")
+    outer.running=false
+  end function
+ //Command: Quit without save
+  cmdQuitNoSave=function(args);Info.info("Closing vi without saving");outer.running=false;end function
+  // Command: Jump to specific buffer index (ex-style)
+  cmdGoto=function(args)
+    if not buffer then return Error.set("No files opened")
+    if not args then return Error.set("You must specify a file index")
+    idx=to_int(args[0])-1
+    if not idx isa number then return Error.set("Not an index: "+args[0])
+    if not hasIndex(buffer,idx) then return Error.set("Invalid file index: "+args[0])
+    outer.currentIndex=idx
+    outer.cursorLine=0
+    outer.cursorCol=0
+  end function
+  // Command: Goto first line (vi-style gg)
+  cmdGotoFirst=function(args)
+    if not buffer then return
+    outer.cursorLine=0
+    outer.cursorCol=0
+  end function
+  // Command: Goto last line (vi-style G)
+  cmdGotoLast=function(args)
+    if not buffer then return
+    if len(buffer[currentIndex].content)>0 then outer.cursorLine=len(buffer[currentIndex].content)-1 else outer.cursorLine=0
+    outer.cursorCol=0
+  end function
+  // Command: Goto specific line number (:#G or just number)
+  cmdGotoLine=function(args)
+    if not buffer then return
+    if not args then return
+    lineNum=to_int(args[0])-1
+    if not lineNum isa number then return
+    if lineNum<0 then lineNum=0
+    if lineNum>=len(buffer[currentIndex].content) then lineNum=len(buffer[currentIndex].content)-1
+    outer.cursorLine=lineNum
+    outer.cursorCol=0
+  end function
+  // Command: List all files in buffer with current indicator
+  cmdList=function(args)
+    if not buffer then return Error.set("No files opened")
+    if len(buffer)==1 then Info.info("Buffer contains 1 file") else Info.info("Buffer contains "+str(len(buffer))+" files")
+    print green("[=====] "+yellow("Buffer")+" [=====]")
+    _len=len(buffer);i=0;while i<_len;indicator="";if i==currentIndex then indicator=green("* ");print indicator+white(str(i+1)+yellow(": ")+name(buffer[i].file));i+=1;end while
+    if outer.argv.c then user_input(white("Press Enter to continue..."))
+  end function
+  // Command: Enter visual line mode (vi-style V)
+  cmdVisualLine=function(args)
+    if not buffer then return
+    outer.mode="visual"
+    outer.visualStart=outer.cursorLine
+  end function
+  // Helper: Match pattern against a line, return match position or null
+  matchLine=function(line,pattern,useRegex)
+    if useRegex then
+      matches=line.matches(pattern)
+      if matches then
+        for key in matches.indexes;if matches[key] then return line.indexOf(matches[key]);end for
+        return 0
+      end if
+      return null
+    end if
+    return indexOf(line,pattern)
+  end function
+  // Command: Search forward (vi-style /pattern or /regex/)
+  cmdSearch=function(args)
+    if not buffer then return Error.set("No files opened")
+    if not args then return Error.set("Search pattern required")
+    pattern=join(args," ")
+    useRegex=false
+    // Check if pattern is wrapped in / / for regex mode
+    if len(pattern)>2 and pattern[0]=="/" and pattern[-1]=="/" then
+      useRegex=true
+      pattern=pattern[1:-1]
+    end if
+    found=false
+    startLine=outer.cursorLine+1
+    contentLen=len(buffer[currentIndex].content)
+    i=startLine
+    while i<contentLen
+      matchPos=matchLine(buffer[currentIndex].content[i],pattern,useRegex)
+      if matchPos!=null then
+        outer.cursorLine=i
+        outer.cursorCol=matchPos
+        found=true
+        break
+      end if
+    i+=1
+    end while
+    if not found then
+      i=0
+      while i<=outer.cursorLine
+        matchPos=matchLine(buffer[currentIndex].content[i],pattern,useRegex)
+        if matchPos!=null then
+          outer.cursorLine=i
+          outer.cursorCol=matchPos
+          found=true
+          break
+        end if
+      i+=1
+      end while
+    end if
+    if not found then Info.info("Pattern not found: "+stripRegex(pattern))
+  end function
+  // Command: Substitute in line or file (:s/old/new/ or :%s/old/new/)
+  cmdSubstitute=function(args)
+    if not buffer then return Error.set("No files opened")
+    if not args then return Error.set("Usage: :s/old/new/ or :%s/old/new/g")
+    saveUndo
+    arg=join(args," ")
+    global=false
+    allLines=false
+    if arg[0]=="%" then
+      allLines=true
+      arg=arg[1:]
+    end if
+    if arg[0]!="s" then return Error.set("Invalid substitute syntax")
+    arg=arg[1:]
+    if arg[0]!="/" then return Error.set("Invalid substitute syntax")
+    parts=split(arg[1:],"/")
+    if len(parts)<2 then return Error.set("Invalid substitute syntax")
+    oldText=parts[0]
+    newText=parts[1]
+    if len(parts)>2 and parts[2]=="g" then global=true
+    if allLines then
+      _len=len(buffer[currentIndex].content)
+      i=0
+      while i<_len
+        if global then
+          buffer[currentIndex].content[i]=buffer[currentIndex].content[i].replace(oldText,newText)
+        else
+          if indexOf(buffer[currentIndex].content[i],oldText)!=null then
+            line=buffer[currentIndex].content[i]
+            idx=indexOf(line,oldText)
+            buffer[currentIndex].content[i]=line[:idx]+newText+line[idx+len(oldText):]
+          end if
+        end if
+      i+=1
+      end while
+    else
+      if global then
+        buffer[currentIndex].content[outer.cursorLine]=buffer[currentIndex].content[outer.cursorLine].replace(oldText,newText)
+      else
+        line=buffer[currentIndex].content[outer.cursorLine]
+        if indexOf(line,oldText)!=null then
+          idx=indexOf(line,oldText)
+          buffer[currentIndex].content[outer.cursorLine]=line[:idx]+newText+line[idx+len(oldText):]
+        end if
+      end if
+    end if
+    buffer[currentIndex].dirty=true
+  end function
+  // Command: Clear all content from current file
+  cmdClear=function(args)
+    if not buffer then return Error.set("No files opened")
+    saveUndo
+    if not buffer[currentIndex].content then return Warning.set("Nothing to clear")
+    buffer[currentIndex].content=[]
+    buffer[currentIndex].dirty=true
+  end function
+  // Command: Remove all empty lines from current file
+  cmdZap=function(args)
+    if not buffer then return Error.set("No files opened")
+    saveUndo
+    cleaned=[]
+    for line in buffer[currentIndex].content;if line and not line.is_match("^\s*$") then push(cleaned,line);end for
+    if len(cleaned)!=len(buffer[currentIndex].content) then
+      buffer[currentIndex].content=cleaned
+      buffer[currentIndex].dirty=true
+      clampCursor
+      Info.info("Empty lines removed")
+    else
+      Info.info("No empty lines found")
+    end if
+  end function
+  // Command: Toggle syntax highlighting
+  cmdFormat=function(args)
+    buffer[currentIndex].format=not buffer[currentIndex].format
+    status="disabled"
+    if buffer[currentIndex].format then status="enabled"
+    Info.info("Syntax formatting "+status)
+  end function
+  // Command: Toggle line numbers display
+  cmdHide=function(args)
+    outer.showLineNumbers=not showLineNumbers
+    status="hidden"
+    if showLineNumbers then status="visible"
+    Info.info("Line numbers "+status)
+  end function
+  // Command: Toggle clear screen mode
+  cmdClearScreen=function(args)
+    outer.argv.c=not argv.c
+    if outer.argv.c then clear_screen
+    status="disabled"
+    if argv.c then status="enabled"
+    Info.info("Clear screen "+status)
+  end function
+  // Command: Rename current file
+  cmdRename=function(args)
+    if not buffer then return Error.set("No files opened")
+    if not args then return Error.set("You must specify a new file name")
+    newName=args[0]
+    oldPath=path(buffer[currentIndex].file)
+    newPath=oldPath.replace(name(buffer[currentIndex].file),newName)
+    result=rename(buffer[currentIndex].file,newName)
+    if result!="" then return Error.set(result)
+    f=Io._getFile(Obj,newPath)
+    if f isa Error then return
+    buffer[currentIndex].file=f
+    Info.info("File renamed to: "+newName)
+  end function
+  // Command: Delete current file from disk and buffer
+  cmdDeleteFile=function(args)
+    if not buffer then return Error.set("No files opened")
+    fileName=name(buffer[currentIndex].file)
+    result=delete(buffer[currentIndex].file)
+    if result then return Error.set(result)
+    Info.info("File deleted: "+fileName)
+    remove(buffer,currentIndex)
+    if not buffer then outer.currentIndex=0 else outer.currentIndex=len(buffer)-1
+  end function
+  // Command: Build current .src file (auto-saves before building)
+  cmdBuild=function(args)
+    if Obj.type!="shell" then return Error.set(Obj.type+" objects do not support build")
+    if not buffer then return Error.set("No files opened")
+    // Auto-save before building if dirty
+    if buffer[currentIndex].dirty then cmdWrite([])
+    buildArgs=[]
+    if not args then
+      buildArgs=[path(buffer[currentIndex].file),path(Obj.dir.current)]
+    else if len(args)==1 then
+      if args[0]=="-a" then buildArgs=["-a",path(buffer[currentIndex].file),path(Obj.dir.current)] else buildArgs=[path(buffer[currentIndex].file),args[0]]
+    else
+      if args[0]!="-a" then return Error.set("Invalid build arguments")
+      buildArgs=["-a",path(buffer[currentIndex].file),args[1]]
+    end if
+    Command.build(Obj,buildArgs)
+  end function
+  // Command: Execute shell command from within editor
+  cmdExec=function(args)
+    if not args then return Error.set("You must specify a command")
+    cmdName=args[0]
+    if not hasIndex(Obj.commands,cmdName) then return Error.set("Command not found: "+cmdName)
+    Obj.commands[cmdName](args[1:])
+  end function
+  // Command: Run script from within editor
+  cmdRun=function(args)
+    if indexOf(Obj.type,"shell")==null then return Error.set(Obj.type+" objects do not support run")
+    if not args then return Error.set("Missing run parameters")
+    Obj.commands["exec"](args)
+  end function
+  // Command: Open binary/GUI application from editor
+  cmdOpenBinary=function(args);if not args then return Error.set("Missing open parameters");Obj.commands["open"](args);end function
+  // Command: Display help information for all editor commands
+  cmdHelp=function(args)
+    print green("================================================================")
+    print white("                      "+yellow("VI EDITOR")+" - Quick Reference")
+    print green("================================================================")
+    print ""
+    print white(bold("MODES:"))
+    print white("  NORMAL   - Navigate and execute commands (default)")
+    print white("  INSERT   - Type text (i/a/o/O to enter, Enter to exit)")
+    print white("  VISUAL   - Select lines (V to enter, d/y to operate)")
+    print white("  COMMAND  - Ex-style commands (: prefix)")
+    print ""
+    print white(bold("MOVEMENT:"))
+    print white("  j k h l              Move down/up/left/right")
+    print white("  3j 5k                Move with count (3 down, 5 up)")
+    print white("  gg G                 Jump to first/last line")
+    print white("  0 $                  Jump to start/end of line")
+    print white("  25G                  Jump to line 25")
+    print ""
+    print white(bold("INSERT:"))
+    print white("  i                    Insert at cursor")
+    print white("  a                    Append after cursor")
+    print white("  o                    Open line below")
+    print white("  O                    Open line above")
+    print ""
+    print white(bold("DELETE:"))
+    print white("  dd                   Delete current line")
+    print white("  3dd                  Delete 3 lines")
+    print white("  x                    Delete character at cursor")
+    print white("  cc                   Change line (delete and enter insert)")
+    print ""
+    print white(bold("COPY/PASTE:"))
+    print white("  yy                   Yank (copy) current line")
+    print white("  5yy                  Yank 5 lines")
+    print white("  p                    Paste below cursor")
+    print white("  P                    Paste above cursor")
+    print ""
+    print white(bold("UNDO/REDO:"))
+    print white("  u                    Undo last change")
+    print white("  r                    Redo undone change")
+    print white("  .                    Repeat last command")
+    print ""
+    print white(bold("VISUAL:"))
+    print white("  V                    Enter visual line mode")
+    print white("  j/k                  Select lines (move up/down)")
+    print white("  d                    Delete selection")
+    print white("  y                    Yank selection")
+    print ""
+    print white(bold("SEARCH:"))
+    print white("  /pattern             Search for pattern")
+    print white("  :s/old/new/          Replace in current line")
+    print white("  :%s/old/new/g        Replace all in file")
+    print ""
+    print white(bold("FILE OPS:"))
+    print white("  :o [file]            Open file in new buffer")
+    print white("  :n "+char(60)+"name"+char(62)+"            Create new file")
+    print white("  :w                   Write (save) current file")
+    print white("  :q                   Quit and save all")
+    print white("  :q!                  Quit without saving")
+    print white("  "+char(62)+" "+char(60)+"                  Next/previous buffer")
+    print ""
+    print white(bold("ADVANCED:"))
+    print white("  :build               Compile .src file")
+    print white("  :exec "+char(60)+"cmd"+char(62)+"          Run shell command")
+    print white("  :man "+char(60)+"cmd"+char(62)+"           View man page")
+    print white("  :zap                 Remove empty lines")
+    print ""
+    print skyblue("Full docs: ")+bold(":man vi")+skyblue(" or press ")+bold("?")+skyblue(" in editor")
+    print green("================================================================")
+    user_input(white("Press Enter to continue..."))
+  end function
+  // Command: Display man page for specified command
+  cmdMan=function(args)
+    if not args then return Error.set("You must specify a command name")
+    cmdName=args[0]
+    Man.help([cmdName])
+  end function
+  // Helper: Get sorted visual selection range
+  getVisualRange=function
+    s=outer.visualStart
+    e=outer.cursorLine
+    if s>e then
+      tmp=s
+      s=e
+      e=tmp
+    end if
+    return {"first":s,"last":e}
+  end function
+  // Command map - maps command strings to function references
+  normalCommands={
+    "j":@cmdMoveDown,
+    "k":@cmdMoveUp,
+    "h":@cmdMoveLeft,
+    "l":@cmdMoveRight,
+    "gg":@cmdGotoFirst,
+    "G":@cmdGotoLast,
+    "0":@cmdLineStart,
+    "$":@cmdLineEnd,
+    "i":@cmdInsert,
+    "a":@cmdAppendCursor,
+    "o":@cmdOpenBelow,
+    "O":@cmdOpenAbove,
+    "dd":@cmdDeleteLine,
+    "x":@cmdDeleteChar,
+    "yy":@cmdYankLine,
+    "p":@cmdPutBelow,
+    "P":@cmdPutAbove,
+    "cc":@cmdChangeLine,
+    "u":@cmdUndo,
+    "r":@cmdRedo,
+    ".":@cmdRepeat,
+    "V":@cmdVisualLine,
+    ">":@cmdNext,
+    "<":@cmdPrevious,
+    "help":@cmdHelp,
+    "?":@cmdHelp
+  }
+  commandCommands={
+    "o":@cmdOpen,
+    "n":@cmdNew,
+    "s":@cmdSet,
+    "d":@cmdDelete,
+    "r":@cmdReplace,
+    "a":@cmdAppend,
+    "p":@cmdPrepend,
+    "w":@cmdWrite,
+    "c!":@cmdCloseNoSave,
+    "c":@cmdCloseSave,
+    "q":@cmdQuitSave,
+    "q!":@cmdQuitNoSave,
+    "g":@cmdGoto,
+    "l":@cmdList,
+    "b":@cmdList,
+    "x":@cmdClear,
+    "zap":@cmdZap,
+    "f":@cmdFormat,
+    "hide":@cmdHide,
+    "clear":@cmdClearScreen,
+    "j":@cmdRename,
+    "del":@cmdDeleteFile,
+    "build":@cmdBuild,
+    "exec":@cmdExec,
+    "run":@cmdRun,
+    "open":@cmdOpenBinary,
+    "man":@cmdMan,
+    "s/":@cmdSubstitute,
+    "%s/":@cmdSubstitute
+  }
+  // Main editor loop - display and process commands
+  while running
+    // Display current file status or empty buffer message
+    if not buffer then
+      print yellow("No files loaded. Use ':o [file]' to open or ':n <name>' to create")
+    else
+      buf=buffer[currentIndex]
+      modeStr=mode.upper
+      if mode=="normal" then modeStr=green("-- NORMAL --")
+      if mode=="insert" then modeStr=blue("-- INSERT --")
+      if mode=="visual" then modeStr=yellow("-- VISUAL LINE --")
+      if mode=="command" then modeStr=white("-- COMMAND --")
+      // Show file header with dirty indicator, mode, and buffer position
+      indicator=""
+      if buf.dirty then indicator=green("*")
+      fileInfo=indicator+blue(name(buf.file))
+      fileInfo=fileInfo+white(" ["+str(currentIndex+1)+"/"+str(len(buffer))+"]")
+      fileInfo=fileInfo+white(" Line:"+str(cursorLine+1)+"/"+str(len(buf.content)))
+      // Calculate visual column accounting for tabs
+      visualCol=cursorCol
+      if cursorLine<len(buf.content) then
+        line=buf.content[cursorLine]
+        visualCol=0
+        if cursorCol>0 then
+          charIdx=0;while charIdx<cursorCol;if charIdx<len(line) and line[charIdx]==char(9) then visualCol+=4 else visualCol+=1;charIdx+=1;end while
+        end if
+        // If ON a tab, show visual position at start of tab
+        if cursorCol<len(line) and line[cursorCol]==char(9) then visualCol=visualCol
+      end if
+      fileInfo=fileInfo+white(" Col:"+str(visualCol))
+      fileInfo=fileInfo+white(" ")+modeStr
+      if argv.c then clear_screen
+      print fileInfo
+      // Display file content with optional line numbers and cursor
+      if len(buf.content) then
+        if buf.format then
+          content=join(buf.content,char(10))
+          content=parseSyntax(content,false).replace("\\n","\<b></b>n")
+          lines=split(content,char(10))
+        else
+          lines=[]
+          for line in buf.content;push(lines,line.replace("\\n","\<b></b>n"));end for
+        end if
+        // Cache cursor position for display loop
+        dispCursorLine=cursorLine
+        dispCursorCol=cursorCol
+        _len=len(lines)
+        i=0
+        while i<_len
+          cursor=""
+          if i==dispCursorLine then cursor=green(">")
+          if mode=="visual" then
+            if i>=visualStart and i<=dispCursorLine or i>=dispCursorLine and i<=visualStart then cursor=yellow(">")
+          end if
+          lineContent=lines[i]
+          // Highlight character at cursor column on current line
+          // Check against actual buffer content length, not display content
+          actualLineLen=0
+          if i<len(buf.content) then actualLineLen=len(buf.content[i])
+          if i==dispCursorLine and dispCursorCol<actualLineLen then
+            if buf.format then
+              // When format is ON: display line normally, then show ^ marker below
+              if showLineNumbers then print cursor+white(i+1)+yellow("| ")+lineContent else print cursor+" "+lineContent
+              // Calculate visual column accounting for tabs
+              visualColPos=0
+              plainLine=uncolorString(buf.content[dispCursorLine])
+              if dispCursorCol>0 then
+                charIdx=0;while charIdx<dispCursorCol;if charIdx<len(plainLine) and plainLine[charIdx]==char(9) then visualColPos+=4 else visualColPos+=1;charIdx+=1;end while
+              end if
+              // Add spacing for line number prefix if shown
+              prefix=""
+              if showLineNumbers then prefix=" "+(" "*(len(str(i+1))+2))
+              print prefix+(" "*visualColPos)+yellow("^")
+              i+=1
+              continue
+            else
+              // When format is OFF: inline highlight cursor character
+              plainLine=uncolorString(lineContent)
+              if dispCursorCol<len(plainLine) then
+                beforeCursor=plainLine[:dispCursorCol]
+                atCursor=plainLine[dispCursorCol]
+                afterCursor=""
+                if dispCursorCol+1<len(plainLine) then afterCursor=plainLine[dispCursorCol+1:]
+                // Use bold yellow for cursor character
+                lineContent=beforeCursor+bold(yellow(atCursor))+afterCursor
+              end if
+            end if
+          end if
+          if showLineNumbers then print cursor+white(i+1)+yellow("| ")+lineContent else print cursor+" "+lineContent
+          i+=1
+        end while
+      else
+        print yellow("No content in file")
+      end if
+    end if
+    prompt=white(">")
+    if mode=="normal" then prompt=white("")
+    if mode=="insert" then prompt=blue("i>")
+    if mode=="visual" then prompt=yellow("v>")
+    if mode=="command" then prompt=white(":")
+    input=user_input(prompt)
+    if mode=="insert" then
+      if input=="" then
+        // Empty input returns to normal mode
+        mode="normal"
+        continue
+      end if
+      if len(buffer[currentIndex].content)==0 then
+        push(buffer[currentIndex].content,input)
+      else
+        line=buffer[currentIndex].content[cursorLine]
+        buffer[currentIndex].content[cursorLine]=line[:cursorCol]+input+line[cursorCol:]
+        cursorCol+=len(input)
+      end if
+      buffer[currentIndex].dirty=true
+    else if mode=="visual" then
+      if input=="" or input=="V" or input=="v" or lower(input)=="esc" then
+        mode="normal"
+        continue
+      end if
+      if input=="j" then
+        cmdMoveDown([])
+        continue
+      end if
+      if input=="k" then
+        cmdMoveUp([])
+        continue
+      end if
+      if input=="gg" then
+        cmdGotoFirst([])
+        continue
+      end if
+      if input=="G" then
+        cmdGotoLast([])
+        continue
+      end if
+      if input=="d" then
+        saveUndo
+        vr=getVisualRange
+        yankBuffer=[]
+        i=vr.first;while i<=vr.last;push(yankBuffer,buffer[currentIndex].content[vr.first]);remove(buffer[currentIndex].content,vr.first);i+=1;end while
+        if len(buffer[currentIndex].content)==0 then push(buffer[currentIndex].content,"")
+        cursorLine=vr.first
+        clampCursor
+        buffer[currentIndex].dirty=true
+        mode="normal"
+        continue
+      end if
+      if input=="y" then
+        vr=getVisualRange
+        yankBuffer=[]
+        i=vr.first;while i<=vr.last;push(yankBuffer,buffer[currentIndex].content[i]);i+=1;end while
+        Info.info(str(len(yankBuffer))+" lines yanked")
+        mode="normal"
+        continue
+      end if
+      print yellow("Not a visual mode command: "+input+" (Press Enter/V/v/esc to exit)")
+    else if mode=="command" or (len(input)>0 and (input[0]==":" or input[0]=="/")) then
+      // Handle search before stripping prefix
+      if len(input)>0 and input[0]=="/" then
+        cmdSearch(split(input[1:]," "))
+        mode="normal"
+        continue
+      end if
+      if len(input)>0 and input[0]==":" then
+        mode="command"
+        input=input[1:]
+      end if
+      if input=="" then
+        mode="normal"
+        continue
+      end if
+      if indexOf(input,"s/")!=null then
+        cmdSubstitute(split(input," "))
+        mode="normal"
+        continue
+      end if
+      if indexOf(input,"G")!=null then
+        cmdGotoLine([input.replace("G","")])
+        mode="normal"
+        continue
+      end if
+      parts=split(input," ")
+      cmdName=parts[0]
+      cmdArgs=parts[1:]
+      if hasIndex(commandCommands,cmdName) then
+        commandCommands[cmdName](cmdArgs)
+        mode="normal"
+      else
+        print yellow("Unknown command: "+cmdName)
+      end if
+    else
+      if input=="" then continue
+      // Check for count prefix (e.g., 3dd, 350j, 42k)
+      cmdCount=1
+      countStr=""
+      _len=len(input)
+      idx=0
+      while idx<_len
+        ch=input[idx]
+        if ch>="0" and ch<="9" then
+          countStr=countStr+ch
+          idx+=1
+        else
+          break
+        end if
+      end while
+      if countStr!="" then
+        cmdCount=to_int(countStr)
+        input=input[len(countStr):]
+      end if
+      if hasIndex(normalCommands,input) then
+        normalCommands[input]([])
+      else if len(input)>0 and input[0]==":" then
+        mode="command"
+      else if len(input)>0 and input[0]=="/" then
+        cmdSearch(split(input[1:]," "))
+      else
+        print yellow("Unknown command: '"+input+"' (press ? for help)")
+        user_input("Press Enter...")
+      end if
+    end if
+  end while
+end function

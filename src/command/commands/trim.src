@@ -1,0 +1,60 @@
+// =============================================================================
+// TRIM
+// Strip leading/trailing whitespace from each line in a file or stdin.
+// =============================================================================
+Command.trim=function(Obj,argv)
+  argv=ArgumentParser.check(argv)
+  writeMode=false
+  _len=len(argv)
+  startIdx=0
+  while startIdx<_len
+    arg=argv[startIdx]
+    if arg=="-w" or arg=="--write" then
+      writeMode=true
+      startIdx+=1
+    else
+      break
+    end if
+  end while
+  // Check for stdin from pipe FIRST (check for null, not truthiness - empty string is valid)
+  usePipedInput=false
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then usePipedInput=true
+  if not usePipedInput then
+    if len(argv)-startIdx<1 then return Error.set("Missing file operand")
+  end if
+  filePath=null
+  if len(argv)-startIdx>=1 then filePath=argv[startIdx]
+  lines=[]
+  fileObj=null
+  if not usePipedInput then
+    fileObj=Io._getFile(Obj,filePath)
+    if fileObj isa Error then return fileObj
+    if not has_permission(fileObj,"r") then return Error.set(name(fileObj)+": Permission denied")
+    if Io.isBinFolder(fileObj) then return Error.set(name(fileObj)+": cannot process binary file or directory")
+    content=get_content(fileObj)
+    if not content then return Info.info(name(fileObj)+": empty file")
+    lines=split(content,char(10))
+  else
+    stdinData=globals.G_pipe.stdin
+    if typeof(stdinData)=="string" then
+      lines=split(stdinData,char(10))
+    else if stdinData isa list then
+      lines=stdinData
+    else
+      lines=[str(stdinData)]
+    end if
+  end if
+  results=[]
+  for line in lines;text=str(line);trimmed=trim(text);push(results,trimmed);end for
+  if globals.G_pipe.PIPE_MODE then
+    for line in results;push(globals.G_pipe.stdout,line);end for
+    return
+  end if
+  if writeMode and fileObj then
+    if not has_permission(fileObj,"w") then return Error.set(name(fileObj)+": Permission denied")
+    outputContent=join(results,char(10))
+    set_content(fileObj,outputContent)
+    return Info.info("File updated: "+path(fileObj))
+  end if
+  for line in results;print white(line);end for
+end function

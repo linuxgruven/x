@@ -1,0 +1,57 @@
+// =============================================================================
+// WRITE
+// Write or insert text into a file; -i inserts at a line number.
+// =============================================================================
+Command.write=function(Obj,argv)
+  _p=ArgumentParser.init
+  // Line number flag for insert mode (0-indexed)
+  _p.addArgument("l",false,"storeNumber")  // Line number for insert mode (0-indexed)
+  _p.addArgument("o",false,"flag")  // Overwrite mode (replace file contents)
+  argv=_p.parseArgs("write",argv)
+  if argv isa Error then return
+  argv=_p.parsePath(Obj,argv)
+  if argv isa Error then return
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    _stdin=trim(str(globals.G_pipe.stdin))
+    globals.G_pipe.stdin=null
+    if argv.rest and len(argv.rest)==1 then argv.rest=[_stdin]+argv.rest
+  end if
+  if hasIndex(argv,"useAI") then
+    fileObj=Io.file(Obj,Obj.dir.current,"Select a file to write to:")
+    if fileObj isa Warning then return fileObj
+    if not has_permission(fileObj,"r") then return Error.set(Info.message.NOR)
+    if not has_permission(fileObj,"w") then return Error.set(Info.message.NOW)
+    text=Gui.input({"text":"Enter the text to write to "+name(fileObj)})
+    if text==null then return
+    if get_content(fileObj) then set_content(fileObj,get_content(fileObj)+char(10)+text) else set_content(fileObj,text)
+    return
+  end if
+  if not argv.rest then return Warning.set("Invalid params")
+  fileName=argv.rest[-1]
+  if not fileName then return Warning.set("Invalid file name")
+  if not len(argv.rest) then return Warning.set("Nothing to write")
+  textContent=join(argv.rest[:-1]," ")
+  // Clean text content (removes // comment markers)
+  textContent=clean(textContent)
+  fileObj=Io._getFile(Obj,fileName)
+  if fileObj isa Error then
+    Info.info("Creating file "+fileName)
+    fileObj=self.touch(Obj,[fileName])
+    if fileObj isa Error then return fileObj
+    return set_content(fileObj,textContent)
+  end if
+  if is_binary(fileObj) then return Error.set(Info.message.binaryFiles)
+  if not has_permission(fileObj,"r") then return Error.set(Info.message.NOR)
+  if not has_permission(fileObj,"w") then return Error.set(Info.message.NOW)
+  if argv.l then
+    lines=split(get_content(fileObj),char(10))
+    if argv.l<0 or argv.l>len(lines)-1 then return Error.set("Invalid line number: "+argv.l)
+    insert(lines,argv.l,textContent)
+    return set_content(fileObj,join(lines,char(10)))
+  end if
+  if get_content(fileObj) then
+    if argv.o then set_content(fileObj,textContent) else set_content(fileObj,get_content(fileObj)+char(10)+textContent)
+  else
+    set_content(fileObj,textContent)
+  end if
+end function

@@ -1,0 +1,152 @@
+// =============================================================================
+// BLOCKCHAIN
+// Create and manage coins with subwallet and mining configuration.
+// =============================================================================
+Command.blockchain=function(Obj,argv)
+	if not hasIndex(Library,"blockchain") or not Library.blockchain then Library.blockchain=include_lib(path(Obj.dir.data)+"/blockchain.so")
+  if not hasIndex(Library,"blockchain") or not Library.blockchain then Library.blockchain=include_lib("/lib/blockchain.so")
+	if not hasIndex(Library,"blockchain") or not Library.blockchain then
+		self.apt(Obj,["update"])
+		self.apt(Obj,["install","-a","blockchain.so","-p","/lib"])
+    libFile=File(Obj.computer,"/lib/blockchain.so")
+    if not libFile then return Error.set("Unable to load blockchain")
+		Library.blockchain=include_lib(path(libFile))
+	end if
+	if not hasIndex(Library,"blockchain") or not Library.blockchain then return Error.set("Unable to load blockchain")
+	_p=ArgumentParser.init
+  _p.addArgument("n",false,"store")  // Coin name
+  _p.addArgument("u",false,"store")  // Username
+  _p.addArgument("p",false,"store")  // Password
+  argv=_p.parseArgs("blockchain",argv)
+	blockchainLib=Library.blockchain
+  coinData={}
+  if not argv.n then
+    coinName=Gui.input({"text":"Coin name"})
+    if not coinName then return Error.set("Coin name required")
+    coinData["name"]=coinName
+  else
+    coinData["name"]=argv.n
+  end if
+  if not argv.u then
+    coinUser=Gui.input({"text":"Coin user"})
+    if not coinUser then return Error.set("Coin user required")
+    coinData["user"]=coinUser
+  else
+    coinData["user"]=argv.u
+  end if
+  if not argv.p then
+    coinPass=Gui.inputPass("Enter coin password:")
+    if not coinPass then return Error.set("Coin password required")
+    coinData["pass"]=coinPass
+  else
+    coinData["pass"]=argv.p
+  end if
+	coinData["coin"]=get_coin(blockchainLib,coinData["name"],coinData["user"],coinData["pass"])
+  if coinData["coin"] isa string then return Error.set(coinData["coin"])
+	coinData["subwallets"]=get_subwallets(coinData["coin"])
+	count=function;print yellow("There are "+green(str(len(coinData.subwallets)))+" subwallets");end function
+	subwalletInfo=function
+		for wallet in coinData.subwallets
+			print green("Subwallet name: "+wallet.getUser+" Subwallet balance: ")+yellow(str(get_balance(wallet)))
+			print green("Subwallet info: "+get_info(wallet)+" Binded to wallet: ")+yellow(wallet_username(wallet))
+			print green("=")*30
+		end for
+		print yellow("There are "+green(str(len(coinData.subwallets)))+" subwallets")
+	end function
+	lastTransaction=function
+    subwalletName=Gui.input({"text":"Subwallet name"})
+    if subwalletName==null then return
+    wallet=get_subwallet(coinData.coin,subwalletName)
+    if wallet isa string then return Info.info(wallet)
+    txn=last_transaction(wallet)
+    if len(txn)<4 then return Info.info("No transaction found")
+    if txn[2]==0 then print yellow("From "+txn[0]+" to "+wallet.getUser+". Amount: "+txn[1]+" Date: "+txn[3]) else print yellow("From "+wallet.getUser+" to "+txn[0]+". Amount: "+txn[1]+" Date: "+txn[3])
+	end function
+	doTransaction=function
+    fromName=Gui.input({"text":"From subwallet"})
+    if not fromName then return
+    sourceWallet=get_subwallet(coinData.coin,fromName)
+    if sourceWallet isa string then return Info.info(sourceWallet)
+    toName=Gui.input({"text":"To subwallet"})
+    if toName==null then return
+    targetWallet=get_subwallet(coinData.coin,toName)
+    if targetWallet isa string then return Error.set(targetWallet)
+    amount=Gui.inputInt({"text":"Amount"})
+    if not amount isa number then return Info.info("Invalid amount")
+    result=transaction(coinData.coin,fromName,toName,amount)
+    if result isa string then return Error.set(result)
+    Info.info("Transaction done")
+	end function
+	setAddress=function
+    address=Gui.input({"text":"Address"})
+    if address==null then return
+    result=set_address(coinData.coin,address)
+    if result==1 then print green("Address set") else Info.error(result)
+	end function
+	setReward=function
+    reward=Gui.input({"text":"Reward"})
+    if reward==null then return
+    result=set_reward(coinData.coin,reward.to_int)
+    if result==1 then print green("Reward set") else Info.error(result)
+	end function
+	setMining=function
+    cycle=Gui.input({"text":"Cycle mining"})
+    if cycle==null then return
+    result=set_cycle_mining(coinData.coin,cycle.to_int)
+    if result==1 then print green("Cycle mining set") else Info.error(result)
+	end function
+	coinInfo=function
+		print yellow("Coin user    : "+coinData.user)
+		print yellow("Coin password: "+coinData.pass)
+    print yellow("Coin name    : "+coinData.name)
+    print yellow("Address      : "+get_address(coinData.coin))
+    print yellow("Reward       : "+get_reward(coinData.coin))
+		print yellow("Mined coins  : "+get_mined_coins(coinData.coin))
+		print yellow("Cycle mining : "+get_cycle_mining(coinData.coin))
+	end function
+	deleteSubwallet=function
+    Info.warning("You are about to delete a subwallet. This action delete everything in it")
+    subwalletName=Gui.input({"text":"Subwallet name"})
+    if subwalletName==null then return
+    wallet=get_subwallet(coinData.coin,subwalletName)
+    if wallet isa string then return Info.info(wallet)
+    if Gui.yesNo("You are about to delete subwallet "+white(subwalletName)+" for coin "+white(coinData.name)+". It has "+white(str(wallet.get_balance))+" in it. It is binding with "+white(wallet.wallet_username)+" wallet",false) then
+      deleteResult=delete_subwallet(wallet)
+      if deleteResult isa string then return Error.set(deleteResult)
+      if deleteResult==1 then return Info.info("Subwallet deleted")
+      if deleteResult==0 then return Info.info("Subwallet not found!")
+      return Error.set("Unknown error")
+    end if
+    Info.info("Delete canceled")
+	end function
+	deleteCoin=function
+    Info.warning("You are about to delete your coin. This action delete everything in it")
+    passwordConfirm=Gui.input({"text":"Coin password"})
+    if passwordConfirm==null then return
+    if not passwordConfirm==coinData.pass then return Error.set("Password invalid")
+    if Gui.yesNo("You are about to delete coin "+white(coinData.name)+". This action will delete everything in it",false) then
+      result=delete_coin(blockchainLib,coinData.name,coinData.user,coinData.pass)
+      if result isa string then return Error.set(result)
+      if result==1 then
+				Info.info("Coin deleted")
+				return true
+			end if
+      return Error.set(result)
+    end if
+    Info.info("Delete canceled")
+	end function
+	menuHandlers=[null,@count,@subwalletInfo,@lastTransaction,@doTransaction,@setAddress,@setReward,@setMining,@coinInfo,@deleteSubwallet,@deleteCoin]
+	while true
+		menuChoices=[coinData.name+green(" opened"),yellow("Subwallets Count"),yellow("Subwallets Info"),yellow("Last Transaction"),yellow("Transaction"),yellow("Set Address"),yellow("Set Reward"),yellow("Set Mining Cycle"),yellow("Coin Info"),yellow("Delete Subwallet"),yellow("Delete Coin"),iyellow("Finished")]
+		userChoice=Gui.choiceHybrid(menuChoices,{},len(menuChoices)-1)
+		if userChoice==len(menuChoices)-1 then break
+		if userChoice>=1 and userChoice<=10 then
+			fn=menuHandlers[userChoice]
+			if userChoice==10 then
+				if fn then break
+			else
+				fn
+			end if
+		end if
+	end while
+end function

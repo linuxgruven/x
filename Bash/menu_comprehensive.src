@@ -1,0 +1,50 @@
+// Comprehensive menu() builtin demonstration
+
+_print bold(blue(========================================))
+_print bold(blue(    MENU BUILTIN COMPLETE EXAMPLE    ))
+_print bold(blue(========================================))
+_print
+
+// Example 1: Service manager
+_print green(=== EXAMPLE 1: SERVICE MANAGER ===)
+_setvar(services, [Apache, Nginx, PostgreSQL, MongoDB, Redis])
+_setvar(action, menu(_getvar(services), letters, cyan))
+_print You selected service at index _getvar(action)
+_print
+
+// Example 2: Risk-level menu (color-coded)
+_print green(=== EXAMPLE 2: DEPLOYMENT ACTIONS ===)
+_setvar(deployments, [Deploy to Staging, Deploy to Production, Rollback, Verify Health, Cancel])
+_setvar(deploy_choice, menu(_getvar(deployments), numbers, orange))
+_print Selected action: _getvar(deploy_choice)
+_print
+
+// Example 3: Using the result in logic
+_print green(=== EXAMPLE 3: CONDITIONAL LOGIC ===)
+_setvar(modes, [Development, Testing, Staging, Production])
+_setvar(env_choice, menu(_getvar(modes), letters, magenta))
+
+_print
+if _getvar(env_choice) == 0
+  _print blue(Selected: Development)
+  _print green(Debug mode enabled)
+  _print green(Verbose logging enabled)
+endif
+
+if _getvar(env_choice) == 1
+  _print blue(Selected: Testing)
+  _print yellow(Running test suite...)
+endif
+
+if _getvar(env_choice) == 2
+  _print blue(Selected: Staging)
+  _print yellow(Performance monitoring enabled)
+endif
+
+if _getvar(env_choice) == 3
+  _print blue(Selected: Production)
+  _print red(PRODUCTION MODE - BE CAREFUL!)
+endif
+
+_print
+_print bold(green(=== ALL EXAMPLES COMPLETE ===))

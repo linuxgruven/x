@@ -1,0 +1,218 @@
+// =============================================================================
+// WALLET
+// Manage blockchain cryptocurrency wallets: balance, send, receive.
+// =============================================================================
+Command.wallet=function(Obj,argv)
+  // User session storage for wallet credentials and state
+  userSession=null
+  // Helper: Create new wallet with username and password
+  createWallet=function(blockchain,args)
+    credentials={}
+    if not args.u then
+      username=Gui.input({"text":"User name"})
+      if username==null then return Error.set("Username required")
+      credentials["user"]=username
+    else
+      credentials["user"]=args.u
+    end if
+    if not args.p then
+      password=Gui.inputPassNS("Enter password")
+      if not password then return Error.set("Password required")
+      confirmPass=Gui.inputPassNS("Re-Enter password")
+      if confirmPass!=password then return Error.set("Passwords do not match")
+      credentials["pass"]=confirmPass
+    else
+      credentials["pass"]=args.p
+    end if
+    result=create_wallet(blockchain,credentials["user"],credentials["pass"])
+    if result isa string then return Error.set(result)
+    credentials["wallet"]=result
+    return credentials
+  end function
+  if not argv then return Man.help(["wallet"])
+  _p=ArgumentParser.init
+  _p.addArgument("create",true,"flag")  // Long flag: --create (create new wallet)
+  _p.addArgument("u",false,"store")  // Username for wallet
+  _p.addArgument("p",false,"store")  // Password for wallet
+  argv=_p.parseArgs("wallet",argv)
+  if argv isa Error then return
+  if not Library.blockchain then Library.blockchain=include_lib(path(Obj.dir.data)+"/blockchain.so")
+  if not Library.blockchain then Library.blockchain=include_lib("/lib/blockchain.so")
+  if not Library.blockchain then
+    self.apt(Obj,["update"])
+    self.apt(Obj,["install","-a","blockchain.so","-p","/lib"])
+    libFile=File(Obj.computer,"/lib/blockchain.so")
+    if not libFile then return Error.set("Unable to load blockchain")
+    Library.blockchain=include_lib(path(libFile))
+  end if
+  blockchain=Library.blockchain
+  if argv.create then
+    userSession=createWallet(blockchain,argv)
+    if userSession isa Error then return
+  else
+    if not argv.u then return Error.set("Username required (-u)")
+    userSession={}
+    userSession["user"]=argv.u
+    if not argv.p then
+      password=Gui.inputPassNS("Enter password")
+      if not password then return Error.set("Password required")
+      userSession["pass"]=password
+    else
+      userSession["pass"]=argv.p
+    end if
+    userSession["wallet"]=login_wallet(blockchain,userSession["user"],userSession["pass"])
+    if userSession["wallet"] isa string then return Error.set(userSession["wallet"])
+  end if
+  // Initialize coin selection state (no coin selected initially)
+  userSession["coin"]=null
+  coinList=list_coins(userSession.wallet)
+  while true
+    if coinList isa list and coinList then
+      for coinSymbol in coinList
+        balance=get_balance(userSession.wallet,coinSymbol)
+        if balance isa string then balance=0
+        print purple("{"+white(coinSymbol)+"} - ")+green("Balance : ")+balance+yellow(" coins")
+      end for
+      userSession.coin=coinList[-1]
+    end if
+    if userSession.coin then
+      choices=[userSession.coin+green(" coin opened")]
+    else
+      choices=[green("no coin opened")]
+    end if
+    push(choices,yellow("Buy coins"))
+    push(choices,yellow("Sell coins"))
+    push(choices,yellow("Pending trade"))
+    push(choices,yellow("Cancel trade"))
+    push(choices,yellow("Show global offers"))
+    push(choices,yellow("Show PIN"))
+    push(choices,yellow("List coins"))
+    push(choices,yellow("View a different coin"))
+    push(choices,yellow("Change wallet password"))
+    push(choices,iyellow("Finished"))
+    userChoice=Gui.choiceHybrid(choices,{},len(choices)-1)
+    if userChoice==len(choices)-1 then break
+    if userChoice==1 then
+      if not userSession.coin then
+        Info.info("No coin loaded")
+        continue
+      end if
+      amount=Gui.inputInt({"text":"How many coins do you want to buy?"})
+      if not amount isa number then
+        Info.info("User Aborted")
+        continue
+      end if
+      price=Gui.inputInt({"text":"What price are you willing to pay?"})
+      if not price isa number then
+        Info.info("User Aborted")
+        continue
+      end if
+      result=buy_coin(userSession.wallet,userSession.coin,amount,price,userSession.user)
+      if result isa string then Info.info(result) else Info.info("Transaction completed")
+    else if userChoice==2 then
+      if not userSession.coin then
+        Info.info("No coin loaded")
+        continue
+      end if
+      amount=Gui.inputInt({"text":"How many coins do you want to sell?"})
+      if not amount isa number then
+        Info.info("User Aborted")
+        continue
+      end if
+      price=Gui.inputInt({"text":"Price you want to sell for?"})
+      if not price isa number then
+        Info.info("User Aborted")
+        continue
+      end if
+      result=sell_coin(userSession.wallet,userSession.coin,amount,price,userSession.user)
+      if result isa string then Info.info(result) else Info.info("Transaction completed")
+    else if userChoice==3 then
+      if not userSession.coin then
+        Info.info("No coin loaded")
+        continue
+      end if
+      offer=get_pending_trade(userSession.wallet,userSession.coin)
+      if offer isa list then
+        print green(ljust(offer[0]+" Offer: "),12)+orange(ljust(str(offer[1]),5))+yellow(" | ")+green("Unit Price: ")+orange(str(offer[2]))
+      else if offer isa string then
+        Info.info(offer)
+      else if offer isa number then
+        Info.info(str(offer))
+      end if
+    else if userChoice==4 then
+      if not userSession.coin then
+        Info.info("No coin loaded")
+        continue
+      end if
+      result=cancel_pending_trade(userSession.wallet,userSession.coin)
+      if result isa string then
+        if len(result)==0 then Info.info("All pending trades have been canceled") else Info.info(result)
+      else if result isa number then
+        Info.info("All pending trades have been canceled")
+      end if
+    else if userChoice==5 then
+      if not userSession.coin then
+        Info.info("No coin loaded")
+        continue
+      end if
+      offers=get_global_offers(userSession.wallet,userSession.coin)
+      if offers isa map then
+        for entry in offers;print yellow(ljust(entry.key,20))+green(ljust(entry.value[0]+" Offer: ",12))+orange(ljust(str(entry.value[1]),5))+yellow(" | ")+green("Unit Price: ")+orange(str(entry.value[2]));end for
+      else if offers isa string then
+        Info.info(offers)
+      else if offers isa number then
+        Info.info(str(offers))
+      end if
+    else if userChoice==6 then
+      print yellow("PIN : ")+green(get_pin(userSession.wallet))
+    else if userChoice==7 then
+      coins=list_coins(userSession.wallet)
+      if coins isa list then
+        print yellow("Your coins")
+        listNN(coins)
+      else if coins isa string then
+        Info.info(coins)
+      else if coins isa number then
+        Info.info(str(coins))
+      end if
+    else if userChoice==8 then
+      globalCoins=list_global_coins(userSession.wallet)
+      if not globalCoins then continue
+      if globalCoins isa list then
+        print yellow("Global coins")
+        listNN(globalCoins)
+      else if globalCoins isa string then
+        Info.info(globalCoins)
+        continue
+      end if
+      selectedCoin=Gui.input({"text":"Enter the coin you want to select"})
+      if selectedCoin==null then
+        Info.info("User Aborted")
+        continue
+      end if
+      if not hasIndex(join(globalCoins,""),selectedCoin) then
+        Error.set("Invalid coin")
+        continue
+      end if
+      userSession.coin=selectedCoin
+    else if userChoice==9 then
+      newPassword=Gui.inputPassNS("Enter new password")
+      if not newPassword then
+        Info.info("User Aborted")
+        continue
+      end if
+      confirmPassword=Gui.inputPassNS("Re-Enter new password")
+      if confirmPassword!=newPassword then
+        Error.set("Passwords do not match")
+        continue
+      end if
+      result=reset_password(userSession.wallet,confirmPassword)
+      if result isa string then
+        Info.info(result)
+      else if result isa number then
+        Info.info("Password changed successfully")
+        userSession.pass=confirmPassword
+      end if
+    end if
+  end while
+end function

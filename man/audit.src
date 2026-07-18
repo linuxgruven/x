@@ -1,0 +1,86 @@
+// Man page for audit
+manAudit="AUDIT(1)                         X Shell Manual                         AUDIT(1)
+
+<b>NAME</b>
+    audit - Security audit: permissions, processes, and open ports
+<b>SYNOPSIS</b>
+    <b>audit</b>
+    <b>audit</b> [<b>-q</b>] [<b>-p</b>] [<b>-r</b>] [<b>-f</b>]
+<b>DESCRIPTION</b>
+    Run a security audit on the current computer. Scans for guest-
+    accessible files, world-open (rwx) permissions, suspicious
+    root processes, open ports, /etc/passwd account exposure
+    (including the actual exposed usernames), guest account integrity,
+    sensitive config files (Bank.txt, Mail.txt, Browser.txt, Map.conf),
+    and system binary integrity (/usr/bin and /bin).
+    Produces a severity-tagged report with a security score out
+    of 100. Supports piping output to grep, wc, etc.
+
+    The /home/tux/payload directory tree is whitelisted and will not
+    be flagged for its expected 755 permissions.
+<b>OPTIONS</b>
+    <b>-q</b> - Quick Mode
+      Run filesystem and account checks only. Skips ports and procs.
+
+    <b>-p</b> - Ports Only
+      Show only open port information. Skips file and process checks.
+
+    <b>-r</b> - Processes Only
+      Show only running process information. Skips file and port checks.
+
+    <b>-f</b> - Full Mode
+      Run all checks (default when no flags are set).
+<b>OUTPUT SEVERITY LEVELS</b>
+    <b>[CRITICAL]</b> - Immediate threat (e.g. unexpected root process)
+    <b>[WARNING]</b>  - High-risk finding (e.g. world-writable file)
+    <b>[INFO]</b>     - Informational finding
+    <b>[OK]</b>       - Check passed with no issues found
+<b>SCORING</b>
+    Starts at 100. Each finding deducts points:
+      Guest-accessible file: -5/-3/-1 (w/r/x)
+      Guest-accessible dir:  -4/-2/-1 (w/r/x)
+      World-open rwx file:  -10 (2x penalty)
+      World-open rwx dir:    -8 (2x penalty)
+      Unexpected root proc: -10 per process
+      /etc/passwd exposed:  -2
+      Guest unexpected item: -3 per item
+      Guest non-empty folder: -3 per folder
+      Bank.txt readable:   -15 per user
+      Mail.txt readable:   -15 per user
+      Browser.txt readable: -3 per user
+      Map.conf readable:    -3 per user
+      Missing system binary: -5 per file
+      Unexpected binary:     -3 per file
+      Missing /usr/bin or /bin dir: -10
+      Scan error:          -5
+
+    90-100 = Clean, 70-89 = Moderate Risk,
+    50-69 = High Risk,  0-49 = Critical
+<b>EXAMPLE:</b>
+    <b>audit</b>
+    Run full security audit on current computer
+
+    <b>audit -q</b>
+    Quick check: filesystem permissions only
+
+    <b>audit -p</b>
+    Show only open port information
+
+    <color=#e4ff34># Pipe Usage</color>
+    <b>audit | grep CRITICAL</b>
+    Show only critical findings
+
+    <b>audit | grep WARNING</b>
+    Show all warnings
+
+    <b>audit | grep Bank</b>
+    Check for exposed bank credentials
+
+    <color=#e4ff34># Save to File</color>
+    <b>audit | cat > audit.txt</b>
+    Save full audit report to file (overwrite)
+
+    <b>audit | cat >> audit.txt</b>
+    Append audit report to existing file
+<b>SEE ALSO</b>
+    <b>stat</b>, <b>ls</b>, <b>ps</b>, <b>list</b>, <b>ports</b>"

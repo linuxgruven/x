@@ -1,0 +1,14 @@
+binSmtpUserList="cryptools=include_lib(""/lib/crypto.so"")
+if not cryptools then exit(""Error: Missing crypto library"")
+if len(params)==0 or len(params)>2 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""smtpuserlist_usage""))
+port=""25""
+if len(params)>1 then port=params[1]
+print(""Connecting..."")
+users=smtp_user_list(cryptools,params[0],to_int(port))
+if not users then exit(""smtp_user_list: invalid parameters"")
+if typeof(users)==""string"" then exit(users)
+print(""Starting smtp-mail-list...""+char(10)+char(10)+""###### Scan started ######"")
+for user in users
+	print(user)
+end for
+print(""###### Scan completed ######""+char(10)+len(users)+"" results."")"

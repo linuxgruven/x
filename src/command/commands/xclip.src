@@ -1,0 +1,61 @@
+// =============================================================================
+// XCLIP
+// In-memory clipboard: push, pop, list, and export stored items.
+// =============================================================================
+Command.xclip=function(Obj,argv)
+  argv=ArgumentParser.check(argv)
+  _p=ArgumentParser.init
+  _p.addArgument("number",true,"storeNumber")  // Long flag: --number (store number in clipboard)
+  _p.addArgument("clear",true,"flag")  // Long flag: --clear (empty the clipboard)
+  _p.addArgument("p",false,"flag")  // Print clipboard item as output
+  argv=_p.parseArgs("xc",argv)
+  if argv isa Error then return argv
+  // Check for stdin from pipe - add piped input to clipboard (check for null, not truthiness - empty string is valid)
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinData=globals.G_pipe.stdin
+    if typeof(stdinData)=="string" then
+      push(globals.G_xclip,stdinData)
+    else if stdinData isa list then
+      for item in stdinData;push(globals.G_xclip,str(item));end for
+    end if
+  end if
+  argv=_p.checkRedirect(Obj,"xclip",argv)
+  if argv isa Error then return
+  if _p.write then
+    if not globals.G_xclip then return Error.set("Clipboard is empty")
+    argv["data"]=join(globals.G_xclip,char(10))
+    _p.out(Obj,argv)
+  end if
+  if argv.clear then
+    globals.G_xclip=[]
+    Info.info("Clipboard cleared")
+  end if
+  if argv.number then
+    push(globals.G_xclip,argv.number)
+    Info.info("Number added to clipboard : "+argv.number)
+  end if
+  if not argv.rest then
+    if globals.G_pipe.PIPE_MODE then
+      if globals.G_xclip then
+        for item in globals.G_xclip;push(globals.G_pipe.stdout,str(item));end for
+      end if
+      return
+    end if
+    if globals.G_xclip then listNHZ(globals.G_xclip) else Info.info("Clipboard is empty")
+    return
+  end if
+  if to_int(argv.rest[0]) isa number then
+    index=to_int(argv.rest[0])
+    if index isa string then return Error.set("Invalid value : "+index)
+    if index<0 or index>=len(globals.G_xclip) then return Error.set("Invalid index")
+    if globals.G_pipe.PIPE_MODE then
+      push(globals.G_pipe.stdout,str(globals.G_xclip[index]))
+      return
+    end if
+    if argv.p then print yellow(globals.G_xclip[index]) else return globals.G_xclip[index]
+    return
+  end if
+  text=join(argv.rest," ")
+  push(globals.G_xclip,text)
+  Info.info("Text|item added to clipboard : "+text)
+end function

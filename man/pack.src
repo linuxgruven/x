@@ -1,0 +1,75 @@
+// Man page for pack
+manPack="PACK(1)                          X Shell Manual                          PACK(1)
+
+<b>NAME</b>
+    pack - Pack or repack libraries and routers
+<b>SYNOPSIS</b>
+    <b>pack -a</b>
+    <b>pack -m</b> [-y]
+    <b>pack -c</b> [-y]
+    <b>pack -r</b> [-i IP]
+    <b>pack -s</b>
+    <b>pack -t</b>
+    <b>pack --check</b>
+<b>DESCRIPTION</b>
+    The pack utility packages libraries and routers for portable deployment.
+    It enables crypto encryption/decryption and maintains libraries in the
+    /payload/data folder for use on target systems. X automatically manages
+    metaxploit.so and crypto.so in data; other libraries require manual placement.
+
+    Target system libraries take precedence over packed versions. Use -y flag
+    to skip removal when packing metaxploit.so or crypto.so.
+
+    <color=#e4ff34>*** Requires root access for crypto encrypt/decrypt ***</color>
+<b>OPTIONS</b>
+    <b>-a</b> - Pack All
+      Pack all libraries: crypto, metaxploit, and router.
+
+    <b>-m</b> [-y] - Pack Metaxploit
+      Pack metaxploit.so library. Use -y to skip removal confirmation.
+
+    <b>-c</b> [-y] - Pack Crypto
+      Pack crypto.so library. Use -y to skip removal confirmation.
+
+    <b>-r</b> [-i IP] - Pack Router
+      Pack router. Optionally specify IP to pack specific router.
+
+    <b>-s</b> - Pack Appliance
+      Pack smart appliance libraries.
+
+    <b>-t</b> - Pack Traffic
+      Pack traffic management libraries.
+
+    <b>--check</b> - List Packed Items
+      Display all currently packed items in /payload/data.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Pack All Libraries</color>
+    <b>pack -a</b>
+    Pack crypto, metaxploit, and router
+
+    <color=#e4ff34># Pack Individual Items</color>
+    <b>pack -m</b>
+    Pack metaxploit.so with confirmation
+
+    <b>pack -m -y</b>
+    Pack metaxploit.so skipping removal confirmation
+
+    <b>pack -c -y</b>
+    Pack crypto.so skipping confirmation
+
+    <b>pack -r</b>
+    Pack current router
+
+    <b>pack -r -i 192.168.1.1</b>
+    Pack specific router at IP address
+
+    <b>pack -s</b>
+    Pack appliance libraries
+
+    <b>pack -t</b>
+    Pack traffic libraries
+
+    <b>pack --check</b>
+    List all packed items
+<b>SEE ALSO</b>
+    <b>0day</b>, <b>lms</b>"

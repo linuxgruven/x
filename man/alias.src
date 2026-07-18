@@ -1,0 +1,66 @@
+// Man page for alias
+manAlias="ALIAS(1)                         X Shell Manual                         ALIAS(1)
+
+<b>NAME</b>
+    alias - Command aliasing system
+<b>SYNOPSIS</b>
+    <b>alias -s ALIAS COMMAND</b> [PARAMS]
+    <b>alias -s</b> (reads from stdin: ""ALIAS COMMAND [PARAMS]"")
+    <b>alias -r ALIAS</b>
+    <b>alias -l</b>
+    <b>alias --clear</b>
+<b>DESCRIPTION</b>
+    Create command aliases for faster access to frequently-used commands
+    with common parameters. Aliases persist across sessions.
+<b>OPTIONS</b>
+    <b>-s ALIAS COMMAND</b> [PARAMS] - Set Alias
+      Create new command alias. If piped input is present, reads
+      one alias definition per line (format: ALIAS COMMAND [PARAMS]).
+
+    <b>-r ALIAS</b> - Remove Alias
+      Delete existing alias.
+
+    <b>-l</b> - List Aliases
+      Display all configured aliases. Pipeable — output can be
+      filtered with grep.
+
+    <b>--clear</b> - Clear All Aliases
+      Remove all configured aliases.
+<b>EXAMPLE:</b>
+    <b>alias -l</b>
+    List all aliases
+
+    <b>alias -s ll ls -o</b>
+    Create alias ll for ls -o
+
+    <b>alias -s scan nmap -w</b>
+    Create scan alias for nmap with WAN mode
+
+    <b>alias -s lsg ""ls -o | grep""</b>
+    Create alias with pipe support. Running 'lsg foo' expands
+    to 'ls -o | grep foo'
+
+    <b>alias -s test @test</b>
+    Create alias to run a bash script. Running 'test' will
+    execute the @test bash script
+
+    <b>alias -r ll</b>
+    Remove ll alias
+
+    <b>alias --clear</b>
+    Clear all aliases
+
+    <b>alias -l | grep scan</b>
+    List only aliases containing 'scan'
+
+    <b>echo ""lh find *.log | open -l"" | alias -s</b>
+    Define alias from piped input
+<b>NOTES</b>
+    Aliases support pipes (|), chains (;, &&), and bash script
+    references (@scriptname).
+
+    When the alias value contains a pipe or semicolon, wrap the
+    entire value in quotes so the shell does not process it at
+    definition time:
+      alias -s lh ""find *.log | open -l""  (correct)
+      alias -s lh find *.log | open -l     (broken - pipe fires immediately)"

@@ -1,0 +1,197 @@
+webCrypto="<!doctype html>
+<style>
+  html {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background-color: #21333D;
+  }
+  body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: #d4e5ee;
+    font: 14px ""Trebuchet MS"", ""Segoe UI"", Arial, sans-serif;
+  }
+  .scroll-root {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    padding: 18px 0;
+  }
+  .page {
+    width: 860px;
+    max-width: 95%;
+    margin: 0 auto 16px auto;
+    border: 1px solid #3f5967;
+    background: #1a2a34;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.28);
+  }
+  .shell {
+    margin: 10px;
+    border: 1px solid #556f7d;
+    background: #213640;
+  }
+  .top {
+    padding: 9px 12px;
+    border-bottom: 1px solid #556f7d;
+    background: #264b5a;
+    color: #e8f7fb;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+  }
+  .btn-group {
+    margin: 12px;
+    text-align: center;
+  }
+  .btn {
+    background-color: #006100;
+    border: 1px solid #76a17e;
+    color: #eefcf1;
+    padding: 5px 6px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 11px;
+    width: 108px;
+    margin: 3px;
+  }
+  .btn-sel {
+    background-color: #008CD1;
+    border-color: #7ec7ea;
+    color: #f1fbff;
+  }
+  .btn-group button:hover {
+    background-color: #006199;
+  }
+  .hero {
+    margin: 0 12px 12px 12px;
+    border: 1px solid #5a7483;
+    background: #1f323d;
+    padding: 12px;
+  }
+  .hero-left {
+    display: inline-block;
+    vertical-align: top;
+    width: 52%;
+    min-width: 220px;
+    box-sizing: border-box;
+    padding-right: 10px;
+  }
+  .hero-right {
+    display: inline-block;
+    vertical-align: top;
+    width: 47%;
+    min-width: 220px;
+    box-sizing: border-box;
+  }
+  .kicker {
+    margin: 0 0 6px 0;
+    color: #f0bf74;
+    font-size: 10px;
+    letter-spacing: 1px;
+    font-weight: bold;
+  }
+  .hero-copy {
+    margin: 0;
+    color: #e5f4fa;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .sub {
+    margin: 8px 0 0 0;
+    color: #b8cedb;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .image-wrap {
+    border: 1px solid #6e8795;
+    background: #1a2d37;
+    padding: 6px;
+  }
+  img {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+  }
+  .section-title {
+    margin: 0 12px 8px 12px;
+    color: #8fd3e2;
+    font-size: 12px;
+    letter-spacing: 0.7px;
+  }
+  .info-panel {
+    margin: 0 12px 12px 12px;
+    border: 1px solid #5a7483;
+    background: #20333d;
+    padding: 10px 12px;
+  }
+  .info-line {
+    margin: 0 0 7px 0;
+    color: #bfd3de;
+    font-size: 12px;
+  }
+  .info-line:last-child {
+    margin-bottom: 0;
+  }
+  .footer {
+    margin: 0 12px 12px 12px;
+    border-top: 1px solid #5a7483;
+    padding-top: 8px;
+    color: #8fa7b4;
+    font-size: 11px;
+    text-align: center;
+  }
+  @media (max-width: 700px) {
+    .btn {
+      width: 94%;
+      max-width: 260px;
+    }
+    .hero-left,
+    .hero-right {
+      display: block;
+      width: auto;
+      min-width: 0;
+      padding-right: 0;
+    }
+    .hero-right {
+      margin-top: 10px;
+    }
+  }
+</style>
+<div class=""scroll-root"">
+  <div class=""page"">
+    <div class=""shell"">
+      <div class=""top"">CURRENCY LAB PORTAL DIGITAL ASSET CREATION NODE</div>
+      <div class=""btn-group"">
+        <button type=""button"" class=""btn btn-primary btn-sel"" id=""Main"">Main</button>
+        <button type=""button"" class=""btn btn-primary"" id=""CreateCurrency"">Services</button>
+      </div>
+      <div class=""hero"">
+        <div class=""hero-left"">
+          <p class=""kicker"">ASSET CREATION SERVICE</p>
+          <p class=""hero-copy"">Mepaxagir. Create your own coin now!</p>
+          <p class=""sub"">Generate and manage a custom digital currency with identity, issuance and account controls.</p>
+        </div>
+        <div class=""hero-right"">
+          <div class=""image-wrap"">
+            <img src=""Currency.jpg"" width=""440"" height=""180"" align=""center"">
+          </div>
+        </div>
+      </div>
+      <p class=""section-title"">SERVICE OVERVIEW</p>
+      <div class=""info-panel"">
+        <p class=""info-line"">- Coin identity setup with configurable symbol and metadata.</p>
+        <p class=""info-line"">- Management access for balances, issuance and account policy.</p>
+        <p class=""info-line"">- Full operational details available in the Services section.</p>
+      </div>
+      <div class=""footer"">Digital currency platform Managed setup and support tools</div>
+    </div>
+  </div>
+</div>"

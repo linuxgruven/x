@@ -1,0 +1,31 @@
+// Man page for sha256
+manSha256="SHA256(1)                        X Shell Manual                        SHA256(1)
+
+<b>NAME</b>
+    sha256 - SHA-256 cryptographic hashing
+<b>SYNOPSIS</b>
+    <b>sha256 -c</b> HASH
+    <b>sha256</b> TEXT
+<b>DESCRIPTION</b>
+    SHA-256 cryptographic hash function that outputs 256-bit values.
+    Hashing transforms data into fixed-size output that cannot be
+    reversed without extensive computation.
+<b>OPTIONS</b>
+    <b>-c HASH</b> - Crack Hash
+      Attempt to crack SHA-256 hash.
+
+    <b>TEXT</b> - Generate Hash
+      Generate SHA-256 hash from text.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Generate Hash</color>
+    <b>sha256 password123</b>
+    Hash a password
+
+    <b>sha256 Hello World</b>
+    Hash text string
+
+    <color=#e4ff34># Crack Hash</color>
+    <b>sha256 -c a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3</b>
+    Attempt to crack hash
+<b>SEE ALSO</b>
+    <b>decipher</b>, <b>crack</b>"

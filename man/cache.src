@@ -1,0 +1,132 @@
+// Man page for cache
+manCache="CACHE(1)                         X Shell Manual                         CACHE(1)
+
+<b>NAME</b>
+    cache - Remote system attack cache management
+<b>SYNOPSIS</b>
+    <b>cache -l</b>
+    <b>cache -u</b> NICK[NAME] | INDEX
+    <b>cache -e</b> NICK[NAME] | INDEX
+    <b>cache -y</b>
+    <b>cache -n</b>
+    <b>cache -v</b>
+    <b>cache -d</b>
+    <b>cache -r</b> NICK[NAME] | INDEX
+    <b>cache -x</b>
+    <b>cache --u -a</b> NICK[NAME] | INDEX
+    <b>cache --u -t</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
+    <b>cache --u -s</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
+    <b>cache --u -p</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
+    <b>cache --u -u</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
+<b>DESCRIPTION</b>
+    Remote system attack cache for maintaining persistent access to compromised
+    systems. Stores SSH and FTP backdoors for later exploitation. Populated by
+    jack command during reconnaissance. Supports terminal, shell, and upload
+    operations on cached systems. Default connection is SSH port 22.
+<b>OPTIONS</b>
+    <b>-l</b>
+    List captured systems
+    Shows all cached entries
+
+    <b>-u NICK[NAME] | INDEX</b>
+    Use cached system
+    Connect by name or index
+
+    <b>-e NICK[NAME] | INDEX</b>
+    Edit cached entry
+    Modify connection details
+
+    <b>-y</b>
+    Reload cache from disk
+    Refresh system list
+
+    <b>-n</b>
+    Add new entry
+    Create manual cache record
+
+    <b>-v</b>
+    Load external cache file
+    Import cache from file
+
+    <b>-d</b>
+    Dump cache to file
+    Export as cache.dat
+
+    <b>-r NICK[NAME] | INDEX</b>
+    Remove cached system
+    Delete entry
+
+    <b>-x</b>
+    Clear entire cache
+    Remove all entries
+
+    <b>--u -a NICK[NAME] | INDEX</b>
+    Attack cached system
+    Launch exploit against target
+
+    <b>--u -t NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
+    Start terminal connection
+    SSH or FTP terminal access
+
+    <b>--u -s NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
+    Open shell connection
+    Full shell access to target
+
+    <b>--u -p NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
+    Pivot to cached system
+    Upload X and launch in pivot mode
+
+    <b>--u -u NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
+    Full pivot with restart
+    Deploy X to target and restart framework
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Operations</color>
+    <b>cache -l</b>
+    List all cached systems
+
+    <b>cache -n</b>
+    Add new cache entry
+
+    <b>cache -y</b>
+    Reload cache from disk
+
+    <color=#e4ff34># Connection Management</color>
+    <b>cache -u 0</b>
+    Use first cached system
+
+    <b>cache -u rshell</b>
+    Use system by nickname
+
+    <b>cache -e 2</b>
+    Edit third entry
+
+    <color=#e4ff34># Remote Operations</color>
+    <b>cache --u -s 0</b>
+    Open shell on first system
+
+    <b>cache --u -s hacked</b>
+    Open shell using nickname
+
+    <b>cache --u -t 1 21 ftp</b>
+    FTP terminal on port 21
+
+    <b>cache --u -p webserver</b>
+    Standard pivot to system
+
+    <b>cache --u -u webserver 22 ssh</b>
+    Full pivot and restart
+
+    <color=#e4ff34># Cache Management</color>
+    <b>cache -d</b>
+    Export cache to file
+
+    <b>cache -v</b>
+    Import external cache
+
+    <b>cache -r 0</b>
+    Remove first entry
+
+    <b>cache -x</b>
+    Clear all cached systems
+<b>SEE ALSO</b>
+    <b>jack</b>, <b>recon</b>, <b>rshell</b>"

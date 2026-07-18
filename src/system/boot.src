@@ -1,0 +1,679 @@
+// =============================================================================
+// BOOT
+// X shell bootstrap; initializes system state, manages pivot/proxy operations, and coordinates startup.
+// =============================================================================
+Boot={}
+//Initialize encryption type (set by database connections)
+Boot.e=null
+//Reset packed objects in custom_object to null
+Boot.resetCOPacked=function
+  co=get_custom_object
+  //Clear packed password
+  co.packPasswd=null
+  //Clear packed metaxploit library
+  co.packMetaxploit=null
+  //Clear packed crypto library
+  co.packCrypto=null
+  //Clear packed router library
+  co.packRouter=null
+  //Clear packed root shell
+  co.packRootShell=null
+  //Clear packed appliance library
+  co.packAppliance=null
+  //Clear packed traffic library
+  co.packTraffic=null
+//End resetCOPacked
+end function
+//Clear all entries from custom_object
+Boot.clearCO=function
+  co=get_custom_object
+  //Iterate through all custom_object keys
+  for i in indexes(co);remove(co,i);end for
+//End clearCO
+end function
+//Save global state to custom_object before pivot
+// Uses direct dot-notation (not globals[string]) so the compiler correctly
+// renames each global reference during obfuscation.
+Boot.pivotCOLoad=function
+  co=get_custom_object
+  co.main=globals.G_main
+  co.hasPivoted=globals.G_hasPivoted
+  co.proxy=globals.G_proxy
+  co.piping=globals.G_piping
+  co.pendingExit=globals.G_pendingExit
+  co.clearAllSessions=globals.G_clearAllSessions
+  co.settings=globals.G_settings
+  co.errors=globals.G_errors
+  co.GF=globals.G_CF
+  co.sessions=globals.G_sessions
+  co.netSessions=globals.G_netSessions
+  co.rainbow=globals.G_rainbow
+  co.names=globals.G_names
+  co.virtualFiles=globals.G_virtualFiles
+  co.cachePasswords=globals.G_cachePasswords
+  co.shadow=globals.G_shadow
+  co.server=globals.G_server
+  co.libServer=globals.G_libServer
+  co.xclip=globals.G_xclip
+  co.tar=globals.G_tar
+  co.Zday=globals.G_Zday
+  co.attributes=globals.G_attributes
+  co.poDebug=globals.G_poDebug
+  co.exploitCache=globals.G_exploitCache
+  co.exploitBtree=globals.G_exploitBtree
+  co.digCache=globals.G_digCache
+  co.rtree=globals.G_rtree
+  co.frtree=globals.G_frtree
+  co.stree=globals.G_stree
+  co.fstree=globals.G_fstree
+  co.mtree=globals.G_mtree
+  co.fmtree=globals.G_fmtree
+  co.libraryCache=globals.G_libraryCache
+  co.metaxploit=globals.G_metaxploit
+  co.initMetaxploit=globals.G_initMetaxploit
+  co.crypto=globals.G_crypto
+  co.initCrypto=globals.G_initCrypto
+  co.initAptClient=globals.G_initAptClient
+  co.initBlockchain=globals.G_initBlockchain
+  co.agent=globals.G_agent
+  co.bash=globals.G_bash
+  co.dirty=globals.G_dirty
+  co.rshell=globals.G_rshell
+  co.pobjcreds=globals.G_pobjcreds
+  co.IPC=globals.G_IPC
+  co.IPCSafe=globals.G_IPCSafe
+  co.cshell=globals.G_cshell
+  co.hops=globals.G_hops
+  co.continuation_cmds=globals.G_continuation_cmds
+  co.deferred_cmds=globals.G_deferred_cmds
+  co.bloom=globals.G_bloom
+  co.rainbowIndex=globals.G_rainbowIndex
+  co.pipe=globals.G_pipe
+  co.pipeDebug=globals.G_pipeDebug
+  co.savedStates=globals.G_savedStates
+  co.autoYes=globals.G_auto_yes
+  co.lastIP=globals.G_lastIP
+  co.agentContext=globals.G_agentContext
+  co.gui=globals.G_gui
+  co.debug=globals.G_debug
+  co.watchList=globals.G_watchList
+  co.es=globals.G_es
+  co.passwordCache=globals.G_passwordCache
+end function
+//Restore global state from custom_object after pivot
+Boot.pivotCOUnload=function
+  co=get_custom_object
+  globals.G_main=co.main
+  globals.G_hasPivoted=co.hasPivoted
+  globals.G_proxy=co.proxy
+  globals.G_piping=co.piping
+  globals.G_pendingExit=co.pendingExit
+  globals.G_clearAllSessions=co.clearAllSessions
+  globals.G_settings=co.settings
+  globals.G_errors=co.errors
+  globals.G_CF=co.GF
+  globals.G_sessions=co.sessions
+  globals.G_netSessions=co.netSessions
+  globals.G_rainbow=co.rainbow
+  globals.G_names=co.names
+  globals.G_virtualFiles=co.virtualFiles
+  globals.G_cachePasswords=co.cachePasswords
+  globals.G_shadow=co.shadow
+  globals.G_server=co.server
+  globals.G_libServer=co.libServer
+  globals.G_xclip=co.xclip
+  globals.G_tar=co.tar
+  globals.G_Zday=co.Zday
+  globals.G_attributes=co.attributes
+  globals.G_poDebug=co.poDebug
+  globals.G_exploitCache=co.exploitCache
+  globals.G_exploitBtree=co.exploitBtree
+  globals.G_digCache=co.digCache
+  globals.G_rtree=co.rtree
+  globals.G_frtree=co.frtree
+  globals.G_stree=co.stree
+  globals.G_fstree=co.fstree
+  globals.G_mtree=co.mtree
+  globals.G_fmtree=co.fmtree
+  globals.G_libraryCache=co.libraryCache
+  globals.G_metaxploit=co.metaxploit
+  globals.G_initMetaxploit=co.initMetaxploit
+  globals.G_crypto=co.crypto
+  globals.G_initCrypto=co.initCrypto
+  globals.G_initAptClient=co.initAptClient
+  globals.G_initBlockchain=co.initBlockchain
+  globals.G_agent=co.agent
+  globals.G_bash=co.bash
+  globals.G_dirty=co.dirty
+  globals.G_rshell=co.rshell
+  globals.G_pobjcreds=co.pobjcreds
+  globals.G_IPC=co.IPC
+  globals.G_IPCSafe=co.IPCSafe
+  globals.G_cshell=co.cshell
+  globals.G_hops=co.hops
+  globals.G_continuation_cmds=co.continuation_cmds
+  globals.G_deferred_cmds=co.deferred_cmds
+  globals.G_bloom=co.bloom
+  globals.G_rainbowIndex=co.rainbowIndex
+  globals.G_pipe=co.pipe
+  globals.G_pipeDebug=co.pipeDebug
+  globals.G_savedStates=co.savedStates
+  globals.G_auto_yes=co.autoYes
+  globals.G_lastIP=co.lastIP
+  globals.G_agentContext=co.agentContext
+  globals.G_gui=co.gui
+  globals.G_debug=co.debug
+  globals.G_watchList=co.watchList
+  globals.G_es=co.es
+  globals.G_passwordCache=co.passwordCache
+end function
+//Save minimal state for rainbow table operations
+Boot.loadRainbows=function
+  co=get_custom_object
+  co.main=globals.G_main
+  //Save server reference if available
+  co.server=globals.G_server
+  //Save rainbow table data
+  co.rainbow=globals.G_rainbow
+  //Initialize packed password field
+  co.packPasswd=null
+  //Initialize packed root shell field
+  co.packRootShell=null
+//End loadRainbows
+end function
+//Initialize directory tree for server or local system with optional reuse mode for pivots
+Boot.initDirectoryTree=function(computer,baseDir,globalDirObj,mapObj,dirSpecs,reuseFrom=null)
+  //Iterate through directory specifications
+  for spec in dirSpecs
+    globalKey=spec.globalKey
+    mapKey=spec.mapKey
+    //REUSE MODE: Copy reference from existing directories (pivot scenario)
+    if reuseFrom and reuseFrom.hasIndex(globalKey) then
+      if globalKey then globalDirObj[globalKey]=reuseFrom[globalKey]
+      if mapKey then mapObj[mapKey]=reuseFrom[globalKey]
+      continue
+    end if
+    //CREATE MODE: Build directory path and create if needed
+    parentPath=baseDir
+    if spec.parent!=baseDir then
+      if globalDirObj.hasIndex(spec.parent) then parentPath=path(globalDirObj[spec.parent])
+    end if
+    fullPath=parentPath+"/"+spec.name
+    dir=File(computer,fullPath)
+    if not dir then dir=System.createRawFolder(computer,parentPath,spec.name)
+    //Store directory reference in global object and/or map
+    if globalKey then globalDirObj[globalKey]=dir
+    if mapKey then mapObj[mapKey]=dir
+  //End directory iteration
+  end for
+//End initDirectoryTree
+end function
+//Main system initialization and bootstrap
+Boot.init=function
+  //Check if program is named "x"
+  if split(program_path,"/")[-1]!="x" then
+    //Attempt to rename program to "x"
+    r=rename(File(host_computer(get_shell),program_path),"x")
+    //Rename failed (file already exists)
+    if r!="" then
+      //Delete existing "x" file
+      delete(File(host_computer(get_shell),parent_path(program_path)+"/x"))
+      //Retry rename
+      rename(File(host_computer(get_shell),program_path),"x")
+    end if
+    //Exit to force relaunch with new name
+    exit("X relaunch needed - Reason:Program name change...")
+  end if
+  //Get current shell
+  bs=get_shell
+  //Get host computer/Get host computer
+  bc=host_computer(bs)
+	//Directory structure map
+	m={
+    //Main payload directory
+    "payload":null,
+    //Data directory
+    "data":null,
+    //Rainbow table directory
+    "rainbow":null,
+    //Password list directory
+    "list":null,
+    //Exploits directory
+    "exploits":null,
+    //Man directory
+    "man":null,
+    //Password directory
+    "password":null,
+    //Shared files directory
+    "share":null,
+    //Saved libraries directory
+    "savedLibs":null,
+    //Bash scripts directory
+    "bash":null,
+    //Source code directory
+    "src":null,
+    //Source code bin directory
+    "srcBin":null,
+    //Source code tools directory
+    "srcTools":null,
+    //Source code web directory
+    "srcWeb":null
+	}
+	//Check and connect to database servers
+	checkForDatabase=function
+		dataPath=parent_path(program_path)+"/payload/data"
+    //No network, skip database connection
+    if not is_network_active(bc) then return
+    //Database server not yet connected
+    if not globals.G_server then
+    //Get .drc file (database connection config)
+    s=File(bc,dataPath+"/.drc")
+    //File exists and has content
+    if s then
+      ct=get_content(s)
+      if ct then
+      //Decrypt and parse connection string
+      i=split(Encryption.encrypt(split(ct,char(10))[-1],Kernel.key,false),"::")
+      //Invalid format, abort
+      if len(i)!=5 then return
+        //Get encryption type (R1 or direct)
+        Boot.e=i[-1]
+        //Get server IP
+        a=i[3]
+        //Get server port
+        b=to_int(i[2])
+        c=i[1]
+        d=i[0]
+        //Connect with R1 encryption or direct password
+        if Boot.e=="R1" then t=connect_service(bs,a,b,c,Crypt.R1(d+current_date)) else t=connect_service(bs,a,b,c,d)
+        //Connection attempt returned something
+        if t then
+          //Connection failed with error message
+          if t isa string then return Error.set(t)
+          //Connection successful, got shell
+          if indexOf(typeof(t),"shell")!=null then
+            //Create server object
+            globals.G_server=new Server
+            //Initialize server with shell
+            globals.G_server.run(t)
+          else
+            return
+          end if
+        end if
+      end if
+    end if
+  end if
+  //Library server already connected
+  if globals.G_libServer then return
+	//Get .ldrc file (library server connection config)
+  s=File(bc,dataPath+"/.ldrc")
+  //File doesn't exist or empty
+  if not s then return
+  ct=get_content(s)
+  if not ct then return
+	//Decrypt and parse connection string
+  i=split(Encryption.encrypt(split(ct,char(10))[-1],Kernel.key,false),"::")
+		//Invalid format, abort
+		if len(i)!=5 then return
+    //Get encryption type (R1 or direct)
+    Boot.e=i[-1]
+		//Get server IP
+		a=i[3]
+		//Get server port
+		b=to_int(i[2])
+		c=i[1]
+		d=i[0]
+    //Connect with R1 encryption or direct password
+    if Boot.e=="R1" then t=connect_service(bs,a,b,c,Crypt.R1(d+current_date)) else t=connect_service(bs,a,b,c,d)
+    //Connection failed
+    if not t then return
+    //Connection returned error
+    if t isa string then return Error.set(t)
+    //Connection didn't return shell
+    if not indexOf(typeof(t),"shell")!=null then return
+		//Create library server object
+		globals.G_libServer=new LibServer
+		//Initialize library server with shell
+		globals.G_libServer.run(t)
+	//End checkForDatabase
+	end function
+	//Initialize directory structure and return directory map
+	init=function(m)
+		//Database server is connected
+		if globals.G_server then
+      //Server payload directory not yet initialized
+      if not globals.G_server.dir.payload then
+        //Get server computer
+        c=globals.G_server.computer
+        //Define server directory specifications
+        serverDirs=[{"name":"payload","parent":"/root","globalKey":"payload","mapKey":"payload"},{"name":"data","parent":"payload","globalKey":"data","mapKey":"data"},{"name":"exploits","parent":"payload","globalKey":"exploits","mapKey":"exploits"},{"name":"share","parent":"payload","globalKey":"share","mapKey":"share"},{"name":"savedLibs","parent":"payload","globalKey":"savedLibs","mapKey":"savedLibs"},{"name":"password","parent":"payload","globalKey":"password","mapKey":"password"},{"name":"rainbow","parent":"password","globalKey":"rainbow","mapKey":"rainbow"},{"name":"man","parent":"payload","globalKey":"man","mapKey":"man"},{"name":"list","parent":"password","globalKey":"list","mapKey":"list"},{"name":"temp","parent":"payload","globalKey":"temp","mapKey":"temp"},{"name":"src","parent":"payload","globalKey":"src","mapKey":"src"},{"name":"bin","parent":"src","globalKey":"srcBin","mapKey":"srcBin"},{"name":"tools","parent":"src","globalKey":"srcTools","mapKey":"srcTools"},{"name":"web","parent":"src","globalKey":"srcWeb","mapKey":"srcWeb"}]
+        //Initialize server directory tree
+        Boot.initDirectoryTree(c,"/root",globals.G_server.dir,m,serverDirs)
+      else
+        //Server directories already initialized, populate map from globals
+        m.exploits=globals.G_server.dir.exploits
+        m.share=globals.G_server.dir.share
+        m.savedLibs=globals.G_server.dir.savedLibs
+        m.password=globals.G_server.dir.password
+        m.rainbow=globals.G_server.dir.rainbow
+        m.list=globals.G_server.dir.list
+        m.man=globals.G_server.dir.man
+        m.src=globals.G_server.dir.src
+        m.srcBin=globals.G_server.dir.srcBin
+        m.srcTools=globals.G_server.dir.srcTools
+        m.srcWeb=globals.G_server.dir.srcWeb
+      end if
+		end if
+    //Library server is connected
+    if globals.G_libServer then
+      //Library server libs directory not yet initialized
+      if not globals.G_libServer.dir.libs then
+        //Get library server computer
+        c=globals.G_libServer.computer
+        //Library server libs path
+        p="/root/libs"
+        //Check if libs directory exists
+        globals.G_libServer.dir.lib=File(c,p)
+        //Create libs directory if needed
+        if not globals.G_libServer.dir.libs then globals.G_libServer.dir.libs=System.createRawFolder(c,"/root","libs")
+      end if
+		end if
+    //Main object already initialized (reentry/pivot scenario)
+    if globals.G_main then
+      //Get payload directory from user home
+      m.payload=File(bc,path(Utility.getUserEX(bs).home)+"/payload")
+      //Fall back to existing payload directory
+      if not m.payload then m.payload=globals.G_main.dir.payload
+      //Get data directory
+      m.data=File(bc,path(m.payload)+"/data")
+      //Fall back to existing data directory
+      if not m.data then m.data=globals.G_main.dir.data
+      //Reuse existing directories from main object
+      m.exploits=globals.G_main.dir.exploits
+      m.share=globals.G_main.dir.share
+      m.savedLibs=globals.G_main.dir.savedLibs
+      m.password=globals.G_main.dir.password
+      m.rainbow=globals.G_main.dir.rainbow
+      m.list=globals.G_main.dir.list
+      m.bash=globals.G_main.dir.bash
+      m.man=globals.G_main.dir.man
+      m.src=globals.G_main.dir.src
+      m.srcBin=globals.G_main.dir.srcBin
+      m.srcTools=globals.G_main.dir.srcTools
+      m.srcWeb=globals.G_main.dir.srcWeb
+      //Return existing directory map
+      return m
+    end if
+		//Check if local payload directory exists
+		m.payload=File(bc,parent_path(program_path)+"/payload")
+		//Payload directory doesn't exist
+		if not m.payload then
+      //Create payload directory
+      m.payload=System.createRawFolder(bc,parent_path(program_path),"payload")
+      //Critical failure, exit
+      if not m.payload then exit(red("Cannot create payload folder"))
+    end if
+    //Get payload directory path
+    p=path(m.payload)
+    //Create data directory
+		m.data=File(bc,p+"/data")
+		if not m.data then m.data=System.createRawFolder(bc,p,"data")
+    //Create bash directory
+		m.bash=File(bc,path(m.data)+"/bash")
+		if not m.bash then m.bash=System.createRawFolder(bc,path(m.data),"bash")
+    //Create exploits directory only if not from server
+    if not m.exploits then
+			m.exploits=File(bc,p+"/exploits")
+			if not m.exploits then m.exploits=System.createRawFolder(bc,p,"exploits")
+    end if
+    //Create share directory only if not from server
+		if not m.share then
+			m.share=File(bc,p+"/share")
+			if not m.share then m.share=System.createRawFolder(bc,p,"share")
+    end if
+    //Create savedLibs directory only if not from server
+		if not m.savedLibs then
+			m.savedLibs=File(bc,p+"/savedLibs")
+			if not m.savedLibs then m.savedLibs=System.createRawFolder(bc,p,"savedLibs")
+    end if
+    //Create password directory only if not from server
+    if not m.password then
+			m.password=File(bc,p+"/password")
+			if not m.password then m.password=System.createRawFolder(bc,p,"password")
+    end if
+    //Create rainbow directory only if not from server
+    if not m.rainbow then
+			m.rainbow=File(bc,path(m.password)+"/rainbow")
+			if not m.rainbow then m.rainbow=System.createRawFolder(bc,path(m.password),"rainbow")
+    end if
+    //Create list directory only if not from server
+    if not m.list then
+			m.list=File(bc,path(m.password)+"/list")
+			if not m.list then m.list=System.createRawFolder(bc,path(m.password),"list")
+    end if
+    //Create man directory only if not from server
+    if not m.man then
+			m.man=File(bc,p+"/man")
+			if not m.man then m.man=System.createRawFolder(bc,p,"man")
+    end if
+    //Create src directories only if not from server
+    if not m.src then
+			m.src=File(bc,p+"/src")
+			if not m.src then m.src=System.createRawFolder(bc,p,"src")
+    end if
+    if not m.srcBin then
+			m.srcBin=File(bc,path(m.src)+"/bin")
+			if not m.srcBin then m.srcBin=System.createRawFolder(bc,path(m.src),"bin")
+    end if
+    if not m.srcTools then
+			m.srcTools=File(bc,path(m.src)+"/tools")
+			if not m.srcTools then m.srcTools=System.createRawFolder(bc,path(m.src),"tools")
+    end if
+    if not m.srcWeb then
+			m.srcWeb=File(bc,path(m.src)+"/web")
+			if not m.srcWeb then m.srcWeb=System.createRawFolder(bc,path(m.src),"web")
+    end if
+    //Return directory map
+    return m
+	//End init
+	end function
+	//Check and connect to database servers
+	checkForDatabase
+  //Initialize directory structure
+  m=init(m)
+	//Create main object
+	M=new MainObject
+	//Database server is connected
+	if globals.G_server then
+		//Root password is known for this computer
+		if Shadow.hasPassword(public_ip_pc(bc)) then
+			//Attempt to get root shell
+			bs=get_shell("root",Shadow.returnPassword(public_ip_pc(bc)))
+			//Fall back to current shell if root shell fails
+			if not bs then bs=get_shell
+			//Run main object with shell and directory map
+			M.run(M,bs,m)
+		//No root password known
+		else
+			//Run main object with current shell
+			M.run(M,bs,m)
+		end if
+	//No database server connection (offline mode)
+	else
+		//Get shadow password database file
+    dataPath=path(m.data)
+    f=File(bc,dataPath+"/shadow.dat")
+		//No shadow file, run main object without passwords
+		if not f then return M.run(M,bs,m)
+		//Empty shadow file, run main object without passwords
+    ct=trim(get_content(f))
+    if not ct then return M.run(M,bs,m)
+		//Iterate through shadow file lines
+    for i in split(ct,char(10))
+			//Skip empty lines
+			if not len(i) then continue
+			//Decrypt and parse IP:password pair
+			j=split(Encryption.encrypt(i,Kernel.key,false),":")
+			//Invalid format, skip
+			if not j isa list then continue
+      //Invalid format, skip
+      if len(j)!=2 then continue
+			//Store password in shadow database (IP as key)
+			globals.G_shadow[j[1]]=j[0]
+		end for
+    //Set global main object reference
+    globals.G_main=M
+    //Set main object shell
+    globals.G_main.shell=bs
+    //Set main object computer
+    globals.G_main.computer=bc
+    //Set main object directory map
+    globals.G_main.dir=m
+		//Root password is known for this computer
+		if Shadow.hasPassword(public_ip_pc(bc)) then
+			//Attempt to get root shell
+			bs=get_shell("root",Shadow.returnPassword(public_ip_pc(bc)))
+			//Fall back to current shell if root shell fails
+			if not bs then bs=get_shell
+			//Run main object with shell and directory map
+			M.run(M,bs,m)
+		//No root password known
+		else
+			//Run main object with current shell
+			M.run(M,bs,m)
+		end if
+	end if
+//End Boot.init
+end function
+//Initialize pivot shell environment
+Boot.initPivot=function
+  //Create pivot object
+  o=new PivotObject
+  //Run pivot object with current shell
+  o.run(o,get_shell)
+//End initPivot
+end function
+//Initialize proxy shell environment
+Boot.initProxy=function
+  //Create proxy object
+  o=new ProxyObject
+  //Run proxy object with current shell
+  o.run(o,get_shell)
+//End initProxy
+end function
+//Initialize decoy shell environment with goto parameter
+Boot.initDecoy=function(goto=0)
+  //Create decoy object
+  o=new DecoyObject
+  //Run decoy object with current shell and goto value
+  o.run(o,get_shell,goto)
+//End initDecoy
+end function
+//Load trusted hosts from .hrc file
+Boot.trusted=function
+	//Initialize trusted hosts array
+	h=[]
+	//Get .hrc file (trusted hosts config)
+	p=File(host_computer(get_shell),parent_path(program_path)+"/payload/data/.hrc")
+	//File doesn't exist or empty, return empty array
+  if not p then return h
+  ct=get_content(p)
+  if not ct then return h
+	//Iterate through .hrc file lines
+  for i in split(ct,char(10));push(h,split(Encryption.encrypt(i,Kernel.key,false),"::")[0]);end for
+	//Return concatenated IP addresses
+	return join(h,"")
+//End trusted
+end function
+//Crack password using password lists
+Boot.crack=function(o)
+  co=get_custom_object
+  globals.G_main=co.main
+  //Restore server reference if available
+  globals.G_server=co.server
+  //Determine password list directory: prefer server, fallback to main
+  listDir=null
+  if globals.G_server and globals.G_server.dir.list then
+    listDir=globals.G_server.dir.list
+  else if globals.G_main and globals.G_main.dir.list then
+    listDir=globals.G_main.dir.list
+  end if
+  //No password list directory found
+  if not listDir then return
+  //Read and test passwords from disk
+  for f in get_files(listDir)
+    if indexOf(name(f),"list")==null then continue
+    if is_binary(f) then continue
+    if is_folder(f) then continue
+    ct = get_content(f)
+    if not ct then continue
+    //Test each password immediately
+    for line in split(ct,char(10))
+      if not line then continue
+      //Attempt to get root shell with password
+      s=get_shell("root",line)
+      //Failed, try next password
+      if not s then continue
+      //Successfully got shell
+      if typeof(s)=="shell" then
+        //Add password to shadow database
+        Shadow.add([host_computer(s).public_ip,line])
+        //Pack result (shell or password)
+        if o=="shell" then co.packRootShell=s else co.packPasswd=line
+        //Success, exit immediately
+        return
+      end if
+    end for
+  end for
+//End crack
+end function
+//Brute force root password using local get_shell
+//Runs odometer loop natively on the target machine
+Boot.brute=function
+  useCapFirst=indexOf(params,"-c")!=null
+  useMixedFirst=indexOf(params,"-C")!=null
+  noNums=indexOf(params,"-n")!=null
+  numsOnly=indexOf(params,"-N")!=null
+  if numsOnly then
+    alpha="0123456789"
+    firstAlpha="0123456789"
+  else
+    alpha=Crack._bruteAlpha(noNums,useCapFirst or useMixedFirst)
+    if useMixedFirst then
+      firstAlpha=Crack._mixedAlpha
+    else if useCapFirst then
+      firstAlpha=Crack._upperAlpha
+    else
+      firstAlpha=alpha
+    end if
+  end if
+  l=len(alpha)
+  lU=len(firstAlpha)
+  m=Crack.max
+  if m>15 then m=15
+  i=1
+  while i<=m
+    c=[]
+    _j=0;while _j<=i;push(c,0);_j+=1;end while
+    print("[i] Trying "+i+"-char passwords...")
+    n=0
+    while true
+      p=""
+      q=0;while q<i;if q==0 then p+=firstAlpha[c[0]] else p+=alpha[c[q]];q+=1;end while
+      s=get_shell("root",p)
+      if typeof(s)=="shell" then
+        print "[+] Found: "+p
+        get_custom_object.packRootShell=s
+        return
+      end if
+      n+=1
+      if n==500 then
+        print("[~] "+p)
+        n=0
+      end if
+      if not Crack._nextComboVar(c,i,l,lU) then break
+    end while
+    i+=1
+  end while
+  print("[!] Brute force exhausted (max 15 chars). Password not found.")
+end function

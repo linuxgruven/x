@@ -1,0 +1,72 @@
+// =============================================================================
+// JOIN
+// Concatenate multiple files into one; auto-splits at 160KB with numbered suffix.
+// =============================================================================
+Command.join=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("n",false,"store")     // Short form output name
+  _p.addArgument("name",true,"store")   // Long form output name
+  argv=_p.parse("join",argv,Obj)
+  if argv isa Error then return
+  // Check for stdin from pipe BEFORE parsePath (check for null, not truthiness - empty string is valid)
+  usePipedInput=false
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then usePipedInput=true
+  outputName="joined"
+  if argv.n then outputName=argv.n
+  if argv.name then outputName=argv.name
+  fileList=[]
+  if usePipedInput then
+    stdinData=globals.G_pipe.stdin
+    lines=[]
+    if typeof(stdinData)=="string" then
+      lines=split(stdinData,char(10))
+    else if stdinData isa list then
+      lines=stdinData
+    else
+      lines=[str(stdinData)]
+    end if
+    delimiter=" "
+    if argv.rest and len(argv.rest)>0 then delimiter=argv.rest[0]
+    if globals.G_pipe.PIPE_MODE then
+      result=join(lines,delimiter)
+      push(globals.G_pipe.stdout,result)
+      return
+    end if
+    print join(lines,delimiter)
+    return
+  else if hasIndex(argv,"files") and argv.files and len(argv.files)>0 then
+    fileList=argv.files
+  else if argv.rest then
+    for filePath in argv.rest;f=Io._getFile(Obj,filePath);if not (f isa Error) then fileList.push(f);end for
+  end if
+  content=""
+  for file in fileList
+    if not file or file isa Error then continue
+    if is_folder(file) then
+      Error.set("Cannot join a directory")
+      continue
+    end if
+    if not get_content(file) then
+      Error.set("File is empty")
+      continue
+    end if
+    // First file has no leading newline, subsequent files do
+    if __file_idx==0 then content+=get_content(file) else content+=char(10)+get_content(file)
+  end for
+  if not content then return Error.set("Nothing to join")
+  chunks=split160k(content)
+  if len(chunks)>1 then Info.info("Saving joined results...")
+  fileCounter=2
+  for chunk in chunks
+    if __chunk_idx==0 then
+      outputFile=self.touch(Obj,[path(Obj.dir.current)+"/"+outputName])
+      set_content(outputFile,chunk)
+      continue
+    end if
+    // Additional chunks use numbered suffix (outputName2, outputName3, etc.)
+    outputFile=self.touch(Obj,[path(Obj.dir.current)+"/"+(outputName+fileCounter)])
+    set_content(outputFile,chunk)
+    fileCounter+=1
+  end for
+  if fileCounter==2 then Info.info("Saved joined file [ "+path(Obj.dir.current)+"/"+outputName+" ]") else Info.info("Saved joined files in [ "+path(Obj.dir.current)+" ]")
+end function

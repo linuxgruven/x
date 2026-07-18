@@ -1,0 +1,13 @@
+binChmod="if len(params)<2 or (len(params)==3 and params[0]!=""-R"") then exit(command_info(""chmod_usage""))
+perms=params[0]
+pathFile=get_abs_path(params[1])
+isRecursive=0
+if len(params)==3 then
+	perms=params[1]
+	pathFile=params[2]
+	isRecursive=1
+end if
+file=File(host_computer(get_shell),pathFile)
+if not file then exit(""chmod: can't find ""+pathFile)
+output=chmod(file,perms,isRecursive)
+if output then print(output)"

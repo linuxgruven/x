@@ -1,0 +1,64 @@
+// =============================================================================
+// LZW
+// Lempel-Ziv-Welch compression using char(1)-prefixed dict keys (avoids
+// GreyScript reserved map method name collisions) and Encoder output.
+// =============================================================================
+Lzw={}
+// Clone compress base dict (keys prefixed with char(1))
+Lzw.generateDict=function;return self._baseDict.clone;end function
+// LZW compress string; encodes result via Encoder
+Lzw.compress=function(u)
+	z=256
+	d=self.generateDict
+	w=""
+	r=[]
+	for c in values(u)
+		wc=w+c
+		if hasIndex(d,char(1)+wc) then
+			w=wc
+		else
+			push(r,d[char(1)+w])
+			d[char(1)+wc]=z
+			z+=1
+			w=c
+		end if
+	end for
+	if w!="" then push(r,d[char(1)+w])
+	return Encoder.encode(r)
+end function
+// Decode Encoder output then rebuild via LZW
+// Decompress dict keys are chars (0-255) or ints (256+) — both safe, no prefix needed
+Lzw.decompress=function(c)
+	c=Encoder.decode(c)
+	z=256
+	d=self._decompressDict.clone
+	w=c[0]
+	r=c[0]
+	c=c[1:]
+	for k in c
+		if hasIndex(d,k) then
+			e=d[k]
+		else if k==z then
+			// Special case: code not yet in dictionary
+			e=w+w[0]
+		else
+			return Error.set("Bad compressed k: "+k)
+		end if
+		r+=e
+		d[z]=w+e[0]
+		z+=1
+		w=e
+	end for
+	return r
+end function
+// Compress base dict: single-char keys prefixed with char(1) — prevents any
+// LZW phrase (e.g. "len", "push") from silently hitting a map method
+Lzw._baseDict={}
+_i=0;while _i<=255;Lzw._baseDict[char(1)+char(_i)]=char(_i);_i+=1;end while
+_i=1024;while _i<=1279;Lzw._baseDict[char(1)+char(_i)]=char(_i);_i+=1;end while
+// Decompress base dict: code -> char
+// Encoder.decode returns char() for codes 0-255 and integers for codes >= 256.
+// Keys must match: char keys for 0-255, integer keys for 1024-1279.
+Lzw._decompressDict={}
+_i=0;while _i<=255;Lzw._decompressDict[char(_i)]=char(_i);_i+=1;end while
+_i=1024;while _i<=1279;Lzw._decompressDict[_i]=char(_i);_i+=1;end while

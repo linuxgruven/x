@@ -1,0 +1,1435 @@
+// =============================================================================
+// MAN
+// Man page lazy loader; loads man pages on-demand from disk with minimal memory footprint.
+// =============================================================================
+Man={
+  "space":"    ",
+  "options":"<b>OPTIONS</b>",
+  "usage":"<b>Usage:</b>",
+  "example":"<b>EXAMPLE:</b>",
+  "description":"<b>DESCRIPTION</b>",
+  "synopsis":"<b>SYNOPSIS</b>",
+  "name":"<b>NAME</b>",
+  "see":"<b>SEE ALSO</b>",
+  "notes":"<b>NOTES</b>",
+  "mission_types":"<b>MISSION TYPES</b>",
+  "automation":"<b>AUTOMATION</b>",
+  "rshell_info":"<b>RSHELL SERVERS</b>",
+  "configuration":"<b>CONFIGURATION</b>",
+  "_manDir":null
+}
+//Resolve man directory based on current shell context (local vs server)
+Man.getManDir=function
+  s=System.getSystem
+  if s isa Error then return null
+  if s and s.dir and s.dir.man then return s.dir.man
+  return null
+end function
+//Get man page content for AI agent - returns lines array or null
+Man.getManPage=function(cmdName)
+  if not cmdName or typeof(cmdName)!="string" then return null
+  cmd=trim(lower(cmdName))
+  if len(cmd)==0 then return null
+  //Special aliases for commands with symbols/special characters
+  aliases={
+    ">":"arrow",
+    ">>":"arrow2",
+    "!":"bang",
+    "!!":"bang2",
+    "!!!":"bang3"
+  }
+  //Check if command has an alias mapping
+  if aliases.hasIndex(cmd) then cmd=aliases[cmd]
+  //Find the man page file
+  manDir=Man.getManDir
+  if not manDir then return null
+  manFiles=get_files(manDir)
+  if not manFiles then return null
+  targetFile=null
+  //First try exact match
+  for f in manFiles
+    if name(f)==cmd then
+      targetFile=f
+      break
+    end if
+  end for
+  //If no exact match, try prefix match (shortcuts)
+  if not targetFile then
+    for f in manFiles
+      if indexOf(name(f),cmd)==0 then
+        targetFile=f
+        break
+      end if
+    end for
+  end if
+  if not targetFile then return null
+  //Load and return content as lines
+  content=get_content(targetFile)
+  if not content then return null
+  lines=split(content,char(10))
+  if not lines or typeof(lines)!="list" then return null
+  return lines
+end function
+//Main help function - loads man pages on demand
+Man.help=function(argv,tty=true)
+  if not argv then argv=["man"]
+  cmd=argv[0]
+  //Handle special commands
+  if cmd=="apropos" or cmd=="search" then return Man.find(argv[1:])
+  if cmd=="dump" then return Man._dump(argv[1:])
+  //Special aliases for commands with symbols/special characters
+  aliases={
+    "and":"and",
+    ";":"and",
+    ">":"arrow",
+    ">>":"arrow2",
+    "!":"bang",
+    "!!":"bang2",
+    "!!!":"bang3",
+    "|":"pipe",
+    "pipe":"pipe",
+    "post":"post"
+  }
+  //Check if command has an alias mapping
+  if aliases.hasIndex(cmd) then cmd=aliases[cmd]
+  //Initialize man directory if not set
+  //Use System.getSystem to get correct computer (main or server)
+  //Look for command man page file
+  manDir=Man.getManDir
+  if not manDir then return Error.set("Man pages directory is not available")
+  manFiles=get_files(manDir)
+  if not manFiles then return Error.set("Man pages directory is empty")
+  targetFile=null
+  //First try exact match
+  for f in manFiles
+    if name(f)==cmd then
+      targetFile=f
+      break
+    end if
+  end for
+  //If no exact match, try prefix match (shortcuts)
+  if not targetFile then
+    matches=[]
+    for f in manFiles
+      if indexOf(name(f),cmd)==0 then push(matches,f)
+    end for
+    //If single match found, use it
+    if len(matches)==1 then
+      targetFile=matches[0]
+    else if len(matches)>1 then
+      //Multiple matches - show them
+      names=[]
+      for m in matches;push(names,name(m));end for
+      return Error.set("Ambiguous command '"+cmd+"'. Did you mean: "+names.join(", ")+"?")
+    end if
+  end if
+  if not targetFile then return Error.set("No manual entry for '"+cmd+"'")
+  //Read man page content into LOCAL variable
+  //This will go out of scope after print, freeing memory automatically
+  content=get_content(targetFile)
+  if not content then return Error.set("Failed to load man page for '"+cmd+"'")
+  //When not tty: return content for pipe capture
+  if not tty then return content
+  //Display the man page
+  print content
+  //After return, 'content' variable goes out of scope and memory is freed
+end function
+//Search/apropos functionality - searches across all man pages
+Man.find=function(argv)
+  if not argv or len(argv)==0 then return Warning.set("Usage: man search [-e] [-v] TERM [TERM...]")
+  exactMatch=false
+  verbose=false
+  searchTerms=[]
+  for arg in argv
+    if arg=="-e" then
+      exactMatch=true
+    else if arg=="-v" then
+      verbose=true
+    else
+      push(searchTerms,arg)
+    end if
+  end for
+  if len(searchTerms)==0 then return Warning.set("Usage: man search [-e] [-v] TERM [TERM...]")
+  //Initialize man directory if needed
+  //Get all man page files
+  manDir=Man.getManDir
+  if not manDir then return Error.set("No man pages found")
+  manFiles=get_files(manDir)
+  if not manFiles then return Error.set("No man pages found")
+  Info.info("Searching man pages for [ "+searchTerms.join(" ")+" ]...")
+  matches={}
+  matchCount=0
+  //Search through each man page file
+  for manFile in manFiles
+    //Extract command name from filename
+    cmdName=name(manFile)
+    //Read the file content
+    content=get_content(manFile)
+    if not content then continue
+    //Search for terms in content
+    matchFound=false
+    for term in searchTerms
+      pattern=null
+      if exactMatch then pattern="\b"+term+"\b" else pattern="(?i)"+term+"(?-i)"
+      if is_match(content,pattern) then
+        matchFound=true
+        break
+      end if
+    end for
+    if matchFound then
+      matchCount+=1
+      if verbose then
+        //Verbose mode: show full content with highlighting
+        print yellow("-"*31+" ["+cmdName+"] "+"-"*32)
+        lines=content.split(char(10))
+        for line in lines
+          lineMatched=false
+          for term in searchTerms
+            pattern=null
+            if exactMatch then pattern="\b"+term+"\b" else pattern="(?i)"+term+"(?-i)"
+            if is_match(line,pattern) then
+              lineMatched=true
+              break
+            end if
+          end for
+          if lineMatched then print orange(line) else print line
+        end for
+      else
+        //Compact mode: extract just the summary line
+        lines=content.split(char(10))
+        summary=cmdName
+        //Look for "command - description" pattern in NAME section
+        for line in lines
+          clean=line.replace("<b>","").replace("</b>","").trim
+          if is_match(clean,"^\w+\s+-\s+.+") then
+            parts=clean.split(" - ")
+            if len(parts)>=2 then summary=cmdName+" - "+parts[1:].join(" - ")
+            break
+          end if
+        end for
+        matches[cmdName]=summary
+      end if
+    end if
+  end for
+  //Display results for compact mode
+  if not verbose then
+    if len(matches)==0 then return Info.info("[ "+searchTerms.join(" ")+" ] not found in man pages")
+    //Sort and display
+    keys=indexes(matches)
+    keys.sort
+    for key in keys;print matches[key];end for
+  end if
+  //Summary
+  if matchCount==1 then Info.info("Found "+matchCount+" man page") else Info.info("Found "+matchCount+" man pages")
+end function
+//Metalib help - for exploit/library menu commands
+Man.metalib=function(argv)
+  if not argv then return Error.set("Man what?")
+  A=argv[0]
+  rules=function
+    print Man.name
+    print Man.space+"rules - shows firewall rules if available"
+    print Man.synopsis
+    print Man.space+bold("rules")
+    print Man.description
+    print Man.space+"Display firewall rules on remote system. Shows configured firewall rulesets including port"
+    print Man.space+"blocking, IP filtering, and access control policies. Use during LAN scans to assess network"
+    print Man.space+"security posture. Reveals firewall configuration for penetration testing and security audit."
+    print Man.options
+    print Man.space+bold("rules")
+    print Man.space*2+"Show firewall rules"
+    print Man.space*2+"Display current rulesets"
+    print Man.example
+    print Man.space+yellow("# Basic Usage")
+    print Man.space+bold("rules")
+    print Man.space*2+"Show firewall config"
+    print ""
+    print Man.space+yellow("# During LAN Scan")
+    print Man.space+bold("rules")
+    print Man.space*2+"Check security rules"
+    print Man.see
+    print Man.space+bold("nmap")+", "+bold("ifconfig")
+  end function
+  mshow=function
+    print Man.name
+    print Man.space+"show - shows extra net session information"
+    print Man.synopsis
+    print Man.space+bold("show")
+    print Man.description
+    print Man.space+"Toggle display of extended network session information. Shows additional details about active"
+    print Man.space+"network connections, session status, and connection metadata. Run command again to enable or"
+    print Man.space+"disable feature. Useful for monitoring network activity and debugging connection issues."
+    print Man.options
+    print Man.space+bold("show")
+    print Man.space*2+"Toggle extra info display"
+    print Man.space*2+"Enable or disable feature"
+    print Man.example
+    print Man.space+yellow("# Toggle Display")
+    print Man.space+bold("show")
+    print Man.space*2+"Enable extra info"
+    print ""
+    print Man.space+bold("show")
+    print Man.space*2+"Disable extra info"
+    print Man.see
+    print Man.space+bold("net")+", "+bold("ifconfig")
+  end function
+  mscan=function
+    print Man.name
+    print Man.space+"scan - scans libraries to get updated exploit data"
+    print Man.synopsis
+    print Man.space+bold("scan ")+bold("-s|--single|INDEX")
+    print Man.space+bold("scan ")+bold("-x|--upsingle")
+    print Man.space+bold("scan ")+bold("-o|--object")
+    print Man.space+bold("scan ")+bold("-a|--all")
+    print Man.space+bold("scan ")+bold("-u|--upall")
+    print Man.space+bold("scan ")+bold("-z|--allobj")
+    print Man.description
+    print Man.space+"Update exploit database by scanning libraries for new vulnerabilities. Scan single entry"
+    print Man.space+"points or all libraries. Filter for object-only exploits. Automatically run update after"
+    print Man.space+"scan with -x or -u flags. Essential for maintaining current exploit knowledge base."
+    print Man.options
+    print Man.space+bold("-s|--single|INDEX")
+    print Man.space*2+"Scan single entry point"
+    print Man.space*2+"Use exploit index or flag"
+    print ""
+    print Man.space+bold("-x|--upsingle")
+    print Man.space*2+"Scan single and update"
+    print Man.space*2+"Combined scan and update"
+    print ""
+    print Man.space+bold("-o|--object")
+    print Man.space*2+"Scan for objects only"
+    print Man.space*2+"Filter object exploits"
+    print ""
+    print Man.space+bold("-a|--all")
+    print Man.space*2+"Scan all entry points"
+    print Man.space*2+"Full exploit scan"
+    print ""
+    print Man.space+bold("-u|--upall")
+    print Man.space*2+"Scan all and update"
+    print Man.space*2+"Full scan with update"
+    print ""
+    print Man.space+bold("-z|--allobj")
+    print Man.space*2+"Scan all for objects"
+    print Man.space*2+"All object exploits"
+    print Man.example
+    print Man.space+yellow("# Single Entry")
+    print Man.space+bold("scan -s")
+    print Man.space*2+"Scan single"
+    print ""
+    print Man.space+bold("scan --single")
+    print Man.space*2+"Scan by flag"
+    print ""
+    print Man.space+bold("scan 5")
+    print Man.space*2+"Scan by index"
+    print ""
+    print Man.space+yellow("# With Update")
+    print Man.space+bold("scan -x")
+    print Man.space*2+"Scan and update single"
+    print ""
+    print Man.space+bold("scan -u")
+    print Man.space*2+"Scan and update all"
+    print ""
+    print Man.space+yellow("# Full Scan")
+    print Man.space+bold("scan -a")
+    print Man.space*2+"Scan all exploits"
+    print ""
+    print Man.space+bold("scan --all")
+    print Man.space*2+"Full scan"
+    print ""
+    print Man.space+yellow("# Object Only")
+    print Man.space+bold("scan -o")
+    print Man.space*2+"Objects only"
+    print ""
+    print Man.space+bold("scan -z")
+    print Man.space*2+"All object exploits"
+    print Man.see
+    print Man.space+bold("update")+", "+bold("find")+", "+bold("get")
+  end function
+  mupdate=function
+    print Man.name
+    print Man.space+"update - updates the exploit object tree"
+    print Man.synopsis
+    print Man.space+bold("update ")+bold("-s|--single|INDEX")
+    print Man.space+bold("update ")+bold("-a|--all")
+    print Man.description
+    print Man.space+"Update exploit object tree with latest vulnerability data. Rebuild exploit hierarchy after"
+    print Man.space+"scanning. Update single library by index or all libraries at once. Essential maintenance"
+    print Man.space+"task to ensure exploit database reflects current scan results and vulnerability intelligence."
+    print Man.options
+    print Man.space+bold("-s|--single|INDEX")
+    print Man.space*2+"Update single library"
+    print Man.space*2+"Rebuild one exploit tree"
+    print ""
+    print Man.space+bold("-a|--all")
+    print Man.space*2+"Update all libraries"
+    print Man.space*2+"Rebuild full tree"
+    print Man.example
+    print Man.space+yellow("# Single Library")
+    print Man.space+bold("update -s")
+    print Man.space*2+"Update one library"
+    print ""
+    print Man.space+bold("update --single")
+    print Man.space*2+"Update by flag"
+    print ""
+    print Man.space+bold("update 3")
+    print Man.space*2+"Update library 3"
+    print ""
+    print Man.space+yellow("# All Libraries")
+    print Man.space+bold("update -a")
+    print Man.space*2+"Update all"
+    print ""
+    print Man.space+bold("update --all")
+    print Man.space*2+"Full update"
+    print Man.see
+    print Man.space+bold("scan")+", "+bold("reset")+", "+bold("find")
+  end function
+  reset=function
+    print Man.name
+    print Man.space+"reset - resets the current exploit object tree"
+    print Man.synopsis
+    print Man.space+bold("reset ")+bold("INDEX")
+    print Man.description
+    print Man.space+"Reset exploit and user data for specified library while preserving requirements. Clears"
+    print Man.space+"cached exploit data, user credentials, and temporary information. Maintains requirement"
+    print Man.space+"configurations. Use when exploit data becomes corrupted or needs fresh initialization."
+    print Man.options
+    print Man.space+bold("INDEX")
+    print Man.space*2+"Reset library by index"
+    print Man.space*2+"Clear exploit and user data"
+    print Man.example
+    print Man.space+yellow("# Reset Libraries")
+    print Man.space+bold("reset 1")
+    print Man.space*2+"Reset library 1"
+    print ""
+    print Man.space+bold("reset 5")
+    print Man.space*2+"Reset library 5"
+    print ""
+    print Man.space+bold("reset 10")
+    print Man.space*2+"Reset library 10"
+    print Man.see
+    print Man.space+bold("scan")+", "+bold("update")+", "+bold("find")
+  end function
+  hc=function;Man.help(["hc"]);end function
+  smpt=function;Man.help(["smpt"]);end function
+  find=function
+    print Man.name
+    print Man.space+"find - parse exploits"
+    print Man.synopsis
+    print Man.space+bold("find ")+bold("-i|--ip")+" ["+bold("IP")+"]"
+    print Man.space+bold("find ")+bold("-a|--all")
+    print Man.space+bold("find ")+bold("-s|--shell")
+    print Man.space+bold("find ")+bold("-c|--computer")
+    print Man.space+bold("find ")+bold("-f|--file")
+    print Man.space+bold("find ")+bold("-b|--bounce")
+    print Man.space+bold("find ")+bold("--root")
+    print Man.space+bold("find ")+bold("--user")
+    print Man.space+bold("find ")+bold("--guest")
+    print Man.space+bold("find ")+bold("-u")+" ["+bold("USER")+"]"
+    print Man.description
+    print Man.space+"Filter and display exploits by type, privilege level, or target user. Narrow exploit list"
+    print Man.space+"by LAN IP, object type, access level, or LAN bounce. Essential for targeted exploitation."
+    print Man.options
+    print Man.space+bold("-i|--ip IP")
+    print Man.space*2+"Filter by LAN IP"
+    print Man.space+bold("-a|--all")
+    print Man.space*2+"Show all exploits"
+    print Man.space+bold("-s|--shell")
+    print Man.space*2+"Shell exploits only"
+    print Man.space+bold("-c|--computer")
+    print Man.space*2+"Computer exploits only"
+    print Man.space+bold("-f|--file")
+    print Man.space*2+"File exploits only"
+    print Man.space+bold("-b|--bounce")
+    print Man.space*2+"LAN bounce exploits"
+    print Man.space+bold("--root")
+    print Man.space*2+"Root privilege exploits"
+    print Man.space+bold("--user")
+    print Man.space*2+"User privilege exploits"
+    print Man.space+bold("--guest")
+    print Man.space*2+"Guest privilege exploits"
+    print Man.space+bold("-u USER")
+    print Man.space*2+"Filter by username"
+    print Man.example
+    print Man.space+yellow("# By Type")
+    print Man.space+bold("find -a")
+    print Man.space*2+"All exploits"
+    print ""
+    print Man.space+bold("find -s")
+    print Man.space*2+"Shell only"
+    print ""
+    print Man.space+yellow("# By Privilege")
+    print Man.space+bold("find --root")
+    print Man.space*2+"Root exploits"
+    print ""
+    print Man.space+bold("find --user")
+    print Man.space*2+"User exploits"
+    print ""
+    print Man.space+yellow("# Combined")
+    print Man.space+bold("find -a -u user")
+    print Man.space*2+"All for user"
+    print ""
+    print Man.space+bold("find --all --root")
+    print Man.space*2+"All root"
+    print Man.see
+    print Man.space+bold("get")+", "+bold("scan")+", "+bold("update")
+  end function
+  get=function
+    print Man.name
+    print Man.space+"get - returns single exploit|object"
+    print Man.synopsis
+    print Man.space+bold("get ")+bold("-s|--shell")
+    print Man.space+bold("get ")+bold("-c|--computer")
+    print Man.space+bold("get ")+bold("-f|--file")
+    print Man.space+bold("get ")+bold("-b|--bounce")
+    print Man.space+bold("get ")+bold("--root")
+    print Man.space+bold("get ")+bold("--user")
+    print Man.space+bold("get ")+bold("--guest")
+    print Man.space+bold("get ")+bold("-u")+" ["+bold("USER")+"]"
+    print Man.description
+    print Man.space+"Retrieve single exploit or object from database. Get specific object types or filter by"
+    print Man.space+"privilege level and username. Returns first matching exploit for use in scripts."
+    print Man.options
+    print Man.space+bold("-s|--shell")
+    print Man.space*2+"Get shell object"
+    print Man.space+bold("-c|--computer")
+    print Man.space*2+"Get computer object"
+    print Man.space+bold("-f|--file")
+    print Man.space*2+"Get file object"
+    print Man.space+bold("-b|--bounce")
+    print Man.space*2+"Get LAN bounce"
+    print Man.space+bold("--root")
+    print Man.space*2+"Get root object"
+    print Man.space+bold("--user")
+    print Man.space*2+"Get user object"
+    print Man.space+bold("--guest")
+    print Man.space*2+"Get guest object"
+    print Man.space+bold("-u USER")
+    print Man.space*2+"Get by username"
+    print Man.example
+    print Man.space+yellow("# By Type")
+    print Man.space+bold("get -s")
+    print Man.space*2+"Get shell"
+    print ""
+    print Man.space+bold("get -c")
+    print Man.space*2+"Get computer"
+    print ""
+    print Man.space+yellow("# By Privilege")
+    print Man.space+bold("get --root")
+    print Man.space*2+"Get root"
+    print ""
+    print Man.space+bold("get --user")
+    print Man.space*2+"Get user"
+    print ""
+    print Man.space+yellow("# By Username")
+    print Man.space+bold("get -u admin")
+    print Man.space*2+"Get admin object"
+    print Man.see
+    print Man.space+bold("find")+", "+bold("scan")
+  end function
+  recon=function;Man.help(["recon"]);end function
+  mmap=function
+    print Man.name
+    print Man.space+"map - shows lan topology"
+    print Man.synopsis
+    print Man.space+bold("map")+" ("+bold("ROUTER_IP ROUTER_IP ROUTER_IP...")+") ("+bold("--extreme")+")"
+    print Man.description
+    print Man.space+"Display LAN or subnet topology. Visualize network structure and connections. Depends on"
+    print Man.space+"router LAN bounce for maximum efficiency. Use --extreme flag for maximum network addressing"
+    print Man.space+"coverage. Essential reconnaissance tool for network mapping and target identification."
+    print Man.options
+    print Man.space+bold("ROUTER_IP...")
+    print Man.space*2+"Map specific routers"
+    print Man.space*2+"Visualize topology"
+    print ""
+    print Man.space+bold("--extreme")
+    print Man.space*2+"Max network addressing"
+    print Man.space*2+"Extended coverage"
+    print Man.example
+    print Man.space+yellow("# Basic Mapping")
+    print Man.space+bold("map")
+    print Man.space*2+"Map current LAN"
+    print ""
+    print Man.space+yellow("# Specific Routers")
+    print Man.space+bold("map 192.168.1.1")
+    print Man.space*2+"Map single router"
+    print ""
+    print Man.space+bold("map 192.168.1.1 192.168.2.1")
+    print Man.space*2+"Map multiple routers"
+    print ""
+    print Man.space+yellow("# Extended Scan")
+    print Man.space+bold("map --extreme")
+    print Man.space*2+"Max addressing"
+    print ""
+    print Man.space+bold("map 192.168.1.1 --extreme")
+    print Man.space*2+"Extended router map"
+    print Man.see
+    print Man.space+bold("nmap")+", "+bold("find")+", "+bold("scan")
+  end function
+  man=function;Man.help(["man"]);end function
+  mwhois=function;Man.help(["whois"]);end function
+  a={
+    "get":@get,
+    "whois":@mwhois,
+    "man":@man,
+    "map":@mmap,
+    "recon":@recon,
+    "scan":@mscan,
+    "update":@mupdate,
+    "hc":@hc,
+    "reset":@reset,
+    "smpt":@smpt,
+    "find":@find,
+    "show":@mshow,
+    "rules":@rules
+  }
+  if not hasIndex(a,A) then return Error.set("Check your syntax, there is no help for [ "+A+" ]")
+  a[A]
+end function
+//Browse file menu help
+Man.browseFiles=function(argv)
+  if not argv then return Error.set("Man what?")
+  A=argv[0]
+  b=yellow("<[==========================================================]>")
+  man=function
+    print b
+    print Man.usage+"man [command] - :X help system"
+    print b
+  end function
+  peek=function
+    print b
+    print "view => Display the contents of a file."
+    print "peek => Display the contents of a file."
+    print b
+  end function
+  get=function
+    print b
+    print "get => Download a file to main."
+    print Man.usage+"get (y) will use default location"
+    print b
+  end function
+  get2=function
+    print b
+    print "get => Download a text file."
+    print b
+  end function
+  set=function
+    print b
+    print "set => Over-write a file."
+    print Man.usage+"set (new text)"
+    print b
+  end function
+  rm=function
+    print b
+    print "rm => Delete a file."
+    print b
+  end function
+  echo=function
+    print b
+    print "echo => Append some text to a file's contents."
+    print b
+  end function
+  mscan=function
+    print b
+    print "scan => Scan for and crack passwords."
+    print b
+  end function
+  mv=function
+    print b
+    print "mv => Move the file to a different location."
+    print b
+  end function
+  cp=function
+    print b
+    print "cp => Copy the file to a different location."
+    print b
+  end function
+  zip=function
+    print b
+    print "zip => Creates a zip archive from a text file."
+    print b
+  end function
+  lock=function
+    print b
+    print "lock => Creates a password protected archive from a text file."
+    print b
+  end function
+  rn=function
+    print b
+    print "rn (name) => Rename the file."
+    print Man.usage+"rn (name)"
+    print b
+  end function
+  info=function
+    print b
+    print "info => Get full information about a selected file."
+    print b
+  end function
+  share=function
+    print b
+    print "share => Add a file to the share folder."
+    print b
+  end function
+  vfile=function
+    print b
+    print "vfile => Add a file to the virtual cache."
+    print b
+  end function
+  libs=function
+    print b
+    print "libs => Add a library|file to the shared library folder."
+    print b
+  end function
+  chog=function
+    print b
+    print "chog => Apply both owner and group ownership."
+    print Man.usage+"chog (-r) [owner|group]"
+    print b
+  end function
+  mchown=function
+    print b
+    print "chown => Change ownership."
+    print Man.usage+"chown [opt:-r] [owner]."
+    print b
+  end function
+  mchmod=function
+    print b
+    print "chmod => Change permissions."
+    print Man.usage+"chmod [opt:-r] [u,g,o+wrx]"
+    print Man.usage+"chmod [opt:-r] [000]"
+    print b
+  end function
+  mchgrp=function
+    print b
+    print "chgrp => Change the group ownership."
+    print Man.usage+"chgrp [opt:-r] [new group]"
+    print b
+  end function
+  qrm=function
+    print b
+    print "qrm => Quietly removes a file|folder."
+    print Man.usage+"qrm"
+    print b
+  end function
+  a={
+    "qrm":@qrm,
+    "man":@man,
+    "libs":@libs,
+    "vfile":@vfile,
+    "share":@share,
+    "info":@info,
+    "peek":@peek,
+    "view":@peek,
+    "get":@get,
+    "get2":@get2,
+    "set":@set,
+    "rm":@rm,
+    "echo":@echo,
+    "scan":@mscan,
+    "mv":@mv,
+    "cp":@cp,
+    "zip":@zip,
+    "lock":@lock,
+    "rn":@rn,
+    "chog":@chog,
+    "chown":@mchown,
+    "chmod":@mchmod,
+    "chgrp":@mchgrp
+  }
+  if not hasIndex(a,A) then return Error.set("Check your syntax, there is no help for [ "+A+" ]")
+  a[A]
+end function
+//Commands listing function - shows available commands by context
+Man.commands=function(argv,Z=false)
+  if not argv then return
+  A=argv[0]
+  clean=function(s)
+    remove(s,indexOf(s,"!"))
+    remove(s,indexOf(s,"!!"))
+    remove(s,indexOf(s,"!!!"))
+    return s
+  end function
+  main=function
+    print yellow("<[================]>"+white("   Main  Commands   ")+"<[================]>")
+    s=[
+      "heist",
+      "rnet",
+      "active",
+      "zip",
+      "scanlan",
+      "batch",
+      "config",
+      "run",
+      "do",
+      "lt",
+      "recon",
+      "temp",
+      "wallet",
+      "loop",
+      "specs",
+      "drop",
+      "web",
+      "ids",
+      "proxy",
+      "load",
+      "start",
+      "dirty",
+      "coin",
+      "brute",
+      "service",
+      "hunt",
+      "anon",
+      "exp",
+      "pass",
+      "sys",
+      "dict",
+      "get",
+      "set",
+      "pacman",
+      "exit",
+      "missions"
+    ]+Command.mainCommands+Command.fileCommands+Command.computerCommands+Command.shellCommands
+    s=clean(s)
+    z=[
+      "aircrack",
+      "aireplay",
+      "airmon",
+      "build",
+      "cat",
+      "cd",
+      "chgrp",
+      "chmod",
+      "chown",
+      "cp",
+      "date",
+      "decipher",
+      "ftp",
+      "groupadd",
+      "groupdel",
+      "groups",
+      "ifconfig",
+      "iwconfig",
+      "iwlist",
+      "kill",
+      "ls",
+      "mkdir",
+      "mv",
+      "nmap",
+      "nslookup",
+      "passwd",
+      "ping",
+      "ps",
+      "pwd",
+      "reboot",
+      "rm",
+      "scanlib",
+      "scanrouter",
+      "scanaddress",
+      "ssh",
+      "time",
+      "touch",
+      "useradd",
+      "userdel",
+      "whois",
+      "scp",
+      "smtp"
+    ]
+    for i in z;_idx=indexOf(s,i);if _idx!=null then remove(s,_idx);end for
+    sort(s).man
+    print yellow("<[================]>"+white("   Command Flags    ")+"<[================]>")
+    print (ljust("  ; (man and)",20)+ljust("man >",12)+ljust("man >>",12))+"man post"
+    print yellow("<[================]>"+white("  Special Commands  ")+"<[================]>")
+    print (ljust("  man !",20)+ljust("man !!",12)+ljust("man !!!",12))+"| (man pipe)"
+    print yellow("<[================]>"+white("   Basic Commands   ")+"<[================]>")
+    z.man
+    print yellow("<[========================================================]>")
+  end function
+  proxy=function
+    print yellow("<[================]>"+white("   Proxy  Commands   ")+"<[================]>")
+    s=[
+      "heist",
+      "rnet",
+      "active",
+      "zip",
+      "scanlan",
+      "batch",
+      "config",
+      "run",
+      "do",
+      "lt",
+      "recon",
+      "temp",
+      "wallet",
+      "loop",
+      "specs",
+      "drop",
+      "web",
+      "ids",
+      "proxy",
+      "load",
+      "start",
+      "dirty",
+      "coin",
+      "brute",
+      "service",
+      "hunt",
+      "anon",
+      "exp",
+      "pass",
+      "sys",
+      "dict",
+      "get",
+      "set",
+      "pacman",
+      "exit",
+      "close",
+      "missions"
+    ]+Command.proxyCommands+Command.fileCommands+Command.computerCommands+Command.shellCommands
+    s=clean(s)
+    z=[
+      "aircrack",
+      "aireplay",
+      "airmon",
+      "build",
+      "cat",
+      "cd",
+      "chgrp",
+      "chmod",
+      "chown",
+      "cp",
+      "date",
+      "decipher",
+      "ftp",
+      "groupadd",
+      "groupdel",
+      "groups",
+      "ifconfig",
+      "iwconfig",
+      "iwlist",
+      "kill",
+      "ls",
+      "mkdir",
+      "mv",
+      "nmap",
+      "nslookup",
+      "passwd",
+      "ping",
+      "ps",
+      "pwd",
+      "reboot",
+      "rm",
+      "scanlib",
+      "scanrouter",
+      "scanaddress",
+      "ssh",
+      "time",
+      "touch",
+      "useradd",
+      "userdel",
+      "whois",
+      "scp",
+      "smtp"
+    ]
+    for i in z;_idx=indexOf(s,i);if _idx!=null then remove(s,_idx);end for
+    sort(s).man
+    print yellow("<[================]>"+white("   Command Flags    ")+"<[================]>")
+    print (ljust("  ; (man and)",20)+ljust("man >",12)+ljust("man >>",12))+"man post"
+    print yellow("<[================]>"+white("  Special Commands  ")+"<[================]>")
+    print (ljust("  man !",20)+ljust("man !!",12)+ljust("man !!!",12))+"| (man pipe)"
+    print yellow("<[================]>"+white("   Basic Commands   ")+"<[================]>")
+    z.man
+    print yellow("<[========================================================]>")
+  end function
+  pivot=function
+    print yellow("<[================]>"+white("   Pivot  Commands   ")+"<[================]>")
+    s=[
+      "heist",
+      "rnet",
+      "active",
+      "zip",
+      "scanlan",
+      "batch",
+      "config",
+      "run",
+      "do",
+      "lt",
+      "recon",
+      "temp",
+      "wallet",
+      "loop",
+      "specs",
+      "drop",
+      "web",
+      "ids",
+      "proxy",
+      "load",
+      "start",
+      "dirty",
+      "coin",
+      "brute",
+      "service",
+      "hunt",
+      "anon",
+      "exp",
+      "pass",
+      "sys",
+      "dict",
+      "get",
+      "set",
+      "pacman",
+      "missions"
+    ]+Command.pivotCommands+Command.fileCommands+Command.computerCommands+Command.shellCommands
+    s=clean(s)
+    z=[
+      "aircrack",
+      "aireplay",
+      "airmon",
+      "build",
+      "cat",
+      "cd",
+      "chgrp",
+      "chmod",
+      "chown",
+      "cp",
+      "date",
+      "decipher",
+      "ftp",
+      "groupadd",
+      "groupdel",
+      "groups",
+      "ifconfig",
+      "iwconfig",
+      "iwlist",
+      "kill",
+      "ls",
+      "mkdir",
+      "mv",
+      "nmap",
+      "nslookup",
+      "passwd",
+      "ping",
+      "ps",
+      "pwd",
+      "reboot",
+      "rm",
+      "scanlib",
+      "scanrouter",
+      "scanaddress",
+      "ssh",
+      "time",
+      "touch",
+      "useradd",
+      "userdel",
+      "whois",
+      "scp",
+      "smtp",
+      "exit",
+      "close"
+    ]
+    for i in z;_idx=indexOf(s,i);if _idx!=null then remove(s,_idx);end for
+    sort(s).man
+    print yellow("<[================]>"+white("   Command Flags    ")+"<[================]>")
+    print (ljust("  ; (man and)",20)+ljust("man >",12)+ljust("man >>",12))+"man post"
+    print yellow("<[================]>"+white("  Special Commands  ")+"<[================]>")
+    print (ljust("  man !",20)+ljust("man !!",12)+ljust("man !!!",12))+"| (man pipe)"
+    print yellow("<[================]>"+white("   Basic Commands   ")+"<[================]>")
+    z.man
+    print yellow("<[========================================================]>")
+  end function
+  choosemetalib=function
+    print yellow("<[==============]>"+white(" Exploit Menu Commands ")+"<[==============]>")
+    cmds=["find","get","man","map","notes","recon","reset","scan","show","smpt","update","whois"]
+    cmds.man
+    print yellow("<[=======================================================]>")
+  end function
+  choosemetaliblocal=function
+    print yellow("<[==============]>"+white(" Exploit Menu Commands ")+"<[==============]>")
+    if Z then
+      cmds=["find","get","man","notes","reset","rules","scan","show","update"]
+      cmds.man
+    else
+      cmds=["find","get","man","notes","reset","scan","update"]
+      cmds.man
+    end if
+    print yellow("<[=======================================================]>")
+  end function
+	shell=function
+		print yellow("<[================]>"+white("   Shell Commands   ")+"<[================]>")
+    s=[
+      "active",
+      "zip",
+      "scanlan",
+      "run",
+      "do",
+      "proot",
+      "lws",
+      "pivot",
+      "service",
+      "start",
+      "sys",
+      "man",
+      "get",
+      "set",
+      "close",
+      "exit"
+    ]+Command.fileCommands+Command.computerCommands+Command.shellCommands
+    s=clean(s)
+    z=[
+      "reboot",
+      "aircrack",
+      "aireplay",
+      "airmon",
+      "build",
+      "cat",
+      "cd",
+      "chgrp",
+      "chmod",
+      "chown",
+      "cp",
+      "date",
+      "decipher",
+      "ftp",
+      "groupadd",
+      "groupdel",
+      "groups",
+      "ifconfig",
+      "iwconfig",
+      "kill",
+      "ls",
+      "mkdir",
+      "mv",
+      "nmap",
+      "nslookup",
+      "passwd",
+      "ping",
+      "ps",
+      "pwd",
+      "reboot",
+      "rm",
+      "scanlib",
+      "scanrouter",
+      "scanaddress",
+      "ssh",
+      "time",
+      "touch",
+      "useradd",
+      "userdel",
+      "whois",
+      "scp",
+      "smtp"
+    ]
+    for i in z;_idx=indexOf(s,i);if _idx!=null then remove(s,_idx);end for
+    sort(s).man
+		print yellow("<[================]>"+white("   Command Flags    ")+"<[================]>")
+		print (ljust("  ; (man and)",20)+ljust("man >",12)+ljust("man >>",12))+"man post"
+		print yellow("<[================]>"+white("  Special Commands  ")+"<[================]>")
+		print (ljust("  man !",20)+ljust("man !!",12)+ljust("man !!!",12))+"| (man pipe)"
+		print yellow("<[================]>"+white("   Basic Commands   ")+"<[================]>")
+		z.man
+		print yellow("<[========================================================]>")
+	end function
+  ftpShell=function
+    print yellow("<[================]>"+white(" FTP Shell Commands ")+"<[================]>")
+    z=[
+      "help",
+      "mc",
+      "mkdir",
+      "mkcd",
+      "cd",
+      "cp",
+      "ls",
+      "mv",
+      "pwd",
+      "rm",
+      "rmdir",
+      "hostname",
+      "wipelog",
+      "wipesys",
+      "du",
+      "df",
+      "clear",
+      "quit",
+      "rn",
+      "scp",
+      "get",
+      "put",
+      "open",
+      "exec"
+    ]
+    sort(z).man
+    print yellow("<[================]>"+white("  Special Commands  ")+"<[================]>")
+    print (ljust("  !",20)+ljust("!!",20)+ljust("!!!",20))
+    print yellow("<[================]>"+white("      Alias's      ")+"<[================]>")
+    print (ljust("  quit|close|x",20)+ljust("help|?|cmds",20))
+    print yellow("<[========================================================]>")
+  end function
+  computer=function
+    print yellow("<[================]>"+white(" Computer  Commands ")+"<[================]>")
+    s=[
+      "active",
+      "zip",
+      "run",
+      "do",
+      "sys",
+      "man",
+      "get",
+      "set",
+      "exit",
+      "close"
+    ]+Command.fileCommands+Command.computerCommands
+    s=clean(s)
+    z=[
+      "aircrack",
+      "cat",
+      "cd",
+      "chgrp",
+      "chmod",
+      "chown",
+      "cp",
+      "date",
+      "groupadd",
+      "groupdel",
+      "groups",
+      "ifconfig",
+      "iwconfig",
+      "kill",
+      "ls",
+      "mkdir",
+      "mv",
+      "nslookup",
+      "passwd",
+      "ps",
+      "pwd",
+      "reboot",
+      "rm",
+      "scanlib",
+      "scanrouter",
+      "scanaddress",
+      "time",
+      "touch",
+      "useradd",
+      "userdel",
+      "whois",
+      "smtp"
+    ]
+    for i in z;_idx=indexOf(s,i);if _idx!=null then remove(s,_idx);end for
+    sort(s).man
+    print yellow("<[================]>"+white("   Command Flags    ")+"<[================]>")
+    print (ljust("  ; (man and)",20)+ljust("man >",12)+ljust("man >>",12))+"man post"
+    print yellow("<[================]>"+white("  Special Commands  ")+"<[================]>")
+    print (ljust("  man !",20)+ljust("man !!",12)+ljust("man !!!",12))+"| (man pipe)"
+    print yellow("<[================]>"+white("   Basic Commands   ")+"<[================]>")
+    z.man
+    print yellow("<[========================================================]>")
+  end function
+  file=function
+    print yellow("<[================]>"+white("   File  Commands   ")+"<[================]>")
+    s=[
+      "zip",
+      "run",
+      "do",
+      "sys",
+      "man",
+      "set",
+      "get"
+    ]+Command.fileCommands
+    s=clean(s)
+    z=[
+      "aircrack",
+      "aireplay",
+      "cd",
+      "chgrp",
+      "chmod",
+      "chown",
+      "cp",
+      "date",
+      "decipher",
+      "ls",
+      "mkdir",
+      "mv",
+      "nmap",
+      "nslookup",
+      "pwd",
+      "rm",
+      "scanlib",
+      "scanrouter",
+      "scanaddress",
+      "time",
+      "touch",
+      "whois",
+      "smtp"
+    ]
+    for i in z;_idx=indexOf(s,i);if _idx!=null then remove(s,_idx);end for
+    sort(s).man
+    print yellow("<[================]>"+white("   Command Flags    ")+"<[================]>")
+    print (ljust("  ; (man and)",20)+ljust("man >",12)+ljust("man >>",12))+"man post"
+    print yellow("<[================]>"+white("  Special Commands  ")+"<[================]>")
+    print (ljust("  man !",20)+ljust("man !!",12)+ljust("man !!!",12))+"| (man pipe)"
+    print yellow("<[================]>"+white("   Basic Commands   ")+"<[================]>")
+    z.man
+    print yellow("<[========================================================]>")
+  end function
+  browsefiles=function
+    print yellow("<[================]>"+white(" File Menu Commands ")+"<[================]>")
+    [
+      "chgrp",
+      "chmod",
+      "chog",
+      "chown",
+      "cp",
+      "dec",
+      "echo",
+      "edit",
+      "enc",
+      "get",
+      "info",
+      "libs",
+      "lock",
+      "man",
+      "mv",
+      "view",
+      "peek",
+      "post",
+      "rm",
+      "rn",
+      "qrm",
+      "scan",
+      "set",
+      "share",
+      "vfile",
+      "zip"
+    ].man
+    print yellow("<[========================================================]>")
+  end function
+  browselocalfiles=function
+    print yellow("<[================]>"+white(" File Menu Commands ")+"<[================]>")
+    [
+      "chgrp",
+      "chmod",
+      "chog",
+      "chown",
+      "cp",
+      "dec",
+      "echo",
+      "edit",
+      "enc",
+      "info",
+      "libs",
+      "lock",
+      "man",
+      "mv",
+      "view",
+      "peek",
+      "post",
+      "put",
+      "rm",
+      "rn",
+      "qrm",
+      "scan",
+      "set",
+      "share",
+      "vfile",
+      "zip"
+    ].man
+    print yellow("<[========================================================]>")
+  end function
+  mail=function
+print yellow("<[==================]>"+white(" Mail Menu Commands ")+"<[==================]>");print (ljust("  cat",12)+ljust("ls",12)+ljust("send",12)+ljust("x",12));print yellow("<[============================================================]>")
+end function
+  a={
+    "main":@main,
+    "proxy":@proxy,
+    "pivot":@pivot,
+    "choosemetalib":@choosemetalib,
+    "choosemetaliblocal":@choosemetaliblocal,
+    "shell":@shell,
+    "ftpshell":@ftpShell,
+    "computer":@computer,
+    "file":@file,
+    "browselocalfiles":@browselocalfiles,
+    "browsefiles":@browsefiles,
+    "mail":@mail
+  }
+  if hasIndex(a,A) then a[A]
+end function
+//Dump command - export man pages to files
+Man._dump=function(argv)
+  //Initialize man directory if needed
+  //Get all man page files
+  manDir=Man.getManDir
+  if not manDir then return Error.set("No man pages found")
+  manFiles=get_files(manDir)
+  if not manFiles then return Error.set("No man pages found")
+  //Determine dump behavior
+  if not argv or len(argv)==0 then
+    //Dump all man pages
+    Info.info("Dumping man pages...")
+    t=["-"*32+" [X MAN PAGES] "+"-"*33]
+    //Sort files by name
+    fileNames=[]
+    for f in manFiles;push(fileNames,name(f));end for
+    fileNames.sort
+    for fname in fileNames
+      //Find file object
+      targetFile=null
+      for f in manFiles
+        if name(f)==fname then
+          targetFile=f
+          break
+        end if
+      end for
+      if not targetFile then continue
+      content=get_content(targetFile)
+      if not content then continue
+      //Strip formatting tags
+      s=content.replace("<color=#ffffff>","").replace("<color=#36abe8>","").replace("<color=#20ff98>","").replace("<color=#e4ff34>","").replace("<color=#ff4b4b>","").replace("</color>","").replace("<color=#7e17e6>","").replace("<color=#ff0000>","").replace("<color=#ffa500>","").replace("<b>","").replace("</b>"," ")
+      push(t,s)
+      if (__fname_idx+1)!=len(fileNames) then push(t,"-"*80)
+    end for
+    //Split into 160KB chunks
+    fullContent=join(t,char(10))
+    chunks=[]
+    while len(fullContent)>0
+      if len(fullContent)<=160000 then
+        push(chunks,fullContent)
+        break
+      end if
+      push(chunks,fullContent[:160000])
+      fullContent=fullContent[160000:]
+    end while
+    //Write chunks to files
+    c=System.getSystem.computer
+    chunkNum=1
+    for chunk in chunks
+      f=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/man_pages_"+chunkNum])
+      if not f then return Error.set("Failed to create man_pages_"+chunkNum)
+      r=set_content(f,chunk)
+      if r isa string then return Error.set(r)
+      chunkNum+=1
+    end for
+    Info.info("Finished")
+  else
+    //Dump specific command
+    cmd=argv[0]
+    Info.info("Dumping man page for "+cmd+"...")
+    targetFile=null
+    for f in manFiles
+      if name(f)==cmd then
+        targetFile=f
+        break
+      end if
+    end for
+    if not targetFile then return Error.set("No manual entry for '"+cmd+"'")
+    content=get_content(targetFile)
+    if not content then return Error.set("Failed to load man page for '"+cmd+"'")
+    //Strip formatting tags
+    t=["-"*32+" [X MAN PAGE: "+upper(cmd)+"] "+"-"*33]
+    s=content.replace("<color=#ffffff>","").replace("<color=#36abe8>","").replace("<color=#20ff98>","").replace("<color=#e4ff34>","").replace("<color=#ff4b4b>","").replace("</color>","").replace("<color=#7e17e6>","").replace("<color=#ff0000>","").replace("<color=#ffa500>","").replace("<b>","").replace("</b>"," ")
+    push(t,s)
+    c=System.getSystem.computer
+    f=Command.touch(globals.G_main,[path(globals.G_main.dir.current)+"/man_"+cmd+".txt"])
+    if not f then return Error.set("Failed to create man_"+cmd+".txt")
+    r=set_content(f,join(t,char(10)))
+    if r isa string then return Error.set(r)
+    Info.info("Finished - created man_"+cmd+".txt")
+  end if
+end function

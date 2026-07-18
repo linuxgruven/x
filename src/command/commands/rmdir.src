@@ -1,0 +1,40 @@
+// =============================================================================
+// RMDIR
+// Remove an empty directory; rejects non-empty dirs and file paths.
+// =============================================================================
+Command.rmdir=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  if not argv and not hasPipeInput then return Man.help(["rmdir"])
+  _p=ArgumentParser.init
+  argv=_p.parseArgs("rmdir",argv)
+  if argv isa Error then return
+  argv=_p.parsePath(Obj,argv)
+  if argv isa Error then return
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin then
+    if not argv.rest then argv.rest=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(argv.rest,line);end for
+  end if
+  targets=[]
+  if argv.hasIndex("files") and argv.files and len(argv.files)>0 then
+    targets=argv.files
+  else if argv.rest and len(argv.rest)>0 then
+    _len=len(argv.rest);i=0
+    while i<_len
+      push(targets,Io._getFile(Obj,argv.rest[i]))
+      i=i+1
+    end while
+  else
+    return Error.set("Missing directory argument")
+  end if
+  for directory in targets
+    if not directory or directory isa Error then continue
+    // Verify target is a directory (not a file) and provide helpful error message
+    if not is_folder(directory) then
+      Error.set("Cannot remove a file with rmdir, use rm "+path(directory)+" instead")
+      continue
+    end if
+    // Delete directory and report errors (delete checks if directory is empty)
+    result=delete(directory)
+    if result then Error.set(result)
+  end for
+end function

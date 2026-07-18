@@ -1,0 +1,81 @@
+// =============================================================================
+// EXEC
+// Execute a binary file; searches /usr/bin (-u) or /bin (-b) if not found.
+// =============================================================================
+Command.exec=function(Obj,argv)
+	hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+	if not argv and not hasPipeInput then return Man.help(["exec"])
+	if hasPipeInput then
+		if not argv then argv=[]
+		_pipeFiles=[]
+		for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(_pipeFiles,line);end for
+		if len(_pipeFiles)>0 then
+			_savedStdin=globals.G_pipe.stdin
+			globals.G_pipe.stdin=null
+			for _pipeFile in _pipeFiles;Command.exec(Obj,[_pipeFile]+argv);end for
+			globals.G_pipe.stdin=_savedStdin
+			return
+		end if
+	end if
+	_p=ArgumentParser.init
+	_p.addArgument("u",false,"flag")  // Search /usr/bin
+	_p.addArgument("b",false,"flag")  // Search /bin
+	argv=_p.parse("exec",argv,Obj)
+	if argv isa Error then return
+	execFile=null
+	searchDir=null
+	if argv.u then
+		searchDir=File(Obj.computer,"/usr/bin")
+		if not searchDir then return Error.set("No such directory: /usr/bin")
+	else if argv.b then
+		searchDir=File(Obj.computer,"/bin")
+		if not searchDir then return Error.set("No such directory: /bin")
+	end if
+	if argv.u or argv.b then
+		targetName=argv.rest[0]
+		if not targetName then
+			execFile=Io.file(Obj,searchDir,"Select a script or bin to launch:")
+			if execFile isa Warning then return Man.help(["exec"])
+			params=Gui.input({"text":"Enter params if there is any"})
+			if params!=null then argv.rest=split(params," ") else argv.rest=[]
+		else
+			if targetName[:1]!="/" then
+				// Fuzzy match - search for partial filename in directory
+				for file in get_files(searchDir)
+					if indexOf(lower(name(file)),lower(targetName))!=null then
+						execFile=file
+						break
+					end if
+				end for
+			else
+				// Full path provided - use exact path
+				execFile=Io._getFile(Obj,targetName)
+			end if
+			if execFile isa Error then return execFile
+		end if
+	else
+		targetName=argv.rest[0]
+		if not targetName then
+			execFile=Io.file(Obj,Obj.dir.current,"Select a script or bin to launch:")
+			if execFile isa Warning then return Man.help(["exec"])
+			params=Gui.input({"text":"Enter params if there is any"})
+			if params!=null then argv.rest=split(params," ") else argv.rest=[]
+		else
+			execFile=Io._getFile(Obj,targetName)
+			if execFile isa Error then execFile=Io.getFileObj(Obj,"/bin/"+targetName)
+			if execFile isa Error then return execFile
+		end if
+	end if
+	if is_binary(execFile) and len(argv.rest)>=2 then params=join(argv.rest[1:]," ") else params=null
+	// Save and wipe get_custom_object before launch
+	gco=get_custom_object
+	saved={}
+	keys=[]
+	for k in gco;keys.push(k.key);end for
+	for k in keys;saved[k]=gco[k];remove(gco,k);end for
+	if params then result=launch(Obj.shell,path(execFile),params) else result=launch(Obj.shell,path(execFile))
+	// Restore get_custom_object after launch
+	gco=get_custom_object
+	for k in saved;gco[k.key]=k.value;end for
+	return result
+end function

@@ -1,0 +1,38 @@
+// Man page for pzip
+manPzip="PZIP(1)                          X Shell Manual                          PZIP(1)
+
+<b>NAME</b>
+    pzip - File encryption with crypto library
+<b>SYNOPSIS</b>
+    <b>pzip -c</b> FILE
+    <b>pzip -e</b> (<b>-r</b>) (<b>-p</b> [PASSWORD]) FILE|PATH
+    <b>pzip -d</b> (<b>-r</b>) (<b>-p</b> [PASSWORD]) FILE|PATH
+<b>DESCRIPTION</b>
+    Encrypt or decrypt files using crypto encryption algorithm. Supports
+    recursive directory encryption. Uses internal password if -p not provided.
+<b>OPTIONS</b>
+    <b>-c FILE</b> - Check Status
+      Check if file is encrypted.
+
+    <b>-e FILE</b> - Encrypt
+      Encrypt file or directory. Use -r for recursive. Use -p for password.
+
+    <b>-d FILE</b> - Decrypt
+      Decrypt file or directory. Use -r for recursive. Use -p for password.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Check Encryption</color>
+    <b>pzip -c /etc/passwd</b>
+    Check file encryption status
+
+    <color=#e4ff34># Encrypt Files</color>
+    <b>pzip -e -p mypassword /etc/passwd</b>
+    Encrypt single file with password
+
+    <b>pzip -e -r /bin</b>
+    Recursively encrypt directory
+
+    <color=#e4ff34># Decrypt Files</color>
+    <b>pzip -d -p mypassword /etc/passwd</b>
+    Decrypt with password
+<b>SEE ALSO</b>
+    <b>enc</b>, <b>dec</b>, <b>aes128</b>"

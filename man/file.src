@@ -1,0 +1,50 @@
+// Man page for file
+manFile="FILE(1)                          X Shell Manual                          FILE(1)
+
+<b>NAME</b>
+    file - use to view details about a file
+<b>SYNOPSIS</b>
+    <b>file </b> [<b>-o</b>] <b>FILE</b> [FILE...]
+    <b>file </b><b>-s</b>
+<b>DESCRIPTION</b>
+    Display detailed information about files or filesystem. Shows file metadata including
+    permissions, owner, group, size, and modification times. Use -o to display permissions in
+    octal format. Use -s to display filesystem information instead of individual file details.
+    Useful for checking file properties, verifying ownership, and analyzing filesystem status
+    including total size, used space, and available space.
+    Supports glob patterns: <b>file *.dat</b>, <b>file src/**/*.src</b>
+<b>OPTIONS</b>
+    <b>file FILE</b>
+    Display information about the selected file
+    Shows permissions, owner, size, and timestamps
+
+    <b>-o</b>
+    Display permissions in octal format
+    Show numeric permission representation
+
+    <b>-s</b>
+    Display filesystem information
+    Show total, used, and available space
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Info</color>
+    <b>file document.txt</b>
+    View file details
+
+    <b>file script.src</b>
+    View script properties
+
+    <color=#e4ff34># Octal Permissions</color>
+    <b>file -o config.dat</b>
+    Show octal permissions
+
+    <b>file -o binary.bin</b>
+    View with numeric permissions
+
+    <color=#e4ff34># Filesystem Info</color>
+    <b>file -s</b>
+    Display filesystem status
+
+    <b>file -s</b>
+    Check disk usage
+<b>SEE ALSO</b>
+    <b>ls</b>"

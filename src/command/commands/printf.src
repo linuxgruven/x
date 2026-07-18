@@ -1,0 +1,202 @@
+// =============================================================================
+// PRINTF
+// Format and print data: %s string, %d integer, %f float, %x hex, %o octal.
+// =============================================================================
+Command.printf=function(Obj,argv)
+  if not argv or len(argv)==0 then return Man.help(["printf"])
+  _p=ArgumentParser.init
+  argv=_p.parseArgs("printf",argv)
+  if argv isa Error then return
+  argv=_p.checkRedirect(Obj,"printf",argv)
+  if argv isa Error then return
+  _pArgs=argv
+  argv=argv.rest
+  // Check for stdin from pipe — skip when called from xargs (it passes args directly)
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE then
+    stdinData=globals.G_pipe.stdin
+    if stdinData isa string then
+      for line in split(stdinData,char(10));push(argv,line);end for
+    else if stdinData isa list then
+      for line in stdinData;push(argv,str(line));end for
+    else
+      push(argv,str(stdinData))
+    end if
+  end if
+  if len(argv)==0 then return Man.help(["printf"])
+  fmt=argv[0]
+  args=argv[1:]
+  // Strip surrounding quotes (fallback if caller didn't strip them)
+  stripQuotes=function(s)
+    if len(s)<2 then return s
+    c0=code(s[0]);c1=code(s[-1])
+    if (s[0]=="""" and s[-1]=="""") or (s[0]=="'" and s[-1]=="'") then return s[1:-1]
+    if (c0==8216 or c0==8217) and (c1==8216 or c1==8217) then return s[1:-1]
+    return s
+  end function
+  fmt=stripQuotes(fmt)
+  i=0;_alen=len(args);while i<_alen;args[i]=stripQuotes(args[i]);i+=1;end while
+  // Process escape sequences in format string
+  processed=""
+  _fmtLen=len(fmt)
+  fi=0
+  while fi<_fmtLen
+    c=fmt[fi]
+    cCode=code(c)
+    if cCode==92 and fi+1<_fmtLen then  // backslash
+      // Skip zero-width space (char 8203) that may be copied from man pages
+      nextIdx=fi+1
+      if code(fmt[nextIdx])==8203 and nextIdx+1<_fmtLen then nextIdx+=1
+      nextC=fmt[nextIdx]
+      charsToSkip=nextIdx-fi+1
+      if nextC=="n" then
+        processed=processed+char(10)
+        fi+=charsToSkip
+      else if nextC=="t" then
+        processed=processed+char(9)
+        fi+=charsToSkip
+      else if nextC=="r" then
+        processed=processed+char(13)
+        fi+=charsToSkip
+      else if code(nextC)==92 then
+        processed=processed+char(92)
+        fi+=charsToSkip
+      else
+        processed=processed+c
+        fi+=1
+      end if
+    else
+      processed=processed+c
+      fi+=1
+    end if
+  end while
+  fmt=processed
+  // Apply format specifiers
+  result=""
+  argIdx=0
+  _fmtLen=len(fmt)
+  fi=0
+  while fi<_fmtLen
+    c=fmt[fi]
+    if c=="%" and fi+1<_fmtLen then
+      fi+=1
+      // Collect optional flags, width, and precision
+      flags=""
+      while fi<_fmtLen and (fmt[fi]=="-" or fmt[fi]=="0" or fmt[fi]=="+" or fmt[fi]==" ");flags=flags+fmt[fi];fi+=1;end while
+      // Width
+      width=""
+      while fi<_fmtLen and code(fmt[fi])>=48 and code(fmt[fi])<=57;width=width+fmt[fi];fi+=1;end while
+      // Precision
+      precision=""
+      if fi<_fmtLen and fmt[fi]=="." then
+        fi+=1
+        while fi<_fmtLen and code(fmt[fi])>=48 and code(fmt[fi])<=57;precision=precision+fmt[fi];fi+=1;end while
+      end if
+      if fi>=_fmtLen then
+        result=result+"%"
+        break
+      end if
+      spec=fmt[fi];fi+=1
+      // Get argument value
+      argVal=""
+      if argIdx<len(args) then argVal=args[argIdx]
+      argIdx+=1
+      // Apply specifier
+      if spec=="s" then
+        formatted=str(argVal)
+        if precision!="" then
+          p=val(precision)
+          if len(formatted)>p then formatted=formatted[:p]
+        end if
+      else if spec=="d" or spec=="i" then
+        n=floor(val(argVal))
+        if typeof(n)!="number" then n=0
+        formatted=str(n)
+        if flags.indexOf("+")!=null and n>=0 then formatted="+"+formatted
+      else if spec=="f" then
+        n=val(argVal)
+        if typeof(n)!="number" then n=0
+        if precision=="" then precision="6"
+        p=val(precision)
+        // Manual decimal truncation/rounding
+        factor=1;pi=0;while pi<p;factor=factor*10;pi+=1;end while
+        rounded=floor(n*factor+0.5)/factor
+        parts=split(str(rounded),"\.")
+        intPart=parts[0]
+        decPart=""
+        if len(parts)>1 then decPart=parts[1] else decPart=""
+        // Pad or truncate decimal part
+        while len(decPart)<p;decPart=decPart+"0";end while
+        if len(decPart)>p then decPart=decPart[:p]
+        if p==0 then formatted=intPart else formatted=intPart+"."+decPart
+      else if spec=="x" then
+        n=floor(val(argVal))
+        if typeof(n)!="number" then n=0
+        // Convert to hex
+        hexChars="0123456789abcdef"
+        if n==0 then
+          formatted="0"
+        else
+          formatted=""
+          nn=n
+          while nn>0;formatted=hexChars[nn%16]+formatted;nn=floor(nn/16);end while
+        end if
+      else if spec=="X" then
+        n=floor(val(argVal))
+        if typeof(n)!="number" then n=0
+        hexChars="0123456789ABCDEF"
+        if n==0 then
+          formatted="0"
+        else
+          formatted=""
+          nn=n
+          while nn>0;formatted=hexChars[nn%16]+formatted;nn=floor(nn/16);end while
+        end if
+      else if spec=="o" then
+        n=floor(val(argVal))
+        if typeof(n)!="number" then n=0
+        if n==0 then
+          formatted="0"
+        else
+          formatted=""
+          nn=n
+          while nn>0;formatted=str(nn%8)+formatted;nn=floor(nn/8);end while
+        end if
+      else if spec=="c" then
+        n=floor(val(argVal))
+        if typeof(n)=="number" and n>0 then formatted=char(n) else formatted=str(argVal)[0]
+      else if spec=="%" then
+        result=result+"%"
+        continue
+      else
+        result=result+"%"+spec
+        continue
+      end if
+      // Apply width padding
+      if width!="" then
+        w=val(width)
+        if flags.indexOf("-")!=null then
+          while len(formatted)<w;formatted=formatted+" ";end while
+        else if flags.indexOf("0")!=null and "diouxXf".indexOf(spec)!=null then
+          while len(formatted)<w;formatted="0"+formatted;end while
+        else
+          while len(formatted)<w;formatted=" "+formatted;end while
+        end if
+      end if
+      result=result+formatted
+    else
+      result=result+c
+      fi+=1
+    end if
+  end while
+  isPipe=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  if isPipe then
+    if len(result)>0 and code(result[-1])==10 then result=result[:len(result)-1]
+    push(globals.G_pipe.stdout,result)
+  else if _p.write then
+    _pArgs["data"]=result
+    _p.out(Obj,_pArgs)
+  else
+    if len(result)>0 and code(result[-1])==10 then result=result[:len(result)-1]
+    print white(result)
+  end if
+end function

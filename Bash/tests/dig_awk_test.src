@@ -1,0 +1,58 @@
+// dig_awk_test.src
+// Tests using awk on _dig data — single dig call, sections extracted via counter loop
+// Section indices: U=0, E=1, B=2, R=3, G=4, F=5, S=6, PIP=7, type=8
+// NOTE: awk -F with spaces in the separator does not work (engine splits args by space).
+//       Use single-char FS or direct list iteration for structured fields.
+//       String concatenation in print IS supported: $1"."$2"..." evaluates each part.
+// Usage: @dig_awk_test
+
+// --- Single _dig call ---
+_setvar(sections, _dig -e --list --quiet)
+
+// Extract sections by index
+_setvar(esec, )
+_setvar(pip, )
+_setvar(stype, )
+_setvar(idx, 0)
+for section in _getvar(sections)
+  if _getvar(idx) == 1
+    _setvar(esec, section)
+  endif
+  if _getvar(idx) == 7
+    _setvar(pip, section)
+  endif
+  if _getvar(idx) == 8
+    _setvar(stype, section)
+  endif
+  _setvar(idx, _getvar(idx) + 1)
+endfor
+
+_print green(=== dig awk tests ===)
+_print white(------------------------------)
+
+// --- Test 1: PIP (no awk needed — clean string) ---
+_print cyan(Test 1: PIP)
+_print yellow(PIP: ) _getvar(pip)
+_print white(------------------------------)
+
+// --- Test 2: scan type ---
+_print cyan(Test 2: scan type)
+_print yellow(type: ) _getvar(stype)
+_print white(------------------------------)
+
+// --- Test 3: awk on PIP — extract last octet using -F. (single-char FS, no quoting issues) ---
+_print cyan(Test 3: last octet of PIP via awk -F.)
+echo _getvar(pip) | awk -F. '{print $4}'
+_print white(------------------------------)
+
+// --- Test 4: awk on PIP — rebuild as a.b.0.0/16 subnet (string concat in print) ---
+_print cyan(Test 4: subnet mask via awk -F.)
+echo _getvar(pip) | awk -F. '{print $1"."$2".0.0/16"}'  // now works: evalToken concat
+_print white(------------------------------)
+
+// --- Test 5: direct list iteration — all emails from esec ---
+_print cyan(Test 5: emails via for loop)
+for entry in _getvar(esec)
+  _print _getvar(entry).email
+endfor
+_print white(------------------------------)

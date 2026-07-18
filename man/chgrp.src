@@ -1,0 +1,40 @@
+// Man page for chgrp
+// XFIX1.0: -r walks per-node via Io.walkApply and reports child denials (engine swallows them)
+manChgrp="CHGRP(8)                         X Shell Manual                         CHGRP(8)
+
+<b>NAME</b>
+    chgrp - change the group of a file|directory
+<b>SYNOPSIS</b>
+    <b>chgrp </b> [<b>-r|-R</b>] <b>GROUP </b><b>FILE</b> [FILE...]
+<b>DESCRIPTION</b>
+    Change file or directory group ownership. Use -r for recursive changes.
+    Interactive help mode available with help command.
+    Supports glob patterns: <b>chgrp staff *.dat</b>, <b>chgrp users home/*</b>
+<b>OPTIONS</b>
+    <b>-r, -R</b>
+    Recursive mode
+    Apply to directory tree
+
+    <b>GROUP</b>
+    New group name
+    Must exist on system
+
+    <b>FILE</b>
+    Target file or folder
+    Path to modify
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Single File</color>
+    <b>chgrp mygroup document.txt</b>
+    Change file group
+
+    <b>chgrp staff data.dat</b>
+    Set staff group
+
+    <color=#e4ff34># Recursive</color>
+    <b>chgrp -r admin /var/www</b>
+    Recursive group change
+
+    <b>chgrp -R users /home/shared</b>
+    Change directory tree
+<b>SEE ALSO</b>
+    <b>chown</b>, <b>chmod</b>, <b>groups</b>"

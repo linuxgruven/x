@@ -1,0 +1,39 @@
+// Man page for stats
+manStats="STATS(1)                         X Shell Manual                         STATS(1)
+
+<b>NAME</b>
+    stats - Display x statistics and metrics
+<b>SYNOPSIS</b>
+    <b>stats -s</b>
+    <b>stats -l</b>
+    <b>stats -d</b>
+    <b>stats -dl</b> [-s]
+<b>DESCRIPTION</b>
+    View various statistics and metrics about your current x instance including
+    general system information, library statistics, and database metrics. Provides
+    insight into system performance and resource usage.
+<b>OPTIONS</b>
+    <b>-s</b> - General Statistics
+      View general system statistics.
+
+    <b>-l</b> - Library Statistics
+      View library usage and statistics.
+
+    <b>-d</b> - Database Statistics
+      View general database metrics.
+
+    <b>-dl [-s]</b> - Detailed Database View
+      Long view of database statistics. Use -s flag to sort results.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View Statistics</color>
+    <b>stats -s</b>
+    Show general system statistics
+
+    <b>stats -l</b>
+    Show library statistics
+
+    <b>stats -d</b>
+    Show database statistics
+
+    <b>stats -dl -s</b>
+    Show detailed sorted database statistics"

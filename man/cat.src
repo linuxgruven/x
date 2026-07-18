@@ -1,0 +1,45 @@
+// Man page for cat
+manCat="CAT(1)                           X Shell Manual                           CAT(1)
+
+<b>NAME</b>
+    cat - view the contents of a file
+<b>SYNOPSIS</b>
+    <b>cat </b> [<b>-f</b>] [<b>-n</b>] <b>FILE</b> [FILE...]
+<b>DESCRIPTION</b>
+    Can also make use of redirects [>] [>>] and [--post].
+    Use the -f flag to view formatted output. Use the -n flag
+    to view line numbers.
+    Multiple files can be specified; each is printed in order.
+    Supports glob patterns to display multiple files: <b>*.txt</b>, <b>src/*</b>, <b>**/*.src</b>
+    *** Redirect input is never printed to the tty ***
+<b>OPTIONS</b>
+    <b>-f</b>
+    Formatted output
+    Display file with formatting applied
+
+    <b>-n</b>
+    Line numbers
+    Display line numbers alongside content
+
+    <b>--name</b>
+    Show filename header
+    Prints ==> filepath <== before each file's contents (ignored in pipes)
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man cat</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>cat</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    cat params --post
+
+    <color=#e4ff34># Multiple Files</color>
+    cat file1.txt file2.txt
+    cat *.txt
+    cat src/*.src
+
+    <color=#e4ff34># Show Filename Headers</color>
+    cat --name file1.txt file2.txt
+    Prints ==> /path/file1.txt <== before each file"

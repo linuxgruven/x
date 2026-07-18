@@ -1,0 +1,297 @@
+toolXchat="colorMap={}
+colorMap[""&r""]=""#ff4444""
+colorMap[""&g""]=""#88ff88""
+colorMap[""&b""]=""#4488ff""
+colorMap[""&y""]=""#e4ff34""
+colorMap[""&o""]=""#ff8800""
+colorMap[""&p""]=""#cc44ff""
+colorMap[""&c""]=""#44ffff""
+colorMap[""&w""]=""#ffffff""
+colorMap[""&k""]=""#888888""
+colorMap[""&m""]=""#ff44aa""
+applyColors=function(text)
+	for c in outer.colorMap
+		tag=""<color=""+outer.colorMap[c.key]+"">""
+		text=text.replace(c.key,tag)
+	end for
+	openTags=0
+	charIdx=0
+	while charIdx<len(text)
+		if text[charIdx:][:7]==""<color="" then openTags=openTags+1
+		if text[charIdx:][:8]==""</color>"" then openTags=openTags-1
+		charIdx=charIdx+1
+	end while
+	while openTags>0
+		text=text+""</color>""
+		openTags=openTags-1
+	end while
+	return text
+end function
+print(""<color=#88ff88>Connecting to ""+ip+""...</color>"")
+session=connect_service(get_shell,ip,to_int(pt),us,pw)
+if not session then exit(""<color=#ff4444>Failed to connect to ""+ip+""</color>"")
+remoteComputer=host_computer(session)
+if us==""root"" then chatDir=""/root/chat"" else chatDir=""/home/""+us+""/chat""
+msgPath=chatDir+""/messages""
+usersPath=chatDir+""/users""
+outboxDir=chatDir+""/outbox""
+if not File(remoteComputer,chatDir) then exit(""<color=#ff4444>Chat server not running</color>"")
+if not File(remoteComputer,msgPath) then exit(""<color=#ff4444>Chat server not initialized</color>"")
+if not File(remoteComputer,outboxDir) then exit(""<color=#ff4444>Chat server not initialized</color>"")
+nickname=""""
+while true
+	nickname=user_input(""<color=#e4ff34>Nickname:</color> "")
+	if not nickname then continue
+	nickname=nickname[:16]
+	usersFile=File(remoteComputer,usersPath)
+	if usersFile then
+		content=get_content(usersFile)
+		if content then
+			taken=false
+			for user in split(content,char(10))
+				if user==nickname then taken=true
+			end for
+			if taken then
+				print(""<color=#ff4444>Nickname '""+nickname+""' taken. Try another.</color>"")
+				nickname=""""
+				continue
+			end if
+		end if
+	end if
+	break
+end while
+nickColors=[""#ff4444"",""#88ff88"",""#4488ff"",""#e4ff34"",""#ff8800"",""#cc44ff"",""#44ffff"",""#ff44aa""]
+nickColor=nickColors[floor(rnd*len(nickColors))]
+outboxPath=outboxDir+""/""+nickname
+touch(remoteComputer,outboxDir,nickname)
+outboxFile=File(remoteComputer,outboxPath)
+if not outboxFile then exit(""<color=#ff4444>Failed to create outbox</color>"")
+set_content(outboxFile,"""")
+sendMsg=function(msg)
+	lockPath=outer.outboxPath+"".lock""
+	while File(outer.remoteComputer,lockPath)
+	end while
+	outboxFile=File(outer.remoteComputer,outer.outboxPath)
+	if not outboxFile then return
+	content=get_content(outboxFile)
+	if content then set_content(outboxFile,content+char(10)+msg) else set_content(outboxFile,msg)
+end function
+usersFile=File(remoteComputer,usersPath)
+if usersFile then
+	content=get_content(usersFile)
+	if content then set_content(usersFile,content+char(10)+nickname) else set_content(usersFile,nickname)
+end if
+sendMsg(current_date+char(31)+""<color=#888888>*** <color=""+nickColor+"">""+nickname+""</color> has joined ***</color>"")
+lastLine=0
+msgFile=File(remoteComputer,msgPath)
+content=get_content(msgFile)
+if content then lastLine=len(split(content,char(10)))
+printHeader=function(extra=null)
+	clear_screen
+	print("""")
+	print(""<color=#88ff88>==== X CHAT - <color=""+outer.nickColor+"">""+outer.nickname+""</color> ====</color>"")
+	print(""<color=#888888>/help for commands. Messages in viewer.</color>"")
+	if extra then
+		print("""")
+		for l in extra
+			print(l)
+		end for
+	end if
+	print("""")
+end function
+printHeader
+running=true
+while running
+	inp=user_input(""<color=""+nickColor+"">""+nickname+""</color>> "")
+	if not inp then continue
+	cmdLower=lower(inp)
+	if cmdLower==""/help"" then
+		helpLines=[]
+		push(helpLines,""<color=#e4ff34>Commands:</color> /help /nick /who /quit"")
+		push(helpLines,""<color=#e4ff34>Colors:</color> &r &g &b &y &o &p &c &w &k &m"")
+		push(helpLines,""<color=#e4ff34>Art:</color> /tux /train /skull /coffee /cat /bomb /ghost /beer /rip /heart /shrug /flip /unflip"")
+		printHeader(helpLines)
+		continue
+	end if
+	if cmdLower==""/quit"" or cmdLower==""/exit"" then
+		sendMsg(current_date+char(31)+""<color=#888888>*** <color=""+nickColor+"">""+nickname+""</color> has left ***</color>"")
+		wait(0.5)
+		outboxFile=File(remoteComputer,outboxPath)
+		if outboxFile then outboxFile.delete
+		usersFile=File(remoteComputer,usersPath)
+		if usersFile then
+			content=get_content(usersFile)
+			if content then
+				newUsers=[]
+				for user in split(content,char(10))
+					if user!=nickname then push(newUsers,user)
+				end for
+				set_content(usersFile,join(newUsers,char(10)))
+			end if
+		end if
+		print(""<color=#888888>Disconnected.</color>"")
+		running=false
+		continue
+	end if
+	if cmdLower==""/nick"" then
+		newNick=user_input(""<color=#e4ff34>New nick:</color> "")
+		if newNick then
+			newNick=newNick[:16]
+			usersFile=File(remoteComputer,usersPath)
+			if usersFile then
+				content=get_content(usersFile)
+				if content then
+					newUsers=[]
+					for user in split(content,char(10))
+						if user!=nickname then push(newUsers,user) else push(newUsers,newNick)
+					end for
+					set_content(usersFile,join(newUsers,char(10)))
+				end if
+			end if
+			sendMsg(current_date+char(31)+""<color=#888888>*** <color=""+nickColor+"">""+nickname+""</color> is now <color=""+nickColor+"">""+newNick+""</color> ***</color>"")
+			outboxFile=File(remoteComputer,outboxPath)
+			if outboxFile then outboxFile.rename(newNick)
+			outboxPath=outboxDir+""/""+newNick
+			nickname=newNick
+		end if
+		printHeader
+		continue
+	end if
+	if cmdLower==""/who"" then
+		whoList=[]
+		usersFile=File(remoteComputer,usersPath)
+		if usersFile then
+			content=get_content(usersFile)
+			if content then
+				us=split(content,char(10))
+				push(whoList,""<color=#e4ff34>Online (""+len(us)+""):</color>"")
+				for user in us
+					if user==nickname then push(whoList,""  <color=""+nickColor+"">""+user+"" (you)</color>"") else push(whoList,""  <color=#ffffff>""+user+""</color>"")
+				end for
+			else
+				push(whoList,""<color=#888888>No users online</color>"")
+			end if
+		end if
+		printHeader(whoList)
+		continue
+	end if
+	artLines=null
+	if cmdLower==""/tux"" then
+		artLines=[]
+		push(artLines,""<color=#ffffff>       .--.      </color>"")
+		push(artLines,""<color=#ffffff>      |</color><color=#e4ff34>o</color><color=#ffffff>_</color><color=#e4ff34>o</color><color=#ffffff> |     </color>"")
+		push(artLines,""<color=#ffffff>      |</color><color=#ff4444>:</color><color=#ffffff>_/ |     </color>"")
+		push(artLines,""<color=#ffffff>     //   \ \    </color>"")
+		push(artLines,""<color=#e4ff34>    (|     | )   </color>"")
+		push(artLines,""<color=#ff8800>   /'\_   _/`\   </color>"")
+		push(artLines,""<color=#ff8800>   \___)=(___/   </color>"")
+	end if
+	if cmdLower==""/train"" then
+		artLines=[]
+		push(artLines,""<color=#888888>      ====        </color><color=#44ffff>________</color><color=#888888>                ___________</color>"")
+		push(artLines,""<color=#888888>  _D </color><color=#ff4444>_|  |_______/</color><color=#e4ff34>        </color><color=#ff4444>\__I_I_____</color><color=#888888>===__|_________|</color>"")
+		push(artLines,""<color=#888888>   |(</color><color=#ffffff>_</color><color=#888888>)---  |   </color><color=#ff4444>H</color><color=#44ffff>\________/</color><color=#888888> |   |        =|___ ___|</color>"")
+		push(artLines,""<color=#888888>   /     |  |   </color><color=#ff4444>H</color><color=#888888>  |  |     |   |         ||_| |_||</color>"")
+		push(artLines,""<color=#888888>  |      |  |   </color><color=#ff4444>H</color><color=#888888>  |__--------------------|</color><color=#e4ff34> [___]</color><color=#888888> |</color>"")
+		push(artLines,""<color=#888888>  | ________|___</color><color=#ff4444>H</color><color=#888888>__/__|_____/</color><color=#ff8800>[][]</color><color=#888888>~\_______|       |</color>"")
+		push(artLines,""<color=#888888>  |/ |   |-----------I_____I </color><color=#ff8800>[][] []  D</color><color=#888888>   |=======|</color>"")
+		push(artLines,""<color=#888888>__/ =| </color><color=#ff4444>o</color><color=#888888> |=-</color><color=#ffffff>~~\  /~~\  /~~\  /~~\</color><color=#888888> ____Y___________|__</color>"")
+		push(artLines,""<color=#888888> |/-=|___|=    </color><color=#ffffff>||    ||    ||    ||</color><color=#888888>_____/~\___/        </color>"")
+		push(artLines,""<color=#888888>  \_/      </color><color=#ffffff>\O=====O=====O=====O_/</color><color=#888888>      \_/           </color>"")
+	end if
+	if cmdLower==""/skull"" then
+		artLines=[]
+		push(artLines,""<color=#ffffff>      ______      </color>"")
+		push(artLines,""<color=#ffffff>   .-'      '-.   </color>"")
+		push(artLines,""<color=#ffffff>  /            \  </color>"")
+		push(artLines,""<color=#ffffff> |              | </color>"")
+		push(artLines,""<color=#ffffff> |,  </color><color=#ff4444>.-.  .-.</color><color=#ffffff>  ,| </color>"")
+		push(artLines,""<color=#ffffff> | )</color><color=#ff4444>(_o/  \o_)</color><color=#ffffff>( | </color>"")
+		push(artLines,""<color=#ffffff> |/     /\     \| </color>"")
+		push(artLines,""<color=#ffffff> (_     ^^     _) </color>"")
+		push(artLines,""<color=#ffffff>  \__|</color><color=#e4ff34>IIIIII</color><color=#ffffff>|__/  </color>"")
+		push(artLines,""<color=#ffffff>   | \</color><color=#e4ff34>IIIIII</color><color=#ffffff>/ |  </color>"")
+		push(artLines,""<color=#ffffff>   \          /  </color>"")
+		push(artLines,""<color=#ffffff>    `--------`   </color>"")
+	end if
+	if cmdLower==""/coffee"" then
+		artLines=[]
+		push(artLines,""<color=#888888>       ( (       </color>"")
+		push(artLines,""<color=#888888>        ) )      </color>"")
+		push(artLines,""<color=#ffffff>      ........   </color>"")
+		push(artLines,""<color=#ffffff>      |</color><color=#ff8800>~~~~~~</color><color=#ffffff>|]  </color>"")
+		push(artLines,""<color=#ffffff>      \</color><color=#ff8800>~~~~~~</color><color=#ffffff>/   </color>"")
+		push(artLines,""<color=#ffffff>       `----'    </color>"")
+	end if
+	if cmdLower==""/cat"" then
+		artLines=[]
+		push(artLines,""<color=#ffffff>  /\_/\  </color>"")
+		push(artLines,""<color=#ffffff> ( </color><color=#88ff88>o.o</color><color=#ffffff> ) </color>"")
+		push(artLines,""<color=#ffffff>  > ^ <  </color>"")
+	end if
+	if cmdLower==""/bomb"" then
+		artLines=[]
+		push(artLines,""<color=#88ff88>      *    </color>"")
+		push(artLines,""<color=#88ff88>     /     </color>"")
+		push(artLines,""<color=#ff4444>   .--.    </color>"")
+		push(artLines,""<color=#ff4444>  /    \   </color>"")
+		push(artLines,""<color=#ff4444>  \    /   </color>"")
+		push(artLines,""<color=#ff4444>   '--'    </color>"")
+	end if
+	if cmdLower==""/ghost"" then
+		artLines=[]
+		push(artLines,""<color=#ffffff>   .---.   </color>"")
+		push(artLines,""<color=#ffffff>  / </color><color=#44ffff>o o</color><color=#ffffff> \  </color>"")
+		push(artLines,""<color=#ffffff> |   ^   | </color>"")
+		push(artLines,""<color=#ffffff>  \ --- /  </color>"")
+		push(artLines,""<color=#ffffff>   || ||   </color>"")
+		push(artLines,""<color=#ffffff>   '' ''   </color>"")
+	end if
+	if cmdLower==""/beer"" then
+		artLines=[]
+		push(artLines,""<color=#ffffff>    .--. </color>"")
+		push(artLines,""<color=#ffffff>   |</color><color=#e4ff34>~~~~</color><color=#ffffff>|]</color>"")
+		push(artLines,""<color=#ffffff>   |</color><color=#e4ff34>~~~~</color><color=#ffffff>| </color>"")
+		push(artLines,""<color=#ffffff>   |    | </color>"")
+		push(artLines,""<color=#ffffff>   |____| </color>"")
+		push(artLines,""<color=#ffffff>   '----' </color>"")
+	end if
+	if cmdLower==""/rip"" then
+		artLines=[]
+		push(artLines,""<color=#888888>   .---.  </color>"")
+		push(artLines,""<color=#888888>  / </color><color=#ff4444>RIP</color><color=#888888> \ </color>"")
+		push(artLines,""<color=#888888> |       |</color>"")
+		push(artLines,""<color=#888888> |       |</color>"")
+		push(artLines,""<color=#888888> |_______|</color>"")
+	end if
+	if cmdLower==""/heart"" then
+		artLines=[]
+		push(artLines,""<color=#ff4444>  /\  /\  </color>"")
+		push(artLines,""<color=#ff4444> /  \/  \ </color>"")
+		push(artLines,""<color=#ff4444> \      / </color>"")
+		push(artLines,""<color=#ff4444>  \    /  </color>"")
+		push(artLines,""<color=#ff4444>   \  /   </color>"")
+		push(artLines,""<color=#ff4444>    \/    </color>"")
+	end if
+	if cmdLower==""/shrug"" or cmdLower==""/flip"" or cmdLower==""/unflip"" then
+		if cmdLower==""/shrug"" then artText=""<color=#e4ff34> ¯\_(ツ)_/¯ </color>""
+		if cmdLower==""/flip"" then artText=""<color=#ff4444> (>O_O)> ~|__|  </color>""
+		if cmdLower==""/unflip"" then artText=""<color=#88ff88> |__|~ <(o_o<) </color>""
+		sendMsg(current_date+char(31)+""<color=""+nickColor+"">""+nickname+""</color>: ""+artText)
+		printHeader
+		continue
+	end if
+	if artLines then
+		timestamp=current_date
+		chatBlock=timestamp+char(31)+""<color=""+nickColor+"">""+nickname+""</color>:""
+		for artText in artLines
+			chatBlock=chatBlock+char(10)+artText
+		end for
+		sendMsg(chatBlock)
+		printHeader
+		continue
+	end if
+	formatted=applyColors(inp)
+	sendMsg(current_date+char(31)+""<color=""+nickColor+"">""+nickname+""</color>: ""+formatted)
+	printHeader
+end while"

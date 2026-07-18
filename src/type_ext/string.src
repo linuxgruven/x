@@ -1,0 +1,210 @@
+// =============================================================================
+// STRING
+// Manipulation, formatting, color helpers, path parsing, and text utilities.
+// =============================================================================
+split160k=function(self)
+  r=[]
+  i=0
+  n=char(10)
+  _len=len(self)
+  while i<_len
+    e=i+160000
+    if e>=_len then
+      push(r,self[i:])
+      break
+    end if
+    c=self[i:e]
+    idx=c.lastIndexOf(n)
+    if idx!=-1 then
+      push(r,self[i:i+idx+1])
+      i=i+idx+1
+    else
+      push(r,c)
+      i=e
+    end if
+  end while
+  return r
+end function
+string.split160k=@split160k
+// Shrink font size tag for longer strings: <=10 none, <=15 15px, <=25 14px, >25 13px
+adjustSize=function(self)
+  l=len(self)
+  if l<=10 then return self
+  if l<=15 then return "<size=15px>"+self+"</size>"
+  if l<=25 then return "<size=14px>"+self+"</size>"
+  return "<size=13px>"+self+"</size>"
+end function
+string.adjustSize=@adjustSize
+// Strip leading spaces
+removeBSpaces=function(self)
+	if not self then return self
+	while self[0]==" ";self=self[1:];if not self then return self;end while
+	return self
+end function
+string.removeBSpaces=@removeBSpaces
+// Strip trailing spaces
+removeESpaces=function(self)
+	if not self then return self
+	while self[len(self)-1]==" ";self=self[:-1];if not self then return self;end while
+	return self
+end function
+string.removeESpaces=@removeESpaces
+// Color helpers — wrap string in the named color tag
+orange=function(self);return "<color=#ffa500>"+self+"</color>";end function
+string.orange=@orange
+cyan=function(self);return "<color=#61fcff>"+self+"</color>";end function
+string.cyan=@cyan
+magenta=function(self);return "<color=#eb0cc6>"+self+"</color>";end function
+string.magenta=@magenta
+lime=function(self);return "<color=#0ceb86>"+self+"</color>";end function
+string.lime=@lime
+bred=function(self);return "<color=#f70202>"+self+"</color>";end function
+string.bred=@bred
+green=function(self);return "<color=#20ff98>"+self+"</color>";end function
+string.green=@green
+password=function(self);return "<color=#ff5500>"+self+"</color>";end function
+string.password=@password
+blue=function(self);return "<color=#36abe8>"+self+"</color>";end function
+string.blue=@blue
+liteblue=function(self);return "<color=#206d74>"+self+"</color>";end function
+string.liteblue=@liteblue
+skyblue=function(self);return "<color=#00bfff>"+self+"</color>";end function
+string.skyblue=@skyblue
+yellow=function(self);return "<color=#e4ff34>"+self+"</color>";end function
+string.yellow=@yellow
+white=function(self);return "<color=#ffffff>"+self+"</color>";end function
+string.white=@white
+purple=function(self);return "<color=#7e17e6>"+self+"</color>";end function
+string.purple=@purple
+iyellow=function(self);return "<i><color=#e4ff34>"+self+"</color></i>";end function
+string.iyellow=@iyellow
+liteGrey=function(self);return "<color=#fbfbfb>"+self+"</color>";end function
+string.liteGrey=@liteGrey
+error=function(self);return "<color=#FF2222>"+self+"</color>";end function
+string.error=@error
+red=function(self);return "<color=#ff4b4b>"+self+"</color>";end function
+string.red=@red
+grey=function(self);return "<color=#9d9d9d>"+self+"</color>";end function
+string.grey=@grey
+black=function(self);return "<color=#032e41>"+self+"</color>";end function
+string.black=@black
+// Uppercase first character only
+capitalize=function(self);if len(self)<2 then return upper(self);return upper(self[0])+self[1:];end function
+string.capitalize=@capitalize
+// Lowercase first character only
+lowerFirst=function(self);if len(self)<2 then return lower(self);return lower(self[0])+self[1:];end function
+string.lowerFirst=@lowerFirst
+// Reverse character order
+string.reverse=function
+	s=[]
+	v=values(self)
+	while v;push(s,pop(v));end while
+	return join(s,"")
+end function
+// Colon-separated hex character codes e.g. "AB" → "41:42"
+string.toHex=function
+	h=""
+	for i in self;h+=code(self[__i_idx]).toHex;if i<len(self)-1 then h+=":";end for
+	return h
+end function
+// Explode string into list of individual characters
+string.toList=function
+	l=[]
+	for i in self;push(l,self[__i_idx]);end for
+	return l
+end function
+// Right-justify within width s; m=right margin, d=pad char
+rjust=function(self,s,m=0,d=" ")
+  p=s-len(self)
+  l=d*(p-m)
+  r=d*m
+  return l+self+r
+end function
+string.rjust=@rjust
+// Left-justify within width s; m=left margin, d=pad char
+ljust=function(self,s,m=0,d=" ")
+  p=s-len(self)
+  r=d*(p-m)
+  l=d*m
+  return l+self+r
+end function
+string.ljust=@ljust
+// Format short user type r/u/g into colored bracketed label
+formatUser=function(self)
+	if self=="r" then return orange("[  "+green("Root")+"   ]")
+	if self=="u" then return orange("[  "+yellow("User")+"   ]")
+	if self=="g" then return orange("[  "+red("Guest")+"  ]")
+  return orange("[ Unknown ]")
+end function
+string.formatUser=@formatUser
+// Format full username into colored bracketed label for session display
+formatSessionUser=function(self)
+	if self=="root" then return orange("[ "+green("Root")+" ]")
+	if self=="guest" then return orange("[ "+red("Guest")+" ]")
+	return orange("[ "+yellow(self)+" ]")
+end function
+string.formatSessionUser=@formatSessionUser
+// Split path string into list of components, stripping leading/trailing empty elements
+returnPath=function(self)
+  if not self then return self
+  if self[0]=="/" then p=self.split("/")[1:] else p=self.split("/")
+  if not p[-1] then return p[:-1] else return p
+end function
+string.returnPath=@returnPath
+// Parse path into {name, path, fullPath} map; returns self unchanged if no slash
+parsePath=function(self)
+	if indexOf(self,"/")==null then return self
+	self=split(self,"/")[1:]
+	if not self[-1] then self=self[:-1]
+	n=self[-1]
+	p="/"+join(self[:-1],"/")
+	j=p+"/"+n
+	return {
+    "name":n,
+    "path":p,
+    "fullPath":j
+  }
+end function
+string.parsePath=@parsePath
+// Wrap in bold tags
+bold=function(self);return "<b>"+self+"</b>";end function
+string.bold=@bold
+// Escape regex special characters
+escape=function(self);return self.replace("(?=\\|\.|\+|\*|\?|\^|\$|\(|\)|\[|\]|\{|\}|\|)","\");end function
+string.escape=@escape
+// Read non-space characters starting at index i in string s, stopping at first space
+getRest=function(i,s)
+r="";_len=len(s);z=i;while z<_len;if s[z]!=" " then r+=s[z] else break;z+=1;end while;return r
+end function
+string.getRest=@getRest
+// True if string begins with p
+startsWith=function(self,p);return indexOf(self,p)==0;end function
+string.startsWith=@startsWith
+// True if string ends with p
+endsWith=function(self,p);return indexOf(self,p)==len(self)-len(p);end function
+string.endsWith=@endsWith
+// Shared base tag list for uncolorString and unformatString
+_FMT_TAGS=[
+  "align","alpha","color","b","i","cspace","font","indent",
+  "line-height","line-indent","link","br","lowercase","uppercase","smallcaps",
+  "margin","mark","mspace","noparse","nobr","page","pos","size","space",
+  "sprite","s","u","style","sub","sup","voffset","width","link",
+  "#[0-9a-fA-F]{3}","#[0-9a-fA-F]{6}"]
+// Break formatting tags by inserting <sup></sup> after < so they render as visible text
+uncolorString=function(self)
+  tags=_FMT_TAGS+["#[0-9a-fA-F]{8}"]
+  j=tags.join("|")
+  z=self.matches("<\/?("+j+")(\s.*?|=.*?|.{0})>")
+  for r in z;self=self.replace(r.value,r.value.insert(1,"<sup></sup>"));end for
+  return self
+end function
+string.uncolorString=@uncolorString
+// Strip all formatting tags from string
+unformatString=function(self);j=(_FMT_TAGS+["#[0-9a-fA-F]{8}"]).join("|");self=self.replace("<\/?("+j+")(\s.*?|=.*?|.{0})>","");return self;end function
+string.unformatString=@unformatString
+// Strip regex metacharacters for display (e.g. in error messages)
+stripRegex=function(self);return self.replace("\\","").replace("\^","").replace("\$","").replace("\+","").replace("\{","").replace("\}","").replace("\(","").replace("\)","").replace("\[","").replace("\]","").replace("\|","");end function
+string.stripRegex=@stripRegex
+// True if string contains only digits
+isNumber=function(self);r=self.matches("^[0-9]+$");if r then return true else return false;end function
+string.isNumber=@isNumber

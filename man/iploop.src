@@ -1,0 +1,48 @@
+// Man page for iploop
+manIploop="IPLOOP(1)                        X Shell Manual                        IPLOOP(1)
+
+<b>NAME</b>
+    iploop - Automated exploit loop attack
+<b>SYNOPSIS</b>
+    <b>iploop</b> [IP] [-e PARAMS] [-l] [-x]
+    <b>echo IP | iploop</b> [-e PARAMS]
+<b>DESCRIPTION</b>
+    Automated exploit cycling tool that attempts all active exploits against
+    a target IP address. Runs continuously until stopped. Results are added
+    to the watchlist. IP can be supplied as a positional argument or piped
+    via stdin. Press q or x to stop the loop.
+<b>OPTIONS</b>
+    <b>IP</b>
+    Target IP address (positional or piped from stdin)
+
+    <b>-e PARAMS</b>
+    Extra exploit parameters to pass to overflow calls
+
+    <b>-l</b>
+    List captured objects in the watchlist
+
+    <b>-x</b>
+    Clear the watchlist
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Attack</color>
+    <b>iploop 10.0.0.5</b>
+    Loop all exploits on target
+
+    <b>iploop 10.0.0.5 -e root</b>
+    Loop for root access with extra param
+
+    <color=#e4ff34># Pipe IP in</color>
+    <b>echo ""192.168.1.100"" | iploop</b>
+    Pipe target IP into iploop
+
+    <b>echo ""192.168.1.100"" | iploop -e admin</b>
+    Pipe target with extra param
+
+    <color=#e4ff34># Watchlist Management</color>
+    <b>iploop -l</b>
+    View captured shells
+
+    <b>iploop -x</b>
+    Clear results list
+<b>SEE ALSO</b>
+    <b>exp</b>, <b>scan</b>"

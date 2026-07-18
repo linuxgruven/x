@@ -1,0 +1,103 @@
+// Man page for tr
+manTr="TR(1)                            X Shell Manual                            TR(1)
+
+<b>NAME</b>
+    tr - translate or delete characters
+
+<b>SYNOPSIS</b>
+    <b>tr</b> [OPTIONS] SET1 [SET2] [FILE]
+    <b>echo</b> TEXT <b>| tr</b> [OPTIONS] SET1 [SET2]
+
+<b>DESCRIPTION</b>
+    Translates, squeezes, or deletes characters from input. When used
+    in translate mode, characters from SET1 are replaced with the
+    corresponding characters in SET2. Character sets can be specified
+    as individual characters or ranges (e.g., 'a-z', '0-9', 'A-Z').
+    Primarily used in pipe chains for text transformation.
+
+    Both SET1 and SET2 support escape sequences:
+        \"+char(8203)+"n  newline
+        \"+char(8203)+"t  tab
+        \"+char(8203)+"r  carriage return
+        \"+char(8203)+"\
+
+<b>OPTIONS</b>
+    -d    Delete characters in SET1 from input
+
+    -s    Squeeze repeated characters. When used with SET2, only squeezes
+    repeated characters that appear in SET2
+
+    -c    Complement SET1 (use all characters NOT in SET1)
+
+    -w    Write output back to FILE instead of printing
+
+<b>NOTES</b>
+    SET1 is always required. Using <b>tr -s</b> without SET1 returns:
+    Missing arguments: tr [OPTIONS] SET1 [SET2] FILE
+
+    Using <b>tr -d</b> without SET1 returns the same error:
+    Missing arguments: tr [OPTIONS] SET1 [SET2] FILE
+
+    FILE is required when not using pipe input.
+
+<b>COMMON ERRORS</b>
+    echo hello world | tr -s
+    Error: Missing arguments: tr [OPTIONS] SET1 [SET2] FILE
+
+    echo hello world | tr -d
+    Error: Missing arguments: tr [OPTIONS] SET1 [SET2] FILE
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Character translation</color>
+    echo hello | tr aeiou 43100
+    Translate vowels to numbers: 'h3ll0'
+
+    echo HELLO WORLD | tr A-Z a-z
+    Convert uppercase to lowercase: 'hello world'
+
+    echo hello world | tr a-z A-Z
+    Convert lowercase to uppercase: 'HELLO WORLD'
+
+    <color=#e4ff34># Character deletion</color>
+    echo hello123world456 | tr -d 0-9
+    Delete all digits: 'helloworld'
+
+    echo a:b:c:d | tr -d :
+    Remove colons: 'abcd'
+
+    echo hello world | tr -d ' '
+    Remove spaces: 'helloworld'
+
+    <color=#e4ff34># Squeeze repeated characters</color>
+    echo hello    world | tr -s ' '
+    Squeeze multiple spaces: 'hello world'
+
+    echo heeelllooo | tr -s elo
+    Squeeze repeated e, l, o: 'helo'
+
+    <color=#e4ff34># Combined operations</color>
+    echo Hello   World123 | tr -d 0-9 | tr -s  
+    Delete digits and squeeze spaces: 'Hello World'
+
+    cat file.txt | tr A-Z a-z | tr -s   > normalized.txt
+    Normalize: lowercase and single spaces
+
+    <color=#e4ff34># With piping</color>
+    cat /etc/passwd | tr :   | awk '{print $1}'
+    Replace colons with spaces, extract first field
+
+    echo test123 | tr -d 0-9 | rev
+    Delete digits then reverse: 'tset'
+
+    <color=#e4ff34># Escape sequences</color>
+    echo 3 1 2 | tr ' ' '\"+char(8203)+"n' | sort
+    Convert spaces to newlines for sorting
+
+    echo hello world | tr ' ' '\"+char(8203)+"t'
+    Replace spaces with tab characters
+
+    cat file.txt | tr '\"+char(8203)+"n' ' '
+    Join all lines with spaces
+
+<b>SEE ALSO</b>
+    <b>sed</b>, <b>awk</b>, <b>grep</b>, <b>cut</b>, <b>rev</b>, <b>echo</b>"

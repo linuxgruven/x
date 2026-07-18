@@ -1,0 +1,28 @@
+// Man page for diff
+manDiff="DIFF(1)                          X Shell Manual                          DIFF(1)
+
+<b>NAME</b>
+    diff - Compare files or directories
+<b>SYNOPSIS</b>
+    <b>diff</b> AFILE BFILE
+    <b>diff</b> AFILE BFILE > output.txt
+    <b>diff</b> AFILE BFILE >> output.txt
+<b>DESCRIPTION</b>
+    Compare two files or directories and display lines or files that differ.
+    If the files or directories are identical, no output is produced. Supports
+    output redirection with > (overwrite), >> (append), and --post flags.
+
+    *** Redirect output is never printed to the tty ***
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Compare Files</color>
+    <b>diff file1.txt file2.txt</b>
+    Show differences between two files
+
+    <color=#e4ff34># Save Differences</color>
+    <b>diff file1.txt file2.txt > changes.txt</b>
+    Save differences to file
+
+    <b>diff dir1 dir2</b>
+    Compare two directories
+<b>SEE ALSO</b>
+    <b>grep</b>, <b>cat</b>"

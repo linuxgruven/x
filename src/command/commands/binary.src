@@ -1,0 +1,24 @@
+// =============================================================================
+// BINARY
+// Convert binary numbers to decimal.
+// Direct:  binary 11111111      → 255
+// Pipe:    echo "11111111" | binary
+// =============================================================================
+Command.binary=function(Obj,argv)
+  hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  isPipeOut=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  if hasPipeIn then
+    stdinData=globals.G_pipe.stdin
+    if stdinData isa list then lines=stdinData else lines=split(trim(str(stdinData)),char(10))
+    for line in lines
+      line=trim(line)
+      if not line then continue
+      result=Math.binaryToDecimal(val(line))
+      if isPipeOut then push(globals.G_pipe.stdout,str(result)) else Info.info("The decimal value is: "+str(result),"=")
+    end for
+  else
+    if not argv then return Man.help(["binary"])
+    result=Math.binaryToDecimal(val(argv[0]))
+    Info.info("The decimal value is: "+str(result),"=")
+  end if
+end function

@@ -1,0 +1,11 @@
+binBuild="if len(params)!=2 then exit(command_info(""build_usage""))
+pathSource=get_abs_path(params[0])
+programPath=get_abs_path(params[1])
+shell=get_shell
+computer=host_computer(shell)
+fileSource=File(computer,pathSource)
+folderDest=File(computer,programPath)
+if fileSource==null then exit(""build: can't find ""+pathSource)
+if folderDest==null then exit(""build: can't find ""+programPath)
+output=shell.build(fileSource.path, folderDest.path)
+if not output then print(""build successful."") else print(output)"

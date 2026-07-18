@@ -1,0 +1,99 @@
+// Man page for ftp
+manFtp="FTP(1)                           X Shell Manual                           FTP(1)
+
+<b>NAME</b>
+    ftp - used to transfer files between computers
+<b>SYNOPSIS</b>
+    <b>ftp</b> (<b>-l</b>) (<b>-t</b>) (<b>-d</b>) (<b>-p</b> [<b>PORT</b>]) (<b>-P</b> [<b>PASSWORD</b>]) (<b>--start</b> [<b>N</b>]) (<b>--stop</b> [<b>N</b>]) <b>USER@IP|DOMAIN</b>
+<b>DESCRIPTION</b>
+    File Transfer Protocol for transferring files between client and server. Navigate filesystem
+    with cd and ls, but cannot execute remote commands (no shell). Download with get, upload with
+    put. Interactive mode with HELP prompt or user@host format. Type help when connected for
+    command list. Use -p for custom port (default 21), -P for password, -t for
+    tunneling to map public IP to current object, -l to force local main shell instead of proxy.
+    Use -d for dictionary attack mode (no password needed, uses saved wordlist).
+    LAN IPs automatically route through the current shell.
+<b>OPTIONS</b>
+    <b>USER@IP|DOMAIN</b>
+    Connect to FTP server
+    Download: get FILE
+    Upload: put FILE
+
+    <b>-p PORT</b>
+    Custom port number
+    Default: 21
+
+    <b>-P PASSWORD</b>
+    Provide password
+    Skip password prompt
+
+    <b>-t</b>
+    Enable tunneling
+    Map public IP to current object
+
+    <b>-l</b>
+    Force local main shell
+    Bypass proxy
+
+    <b>-d</b>
+    Dictionary attack mode
+    No password needed, uses saved wordlist
+
+    <b>--start N</b>
+    Start index in wordlist
+    Default: 0
+
+    <b>--stop N</b>
+    Stop index in wordlist
+    Default: end of list
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Connection</color>
+    <b>ftp tux@remotehost</b>
+    Password prompt
+
+    <b>ftp -P linux tux@remotehost</b>
+    With password flag
+
+    <b>ftp help</b>
+    Interactive mode
+
+    <color=#e4ff34># Custom Port</color>
+    <b>ftp -p 24 tux@remotehost</b>
+    Connect on port 24
+
+    <b>ftp -p 2121 admin@server.com</b>
+    Custom FTP port
+
+    <color=#e4ff34># With Password</color>
+    <b>ftp -P linux tux@remotehost</b>
+    Provide password via flag
+
+    <color=#e4ff34># Tunneling</color>
+    <b>ftp -t tux@remotehost</b>
+    Enable tunneling
+
+    <b>ftp -t -p 2121 -P mypass root@target</b>
+    Tunnel with custom port and password
+
+    <color=#e4ff34># Local Shell</color>
+    <b>ftp -l tux@remotehost</b>
+    Force local shell
+
+    <color=#e4ff34># Dictionary Attack</color>
+    <b>ftp -d root@remotehost</b>
+    Dict attack on port 21
+
+    <b>ftp -d -p 2121 root@remotehost</b>
+    Dict attack on custom port
+
+    <b>ftp -d --start 50 --stop 200 root@remotehost</b>
+    Dict attack with wordlist slice
+
+    <color=#e4ff34># File Transfer</color>
+    <b>get file.txt</b>
+    Download file
+
+    <b>put local.txt</b>
+    Upload file
+<b>SEE ALSO</b>
+    <b>ssh</b>, <b>sssh</b>, <b>nmap</b>"

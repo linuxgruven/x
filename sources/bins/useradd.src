@@ -1,0 +1,6 @@
+binUseradd="if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""useradd_usage""))
+inputPass=user_input(""Setting password for user ""+params[0]+"".""+char(10)+""New password: "",true)
+output=create_user(host_computer(get_shell),params[0],inputPass)
+if output==true then exit(""User created OK"")
+if output then exit(output)
+print(""Error: the user could not be created."")"

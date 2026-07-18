@@ -1,0 +1,27 @@
+// =============================================================================
+// GROUPADD
+// Add a user to a group, creating the group if needed.
+// =============================================================================
+Command.groupadd=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+  if (not argv or len(argv)<2) and not hasPipeInput then return Man.help(["groupadd"])
+  if hasPipeInput then
+    if not argv then argv=[]
+    _pipeUsers=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(_pipeUsers,line);end for
+    if len(_pipeUsers)>0 then
+      _savedStdin=globals.G_pipe.stdin
+      globals.G_pipe.stdin=null
+      for _pipeUser in _pipeUsers;Command.groupadd(Obj,[_pipeUser]+argv);end for
+      globals.G_pipe.stdin=_savedStdin
+      return
+    end if
+  end if
+  username=argv[0]
+  if len(username)>15 then return Error.set("Username too long")
+  groupName=argv[1]
+  if len(groupName)>15 then return Error.set("Group name too long")
+  result=create_group(Obj.computer,username,groupName)
+  if result==1 then return Info.info("Group "+groupName+" added to user "+username)
+  Info.error(result)
+end function

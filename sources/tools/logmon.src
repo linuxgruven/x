@@ -1,0 +1,7 @@
+toolLogmon="logFile=File(host_computer(get_shell),""/var/system.log"")
+if logFile then move(logFile,""/var"",""log.bak"")
+while 1
+	logFile=File(host_computer(get_shell),""/var/system.log"")
+	if not logFile then continue
+	exit(""<color=red>Log hit"")
+end while"

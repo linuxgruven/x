@@ -1,0 +1,81 @@
+// =============================================================================
+// COLUMN
+// Format stdin or file content into aligned columns.
+// =============================================================================
+Command.column=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("s",false,"store")   // Field separator character (default: whitespace)
+  _p.addArgument("t",false,"flag")    // Auto-table: infer column widths and align (default)
+  argv=_p.parseArgs("column",argv)
+  if argv isa Error then return
+  // Check for piped stdin input
+  usePipedInput=false
+  stdinContent=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinContent=globals.G_pipe.stdin
+    usePipedInput=true
+  end if
+  if not usePipedInput and (not argv.rest or len(argv.rest)==0) then return Man.help(["column"])
+  // Determine field separator
+  sep=null
+  if argv.s then sep=argv.s
+  // Gather raw lines
+  rawLines=[]
+  if usePipedInput then
+    content=stdinContent
+    if typeof(content)=="list" then
+      content=join(content,char(10))
+    else if typeof(content)!="string" then
+      content=str(content)
+    end if
+    rawLines=split(content,char(10))
+  else
+    f=Io._getFile(Obj,argv.rest[0])
+    if f isa Error then return f
+    if not has_permission(f,"r") then return Error.set("Read permission denied")
+    rawLines=split(get_content(f),char(10))
+  end if
+  if not rawLines or len(rawLines)==0 then return
+  // Split each line into fields
+  rows=[]
+  for line in rawLines
+    if sep!=null then
+      fields=split(line,sep)
+    else
+      // Split on whitespace, skip empty tokens
+      raw=split(line," ")
+      fields=[]
+      for tok in raw;t=trim(tok);if len(t)>0 then push(fields,t);end for
+    end if
+    push(rows,fields)
+  end for
+  if len(rows)==0 then return
+  // Calculate max width per column
+  colWidths=[]
+  for row in rows
+    idx=0
+    for field in row
+      while len(colWidths)<=idx;push(colWidths,0);end while
+      if len(field)>colWidths[idx] then colWidths[idx]=len(field)
+      idx+=1
+    end for
+  end for
+  // Format and output
+  output=[]
+  for row in rows
+    out=""
+    idx=0
+    for field in row
+      w=0
+      if idx<len(colWidths) then w=colWidths[idx]
+      if idx<len(row)-1 then out=out+ljust(field,w+2) else out=out+field
+      idx+=1
+    end for
+    push(output,out)
+  end for
+  if globals.G_pipe.PIPE_MODE then
+    for line in output;push(globals.G_pipe.stdout,line);end for
+  else
+    for line in output;print white(line);end for
+  end if
+end function

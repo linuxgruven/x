@@ -1,0 +1,35 @@
+// Small menu() builtin test for Bash scripts
+
+_print bold(=== MENU SMALL TEST ===)
+_print
+
+_setvar(main_items, [Status, Logs, Exit])
+_setvar(main_choice, menu(_getvar(main_items), numbers, cyan))
+_print Main index: _getvar(main_choice)
+
+_setvar(env_items, [Dev, Test, Prod])
+_setvar(env_choice, menu(_getvar(env_items), letters, #00bfff))
+_print Env index: _getvar(env_choice)
+
+_print
+_print yellow(Testing explicit case modes)
+_print yellow(Insensitive mode: lowercase or uppercase letter should both work)
+_setvar(env_choice_ci, menu(_getvar(env_items), letters, #00bfff, insensitive))
+_print Env index (insensitive): _getvar(env_choice_ci)
+
+_print yellow(Strict mode: input must match uppercase labels)
+_setvar(env_choice_strict, menu(_getvar(env_items), letters, #00bfff, strict))
+_print Env index (strict): _getvar(env_choice_strict)
+
+if _getvar(main_choice) == 0
+  _print green(Status selected)
+endif
+if _getvar(main_choice) == 1
+  _print yellow(Logs selected)
+endif
+if _getvar(main_choice) == 2
+  _print red(Exit selected)
+endif
+
+_print
+_print bold(=== MENU SMALL TEST COMPLETE ===)

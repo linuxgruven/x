@@ -1,0 +1,237 @@
+// Man page for make
+manMake="MAKE(1)                          X Shell Manual                          MAKE(1)
+
+<b>NAME</b>
+    make - Binary build and infection framework
+<b>SYNOPSIS</b>
+    <b>make -t</b> [-y] (-f) (-c [-b]|[-e]) (-p [[PASSWORD]]) (-s [START]) (-o [PATH]) BINARY
+    <b>make -rec</b>
+    <b>make -r</b>
+    <b>make -cs</b>
+    <b>make -pm</b>
+    <b>make -pp</b>
+    <b>make -pc</b>
+    <b>make -i</b> BINARY V
+    <b>make -i</b> BINARY R
+    <b>make -i</b> BINARY T
+    <b>make -i</b> BINARY C
+    <b>make -l</b>
+    <b>make -v</b> BINARY
+    <b>make -a</b> [-y]
+    <b>make -b</b> BINARY
+    <b>make -b S</b> BINARY
+    <b>make -b T</b> BINARY
+    <b>make -b V</b> BINARY
+    <b>make -b R</b> BINARY
+    <b>make -b P</b> BINARY
+    <b>make -b E</b> BINARY
+    <b>make -b D</b> BINARY
+    <b>make -b C</b> BINARY
+    <b>make -b F</b> BINARY
+    <b>make -b G</b> BINARY
+    <b>make -b GS</b> BINARY
+    <b>make -p</b> BINARY
+<b>DESCRIPTION</b>
+    Build framework for creating standalone tools and infecting binaries. Supports
+    virus, rshell, and RAT injection. Creates proxy binaries, custom servers, and
+    system recovery tools. Lock and unlock binaries support -p for password and
+    -s for start path. Default encryption mode is -e. RAT requires /root/rat file
+    on C2 server for remote code execution.
+<b>OPTIONS</b>
+    <b>-t BINARY</b>
+    Make standalone tool
+    -y keeps in current dir
+    -o PATH installs to path
+    -o PATH installs to path
+
+    <b>-rec</b>
+    System recovery binary
+    Standalone recovery tool
+
+    <b>-r</b>
+    Generic rshell binary
+    Create rshell bin file
+
+    <b>-cs</b>
+    Custom server frontend
+    Build server interface
+
+    <b>-pm</b>
+    Proxy from Map.conf
+    Use Map.conf entries
+
+    <b>-pp</b>
+    Proxy from proxy.dat
+    Use proxy.dat entries
+
+    <b>-pc</b>
+    Proxy custom input
+    Manual proxy configuration
+
+    <b>-i BINARY V</b>
+    Inject virus
+    Infect with virus payload
+
+    <b>-i BINARY R</b>
+    Inject rshell
+    Infect with reverse shell
+
+    <b>-i BINARY T</b>
+    Inject RAT
+    Remote access trojan
+
+    <b>-i BINARY C</b>
+    Inject custom payload
+    User-defined code
+
+    <b>-l</b>
+    List buildable binaries
+    Show all available builds
+
+    <b>-v BINARY</b>
+    View binary source
+    Display source code
+
+    <b>-a (-y)</b>
+    Build all default binaries
+    -y places in /bin
+
+    <b>-b BINARY</b>
+    Build single binary
+    Standard build
+
+    <b>-b BINARY /path</b>
+    Build and install to path
+    Skips /bin prompt
+
+    <b>-b S BINARY</b>
+    Show source before building
+    Display source code then build
+
+    <b>-b T BINARY</b>
+    Build with RAT
+    Include trojan
+
+    <b>-b V BINARY</b>
+    Build with virus
+    Include virus payload
+
+    <b>-b R BINARY</b>
+    Build with rshell
+    Include reverse shell
+
+    <b>-b P BINARY</b>
+    Build with password
+    Password protected
+
+    <b>-b E BINARY</b>
+    Build encrypt filesystem
+    Full encryption binary
+
+    <b>-b D BINARY</b>
+    Build decrypt filesystem
+    Full decryption binary
+
+    <b>-b C BINARY</b>
+    Build with custom payload
+    Include custom code
+
+    <b>-b F BINARY</b>
+    Build from file content
+    Use file as payload
+
+    <b>-b G BINARY</b>
+    Build with GCO reader
+    Reads gco on target and emails data to you
+    Prompts for your email address, password, and list cap at build time
+    Emails arrive as 'GCO 1', 'GCO 2', etc. with [END] in the final email
+
+    <b>-b GS BINARY</b>
+    Build with GCO reader (show source)
+    Same as -b G but previews source before building
+
+    <b>-p BINARY</b>
+    View source code
+    Display buildable source
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Building</color>
+    <b>make -l</b>
+    List all binaries
+
+    <b>make -b ls</b>
+    Build ls binary
+
+    <b>make -a</b>
+    Build all defaults
+
+    <b>make -a -y</b>
+    Build all to /bin
+
+    <color=#e4ff34># Standalone Tools</color>
+    <b>make -t lock</b>
+    Create lock tool
+
+    <b>make -t -y unlock</b>
+    Keep unlock in current dir
+
+    <b>make -rec</b>
+    System recovery binary
+
+    <color=#e4ff34># Infected Binaries</color>
+    <b>make -i /bin/cat V</b>
+    Inject virus into cat
+
+    <b>make -i /home/x R</b>
+    Inject rshell
+
+    <b>make -b V ls</b>
+    Build ls with virus
+
+    <b>make -b R ps</b>
+    Build ps with rshell
+
+    <color=#e4ff34># Proxy Binaries</color>
+    <b>make -pm</b>
+    Proxy from Map.conf
+
+    <b>make -pp</b>
+    Proxy from proxy.dat
+
+    <b>make -pc</b>
+    Custom proxy config
+
+    <color=#e4ff34># Special Builds</color>
+    <b>make -b E encrypt</b>
+    Encryption binary
+
+    <b>make -b D decrypt</b>
+    Decryption binary
+
+    <b>make -b P secure</b>
+    Password protected
+
+    <color=#e4ff34># GCO Spy</color>
+    <b>make -b G ls</b>
+    Build ls with GCO spy
+    Emails gco data when victim runs ls
+
+    <b>make -b GS ls</b>
+    Same with source preview
+
+    <color=#e4ff34># X Chat</color>
+    <b>make -t xserver</b>
+    Chat server (run on host)
+    Sets up /root/chat/, polls
+    client outboxes, writes msgs
+
+    <b>make -t xchat</b>
+    Chat client (connects via SSH)
+    Prompts for IP/port/user/pass
+    Colors, art, /nick, /who, /quit
+
+    <b>make -t xviewer</b>
+    Chat message viewer
+    Prompts for SSH login, displays
+    messages in real time
+<b>SEE ALSO</b>
+    <b>build</b>"

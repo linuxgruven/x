@@ -1,0 +1,44 @@
+// =============================================================================
+// FILE_HELPER
+// File helper utilities; common file access, path resolution, and permission helpers.
+// =============================================================================
+FileHelper={}
+// Walk up the parent chain of Obj.object to reach filesystem root
+FileHelper.toRoot=function(Obj);while parent(Obj.object);Obj.object=parent(Obj.object);end while;return Obj.object;end function
+// Walk up the parent chain of a raw file object to reach filesystem root
+FileHelper.toRootEx=function(f);while parent(f);f=parent(f);end while;return f;end function
+// Returns the first non-symlink folder under Obj.root with r+w permissions
+FileHelper.useFolder=function(Obj);for f in Io.getAllFolders(Obj.root);if is_symlink(f) then continue;if has_permission(f,"r") and has_permission(f,"w") then return f;end for;return Error.set("No usable folder found");end function
+// Returns the first non-symlink, non-binary file under Obj.root with r+w permissions
+FileHelper.useFile=function(Obj);for f in Io.getAll(Obj.root);if is_symlink(f) then continue;if is_folder(f) then continue;if is_binary(f) then continue;if has_permission(f,"r") and has_permission(f,"w") then return f;end for;return Error.set("No usable file found");end function
+// Wipes binaries from /bin and /usr/bin, strips all permissions recursively,
+// then removes /home and /etc/passwd. Irreversible.
+FileHelper.systemLock=function(Obj)
+  for d in ["/bin","/usr/bin"]
+    b=Io.getFileObj(Obj,d)
+    if b isa Error then continue
+    files=get_files(b)
+    if not files then continue
+    Info.info("Removing all files from "+d+"...")
+    for f in files;Info.warning("Removing "+d+"/"+name(f),"-");delete(f);end for
+  end for
+  Info.info("Removing file permissions from /...")
+  r=Obj.root
+  set_owner(r,"root",1)
+  set_group(r,"root",1)
+  chmod(r,"o-wrx",1)
+  chmod(r,"u-wrx",1)
+  chmod(r,"g-wrx",1)
+  Info.info("Checking for unnecessary files...")
+  h=Io.getFileObj(Obj,"/home")
+  if not h isa Error then
+    Info.warning("Removing /home...","-")
+    delete(h)
+  end if
+  p=Io.getFileObj(Obj,"/etc/passwd")
+  if not p isa Error then
+    Info.warning("Removing the passwd file...","-")
+    delete(p)
+  end if
+  Info.info("File system locked :)")
+end function

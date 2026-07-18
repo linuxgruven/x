@@ -1,0 +1,55 @@
+// =============================================================================
+// LN
+// Create a symlink; -l lists all symlinks in the filesystem.
+// =============================================================================
+Command.ln=function(Obj,argv)
+  if not argv then return Man.help(["ln"])
+  _p=ArgumentParser.init
+  _p.addArgument("l",false,"flag")    // List all symlinks
+  argv=_p.parse("ln",argv,Obj)
+  if argv isa Error then return
+  if argv.l then
+    symlinks=[]
+    allItems=Io.getAll(Obj.root)
+    if allItems isa Error then return allItems
+    for item in allItems;if is_symlink(item) then push(symlinks,path(item));end for
+    if not symlinks then return Info.info("No system links found")
+    Info.info("Found the following system links:")
+    return listNHZ(symlinks)
+  end if
+  if not len(argv.rest)>=2 then return Man.help(["ln"])
+  destPath=argv.rest[-1]
+  destFile=Io._getFile(Obj,destPath)
+  destDir=null
+  linkName=null
+  if destFile and not (destFile isa Error) and is_folder(destFile) then
+    destDir=destFile
+  else
+    // Parse as: ln source linkname
+    parentPath=parent_path(destPath)
+    if parentPath==destPath then parentPath=current_path
+    destDir=Io._getFile(Obj,parentPath)
+    if destDir isa Error then return destDir
+    if not is_folder(destDir) then return Error.set("Invalid path")
+    parts=split(destPath,"/")
+    linkName=parts[-1]
+  end if
+  sourceFiles=[]
+  hasFiles=argv.hasIndex("files")
+  if hasFiles and argv.files and len(argv.files)>0 then
+    _len=len(argv.files);i=0;while i<_len;push(sourceFiles,argv.files[i]);i+=1;end while
+  else
+    _len=len(argv.rest);i=0;while i<=_len-2;srcFile=Io._getFile(Obj,argv.rest[i]);if srcFile isa Error then return srcFile;push(sourceFiles,srcFile);i+=1;end while
+  end if
+  if not sourceFiles or len(sourceFiles)==0 then return Error.set("No source files specified")
+  if linkName and len(sourceFiles)>1 then return Error.set("Cannot create multiple links with single name")
+  for source in sourceFiles
+    if not source or source isa Error then continue
+    if linkName then finalLinkName=linkName else finalLinkName=split(name(source),"/")[-1] // Extract source filename (last component after splitting by /)
+    // Create the symbolic link - returns 1 on success, string on error, null if deleted
+    result=symlink(source,path(destDir),finalLinkName)
+    if result==null then return Error.set("File was deleted or invalid")
+    if result isa string then return Error.set(result)
+    if result!=1 then return Error.set("Unexpected symlink result: "+str(result))
+  end for
+end function

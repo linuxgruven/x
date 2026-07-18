@@ -1,0 +1,23 @@
+// Man page for wait
+manWait="WAIT(1)                          X Shell Manual                          WAIT(1)
+
+<b>NAME</b>
+    wait - Pause execution
+<b>SYNOPSIS</b>
+    <b>wait</b> [SECONDS]
+<b>DESCRIPTION</b>
+    Pause script execution. If SECONDS is omitted, pauses for ~1 second.
+    Mainly used with [ ; ] for command chaining. Accepts whole numbers (1)
+    or fractions (0.2). Range: 0.001 to 300 seconds.
+<b>OPTIONS</b>
+    <b>SECONDS</b> - Pause Duration
+      Pause for specified seconds (0.001-300).
+<b>EXAMPLE:</b>
+    <b>wait 5</b>
+    Pause for 5 seconds
+
+    <b>echo Starting ; wait 2 ; echo Done</b>
+    Wait between commands
+
+    <b>wait 0.5</b>
+    Pause for half second"

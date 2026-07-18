@@ -1,0 +1,54 @@
+// Man page for web
+manWeb="WEB(1)                           X Shell Manual                           WEB(1)
+
+<b>NAME</b>
+    web - Private HTTP interweb service
+<b>SYNOPSIS</b>
+    <b>web</b>
+<b>DESCRIPTION</b>
+    The web command installs and launches a private HTTP server for secure
+    browsing of coin, bank, repository, and internet rental services. The
+    server is not port forwarded and operates as a local service only.
+    Requires root privileges to execute. The service automatically closes
+    when the terminal is closed. Repository access is limited to fetching
+    files only, without account creation or file download capabilities.
+<b>OPTIONS</b>
+    <b>web</b> - Launch Interweb Service
+      Initiates the private HTTP interweb service.
+      Provides safe browsing for financial and repository services.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Launch Service</color>
+    <b>web</b>
+    Start the private HTTP server
+
+    <color=#e4ff34># Access Services</color>
+    <b>web</b>
+    Browse coin services securely
+
+    <b>web</b>
+    Access bank services privately
+
+    <b>web</b>
+    View repository files safely
+
+    <color=#e4ff34># Service Features</color>
+    <b>web</b>
+    No port forwarding (local only)
+
+    <b>web</b>
+    Auto-closes on terminal exit
+
+    <b>web</b>
+    Repository fetch capability
+
+    <color=#e4ff34># Security Notes</color>
+    <b>web</b>
+    Requires root privileges
+
+    <b>web</b>
+    Cannot create accounts or download files
+
+    <b>web</b>
+    Limited repo functionality
+<b>SEE ALSO</b>
+    <b>service</b>, <b>open</b>, <b>start</b>"

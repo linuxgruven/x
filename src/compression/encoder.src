@@ -1,0 +1,70 @@
+// =============================================================================
+// ENCODER
+// Packs arrays into 7-bit compact strings using a printable charSet.
+// =============================================================================
+Encoder={
+  "charSet":[],
+  "charMap":{}
+}
+// Build charSet: 0-9 (48-57), A-Z (65-90), a-z (97-122), extended (128-193)
+_n=48;while _n<=57;push(Encoder.charSet,_n);_n+=1;end while
+_n=65;while _n<=90;push(Encoder.charSet,_n);_n+=1;end while
+_n=97;while _n<=122;push(Encoder.charSet,_n);_n+=1;end while
+_n=128;while _n<=193;push(Encoder.charSet,_n);_n+=1;end while
+// Build reverse lookup map for O(1) decode
+for _i in indexes(Encoder.charSet);Encoder.charMap[Encoder.charSet[_i]]=_i;end for
+// Convert decimal number to binary string (iterative)
+Encoder.toBin=function(n)
+	if n==0 then return "0"
+	r=""
+	while n>0;r=str(n%2)+r;n=floor(n/2);end while
+	return r
+end function
+// Convert binary string to decimal integer
+Encoder.toInt=function(n)
+	r=0
+	v=values(n)
+	l=len(v)
+	for i in indexes(v);if v[i]=="1" then r=r+2^(l-1-i);end for
+	return r
+end function
+// Split string into chunks of size n (iterative)
+Encoder.divide=function(s,n)
+	r=[]
+	_len=len(s)
+	i=0
+	while i<_len;push(r,s[i:i+n]);i=i+n;end while
+	return r
+end function
+// Encode array of numbers/characters to compact string
+Encoder.encode=function(z)
+	l=z[0:]
+	c=0
+	for i in indexes(l);if l[i] isa string then l[i]=l[i].code;l[i]=self.toBin(l[i]);if len(l[i])>c then c=len(l[i]);end for
+	for i in indexes(l);l[i]="0"*(c-len(l[i]))+l[i];end for
+	l=join(l,"")
+	// Calculate padding needed for 7-bit alignment
+	f=len(l)%7
+	if f>0 then f=7-f
+	l=l+"0"*f
+	b=self.toBin(f)
+	l="0"*(7-len(b))+b+l
+	e=self.toBin(c)
+	l="0"*(7-len(e))+e+l
+	l=self.divide(l,7)
+	for i in indexes(l);l[i]=char(self.charSet[self.toInt(l[i])]);end for
+	return join(l,"")
+end function
+// Decode compact string back to array
+Encoder.decode=function(s)
+	l=s.values
+	for i in indexes(l);l[i]=self.toBin(self.charMap[l[i].code]);l[i]="0"*(7-len(l[i]))+l[i];end for
+	l=join(l,"")
+	c=self.toInt(l[0:7])
+	f=self.toInt(l[7:14])
+	l=self.divide(l[14:],7)
+	if f>0 then l[-1]=l[-1][0:f*-1]
+	l=self.divide(l.join(""),c)
+	for i in indexes(l);l[i]=self.toInt(l[i]);if l[i]<256 then l[i]=char(l[i]);end for
+	return l
+end function

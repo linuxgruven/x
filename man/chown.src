@@ -1,0 +1,49 @@
+// Man page for chown
+// XFIX1.0: -r walks per-node via Io.walkApply and reports child denials (engine swallows them)
+manChown="CHOWN(8)                         X Shell Manual                         CHOWN(8)
+
+<b>NAME</b>
+    chown - change the owner of a file|directory
+<b>SYNOPSIS</b>
+    <b>chown</b> [<b>-r|-R</b>] <b>USER </b><b>FILE</b> [FILE...]
+    <b>find</b> PATTERN | <b>chown</b> <b>USER</b>
+<b>DESCRIPTION</b>
+    Change file or directory owner. Requires appropriate permissions.
+    Use -r for recursive ownership changes. Interactive help mode available.
+    Supports glob patterns: <b>chown user *.txt</b>, <b>chown admin src/*</b>
+    Accepts filenames from stdin via pipe — username is passed as the argument.
+<b>OPTIONS</b>
+    <b>-r, -R</b>
+    Recursive mode
+    Apply to directory tree
+
+    <b>USER</b>
+    New owner username
+    Must exist on system
+
+    <b>FILE</b>
+    Target file or directory
+    Path to modify
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Single File</color>
+    <b>chown myuser document.txt</b>
+    Change file owner
+
+    <b>chown tux /home/files/data.dat</b>
+    Change owner to tux
+
+    <color=#e4ff34># Recursive</color>
+    <b>chown -r admin /var/www</b>
+    Recursive ownership
+
+    <b>chown -R guest /root/files</b>
+    Change directory tree
+
+    <color=#e4ff34># Pipe Support</color>
+    <b>find *.src | chown root</b>
+    Transfer ownership of all matched files to root
+
+    <b>find /var/log *.log | chown admin</b>
+    Batch reassign log file ownership
+<b>SEE ALSO</b>
+    <b>chmod</b>, <b>chog</b>, <b>groups</b>"

@@ -1,0 +1,15 @@
+binScanrouter="if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""scanrouter_usage""))
+router=get_router(params[0])
+if not router then exit(""scanrouter: ip address not found"")
+print(""Connecting to router at address: ""+params[0]+char(10)+""Scanning kernel library..."")
+version=kernel_version(router)
+if not version then print(""Warning: kernel_router.so not found"") else print(""kernel_router.so : v""+version)
+fw_rules=firewall_rules(router)
+if typeof(fw_rules)==""string"" then exit(fw_rules)
+print(char(10)+""Scanning firewall rules..."")
+if len(fw_rules)==0 then exit(""No rules found."")
+info=""ACTION PORT SOURCE_IP DESTINATION_IP""
+for rules in fw_rules
+	info=info+char(10)+rules
+end for
+print(format_columns(info)+char(10))"

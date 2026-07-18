@@ -1,0 +1,406 @@
+// =============================================================================
+// DISK
+// Filesystem library; analysis, management, synchronization, and disk utility operations.
+// =============================================================================
+Disk={}
+Disk.rsyncDir=function(Obj,srcFolder,dstPath,argv)
+  dstFolder=Io.getFileObj(Obj,dstPath)
+  if not dstFolder then
+    parent=parent_path(dstPath)
+    parentFolder=Io.getFileObj(Obj,parent)
+    if not parentFolder then return Error.set("Destination parent does not exist: "+parent)
+    //Create destination folder
+    if not create_folder(Obj.computer,parent,name(srcFolder)) then return Error.set("Failed to create destination folder: "+dstPath)
+    dstFolder=Io.getFileObj(Obj,dstPath)
+  end if
+  if not is_folder(dstFolder) then return Error.set("Destination is not a folder: "+path(dstFolder))
+  //Sync all files in source folder
+  for f in get_files(srcFolder)+get_folders(srcFolder)
+    if not has_permission(f,"r") then continue
+    dstFilePath=path(dstFolder)+"/"+name(f)
+    dstFile=Io.getFileObj(Obj,dstFilePath)
+    shouldCopy=true
+    if dstFile and argv.u then
+      //Update mode: skip if destination is newer or same
+      //For text files, check character count; for binary, check file size
+      if is_binary(f) then
+        if size(dstFile)>=size(f) then shouldCopy=false
+      else
+        //Text file - compare character counts and content
+        srcContent=get_content(f)
+        dstContent=get_content(dstFile)
+        if srcContent!=null and dstContent!=null then
+          srcLen=len(srcContent)
+          dstLen=len(dstContent)
+          //If both are empty (length 0), skip copy
+          if srcLen==0 and dstLen==0 then
+            shouldCopy=false
+          else if srcLen==dstLen and srcContent==dstContent then
+            shouldCopy=false
+          end if
+        end if
+      end if
+    end if
+    if shouldCopy then
+      if argv.v then Info.info("  Copying file: "+name(f))
+      result=copy(f,path(dstFolder),name(f))
+      if result!=1 and argv.v then Info.error("Failed to copy "+name(f)+": "+result)
+    end if
+  end for
+  //Recursively sync subdirectories
+  for d in get_folders(srcFolder)
+    if is_symlink(d) then continue
+    if not has_permission(d,"r") then continue
+    dstSubPath=path(dstFolder)+"/"+name(d)
+    result=self.rsyncDir(Obj,d,dstSubPath,argv)
+    if result isa Error and argv.v then Info.error("Failed to sync directory "+name(d))
+  end for
+  //Delete source files if --delete flag is set
+  if argv.delete then
+    srcNames={}
+    for f in get_files(srcFolder)+get_folders(srcFolder);srcNames[name(f)]=1;end for
+    for f in get_files(dstFolder)+get_folders(dstFolder)
+      if not hasIndex(srcNames,name(f)) then
+        if argv.v then Info.info("  Deleting: "+name(f))
+        if is_folder(f) then
+          f.delete
+        else
+          if has_permission(f,"w") then f.delete
+        end if
+      end if
+    end for
+  end if
+  return true
+end function
+Disk.analyzeFileSystem=function(Obj,startPath=null)
+  //Analyze filesystem and return detailed information about all files/folders
+  if not startPath then startPath=path(Obj.root)
+  root=Io.getFileObj(Obj,startPath)
+  if root isa Error then return root
+  if not is_folder(root) then return Error.set("Path must be a folder: "+startPath)
+  files=Io.getAll(root)
+  if files isa Error then return files
+  results=[]
+  for f in files
+    info={
+      "file":f,
+      "path":path(f),
+      "name":name(f),
+      "size":val(size(f)),
+      "is_folder":is_folder(f),
+      "owner":owner(f),
+      "group":group(f),
+      "permissions":permissions(f),
+      "parent":parent_path(path(f))
+    }
+    push(results,info)
+  end for
+  return results
+end function
+Disk.sortBySize=function(fileList,descending=true)
+  //Sort file list by size using quicksort O(n log n)
+  if len(fileList)<=1 then return fileList
+  return self._quicksort(fileList,"size",descending)
+end function
+Disk.sortByName=function(fileList,descending=false)
+  //Sort file list by name alphabetically using quicksort O(n log n)
+  if len(fileList)<=1 then return fileList
+  return self._quicksort(fileList,"name",descending)
+end function
+Disk._quicksort=function(arr,field,descending=true)
+  //Generic quicksort implementation for object arrays
+  n=len(arr)
+  if n<=1 then return arr
+  //Use middle element as pivot (better for partially sorted data)
+  pivotIdx=floor(n/2)
+  pivot=arr[pivotIdx][field]
+  //Partition into three groups
+  less=[]
+  equal=[]
+  greater=[]
+  for item in arr
+    val=item[field]
+    if val<pivot then
+      push(less,item)
+    else if val>pivot then
+      push(greater,item)
+    else
+      push(equal,item)
+    end if
+  end for
+  //Recursively sort and combine
+  if descending then return self._quicksort(greater,field,descending)+equal+self._quicksort(less,field,descending) else return self._quicksort(less,field,descending)+equal+self._quicksort(greater,field,descending)
+end function
+Disk.matchWildcard=function(text,pattern)
+  //Match text against pattern with wildcard support (* = any characters)
+  //Returns true if text matches pattern, false otherwise
+  //No wildcard - simple contains check
+  if indexOf(pattern,"*")==null then return indexOf(text,pattern)!=null
+  //Split pattern by wildcards (escape * with backslash)
+  parts=split(pattern,"\*")
+  //No wildcard found after split (shouldn't happen but safety check)
+  if len(parts)==1 then return indexOf(text,parts[0])!=null
+  if len(parts)==2 then
+    //Single wildcard: prefix*suffix or *suffix or prefix*
+    prefix=parts[0]
+    suffix=parts[1]
+    if prefix=="" and suffix=="" then
+      //Just * matches everything
+      return true
+    else if prefix=="" then
+      //*suffix - check if ends with
+      if len(suffix)>len(text) then return false
+      return text[len(text)-len(suffix):]==suffix
+    else if suffix=="" then
+      //prefix* - check if starts with
+      if len(prefix)>len(text) then return false
+      return text[:len(prefix)]==prefix
+    else
+      //prefix*suffix - check both
+      if len(prefix)+len(suffix)>len(text) then return false
+      if text[:len(prefix)]!=prefix then return false
+      if text[len(text)-len(suffix):]!=suffix then return false
+      return true
+    end if
+  end if
+  //Multiple wildcards - check if all parts exist in order
+  pos=0
+  for p in parts
+    if p=="" then continue
+    idx=text.indexOf(p,pos)
+    if idx==null or idx<pos then return false
+    pos=idx+len(p)
+  end for
+  return true
+end function
+Disk.displayResults=function(results,maxDisplay,showSize=true)
+  //Display formatted results from analysis functions
+  if not results then return Info.error("No results to display")
+  if len(results)==0 then return Info.info("No matches found")
+  Info.info("Showing "+str(maxDisplay)+" of "+str(len(results))+" results:")
+  //Calculate max owner/group lengths for proper alignment
+  maxOwner=8
+  maxGroup=8
+  for item in results;if len(item.owner)>maxOwner then maxOwner=len(item.owner);if len(item.group)>maxGroup then maxGroup=len(item.group);end for
+  i=0;while i<maxDisplay
+    item=results[i]
+    if item.is_folder then typeStr=yellow("[DIR] ") else typeStr=cyan("[FILE]")
+    perms=item.permissions
+    ownerStr=ljust(item.owner,maxOwner)
+    groupStr=ljust(item.group,maxGroup)
+    if showSize then
+      sizeStr=" "+Io.size(item.size)
+      print typeStr+" "+perms+" "+ownerStr+" "+groupStr+" "+ljust(item.path,40)+" "+rjust(sizeStr,10)
+    else
+      print typeStr+" "+perms+" "+ownerStr+" "+groupStr+" "+item.path
+    end if
+  i+=1;end while
+  if len(results)>maxDisplay then Info.info("... and "+str(len(results)-maxDisplay)+" more results not shown")
+end function
+Disk.free=function(Obj,argv)
+  //Show how many files can still be created (max 3125 total files/folders)
+  maxFiles=3125
+  Info.info("Analyzing filesystem...")
+  allItems=Io.getAll(Obj.root)
+  if allItems isa Error then return Info.error("Unable to analyze disk usage")
+  currentCount=len(allItems)
+  remainingCount=maxFiles-currentCount
+  print(yellow("         === Disk Space Available ==="))
+  print "  Maximum files/folders: "+cyan(str(maxFiles))
+  print "  Current files/folders: "+yellow(str(currentCount))
+  print "     Remaining capacity: "+green(str(remainingCount))
+  percentUsed=(currentCount*100.0)/maxFiles
+  print "                  Usage: "+str(round(percentUsed,2))+"%"
+end function
+Disk.used=function(Obj,argv)
+  //Show current filesystem usage statistics
+  maxFiles=3125
+  Info.info("Analyzing filesystem...")
+  allItems=Io.getAll(Obj.root)
+  if allItems isa Error then return Info.error("Unable to analyze disk usage")
+  totalSize=0
+  fileCount=0
+  folderCount=0
+  for item in allItems;totalSize+=val(size(item));if is_folder(item) then folderCount+=1 else fileCount+=1;end for
+  totalCount=fileCount+folderCount
+  print(yellow("       === Disk Usage Statistics ==="))
+  print "          Total files: "+cyan(str(fileCount))
+  print "        Total folders: "+yellow(str(folderCount))
+  print "          Total items: "+green(str(totalCount))
+  percentUsed=(totalCount*100.0)/maxFiles
+  print "                Usage: "+str(round(percentUsed,2))+"%"
+  print "  Overall system size: "+magenta(Io.size(totalSize))
+end function
+Disk.list=function(Obj,argv)
+  //List files and directories sorted by size
+  argv=ArgumentParser.check(argv)
+  _p=ArgumentParser.init
+  //sort by size
+  _p.addArgument("s",false,"flag")
+  //sort by name
+  _p.addArgument("n",false,"flag")
+  //reverse sort
+  _p.addArgument("r",false,"flag")
+  //directories only
+  _p.addArgument("d",false,"flag")
+  //files only
+  _p.addArgument("f",false,"flag")
+  //delete found results
+  _p.addArgument("x",false,"flag")
+  //omit zero-size files
+  _p.addArgument("z",false,"flag")
+  //find files by name pattern
+  _p.addArgument("find",true,"store")
+  //case-insensitive search
+  _p.addArgument("i",false,"flag")
+  //exact match (no wildcards, no contains)
+  _p.addArgument("e",false,"flag")
+  //limit display to N results
+  _p.addArgument("limit",true,"store")
+  //minimum size in bytes
+  _p.addArgument("min",true,"store")
+  //maximum size in bytes
+  _p.addArgument("max",true,"store")
+  //show top N results (alias for limit)
+  _p.addArgument("top",true,"store")
+  //show free space (remaining capacity)
+  _p.addArgument("free",true,"flag")
+  //show usage statistics
+  _p.addArgument("used",true,"flag")
+  argv=_p.parseArgs("disk",argv)
+  if argv isa Error then return
+  //Handle special commands first
+  if argv.free then return self.free(Obj,argv)
+  if argv.used then return self.used(Obj,argv)
+  startPath=null
+  if len(argv.rest)>0 then startPath=argv.rest[0] else startPath=path(Obj.root)
+  //Get filesystem analysis
+  Info.info("Analyzing filesystem...")
+  results=self.analyzeFileSystem(Obj,startPath)
+  if results isa Error then return results
+  //Filter by name pattern if specified
+  if argv.find then
+    filtered=[]
+    searchPattern=argv.find
+    caseSensitive=not argv.i
+    exactMatch=argv.e
+    for item in results
+      itemName=item.name
+      pattern=searchPattern
+      if not caseSensitive then
+        itemName=lower(itemName)
+        pattern=lower(pattern)
+      end if
+      //Check for match based on flags
+      matched=false
+      //Exact match only (no wildcards, no contains)
+      if exactMatch then matched=(itemName==pattern) else matched=self.matchWildcard(itemName,pattern) //Use wildcard matching function
+      if matched then push(filtered,item)
+    end for
+    results=filtered
+  end if
+  //Filter by type
+  if argv.d or argv.f then
+    filtered=[]
+    for item in results;if argv.d and item.is_folder then push(filtered,item);if argv.f and not item.is_folder then push(filtered,item);end for
+    results=filtered
+  end if
+  //Omit zero-size files if requested
+  if argv.z then
+    filtered=[]
+    for item in results;if item.size>0 then push(filtered,item);end for
+    results=filtered
+  end if
+  //Filter by size range
+  if argv.min or argv.max then
+    filtered=[]
+    minVal=0
+    maxVal=null
+    if argv.min then
+     //Support MB notation (e.g., "10mb" or just bytes "1024")
+      minStr=lower(argv.min)
+      if minStr.indexOf("mb")!=null then
+        minVal=val(minStr.replace("mb",""))*1024*1024
+      else if minStr.indexOf("kb")!=null then
+        minVal=val(minStr.replace("kb",""))*1024
+      else if minStr.indexOf("gb")!=null then
+        minVal=val(minStr.replace("gb",""))*1024*1024*1024
+      else
+        minVal=val(argv.min)
+      end if
+    end if
+    if argv.max then
+      //Support MB notation (e.g., "10mb" or just bytes "1024")
+      maxStr=lower(argv.max)
+      if maxStr.indexOf("mb")!=null then
+        maxVal=val(maxStr.replace("mb",""))*1024*1024
+      else if maxStr.indexOf("kb")!=null then
+        maxVal=val(maxStr.replace("kb",""))*1024
+      else if maxStr.indexOf("gb")!=null then
+        maxVal=val(maxStr.replace("gb",""))*1024*1024*1024
+      else
+        maxVal=val(argv.max)
+      end if
+    end if
+    for item in results
+      if item.size>=minVal then
+        if maxVal==null or item.size<=maxVal then push(filtered,item)
+      end if
+    end for
+    results=filtered
+  end if
+  //Sort results
+  if argv.s then
+    results=self.sortBySize(results,not argv.r)
+  else if argv.n then
+    results=self.sortByName(results,argv.r)
+  else
+    //Default: sort by size descending
+    results=self.sortBySize(results,not argv.r)
+  end if
+  //Determine display limit (default: show all)
+  maxDisplay=len(results)
+  if argv.limit then
+    maxDisplay=val(argv.limit)
+  else if argv.top then
+    maxDisplay=val(argv.top)
+  end if
+  //Handle deletion if requested
+  if argv.x then
+    if len(results)==0 then return Info.info("No files to delete")
+    if not Gui.yesNo("Delete "+str(len(results))+" found files/folders?",false) then return Info.info("Deletion cancelled")
+    Info.info("Deleting found results...")
+    deletedCount=0
+    failedCount=0
+    for item in results
+      if not has_permission(item.file,"w") then
+        if argv.v then Info.error("No write permission: "+item.path)
+        failedCount+=1
+        continue
+      end if
+      if item.is_folder then
+        //Delete folder
+        result=item.file.delete
+        if result then
+          deletedCount+=1
+          if argv.v then Info.info("Deleted folder: "+item.path)
+        else
+          failedCount+=1
+          if argv.v then Info.error("Failed to delete folder: "+item.path)
+        end if
+      else
+        //Delete file
+        result=item.file.delete
+        if result then
+          deletedCount+=1
+          if argv.v then Info.info("Deleted file: "+item.path)
+        else
+          failedCount+=1
+          if argv.v then Info.error("Failed to delete file: "+item.path)
+        end if
+      end if
+    end for
+    return Info.info("Deletion complete: "+str(deletedCount)+" deleted, "+str(failedCount)+" failed")
+  end if
+  self.displayResults(results,maxDisplay,true)
+end function

@@ -1,0 +1,16 @@
+computer=host_computer(get_shell)
+if params then interval=to_int(params[0]) else interval=5
+if not interval or interval<1 then interval=5
+print "<color=#4bff4b>[+] Log wiper started (every "+str(interval)+"s)</color>"
+while true
+  wait interval
+  logFile=File(computer,"/var/system.log")
+  if not logFile then continue
+  if size(logFile)=="0" then continue
+  if touch(computer,"/var","t") isa number then
+    move(File(computer,"/var/t"),"/var","system.log")
+    print "<color=#4bff4b>[+] Log cleared => "+current_date+"</color>"
+  else
+    exit "<color=#ff4b4b>[!] Failed to clear log (no write permission)</color>"
+  end if
+end while

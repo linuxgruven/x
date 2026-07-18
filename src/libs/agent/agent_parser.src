@@ -1,0 +1,3127 @@
+// =============================================================================
+// AGENT_PARSER
+// AI agent parser; natural language command parsing and intent extraction.
+// =============================================================================
+AgentParser={}
+AgentParser._CONFIG_KEYWORDS=["aggressive","stealth","dryRun","debug","trainer","promptOnAttack","promptOnCritical","outputLevel"]
+AgentParser._LEGACY_ALIASES={"verbose":"outputLevel","quiet":"outputLevel"}
+AgentParser._AUTONOMOUS_PATTERNS=["decide how","figure out","choose your own","think for yourself","you decide","your choice","use your judgment","be creative"]
+AgentParser._CONDITIONAL_PATTERNS=["if","then","else","otherwise","or try","fallback","on failure","failing that","if it works","on success","if successful"]
+AgentParser._EXCLUDE_KEYWORDS=["not from","but not","except","exclude","not a","no","without"]
+AgentParser._KNOWLEDGE_PATTERNS=["what do you know about","tell me about","what is","what's","explain","info on","info about","information about","help with","describe"]
+AgentParser._NUMBER_WORDS={"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,"ten":10,"twenty":20,"thirty":30,"forty":40,"fifty":50}
+//Parse config commands (enable/disable settings)
+AgentParser._parseConfig=function(cmd)
+  outLvl=globals.G_agent.config.outputLevel
+  result={"isConfig":false}
+  //Skip if this is a "set", "config", "show config", or "reset config" command
+  //Those are handled by the new setConfig/showConfig/resetConfig flow
+  if indexOf(cmd,"set ")!=null or indexOf(cmd,"config ")!=null or indexOf(cmd,"show config")!=null or indexOf(cmd,"display config")!=null or indexOf(cmd,"view config")!=null or indexOf(cmd,"reset config")!=null or indexOf(cmd,"restore defaults")!=null then return result
+  //Parse config command format: "ai/agent <setting> <on/off/true/false>"
+  configKeywords=self._CONFIG_KEYWORDS
+  legacyAliases=self._LEGACY_ALIASES
+  settingFound=null
+  isLegacyAlias=false
+  //Check for legacy aliases first
+  for alias in legacyAliases.indexes
+    if indexOf(cmd,alias)!=null then
+      settingFound=legacyAliases[alias]
+      isLegacyAlias=alias
+      break
+    end if
+  end for
+  //If no legacy alias, check normal keywords
+  if not settingFound then
+    for keyword in configKeywords
+      if indexOf(cmd,keyword)!=null then
+        settingFound=keyword
+        break
+      end if
+    end for
+  end if
+  if not settingFound then return result
+  result.isConfig=1  //Set to 1 (true) when config setting detected
+  //Determine value (on/off/true/false/enable/disable)
+  newValue=null
+  if indexOf(cmd," on")!=null or indexOf(cmd," true")!=null or indexOf(cmd," enable")!=null or indexOf(cmd," yes")!=null then
+    newValue=true
+  else if indexOf(cmd," off")!=null or indexOf(cmd," false")!=null or indexOf(cmd," disable")!=null or indexOf(cmd," no")!=null then
+    newValue=false
+  else
+    //Toggle if no explicit value given
+    if hasIndex(globals.G_agent.config,settingFound) then
+      if settingFound=="outputLevel" and isLegacyAlias then
+        //Special handling for verbose/quiet aliases
+        if isLegacyAlias=="verbose" then
+          //Toggle between 1 (normal) and 2 (verbose)
+          if outLvl>=2 then newValue=1 else newValue=2
+        else if isLegacyAlias=="quiet" then
+          //Toggle between 0 (silent) and 1 (normal)
+          if outLvl==0 then newValue=1 else newValue=0
+        end if
+      else if typeof(globals.G_agent.config[settingFound])=="number" and settingFound!="outputLevel" then
+        newValue=not globals.G_agent.config[settingFound]
+      else
+        newValue=not globals.G_agent.config[settingFound]
+      end if
+    else
+      newValue=true
+    end if
+  end if
+  //Apply the setting
+  if hasIndex(globals.G_agent.config,settingFound) then
+    oldValue=globals.G_agent.config[settingFound]
+    //Handle explicit on/off for outputLevel aliases
+    if settingFound=="outputLevel" and isLegacyAlias and typeof(newValue)=="number" and (newValue==true or newValue==false) then
+      if isLegacyAlias=="verbose" then
+        if newValue then newValue=2 else newValue=1
+      else if isLegacyAlias=="quiet" then
+        if newValue then newValue=0 else newValue=1
+      end if
+    end if
+    globals.G_agent.config[settingFound]=newValue
+    result.success=true
+    result.isConfig=1  //Explicitly set to 1 (true) on successful config change
+    //Format display message
+    displayName=settingFound
+    if isLegacyAlias then displayName=isLegacyAlias
+    //Format boolean values as "true"/"false" instead of 1/0
+    newStr=newValue
+    oldStr=oldValue
+    if typeof(newValue)=="number" and settingFound!="outputLevel" then
+      if newValue then newStr="true" else newStr="false"
+    end if
+    if typeof(oldValue)=="number" and settingFound!="outputLevel" then
+      if oldValue then oldStr="true" else oldStr="false"
+    end if
+    result.message="Agent config: "+displayName+" = "+str(newStr)+" (was "+str(oldStr)+")"
+    if outLvl>=1 then print skyblue(result.message)
+  else
+    result.error="Unknown config setting: "+settingFound
+  end if
+  return result
+end function
+//Minimal command patterns - only for commands that need special parsing logic
+//Most commands are dynamically loaded from man pages
+AgentParser._commandPatterns={
+  "scan":{"keywords":["scan"],"action":"scan","summary":"Scan target","subtypes":{"local":{"keywords":["local"],"mode":"local","summary":"Scan local machine"},"lan":{"keywords":["lan","network"],"mode":"lan","summary":"Scan LAN"}}},
+  "fetch":{"keywords":["fetch","get"],"action":"fetch","summary":"Fetch shell or access"},
+  "crackAll":{"keywords":["crack"],"action":"crackAll","summary":"Crack passwords","requiresContext":["all","accounts","users","passwords","computer","machine","system"]},
+  "escalate":{"keywords":["escalate","privilege","privesc"],"action":"escalate","summary":"Escalate privileges"},
+  "test":{"keywords":["test","run test","load test","self test","selftest","unit test"],"action":"test","summary":"Run AI test suite"}
+}
+//Goal pattern definitions
+AgentParser._goalPatterns={
+  "rootShell":{"keywords":["root"],"suffix":"for root access"},
+  "admin":{"keywords":["admin"],"suffix":"for admin access"},
+  "shell":{"keywords":["shell"],"suffix":"for shell access"},
+  "data":{"keywords":["data"],"suffix":"to extract data"},
+  "persistence":{"keywords":["persist"],"suffix":"for persistence"}
+}
+//Synonym dictionary for NLP enhancement
+AgentParser._synonyms={
+  "scan":["probe","check","inspect","examine","survey"],
+  "exploit":["hack","penetrate","compromise","breach","pwn","break"],
+  "crack":["break","decode","decrypt","bruteforce"],
+  "attack":["assault","strike","raid","hit"],
+  "escalate":["elevate","promote","upgrade","advance"],
+  "fetch":["get","retrieve","obtain","acquire","grab"],
+  "install":["deploy","setup","place","add"],
+  "remove":["delete","erase","wipe","uninstall"],
+  "find":["search","locate","discover","seek"],
+  "show":["display","list","view","present"],
+  "root":["admin","superuser","administrator","su"],
+  "target":["victim","host","machine","system","box"]
+}
+//Context hints: words that increase likelihood of each synonym group
+AgentParser._synonymContext={
+  "scan":["network","port","ports","nmap","service","services","open","range","discovery"],
+  "exploit":["system","server","vulnerability","vuln","remote","access","into","entry"],
+  "crack":["password","hash","login","credentials","auth","key","cipher"],
+  "attack":["ddos","flood","target","offensive","launch"],
+  "escalate":["privilege","root","admin","permission","sudo","level"],
+  "fetch":["file","download","data","info","information","copy"],
+  "install":["lib","library","package","tool","module","setup"],
+  "remove":["file","log","logs","trace","traces","evidence","clean"],
+  "find":["where","location","path","look","directory","hidden"],
+  "show":["status","info","information","current","my","config"],
+  "root":["shell","access","privilege","escalate","become"],
+  "target":["ip","address","remote","connect","reach"]
+}
+//Expand command with context-weighted synonyms for better matching
+AgentParser._expandWithSynonyms=function(text)
+  textLower=lower(text)
+  words=split(textLower," ")
+  //Score each possible base word match
+  bestWord=null
+  bestScore=0
+  tiedWords=[]
+  for baseWord in indexes(globals.G_agent._synonyms)
+    for synonym in globals.G_agent._synonyms[baseWord]
+      if indexOf(textLower,synonym)!=null then
+        //Found a synonym match - score it by context
+        score=1
+        if hasIndex(globals.G_agent._synonymContext,baseWord) then
+          for ctxWord in globals.G_agent._synonymContext[baseWord];if indexOf(textLower,ctxWord)!=null then score+=1;end for
+        end if
+        if score>bestScore then
+          bestScore=score
+          bestWord=baseWord
+          tiedWords=[baseWord]
+        else if score==bestScore and score>0 then
+          if indexOf(tiedWords,baseWord)==null then push(tiedWords,baseWord)
+        end if
+      end if
+    end for
+  end for
+  //If multiple matches tied AND promptOnAmbiguous is enabled, ask user
+  if len(tiedWords)>1 and bestScore>0 then
+    if globals.G_agent.config.promptOnAmbiguous then
+      outLvl=globals.G_agent.config.outputLevel
+      if outLvl>=1 then print yellow("Agent: Ambiguous intent - multiple interpretations possible")
+      choices=[]
+      for tw in tiedWords;push(choices,tw);end for
+      push(choices,"cancel")
+      choiceIdx=Gui.choiceHybrid(choices,{},0,false,true)
+      if choiceIdx>=0 and choiceIdx<len(tiedWords) then return tiedWords[choiceIdx]
+      return null
+    end if
+  end if
+  return bestWord
+end function
+//Parse natural language command into structured format
+AgentParser._parseCommand=function(Obj,command,headlessMode=false)
+  debug=globals.G_agent.config.debug
+  //Validate input
+  if not command or typeof(command)!="string" then return {"error":"Invalid command input"}
+  cmd=lower(trim(command))
+  if cmd=="" then return {"error":"Empty command"}
+  parsed={}
+  parsed.raw=command
+  //Check for compound commands: "scan X and then exploit Y", "first scan then crack"
+  compoundDelimiters=[" and then "," then "," afterwards "," after that "]
+  for delim in compoundDelimiters
+    delimIdx=indexOf(cmd,delim)
+    if delimIdx!=null and delimIdx>0 then
+      firstPart=trim(command[:delimIdx])
+      secondPart=trim(command[delimIdx+len(delim):])
+      if len(firstPart)>0 and len(secondPart)>0 then
+        //Strip "first" prefix if present
+        firstLower=lower(firstPart)
+        if indexOf(firstLower,"first ")==0 then firstPart=trim(firstPart[6:])
+        parsed.compound=true
+        parsed.subCommands=[firstPart,secondPart]
+        parsed.action="compound"
+        parsed.summary="Compound: "+firstPart+" -> "+secondPart
+        if debug then print green("[DEBUG] Parser: Compound command detected: '"+firstPart+"' -> '"+secondPart+"'")
+        return parsed
+      end if
+    end if
+  end for
+  //Check for multi-target commands: "scan 1.2.3.4 and 5.6.7.8 and 9.10.11.12"
+  //Detect 3+ IPs with no compound delimiter -> multi-target mode
+  allIps=globals.G_agent._extractIps(cmd)
+  if allIps and len(allIps)>=3 then
+    //3+ IPs likely means multi-target (not router+target pair)
+    //Extract the action word (first word before any IP)
+    actionWord=null
+    words=split(cmd," ")
+    for w in words
+      //Skip IPs and connectors
+      if indexOf(w,".")!=null and len(split(w,"."))==4 then continue
+      if w=="and" or w=="," or w=="" then continue
+      actionWord=w
+      break
+    end for
+    if actionWord then
+      parsed.action="multiTarget"
+      parsed.multiTarget=true
+      parsed.targets=allIps
+      parsed.targetAction=actionWord
+      parsed.summary="Multi-target "+actionWord+" on "+len(allIps)+" targets"
+      if debug then print green("[DEBUG] Parser: Multi-target detected: "+actionWord+" on "+join(allIps,", "))
+      return parsed
+    end if
+  end if
+  //Check for config management commands first (but not permission commands)
+  if (indexOf(cmd,"set ")!=null or indexOf(cmd,"config ")!=null or indexOf(cmd,"show config")!=null or indexOf(cmd,"reset config")!=null) and indexOf(cmd,"permission")==null and indexOf(cmd,"permissions")==null and indexOf(cmd,"owner")==null and indexOf(cmd,"group")==null then
+    //Config commands: "set debug on", "config verbose true", "show config", "reset config"
+    if indexOf(cmd,"show config")!=null or indexOf(cmd,"display config")!=null or indexOf(cmd,"view config")!=null then
+      parsed.action="showConfig"
+      parsed.summary="Show configuration"
+      return parsed
+    else if indexOf(cmd,"reset config")!=null or indexOf(cmd,"restore defaults")!=null then
+      parsed.action="resetConfig"
+      parsed.summary="Reset configuration to defaults"
+      return parsed
+    else if indexOf(cmd,"set ")!=null or indexOf(cmd,"config ")!=null then
+      //Parse "set <key> <value>" or "config <key> <value>"
+      parsed.action="setConfig"
+      //Extract key and value
+      words=split(cmd," ")
+      //Find "set" or "config" position
+      setIdx=-1
+      _len=len(words);i=0;while i<_len
+        if words[i]=="set" or words[i]=="config" then
+          setIdx=i
+          break
+        end if
+      i+=1;end while
+      if setIdx>=0 and setIdx+2<len(words) then
+        configKey=words[setIdx+1]
+        configValue=words[setIdx+2]
+        //Normalize common values
+        if configValue=="on" or configValue=="yes" or configValue=="true" or configValue=="enabled" then
+          configValue=true
+        else if configValue=="off" or configValue=="no" or configValue=="false" or configValue=="disabled" then
+          configValue=false
+        else
+          //Try to parse as number
+          numVal=configValue.val
+          if numVal!=null then configValue=numVal
+        end if
+        parsed.configKey=configKey
+        parsed.configValue=configValue
+        parsed.summary="Set "+configKey+" to "+configValue
+        return parsed
+      else
+        parsed.error="Invalid config command format. Use: ai set <key> <value>"
+        return parsed
+      end if
+    end if
+  end if
+  //Check for "what is my ip" queries
+  if indexOf(cmd,"what")!=null and indexOf(cmd,"my")!=null and indexOf(cmd,"ip")!=null then
+    parsed.action="showMyIp"
+    //Check if user specified public or local
+    if indexOf(cmd,"public")!=null then
+      parsed.ipType="public"
+      parsed.summary="Show my public IP address"
+    else if indexOf(cmd,"local")!=null then
+      parsed.ipType="local"
+      parsed.summary="Show my local IP address"
+    else
+      parsed.summary="Show my IP address"
+    end if
+    return parsed
+  end if
+  //Check for "who is" queries (map to whois)
+  if indexOf(cmd,"who is")!=null or indexOf(cmd,"whois")!=null then
+    //Extract target after "who is" or "whois"
+    target=null
+    if indexOf(cmd,"who is")!=null then
+      afterWhoIs=split(cmd,"who is")
+      if len(afterWhoIs)>1 then target=trim(afterWhoIs[1])
+    else if indexOf(cmd,"whois")!=null then
+      afterWhois=split(cmd,"whois")
+      if len(afterWhois)>1 then target=trim(afterWhois[1])
+    end if
+    if target then
+      parsed.action="whois"
+      parsed.target=target
+      parsed.summary="Whois lookup for "+target
+      return parsed
+    end if
+  end if
+  //Check for shorthand commands (single keyword without IPs/targets)
+  cmdWords=split(cmd," ")
+  if len(cmdWords)==1 then
+    shorthandCmd=cmdWords[0]
+    //Data extraction shorthands
+    if shorthandCmd=="emails" or shorthandCmd=="email" then
+      parsed.action="extractData"
+      parsed.dataType="email"
+      parsed.summary="Extract emails"
+      parsed.shorthand=true
+      //Use lastTarget if available AND no stored objects
+      if globals.G_agentContext.lastTarget and len(globals.G_agentContext.storedObjects)==0 then
+        parsed.target=globals.G_agentContext.lastTarget
+        if debug then print green("[DEBUG] Agent: Using lastTarget "+parsed.target+" for shorthand command")
+      end if
+      return parsed
+    else if shorthandCmd=="bank" or shorthandCmd=="banks" then
+      parsed.action="extractData"
+      parsed.dataType="bank"
+      parsed.summary="Extract bank data"
+      parsed.shorthand=true
+      //Use lastTarget if available AND no stored objects
+      if globals.G_agentContext.lastTarget and len(globals.G_agentContext.storedObjects)==0 then
+        parsed.target=globals.G_agentContext.lastTarget
+        if debug then print green("[DEBUG] Agent: Using lastTarget "+parsed.target+" for shorthand command")
+      end if
+      return parsed
+    else if shorthandCmd=="users" or shorthandCmd=="user" then
+      parsed.action="extractData"
+      parsed.dataType="user"
+      parsed.summary="Extract user data"
+      parsed.shorthand=true
+      //Use lastTarget if available AND no stored objects
+      if globals.G_agentContext.lastTarget and len(globals.G_agentContext.storedObjects)==0 then
+        parsed.target=globals.G_agentContext.lastTarget
+        if debug then print green("[DEBUG] Agent: Using lastTarget "+parsed.target+" for shorthand command")
+      end if
+      return parsed
+    else if shorthandCmd=="rshell" or shorthandCmd=="rshells" then
+      parsed.action="extractData"
+      parsed.dataType="rshell"
+      parsed.summary="Extract rshells"
+      parsed.shorthand=true
+      //Use lastTarget if available AND no stored objects
+      if globals.G_agentContext.lastTarget and len(globals.G_agentContext.storedObjects)==0 then
+        parsed.target=globals.G_agentContext.lastTarget
+        if debug then print green("[DEBUG] Agent: Using lastTarget "+parsed.target+" for shorthand command")
+      end if
+      return parsed
+    else if shorthandCmd=="data" or shorthandCmd=="all" then
+      parsed.action="extractData"
+      parsed.dataType="all"
+      parsed.summary="Extract all data"
+      parsed.shorthand=true
+      //Use lastTarget if available AND no stored objects
+      if globals.G_agentContext.lastTarget and len(globals.G_agentContext.storedObjects)==0 then
+        parsed.target=globals.G_agentContext.lastTarget
+        if debug then print green("[DEBUG] Agent: Using lastTarget "+parsed.target+" for shorthand command")
+      end if
+      return parsed
+    else if shorthandCmd=="scan" then
+      parsed.action="scan"
+      parsed.summary="Scan target"
+      parsed.shorthand=true
+      //Use lastTarget if available AND no stored objects
+      if globals.G_agentContext.lastTarget and len(globals.G_agentContext.storedObjects)==0 then
+        parsed.target=globals.G_agentContext.lastTarget
+        if debug then print green("[DEBUG] Agent: Using lastTarget "+parsed.target+" for shorthand command")
+      end if
+      return parsed
+    end if
+  end if
+  //Check for knowledge queries first (before IP extraction to avoid false positives)
+  //Patterns: "what do you know about X", "tell me about X", "what is X", "explain X", "info on X", "help with X"
+  actionFound=false
+  //Check for autonomous decision-making requests
+  autonomousPatterns=self._AUTONOMOUS_PATTERNS
+  for pattern in autonomousPatterns
+    if indexOf(cmd,pattern)!=null then
+      parsed.action="autonomous"
+      parsed.summary="Make autonomous decision"
+      parsed.autonomousRequest=true
+      actionFound=true
+      break
+    end if
+  end for
+  //Check for conditional logic patterns: "if X fails, try Y" or "scan target, and if vulnerable, exploit"
+  conditionalPatterns=self._CONDITIONAL_PATTERNS
+  hasConditional=false
+  for pattern in conditionalPatterns
+    if indexOf(cmd,pattern)!=null then
+      hasConditional=true
+      break
+    end if
+  end for
+  if hasConditional then
+    conditional=globals.G_agent._parseConditionals(command)
+    if conditional and hasIndex(conditional,"primary") then
+      parsed.conditional=conditional
+      summaryText=conditional.primary
+      if hasIndex(conditional,"summary") then summaryText=conditional.summary
+      parsed.summary="Conditional operation: "+summaryText
+      //Mark this as needing special execution handling
+      parsed.hasConditional=true
+    end if
+  end if
+      parsed.originalInput=cmd  // Store original command for knowledge recording
+      //Extract target - look for IP addresses
+      extractedIps=globals.G_agent._extractIps(cmd)
+      if extractedIps and len(extractedIps)>0 then
+        //Check if we have multiple IPs - determine which are LAN targets vs public routers
+        if len(extractedIps)>=2 then
+          //Smart detection: LAN IPs are targets, public IPs are routers/entry points
+          lanIps=[]
+          publicIps=[]
+          for ip in extractedIps;if is_lan_ip(ip) then push(lanIps,ip) else push(publicIps,ip);end for
+          //Assign based on what we found
+          if len(lanIps)>0 and len(publicIps)>0 then
+            //Have both LAN and public IPs - public is router, LAN is target
+            parsed.lanIPs=lanIps
+            parsed.publicIPs=publicIps
+            parsed.lanIP=lanIps[0]  //Primary LAN target
+            parsed.publicIP=publicIps[0]  //Primary router
+            parsed.target=lanIps[0]  //Main target is first LAN IP
+          else if len(lanIps)>=2 then
+            //Multiple LAN IPs - need to determine which is router vs target
+            //Pattern: "attack X and get Y" or "X to Y" means X is router, Y is target
+            if indexOf(cmd," on ")!=null then
+              //Look for IP after "on" - that's the target
+              onIdx=indexOf(cmd," on ")
+              afterOn=cmd[onIdx+4:]
+              targetIps=globals.G_agent._extractIps(afterOn)
+              if targetIps and len(targetIps)>0 then
+                targetIp=targetIps[0]
+                //Find this IP in lanIps and make it the target, others are routers
+                _len=len(lanIps);i=0;while i<_len
+                  if lanIps[i]==targetIp then
+                    //This is the target, others are routers
+                    routerIps=[]
+                    _len2=len(lanIps);j=0;while j<_len2;if j!=i then push(routerIps,lanIps[j]);j+=1;end while
+                    parsed.lanIPs=[targetIp]
+                    parsed.publicIPs=routerIps  //Treat other LAN IPs as routers
+                    parsed.lanIP=targetIp
+                    parsed.publicIP=routerIps[0]
+                    parsed.target=targetIp
+                    break
+                  end if
+                i+=1;end while
+              else
+                //Couldn't determine - use last IP as target, first as router
+                parsed.lanIPs=[lanIps[len(lanIps)-1]]
+                parsed.publicIPs=[lanIps[0]]
+                parsed.lanIP=lanIps[len(lanIps)-1]
+                parsed.publicIP=lanIps[0]
+                parsed.target=lanIps[len(lanIps)-1]
+              end if
+            else
+              //No "on" keyword - assume first is router, last is target
+              parsed.lanIPs=[lanIps[len(lanIps)-1]]
+              parsed.publicIPs=[lanIps[0]]
+              parsed.lanIP=lanIps[len(lanIps)-1]
+              parsed.publicIP=lanIps[0]
+              parsed.target=lanIps[len(lanIps)-1]
+            end if
+          else if len(lanIps)==1 then
+            //Single LAN IP
+            parsed.lanIPs=lanIps
+            parsed.lanIP=lanIps[0]
+            parsed.target=lanIps[0]
+          else if len(publicIps)>0 then
+            //Only public IPs
+            parsed.publicIPs=publicIps
+            parsed.publicIP=publicIps[0]
+            parsed.target=publicIps[0]
+          else
+            //Fallback: use first IP
+            parsed.target=extractedIps[0]
+          end if
+        else
+          //Single IP - use as target
+          parsed.target=extractedIps[0]
+        end if
+      end if
+      //Extract requirements from command
+      requirements={}
+      //Extract privilege requirement
+      if indexOf(cmd,"root")!=null then
+        requirements.privilege="root"
+      else if indexOf(cmd,"user")!=null then
+        requirements.privilege="user"
+      else if indexOf(cmd,"guest")!=null then
+        requirements.privilege="guest"
+      end if
+      //Extract object type requirement
+      if indexOf(cmd,"shell")!=null then
+        requirements.objectType="shell"
+      else if indexOf(cmd,"computer")!=null then
+        requirements.objectType="computer"
+      else if indexOf(cmd,"file")!=null then
+        requirements.objectType="file"
+      end if
+      //Extract library/system type requirement (positive and negative)
+      //Check for negative/exclusion patterns first
+      excludeKeywords=self._EXCLUDE_KEYWORDS
+      for excludeWord in excludeKeywords
+        if indexOf(cmd,excludeWord)!=null then
+          //Extract what comes after the exclusion keyword
+          excludeIdx=indexOf(cmd,excludeWord)
+          afterExclude=cmd[excludeIdx+len(excludeWord):]
+          //Check for excluded library types
+          if indexOf(afterExclude,"router")!=null then
+            if not hasIndex(requirements,"excludeLibraryTypes") then requirements.excludeLibraryTypes=[]
+            if requirements.excludeLibraryTypes.indexOf("router")==null then push(requirements.excludeLibraryTypes,"router")
+          end if
+          if indexOf(afterExclude,"http")!=null or indexOf(afterExclude,"web")!=null then
+            if not hasIndex(requirements,"excludeLibraryTypes") then requirements.excludeLibraryTypes=[]
+            if requirements.excludeLibraryTypes.indexOf("http")==null then push(requirements.excludeLibraryTypes,"http")
+          end if
+          if indexOf(afterExclude,"ssh")!=null then
+            if not hasIndex(requirements,"excludeLibraryTypes") then requirements.excludeLibraryTypes=[]
+            if requirements.excludeLibraryTypes.indexOf("ssh")==null then push(requirements.excludeLibraryTypes,"ssh")
+          end if
+          if indexOf(afterExclude,"ftp")!=null then
+            if not hasIndex(requirements,"excludeLibraryTypes") then requirements.excludeLibraryTypes=[]
+            if requirements.excludeLibraryTypes.indexOf("ftp")==null then push(requirements.excludeLibraryTypes,"ftp")
+          end if
+          if indexOf(afterExclude,"sql")!=null or indexOf(afterExclude,"database")!=null then
+            if not hasIndex(requirements,"excludeLibraryTypes") then requirements.excludeLibraryTypes=[]
+            if requirements.excludeLibraryTypes.indexOf("sql")==null then push(requirements.excludeLibraryTypes,"sql")
+          end if
+        end if
+      end for
+      //Check for positive library type requirement (only if no exclusions set)
+      if not hasIndex(requirements,"excludeLibraryTypes") then
+        if indexOf(cmd,"router")!=null then
+          requirements.libraryType="router"
+        else if indexOf(cmd,"http")!=null or indexOf(cmd,"web")!=null then
+          requirements.libraryType="http"
+        else if indexOf(cmd,"ssh")!=null then
+          requirements.libraryType="ssh"
+        else if indexOf(cmd,"ftp")!=null then
+          requirements.libraryType="ftp"
+        else if indexOf(cmd,"sql")!=null or indexOf(cmd,"database")!=null then
+          requirements.libraryType="sql"
+        end if
+      end if
+      //Extract specific IP requirement (look for "on X.X.X.X" pattern)
+      if indexOf(cmd," on ")!=null then
+        onIdx=indexOf(cmd," on ")
+        afterOn=cmd[onIdx+4:]
+        //Extract all IPs from the text after "on"
+        lanIps=globals.G_agent._extractIps(afterOn)
+        if lanIps and len(lanIps)>0 then
+          //Use first LAN IP found after "on"
+          for ip in lanIps
+            if is_lan_ip(ip) then
+              requirements.targetIP=ip
+              break
+            end if
+          end for
+        end if
+      end if
+      //Store requirements in parsed object
+      if len(requirements)>0 then parsed.requirements=requirements
+      //Extract goal from common phrases
+      if indexOf(cmd,"attack")!=null then
+        parsed.goal="attack"
+      else if indexOf(cmd,"compromise")!=null then
+        parsed.goal="compromise"
+      else if indexOf(cmd,"get root")!=null or indexOf(cmd,"escalate")!=null then
+        parsed.goal="root"
+      else if indexOf(cmd,"crack")!=null or indexOf(cmd,"password")!=null then
+        parsed.goal="password"
+      else if indexOf(cmd,"scan")!=null or indexOf(cmd,"recon")!=null then
+        parsed.goal="scan"
+      else
+        parsed.goal="compromise"
+      end if
+      //Parse continuation commands for autonomous actions
+      //First check if user explicitly requests object access
+      continuationParts=[]
+      cmdLower=lower(cmd)
+      skipAllCommands=false
+      //Check for object request patterns with flexible matching (allow words between "need" and "computer")
+      hasObjectRequest=false
+      if (indexOf(cmdLower,"i want")!=null or indexOf(cmdLower,"i need")!=null or indexOf(cmdLower,"give me")!=null or indexOf(cmdLower,"get me")!=null) and (indexOf(cmdLower," shell")!=null or indexOf(cmdLower," computer")!=null or indexOf(cmdLower," file")!=null or indexOf(cmdLower," object")!=null) then hasObjectRequest=true
+      if hasObjectRequest then
+        //Check if this has continuation context (comma, then, and, also, to do X, etc)
+        hasContinuationContext=false
+        if indexOf(cmdLower,",")!=null and indexOf(cmdLower,",")>indexOf(cmdLower,"computer") then hasContinuationContext=true
+        if indexOf(cmdLower," then ")!=null then hasContinuationContext=true
+        if indexOf(cmdLower," and ")!=null and indexOf(cmdLower," and ")>indexOf(cmdLower,"computer") then hasContinuationContext=true
+        if indexOf(cmdLower," also ")!=null then hasContinuationContext=true
+        //Check for "store" or "save" keywords - indicates headless mode to save object
+        if indexOf(cmdLower,"store")!=null or indexOf(cmdLower,"save")!=null or indexOf(cmdLower,"for later")!=null then hasContinuationContext=true
+        //Only check for data extraction keywords if they appear AFTER the object request
+        objectPos=indexOf(cmdLower,"computer")
+        if objectPos==null then objectPos=indexOf(cmdLower,"shell")
+        if objectPos==null then objectPos=indexOf(cmdLower,"file")
+        if objectPos!=null then
+          afterObject=cmdLower[objectPos:]
+          if indexOf(afterObject,"fetch")!=null or indexOf(afterObject,"list")!=null or indexOf(afterObject,"show")!=null or indexOf(afterObject,"see")!=null then hasContinuationContext=true
+        end if
+        if not hasContinuationContext and not headlessMode then
+          //Standalone object request - interactive mode (only if not forced headless)
+          parsed.needsInteractiveShell=true
+          skipAllCommands=true
+          if debug then print green("[DEBUG] Standalone object request - will launch interactive UI")
+        else if headlessMode then
+          //Forced headless mode from intermediate step - skip interactive UI logic
+          if debug then print green("[DEBUG] Object request in headless mode - will execute autonomously")
+        else
+          //Has continuation commands - will be parsed below
+          if debug then print green("[DEBUG] Object request with continuation commands - will execute headless")
+        end if
+      end if
+      if not skipAllCommands then
+        //First check hardcoded patterns (more specific)
+        cmdParts=split(cmd," ")
+        for part in cmdParts;partLower=lower(part);end for
+        //Check whole command for continuation patterns
+      //Check for corrupted system - don't attempt any operations
+      if hasIndex(Obj,"machineType") and lower(Obj.machineType)=="corrupted" then
+        parsed.action="error"
+        parsed.error="System is corrupted - no operations available"
+        if debug then print red("[DEBUG] Corrupted system detected - refusing operation")
+        return parsed
+      end if
+      //Account listing pattern - NOT for routers (routers use dig)
+      if (indexOf(cmdLower,"see")!=null or indexOf(cmdLower,"show")!=null or indexOf(cmdLower,"fetch")!=null or indexOf(cmdLower,"get")!=null or indexOf(cmdLower,"list")!=null) and indexOf(cmdLower,"account")!=null and not actionFound then
+        //Skip if on router - dig handles router data extraction
+        if hasIndex(Obj,"machineType") and (indexOf(lower(Obj.machineType),"router")!=null or lower(Obj.machineType)=="switch") then
+          //Do nothing, let dig pattern handle it
+        else
+          //Not a router - use list command for accounts
+          listFlag=globals.G_agent.getListFlag(false)
+          listCmd="list "+listFlag
+          parsed.action="directCommand"
+          parsed.command=listCmd
+          parsed.summary="List accounts using "+listCmd
+          actionFound=true
+          if debug then print green("[DEBUG] Autonomous - non-router context, using '"+listCmd+"' for list accounts")
+        end if
+      end if
+      //Navigation pattern: "go/goto [to] <location>"
+      if (indexOf(cmdLower,"go ")!=null or indexOf(cmdLower,"goto")!=null or indexOf(cmdLower,"navigate")!=null) and not actionFound then
+        //Extract location after go/goto/navigate (remove "to" preposition)
+        location=""
+        if indexOf(cmdLower,"go to ")!=null then
+          location=trim(cmdLower[cmdLower.indexOf("go to ")+6:])
+        else if indexOf(cmdLower,"go ")!=null then
+          location=trim(cmdLower[cmdLower.indexOf("go ")+3:])
+        else if indexOf(cmdLower,"goto ")!=null then
+          location=trim(cmdLower[cmdLower.indexOf("goto ")+5:])
+        else if indexOf(cmdLower,"navigate to ")!=null then
+          location=trim(cmdLower[cmdLower.indexOf("navigate to ")+12:])
+        else if indexOf(cmdLower,"navigate ")!=null then
+          location=trim(cmdLower[cmdLower.indexOf("navigate ")+9:])
+        end if
+        if len(location)>0 then
+          //Strip possessive/article words
+          location=location.replace("my ","").replace("the ","").replace("a ","").replace("an ","")
+          location=trim(location)
+          //Resolve common location names to paths
+          if location=="root" then
+            location="/root"
+          else if location=="home" or location=="directory" then
+            location="~"
+          else if location=="etc" then
+            location="/etc"
+          else if location=="var" then
+            location="/var"
+          else if location=="usr" then
+            location="/usr"
+          else if location=="bin" then
+            location="/bin"
+          else if location=="opt" then
+            location="/opt"
+          else if location=="lib" then
+            location="/lib"
+          end if
+          cdCmd="cd "+location
+          parsed.action="directCommand"
+          parsed.command=cdCmd
+          parsed.summary="Navigate to "+location
+          actionFound=true
+          if debug then print green("[DEBUG] Autonomous - set navigation command '"+cdCmd+"' (overrides planner)")
+        end if
+      end if
+      //Dig pattern - comprehensive router data extraction
+      if not actionFound then
+        isOnRouter=false
+        if hasIndex(Obj,"machineType") and (indexOf(lower(Obj.machineType),"router")!=null or lower(Obj.machineType)=="switch") then isOnRouter=true
+        //Only process dig patterns on routers
+        if isOnRouter then
+          digFlag=""
+          digModifiers=[]
+          //Detect data type
+          if indexOf(cmdLower,"email")!=null or indexOf(cmdLower,"mail")!=null then
+            digFlag="-e"
+          else if indexOf(cmdLower,"bank")!=null then
+            digFlag="-b"
+          else if indexOf(cmdLower,"user")!=null or indexOf(cmdLower,"account")!=null then
+            digFlag="-u"
+          else if indexOf(cmdLower,"rshell")!=null then
+            digFlag="-r"
+          else if indexOf(cmdLower,"all")!=null and (indexOf(cmdLower,"data")!=null or indexOf(cmdLower,"everything")!=null) then
+            digFlag="-a"
+          end if
+          //Only proceed if we found a dig flag
+          if len(digFlag)>0 then
+            //Check if there are stored objects - if so, defer to extractData pattern for selection
+            hasStoredObjects=false
+            if hasIndex(globals.G_agentContext,"storedObjects") and typeof(globals.G_agentContext.storedObjects)=="list" then
+              if len(globals.G_agentContext.storedObjects)>0 then hasStoredObjects=true
+            end if
+            //Only use autonomous directCommand if no stored objects exist
+            if not hasStoredObjects then
+              //Detect modifiers
+              if indexOf(cmdLower,"filter")!=null then push(digModifiers,"--filter")
+              if indexOf(cmdLower,"save")!=null or indexOf(cmdLower,"store")!=null then push(digModifiers,"-s")
+              if indexOf(cmdLower,"wipe")!=null and indexOf(cmdLower,"log")!=null then push(digModifiers,"--lwipe")
+              if indexOf(cmdLower,"extreme")!=null then push(digModifiers,"--extreme")
+              if indexOf(cmdLower,"router")!=null and indexOf(cmdLower,"include")!=null then push(digModifiers,"--router")
+              digCmd="dig "+digFlag
+              if len(digModifiers)>0 then digCmd=digCmd+" "+join(digModifiers," ")
+              parsed.action="directCommand"
+              parsed.command=digCmd
+              parsed.summary="Extract data from router LAN using "+digCmd
+              actionFound=true
+              if debug then print green("[DEBUG] Autonomous - router context, built command: '"+digCmd+"'")
+            else
+              //Has stored objects - let extractData pattern handle selection
+              if debug then print green("[DEBUG] Stored objects exist - deferring to extractData pattern for selection")
+            end if
+          end if
+        end if
+      end if
+      //Email pattern - workstation context (open email client only)
+      if (indexOf(cmdLower,"email")!=null or indexOf(cmdLower,"mail")!=null) and indexOf(cmdLower,"open")!=null and not actionFound then
+        if indexOf(cmdLower,"local")!=null then push(continuationParts,"open email --l") else push(continuationParts,"open email")
+        if debug then print green("[DEBUG] Autonomous - added 'open email'")
+      end if
+      if indexOf(cmdLower,"open")!=null and indexOf(cmdLower,"browser")!=null then
+        if indexOf(cmdLower,"local")!=null then push(continuationParts,"open web --l") else push(continuationParts,"open web")
+        if debug then print green("[DEBUG] Autonomous - added 'open browser'")
+      end if
+      //Check for "use X" or "run X" pattern to launch specific commands
+      if indexOf(cmdLower,"use")!=null or indexOf(cmdLower,"run")!=null then
+        triggerWord=null
+        triggerIdx=null
+        //Check for "need to use" or "want to use" patterns first (more specific)
+        if indexOf(cmdLower,"need to use")!=null then
+          triggerWord="need to use"
+          triggerIdx=indexOf(cmdLower,"need to use")
+        else if indexOf(cmdLower,"want to use")!=null then
+          triggerWord="want to use"
+          triggerIdx=indexOf(cmdLower,"want to use")
+        else if indexOf(cmdLower,"use")!=null then
+          triggerWord="use"
+          triggerIdx=indexOf(cmdLower,"use")
+        else if indexOf(cmdLower,"run")!=null then
+          triggerWord="run"
+          triggerIdx=indexOf(cmdLower,"run")
+        end if
+        if triggerIdx!=null then
+          afterTrigger=trim(cmdLower[triggerIdx+len(triggerWord):])
+          //Extract command with arguments until "on" or end of string
+          onIdx=indexOf(afterTrigger," on ")
+          if onIdx!=null then cmdToUse=trim(afterTrigger[:onIdx]) else cmdToUse=afterTrigger.trim
+          //Filter out commands that are just common words
+          firstWord=split(cmdToUse," ")[0]
+          if firstWord!="your" and firstWord!="the" and firstWord!="a" and firstWord!="an" and firstWord!="to" and len(cmdToUse)>0 then
+            push(continuationParts,cmdToUse)
+            if debug then print green("[DEBUG] Autonomous - added '"+cmdToUse+"' from "+triggerWord+" pattern")
+          end if
+        end if
+      end if
+      //Try intelligent command construction if no patterns matched
+      if len(continuationParts)==0 then
+        //Parse intent to see if we can build a command intelligently
+        intentResult=globals.G_agent.parseIntent(cmd)
+        if intentResult and len(intentResult.command)>0 then
+          //Build command with intelligent flags
+          intelligentCmd=globals.G_agent.buildIntelligentCommand(intentResult.command,cmd)
+          if intelligentCmd!=intentResult.command then
+            //Flags were added, use intelligent command
+            push(continuationParts,intelligentCmd)
+            if debug then print green("[DEBUG] Built intelligent command from intent - "+intelligentCmd)
+          end if
+        end if
+      end if
+      //Fallback to knowledge system if still no patterns matched
+      if len(continuationParts)==0 then
+        if typeof(Knowledge)=="map" and Knowledge.loaded then
+          knowledgeResult=Knowledge.query(cmd,0.6)
+          if knowledgeResult then
+            push(continuationParts,knowledgeResult.action)
+            if debug then print green("[DEBUG] Using learned knowledge - "+knowledgeResult.action+" (confidence: "+knowledgeResult.confidence+")")
+          end if
+        end if
+      end if
+      if len(continuationParts)>0 then
+        parsed.continuationCommands=continuationParts
+        if debug then print green("[DEBUG] Autonomous - built "+len(continuationParts)+" continuation commands")
+      end if
+    end if
+  //Check for knowledge query patterns
+  if not actionFound then
+    knowledgePatterns=self._KNOWLEDGE_PATTERNS
+    for pattern in knowledgePatterns
+      if indexOf(cmd,pattern)!=null then
+        //Extract the command name after the pattern
+        patternIdx=indexOf(cmd,pattern)
+        afterPattern=cmd[patternIdx+len(pattern):]
+        cmdName=trim(afterPattern)
+        //Clean up common words and punctuation manually (avoid regex issues)
+        cmdName=cmdName.replace(" the "," ").replace(" a "," ")
+        //Remove trailing punctuation
+        while len(cmdName)>0 and (cmdName[-1]=="?" or cmdName[-1]=="." or cmdName[-1]=="!" or cmdName[-1]==" ");cmdName=cmdName[:-1];end while
+        cmdName=trim(split(cmdName," ")[0])  //Take first word
+        if len(cmdName)>0 then
+          parsed.action="knowledge"
+          parsed.knowledgeCommand=cmdName
+          parsed.summary="Get information about "+cmdName
+          actionFound=true
+          break
+        end if
+      end if
+    end for
+  end if
+  //Check for object access requests (computer/shell/file)
+  if not actionFound then
+    //Check if requesting computer/shell/file object
+    requestingObject=false
+    objectType="computer"  //default
+    if (indexOf(cmd,"need")!=null or indexOf(cmd,"get")!=null or indexOf(cmd,"want")!=null or indexOf(cmd,"attack")!=null) then
+      //Check for "router shell" specifically - this is a fetch action, not getObject
+      if indexOf(cmd,"router shell")!=null or indexOf(cmd,"router")!=null and indexOf(cmd,"shell")!=null then
+        //This is a fetch action - skip to fetch parsing
+        requestingObject=false
+      else if indexOf(cmd,"computer")!=null then
+        requestingObject=true
+        objectType="computer"
+      else if indexOf(cmd,"shell")!=null then
+        requestingObject=true
+        objectType="shell"
+      else if indexOf(cmd,"file")!=null then
+        requestingObject=true
+        objectType="file"
+      end if
+    end if
+    if requestingObject then
+      //Determine if root access is required
+      needRoot=false
+      if indexOf(cmd,"root")!=null then
+        needRoot=true
+      else if indexOf(cmd,"admin")!=null then
+        needRoot=true
+      else if indexOf(cmd,"elevated")!=null then
+        needRoot=true
+      else if indexOf(cmd,"best")!=null then
+        needRoot=true
+      else if indexOf(cmd,"highest")!=null then
+        needRoot=true
+      end if
+      //Determine if headless (intermediate step) or interactive (final goal)
+      isHeadless=false
+      //Commands like "get shell to do X" or "need computer then Y" suggest intermediate step
+      //BUT standalone object requests should always be interactive (checked earlier)
+      //Also ignore "to" in "from X to Y" pattern (just IP specification, not continuation)
+      if not skipAllCommands then
+        //Check for continuation patterns, but exclude "from X to Y" pattern
+        hasContinuation=false
+        if indexOf(cmd,"then")!=null or indexOf(cmd,"and then")!=null or indexOf(cmd,"also")!=null or indexOf(cmd,"unless")!=null then hasContinuation=true
+        //Check for "store" keyword - indicates user wants to save the object for later
+        if indexOf(cmd,"store")!=null or indexOf(cmd,"save")!=null or indexOf(cmd,"for later")!=null then
+          hasContinuation=true
+          parsed.shouldStore=true  //Flag for execute to persist the object
+          if debug then print green("[DEBUG PARSER Line 757] Detected 'store' keyword - setting shouldStore flag, hasContinuation=" + hasContinuation)
+        end if
+        if indexOf(cmd,"to")!=null and indexOf(cmd,"from")!=null then
+          //Might be "from X to Y" - check if "to" appears after "from"
+          fromIdx=indexOf(cmd,"from")
+          toIdx=indexOf(cmd,"to")
+          if toIdx>fromIdx then
+            //Likely "from X to Y" pattern - not a continuation
+          else
+            hasContinuation=true
+          end if
+        else if indexOf(cmd,"to")!=null then
+          hasContinuation=true
+        end if
+        if hasContinuation then
+          isHeadless=true
+          if debug then print yellow("[DEBUG PARSER Line 774] Setting isHeadless=true because hasContinuation=" + hasContinuation)
+        else
+          //No continuation - this is a standalone object request, should be interactive
+          if not headlessMode then
+            parsed.needsInteractiveShell=true
+            if debug then print green("[DEBUG] Standalone getObject request - will launch interactive UI")
+          end if
+        end if
+      end if
+      //Check for library installation requests in the same command
+      libsToInstall=[]
+      if indexOf(cmd," and install ")!=null or indexOf(cmd," install ")!=null then
+        //Parse what to install
+        if indexOf(cmd,"http")!=null then push(libsToInstall,"http")
+        if indexOf(cmd,"ssh")!=null then push(libsToInstall,"ssh")
+        if indexOf(cmd,"ftp")!=null then push(libsToInstall,"ftp")
+        if indexOf(cmd,"smtp")!=null then push(libsToInstall,"smtp")
+        if indexOf(cmd,"rshell")!=null then push(libsToInstall,"rshell")
+        if indexOf(cmd,"aptclient")!=null then push(libsToInstall,"aptclient")
+        if indexOf(cmd,"crypto")!=null then push(libsToInstall,"crypto")
+        if indexOf(cmd,"metaxploit")!=null then push(libsToInstall,"metaxploit")
+        if debug and len(libsToInstall)>0 then print green("[DEBUG] Detected library installation request: "+join(libsToInstall,", "))
+      end if
+      //Extract public and LAN IPs using the existing _extractIps function
+      extractedIps=globals.G_agent._extractIps(parsed.raw)
+      if extractedIps and len(extractedIps)>=2 then
+        parsed.action="getObject"
+        //Determine which IP is public and which is LAN by checking if they're private IPs
+        firstIsLan=globals.G_agent._isPrivateIp(extractedIps[0])
+        secondIsLan=globals.G_agent._isPrivateIp(extractedIps[1])
+        //Assign based on IP type, not order
+        if firstIsLan and not secondIsLan then
+          parsed.lanIP=extractedIps[0]
+          parsed.publicIP=extractedIps[1]
+        else if secondIsLan and not firstIsLan then
+          parsed.lanIP=extractedIps[1]
+          parsed.publicIP=extractedIps[0]
+        else
+          //Both same type or can't determine - use order as fallback
+          parsed.publicIP=extractedIps[0]
+          parsed.lanIP=extractedIps[1]
+        end if
+        parsed.objectType=objectType
+        parsed.isHeadless=isHeadless
+        parsed.needRoot=needRoot
+        parsed.libsToInstall=libsToInstall
+        if needRoot then parsed.summary="Get root "+objectType+" on "+parsed.lanIP+" via "+parsed.publicIP+" with root access" else parsed.summary="Get "+objectType+" on "+parsed.lanIP+" via "+parsed.publicIP
+        if len(libsToInstall)>0 then parsed.summary+=" and install "+join(libsToInstall,", ")
+        actionFound=true
+      else if extractedIps and len(extractedIps)==1 then
+        //If only one IP, check if it's a LAN or public IP
+        singleIP=extractedIps[0]
+        isLanIp=globals.G_agent._isPrivateIp(singleIP)
+        //Check for "store" keyword early - applies to all single-IP requests
+        checkStore=false
+        if indexOf(cmd,"store")!=null or indexOf(cmd,"save")!=null or indexOf(cmd,"for later")!=null then
+          checkStore=true
+          isHeadless=true  //Force headless when storing
+          if debug then print yellow("[DEBUG PARSER] Store detected at line 831: isHeadless=" + isHeadless + ", checkStore=" + checkStore)
+        end if
+        if indexOf(cmd,"computer on")!=null or indexOf(cmd,"shell on")!=null or indexOf(cmd,"file on")!=null or indexOf(cmd," on")!=null or indexOf(cmd," from ")!=null then
+          if isLanIp then
+            //IP is a LAN target, need to determine public IP from context
+            parsed.action="getObject"
+            parsed.lanIP=singleIP
+            parsed.objectType=objectType
+            //Set isHeadless AFTER checking store flag
+            if checkStore then parsed.isHeadless=true else parsed.isHeadless=isHeadless
+            if debug then print yellow("[DEBUG PARSER] LAN path line 840: isHeadless=" + isHeadless + ", parsed.isHeadless=" + parsed.isHeadless + ", checkStore=" + checkStore)
+            parsed.needRoot=needRoot
+            parsed.libsToInstall=libsToInstall
+            if checkStore then parsed.shouldStore=true
+            if needRoot then parsed.summary="Get root "+objectType+" on "+parsed.lanIP+" with root access" else parsed.summary="Get "+objectType+" on "+parsed.lanIP
+            if len(libsToInstall)>0 then parsed.summary+=" and install "+join(libsToInstall,", ")
+            actionFound=true
+          else
+            //Public IP - this is a fetch action, not getObject
+            parsed.action="fetch"
+            parsed.target=singleIP
+            parsed.objectType=objectType
+            //Set isHeadless AFTER checking store flag
+            if checkStore then parsed.isHeadless=true else parsed.isHeadless=isHeadless
+            if debug then print yellow("[DEBUG PARSER] Public IP path line 851: isHeadless=" + isHeadless + ", parsed.isHeadless=" + parsed.isHeadless + ", checkStore=" + checkStore)
+            parsed.needRoot=needRoot
+            parsed.libsToInstall=libsToInstall
+            if checkStore then parsed.shouldStore=true
+            if debug and checkStore then print yellow("[DEBUG PARSER] Public IP fetch line 860: checkStore=" + checkStore + ", parsed.shouldStore=" + parsed.shouldStore)
+            if needRoot then parsed.summary="Get root "+objectType+" on "+singleIP else parsed.summary="Get "+objectType+" on "+singleIP
+            if len(libsToInstall)>0 then parsed.summary+=" and install "+join(libsToInstall,", ")
+            actionFound=true
+          end if
+        else if indexOf(cmd,"attack")!=null then
+          //IP is the public target
+          parsed.action="getObject"
+          parsed.publicIP=extractedIps[0]
+          parsed.objectType=objectType
+          //Set isHeadless AFTER checking store flag
+          if checkStore then parsed.isHeadless=true else parsed.isHeadless=isHeadless
+          parsed.needRoot=needRoot
+          parsed.libsToInstall=libsToInstall
+          if checkStore then parsed.shouldStore=true
+          if needRoot then parsed.summary="Attack "+parsed.publicIP+" with root access" else parsed.summary="Attack "+parsed.publicIP
+          if len(libsToInstall)>0 then parsed.summary+=" and install "+join(libsToInstall,", ")
+          actionFound=true
+        end if
+      end if
+    end if
+  end if
+  //Check for data extraction requests (needs to happen early to detect properly)
+  if not actionFound then
+    dataPatterns=["get me all","i need all","need all","get all","extract all","fetch all","grab all","get email","get bank","need email","need bank","extract email","extract bank","get user","need user"]
+    for pattern in dataPatterns
+      if indexOf(cmd,pattern)!=null then
+        //Detect data type
+        if indexOf(cmd,"email")!=null then
+          parsed.action="extractData"
+          parsed.dataType="email"
+          parsed.summary="Extract email data"
+          actionFound=true
+        else if indexOf(cmd,"bank")!=null then
+          parsed.action="extractData"
+          parsed.dataType="bank"
+          parsed.summary="Extract banking data"
+          actionFound=true
+        else if indexOf(cmd,"user")!=null or indexOf(cmd,"account")!=null or indexOf(cmd,"credential")!=null then
+          parsed.action="extractData"
+          parsed.dataType="user"
+          parsed.summary="Extract user data"
+          actionFound=true
+        else if indexOf(cmd,"rshell")!=null then
+          parsed.action="extractData"
+          parsed.dataType="rshell"
+          parsed.summary="Extract rshell data"
+          actionFound=true
+        else if indexOf(cmd,"data")!=null or indexOf(cmd,"everything")!=null then
+          parsed.action="extractData"
+          parsed.dataType="all"
+          parsed.summary="Extract all data"
+          actionFound=true
+        end if
+        //Check if user wants to save results
+        if actionFound then
+          if indexOf(cmd,"save")!=null then parsed.saveResults=true
+          //Check for filter flag
+          if indexOf(cmd,"filter")!=null then parsed.useFilter=true
+          //Check for conditional/fallback phrases
+          if indexOf(cmd," if ")!=null or indexOf(cmd," or just ")!=null or indexOf(cmd," or get ")!=null or indexOf(cmd," otherwise ")!=null then
+            //Parse primary and fallback actions
+            //Examples: "get emails if easy or just get users", "extract bank otherwise get users"
+            fallbackDataType=null
+            if indexOf(cmd," or just ")!=null then
+              //Check what comes after "or just"
+              afterOrJust=cmd[indexOf(cmd," or just ")+len(" or just "):]
+              if indexOf(afterOrJust,"user")!=null then
+                fallbackDataType="user"
+              else if indexOf(afterOrJust,"email")!=null then
+                fallbackDataType="email"
+              else if indexOf(afterOrJust,"bank")!=null then
+                fallbackDataType="bank"
+              else if indexOf(afterOrJust,"rshell")!=null then
+                fallbackDataType="rshell"
+              end if
+            else if indexOf(cmd," or get ")!=null then
+              afterOrGet=cmd[indexOf(cmd," or get ")+len(" or get "):]
+              if indexOf(afterOrGet,"user")!=null then
+                fallbackDataType="user"
+              else if indexOf(afterOrGet,"email")!=null then
+                fallbackDataType="email"
+              else if indexOf(afterOrGet,"bank")!=null then
+                fallbackDataType="bank"
+              else if indexOf(afterOrGet,"rshell")!=null then
+                fallbackDataType="rshell"
+              end if
+            else if indexOf(cmd," otherwise ")!=null then
+              afterOtherwise=cmd[indexOf(cmd," otherwise ")+len(" otherwise "):]
+              if indexOf(afterOtherwise,"user")!=null then
+                fallbackDataType="user"
+              else if indexOf(afterOtherwise,"email")!=null then
+                fallbackDataType="email"
+              else if indexOf(afterOtherwise,"bank")!=null then
+                fallbackDataType="bank"
+              else if indexOf(afterOtherwise,"rshell")!=null then
+                fallbackDataType="rshell"
+              end if
+            end if
+            if fallbackDataType then
+              parsed.fallbackDataType=fallbackDataType
+              parsed.tryPrimaryFirst=true
+              if indexOf(cmd," if ")!=null then parsed.conditionalMode=true
+            end if
+          end if
+          break
+        end if
+      end if
+    end for
+  end if
+  ips=globals.G_agent._extractIps(cmd)
+  if len(ips)>0 then
+    //If there's a LAN IP, it's always the target (endpoint)
+    //If there's only a public IP, that's the target
+    lanTarget=null
+    publicTarget=null
+    for ip in ips;if globals.G_agent._isPrivateIp(ip) then lanTarget=ip else publicTarget=ip;end for
+    //Priority: LAN IP is the target if present, otherwise use public IP
+    if lanTarget then parsed.target=lanTarget else parsed.target=ips[0]
+    //Store all extracted IPs for multi-IP commands (e.g., "via X.X.X.X")
+    if len(ips)>1 then parsed.extractedIps=ips
+  else
+    //No IPs found - check if this is a data extraction action that can use lastTarget
+    if actionFound and hasIndex(parsed,"action") and parsed.action=="extractData" then
+      //Only use lastTarget if no stored objects are available
+      if globals.G_agentContext.lastTarget and len(globals.G_agentContext.storedObjects)==0 then
+        parsed.target=globals.G_agentContext.lastTarget
+        if debug then print green("[DEBUG] Agent: No IP in command, using lastTarget "+parsed.target+" for data extraction")
+      end if
+    end if
+    //Check for network/LAN references ("my network", "the network", "my lan", "on network")
+    networkKeywords=["my network","the network","on network","my lan","the lan","on lan","on my network","on the network","on my lan","on the lan"]
+    isNetworkTarget=false
+    for keyword in networkKeywords
+      if indexOf(cmd,keyword)!=null then
+        isNetworkTarget=true
+        break
+      end if
+    end for
+    if isNetworkTarget then
+      //Use router as target for network-wide operations
+      routerIP=null
+      //Get router public IP from Obj.net.router if available
+      if Obj and hasIndex(Obj,"net") and Obj.net and hasIndex(Obj.net,"router") and Obj.net.router then routerIP=Obj.net.router.public_ip
+      if routerIP then
+        parsed.target=routerIP
+        parsed.networkScope=true
+        if debug then print green("[DEBUG] Agent: Detected network scope, using router "+routerIP+" as target")
+      else
+        //No router found, set a placeholder that will be resolved later
+        parsed.target="network"
+        parsed.networkScope=true
+        if debug then print green("[DEBUG] Agent: Detected network scope, but no router available")
+      end if
+    //Check for context references ("the target", "it", "that host")
+    else if indexOf(cmd,"the target")!=null or indexOf(cmd," it ")!=null or indexOf(cmd,"that host")!=null or indexOf(cmd,"same ")!=null then
+      if globals.G_agent.sessionContext.lastTarget then
+        parsed.target=globals.G_agent.sessionContext.lastTarget
+        parsed.contextReference=true
+        if debug then print green("[DEBUG] Agent: Resolved context reference to "+parsed.target)
+      end if
+    end if
+  end if
+  //Detect action using pattern map (skip if knowledge query already found)
+  //Priority: Check for fetch/get + shell first (primary action)
+  //BUT: if user includes exclusion patterns (not from, except, etc), use autonomous mode instead
+  hasExclusionPattern=false
+  exclusionKeywords=["not from","but not","except","exclude","not a","without"]
+  for excludeWord in exclusionKeywords
+    if indexOf(cmd,excludeWord)!=null then
+      hasExclusionPattern=true
+      break
+    end if
+  end for
+  if not actionFound and (indexOf(cmd,"fetch")!=null or indexOf(cmd,"get")!=null or indexOf(cmd,"need")!=null or indexOf(cmd,"grab")!=null) then
+    //Check if this is data extraction (emails, bank, users, etc) - should NOT be fetch
+    isDataExtraction=false
+    if indexOf(cmd,"email")!=null and (indexOf(cmd,"get")!=null or indexOf(cmd,"need")!=null or indexOf(cmd,"extract")!=null) then isDataExtraction=true
+    if indexOf(cmd,"bank")!=null and (indexOf(cmd,"get")!=null or indexOf(cmd,"need")!=null or indexOf(cmd,"extract")!=null) then isDataExtraction=true
+    if indexOf(cmd,"user")!=null and indexOf(cmd,"account")!=null and (indexOf(cmd,"get")!=null or indexOf(cmd,"need")!=null or indexOf(cmd,"extract")!=null) then isDataExtraction=true
+    if indexOf(cmd,"all account")!=null or indexOf(cmd,"all data")!=null or indexOf(cmd,"everything")!=null then isDataExtraction=true
+    //If data extraction detected, skip this entire fetch section
+    if not isDataExtraction then
+      //Check if this is specifically about proxy - should be proxy not fetch
+      if indexOf(cmd,"proxy")!=null then
+        parsed.action="proxy"
+        parsed.summary="Create proxy session"
+        actionFound=true
+        if debug then print green("[DEBUG] Agent: 'get proxy' detected - using proxy action")
+      //Check if this is specifically about passwords - should be crack not fetch
+      else if indexOf(cmd,"password")!=null and indexOf(cmd,"shell")==null then
+        parsed.action="crack"
+        parsed.summary="Crack password"
+        actionFound=true
+        if debug then print green("[DEBUG] Agent: 'get password' detected - using crack action")
+      else if indexOf(cmd,"shell")!=null or len(ips)>0 then
+      //If user wants to exclude certain services, use autonomous mode to try all others
+      if hasExclusionPattern then
+        parsed.action="autonomous"
+        parsed.summary="Make autonomous decision"
+        parsed.autonomousRequest=true
+        parsed.originalInput=cmd  //Store original command for autonomous processing
+        //Extract target IPs
+        extractedIps=globals.G_agent._extractIps(cmd)
+        if extractedIps and len(extractedIps)>0 then parsed.target=extractedIps[0]
+        //Extract requirements (same logic as autonomous patterns section)
+        requirements={}
+        //Extract privilege requirement
+        if indexOf(cmd,"root")!=null then
+          requirements.privilege="root"
+        else if indexOf(cmd,"user")!=null then
+          requirements.privilege="user"
+        else if indexOf(cmd,"guest")!=null then
+          requirements.privilege="guest"
+        end if
+        //Extract object type requirement
+        if indexOf(cmd,"shell")!=null then
+          requirements.objectType="shell"
+        else if indexOf(cmd,"computer")!=null then
+          requirements.objectType="computer"
+        else if indexOf(cmd,"file")!=null then
+          requirements.objectType="file"
+        end if
+        //Extract library exclusions
+        excludeKeywords=self._EXCLUDE_KEYWORDS
+        for excludeWord in excludeKeywords
+          if indexOf(cmd,excludeWord)!=null then
+            excludeIdx=indexOf(cmd,excludeWord)
+            afterExclude=cmd[excludeIdx+len(excludeWord):]
+            if indexOf(afterExclude,"router")!=null then
+              if not hasIndex(requirements,"excludeLibraryTypes") then requirements.excludeLibraryTypes=[]
+              if requirements.excludeLibraryTypes.indexOf("router")==null then push(requirements.excludeLibraryTypes,"router")
+            end if
+            if indexOf(afterExclude,"http")!=null or indexOf(afterExclude,"web")!=null then
+              if not hasIndex(requirements,"excludeLibraryTypes") then requirements.excludeLibraryTypes=[]
+              if requirements.excludeLibraryTypes.indexOf("http")==null then push(requirements.excludeLibraryTypes,"http")
+            end if
+            if indexOf(afterExclude,"ssh")!=null then
+              if not hasIndex(requirements,"excludeLibraryTypes") then requirements.excludeLibraryTypes=[]
+              if requirements.excludeLibraryTypes.indexOf("ssh")==null then push(requirements.excludeLibraryTypes,"ssh")
+            end if
+            if indexOf(afterExclude,"ftp")!=null then
+              if not hasIndex(requirements,"excludeLibraryTypes") then requirements.excludeLibraryTypes=[]
+              if requirements.excludeLibraryTypes.indexOf("ftp")==null then push(requirements.excludeLibraryTypes,"ftp")
+            end if
+            if indexOf(afterExclude,"sql")!=null or indexOf(afterExclude,"database")!=null then
+              if not hasIndex(requirements,"excludeLibraryTypes") then requirements.excludeLibraryTypes=[]
+              if requirements.excludeLibraryTypes.indexOf("sql")==null then push(requirements.excludeLibraryTypes,"sql")
+            end if
+          end if
+        end for
+        //Store requirements
+        if len(requirements)>0 then parsed.requirements=requirements
+        if debug then
+          if debug then print green("[DEBUG] Exclusion detected - using autonomous mode instead of fetch")
+          if hasIndex(requirements,"excludeLibraryTypes") then print green("[DEBUG] Excluding library types: "+join(requirements.excludeLibraryTypes,", "))
+        end if
+      else
+        //Normal fetch command
+        parsed.action="fetch"
+        parsed.summary="Fetch shell or access"
+      end if
+      actionFound=true
+      end if
+    else
+      //Data extraction detected - skip all fetch processing
+      if debug then print green("[DEBUG] Agent: Data extraction detected - skipping fetch parsing")
+    end if
+  end if
+  //Check hard-coded patterns FIRST (scan, crack, fetch) before man pages to avoid false matches
+  if not actionFound then
+    for patternName in globals.G_agent._commandPatterns.indexes
+      pattern=globals.G_agent._commandPatterns[patternName]
+      //Check if pattern requires additional context words
+      if hasIndex(pattern,"requiresContext") then
+        //Pattern needs specific context words (like "all accounts" for crackAll)
+        hasRequiredContext=false
+        for contextWord in pattern.requiresContext
+          if indexOf(cmd,contextWord)!=null then
+            hasRequiredContext=true
+            break
+          end if
+        end for
+        if not hasRequiredContext then continue  //Skip this pattern if context missing
+      end if
+      //Special check for scan: skip if this should be 'es' or 'iwlist' instead
+      if patternName=="scan" and (indexOf(cmd," library")!=null or indexOf(cmd,"wireless")!=null or indexOf(cmd,"wifi")!=null or (indexOf(cmd," on ")!=null and (indexOf(cmd,"ssh")!=null or indexOf(cmd,"ftp")!=null or indexOf(cmd,"http")!=null or indexOf(cmd,"smtp")!=null))) then continue  //Skip scan pattern, will match 'es' or 'iwlist' in phrase patterns
+      //Check pattern keywords
+      for keyword in pattern.keywords
+        if indexOf(cmd,keyword)!=null then
+          parsed.action=pattern.action
+          parsed.summary=pattern.summary
+          actionFound=true
+          break
+        end if
+      end for
+      if actionFound then break
+    end for
+  end if
+  //Try dynamic knowledge matching from man pages
+  if not actionFound then
+    //Pre-screening: detect strong phrase patterns that override word matching
+    //This prevents false matches like "file" command when user says "create file"
+    bestCommand=null
+    phraseScore=0
+    //Touch: create + file/empty
+    if (indexOf(cmd,"create")!=null or indexOf(cmd,"make")!=null or indexOf(cmd,"new")!=null) and (indexOf(cmd,"file")!=null or indexOf(cmd,"empty")!=null) and indexOf(cmd,"directory")==null and indexOf(cmd,"folder")==null and indexOf(cmd,"link")==null then
+      bestCommand="touch"
+      phraseScore=25
+    end if
+    //Ln: create link/symlink
+    if (indexOf(cmd,"link")!=null or indexOf(cmd,"symlink")!=null or indexOf(cmd,"shortcut")!=null) and indexOf(cmd," from ")!=null and indexOf(cmd," to ")!=null then
+      bestCommand="ln"
+      phraseScore=30
+    end if
+    //Mkdir: create + directory/folder
+    if (indexOf(cmd,"create")!=null or indexOf(cmd,"make")!=null or indexOf(cmd,"new")!=null) and (indexOf(cmd,"directory")!=null or indexOf(cmd,"folder")!=null or indexOf(cmd,"dir")!=null) and indexOf(cmd,"link")==null then
+      bestCommand="mkdir"
+      phraseScore=25
+    end if
+    //Chmod: permission phrases (check specific patterns first to avoid conflicts)
+    if indexOf(cmd,"chmod")!=null or indexOf(cmd,"change permission")!=null or indexOf(cmd,"change permissions")!=null or indexOf(cmd,"set permission")!=null or indexOf(cmd,"set permissions")!=null or (indexOf(cmd,"give")!=null and (indexOf(cmd,"permission")!=null or indexOf(cmd,"permissions")!=null)) or (indexOf(cmd,"grant")!=null and (indexOf(cmd,"permission")!=null or indexOf(cmd,"permissions")!=null)) or (indexOf(cmd,"remove")!=null and (indexOf(cmd,"permission")!=null or indexOf(cmd,"permissions")!=null)) or (indexOf(cmd,"revoke")!=null and (indexOf(cmd,"permission")!=null or indexOf(cmd,"permissions")!=null)) or indexOf(cmd,"read only")!=null or indexOf(cmd,"make executable")!=null or indexOf(cmd,"make it executable")!=null then
+      if debug then print green("[DEBUG] Chmod pattern matched!")
+      bestCommand="chmod"
+      phraseScore=27  //Higher than mv/cp but not too aggressive
+    end if
+    //Chown: change owner
+    if indexOf(cmd,"change owner")!=null or indexOf(cmd,"set owner")!=null or indexOf(cmd,"chown")!=null then
+      bestCommand="chown"
+      phraseScore=25
+    end if
+    //Chgrp: change group
+    if indexOf(cmd,"change group")!=null or indexOf(cmd,"set group")!=null or indexOf(cmd,"chgrp")!=null then
+      bestCommand="chgrp"
+      phraseScore=25
+    end if
+    //Chog: change owner and group (just look for chog keyword)
+    if indexOf(cmd,"chog")!=null then
+      bestCommand="chog"
+      phraseScore=30  //Higher score since it's a unique command name
+    end if
+    //Es: discrete exploit scanning - "scan [service/library] on [ip]" or "scan [library] library"
+    if indexOf(cmd,"es ")!=null or (indexOf(cmd,"scan")!=null and (indexOf(cmd," library")!=null or (indexOf(cmd," on ")!=null and (indexOf(cmd,"ssh")!=null or indexOf(cmd,"ftp")!=null or indexOf(cmd,"http")!=null or indexOf(cmd,"smtp")!=null)))) then
+      bestCommand="es"
+      phraseScore=28  //Higher than generic scan for specific patterns
+    end if
+    //WiFi/iwlist: wireless network scanning and management
+    if indexOf(cmd,"wifi")!=null or indexOf(cmd,"wireless")!=null or indexOf(cmd,"iwlist")!=null then
+      bestCommand="iwlist"
+      phraseScore=30  //High score for specific WiFi commands
+    end if
+    //Mv/Cp: with "to" indicates move/copy operation (check for word boundaries to avoid matching "remove")
+    if ((indexOf(cmd,"move ")!=null or indexOf(cmd," move")!=null or indexOf(cmd,"rename")!=null) and indexOf(cmd," to ")!=null) then
+      if debug then print green("[DEBUG] Mv pattern matched with score 25, current best="+phraseScore)
+      if phraseScore==null or 25>phraseScore then
+        bestCommand="mv"
+        phraseScore=25
+      end if
+    end if
+    if ((indexOf(cmd,"copy ")!=null or indexOf(cmd," copy")!=null or indexOf(cmd,"duplicate")!=null) and indexOf(cmd," to ")!=null) then
+      if phraseScore==null or 25>phraseScore then
+        bestCommand="cp"
+        phraseScore=25
+      end if
+    end if
+    //Cat: "show me" is very specific
+    if indexOf(cmd,"show me")!=null and indexOf(cmd,"file")!=null then
+      bestCommand="cat"
+      phraseScore=20
+    end if
+    //Cat: "read/view/display/show" with filename (not "read only")
+    if (indexOf(cmd,"read ")!=null or indexOf(cmd,"view ")!=null or indexOf(cmd,"display ")!=null or indexOf(cmd,"show ")!=null) and indexOf(cmd,"only")==null and indexOf(cmd,"permission")==null then
+      //Check if there's a word after read/view/display/show that looks like a filename
+      words=split(cmd," ")
+      _len=len(words);i=0;while i<_len
+      if words[i]=="read" or words[i]=="view" or words[i]=="display" or words[i]=="show" then
+        //Skip "show me" pattern - look at word after "me"
+        if words[i]=="show" and i+1<len(words) and words[i+1]=="me" and i+2<len(words) then
+          bestCommand="cat"
+          phraseScore=28
+          break
+        else if words[i]!="show" and i+1<len(words) and len(words[i+1])>0 then
+          bestCommand="cat"
+          phraseScore=28
+          break
+        end if
+      end if
+      i+=1;end while
+    end if
+    //Grep: "search for X in Y" or "find X in Y"
+    if (indexOf(cmd,"search")!=null or indexOf(cmd,"find")!=null) and (indexOf(cmd," for ")!=null or indexOf(cmd," in ")!=null) then
+      bestCommand="grep"
+      phraseScore=30
+    end if
+    //Nmap: "nmap" followed by target/flag keywords
+    if indexOf(cmd,"nmap")!=null then
+      bestCommand="nmap"
+      phraseScore=35
+    end if
+    //If no strong phrase match, use dynamic matching
+    if phraseScore==0 then
+      //Extract meaningful words from query
+      queryWords=split(cmd," ")
+      //Use registry's dynamic matching (reads from commandKnowledgeCache)
+      matchResult=AgentCommandRegistry.matchQuery(queryWords)
+      if matchResult.command and matchResult.score>=10 then
+        bestCommand=matchResult.command
+        if debug then print yellow("[DEBUG] Dynamic match: '"+bestCommand+"' with score "+matchResult.score)
+      end if
+    else
+      if debug then print yellow("[DEBUG] Phrase match: '"+bestCommand+"' with score "+phraseScore)
+    end if
+    if bestCommand then
+      //Apply additional context-aware boosting
+      //Boost chmod for permission phrases
+      if bestCommand=="chmod" then
+        permPhrases=["read only","full permissions","all permissions","executable","make executable","set permissions"]
+        for phrase in permPhrases
+          if indexOf(cmd,phrase)!=null then
+            phraseScore=phraseScore+10
+            break
+          end if
+        end for
+      end if
+      actionFound=true
+      parsed.action=bestCommand
+      parsed.summary="Execute "+bestCommand+" command"
+      if debug then print green("[DEBUG] Final command: '"+bestCommand+"'")
+    end if
+  end if
+  //If hard-coded patterns and registry keywords didn't match, try man pages (dynamic learning)
+  if not actionFound then
+    //Try matching against cached man page descriptions
+    //Initialize cache if needed
+    if not hasIndex(globals.G_agent,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
+    //Load knowledge if cache is empty
+    if len(globals.G_agent.commandKnowledgeCache.indexes)==0 then
+      if debug then print green("[DEBUG] Agent: Loading man pages for command matching...")
+      globals.G_agent.loadKnowledge
+    end if
+    if hasIndex(globals.G_agent,"commandKnowledgeCache") and len(globals.G_agent.commandKnowledgeCache.indexes)>0 then
+      bestMatch=null
+      bestScore=0
+      //Extract meaningful words from user's query (skip common words)
+      sw=AgentCore._STOP_WORDS
+      queryWords=split(cmd," ")
+      meaningfulWords=[]
+      for word in queryWords;if len(word)>2 and not hasIndex(sw,word) then push(meaningfulWords,word);end for
+      //Only expand first word if it's an action verb (to avoid false matches)
+      if len(meaningfulWords)>0 then
+        firstWord=meaningfulWords[0]
+        actionSynonyms={"go":["cd"],"goto":["cd"],"navigate":["cd"],"list":["ls"],"show":["ls"],"display":["ls"],"create":["mkdir","touch"],"make":["mkdir"],"delete":["rm"],"remove":["rm"]}
+        if hasIndex(actionSynonyms,firstWord) then
+          for synonym in actionSynonyms[firstWord];if meaningfulWords.indexOf(synonym)==null then push(meaningfulWords,synonym);end for
+        end if
+      end if
+      if debug then print green("[DEBUG] Agent: Query meaningful words: "+join(meaningfulWords,", "))
+      //Detect user intent based on query words - map to command capabilities
+      requiredCapabilities=[]
+      for word in meaningfulWords
+        //Password/hash cracking intent
+        if word=="crack" or word=="break" or word=="decrypt" or word=="decipher" or word=="hash" then
+          if requiredCapabilities.indexOf("cracksPasswords")==null then push(requiredCapabilities,"cracksPasswords")
+          if requiredCapabilities.indexOf("decrypts")==null then push(requiredCapabilities,"decrypts")
+        end if
+        //File operations intent
+        if word=="file" or word=="files" or word=="read" or word=="write" or word=="cat" then
+          if requiredCapabilities.indexOf("handlesFiles")==null then push(requiredCapabilities,"handlesFiles")
+        end if
+        //Network operations intent
+        if word=="network" or word=="scan" or word=="ping" or word=="port" or word=="nmap" then
+          if requiredCapabilities.indexOf("handlesNetwork")==null then push(requiredCapabilities,"handlesNetwork")
+        end if
+        //System operations intent
+        if word=="system" or word=="disk" or word=="memory" or word=="process" then
+          if requiredCapabilities.indexOf("handlesSystem")==null then push(requiredCapabilities,"handlesSystem")
+        end if
+      end for
+      //Blacklist commands that should never be used for certain intents
+      escalationBlacklist=["cal","date","uptime","clear","pwd","whoami","hostname","echo","neofetch"]
+      isEscalationIntent=false
+      for word in meaningfulWords
+        if word=="escalate" or word=="root" or word=="privilege" or word=="admin" or word=="su" or word=="sudo" then
+          isEscalationIntent=true
+          break
+        end if
+      end for
+      matchCount=0
+      for cmdName in globals.G_agent.commandKnowledgeCache.indexes
+        knowledge=globals.G_agent.commandKnowledgeCache[cmdName]
+        //Only use 'raw' field (full description from man pages)
+        //Old knowledge files with only 'purpose' field are not supported
+        if not hasIndex(knowledge,"raw") or not knowledge.raw then continue
+        //Skip blacklisted commands for escalation intents
+        if isEscalationIntent then
+          isBlacklisted=false
+          for blacklisted in escalationBlacklist
+            if cmdName==blacklisted then
+              isBlacklisted=true
+              break
+            end if
+          end for
+          if isBlacklisted then continue
+        end if
+        matchCount+=1
+        descLower=lower(knowledge.raw)
+        //Debug first few commands
+        if debug and matchCount<=3 then print green("[DEBUG] Agent: Checking '"+cmdName+"' desc='"+descLower[:50]+"...'")
+        //Exact command name match - highest priority
+        score=0
+        for word in meaningfulWords
+          if word==cmdName then
+            score=score+100  //Exact match of command name gets massive boost
+            if debug then print green("[DEBUG] Agent: '"+cmdName+"' exactly matches query word!")
+          end if
+        end for
+        //Base score: match query words in description
+        for word in meaningfulWords;if word!=cmdName and len(word)!=32 and indexOf(descLower,word)!=null then score=score+10;end for
+        //Capability-based scoring boost
+        if len(requiredCapabilities)>0 then
+          for capability in requiredCapabilities
+            if hasIndex(knowledge,capability) and knowledge[capability] then
+              score=score+30  //Strong boost for matching capability
+              if debug and matchCount<=3 then print green("[DEBUG] Agent: '"+cmdName+"' has required capability: "+capability)
+            end if
+          end for
+        end if
+        //Bonus if command name appears as whole word in query (not substring)
+        cmdWords=split(cmd," ")
+        for cmdWord in cmdWords
+          if cmdWord==cmdName then
+            score=score+20
+            break
+          end if
+        end for
+        if score>bestScore then
+          bestMatch=cmdName
+          bestScore=score
+          if debug and score>=10 then print green("[DEBUG] Agent: New best match '"+cmdName+"' with score "+score)
+        end if
+      end for
+      if debug then print green("[DEBUG] Agent: Checked "+matchCount+" commands with descriptions. Best match='"+bestMatch+"' with score="+bestScore)
+      //If no good match but we have a single-word command, try learning it
+      if (not bestMatch or bestScore<10) and len(queryWords)==1 and len(queryWords[0])>2 then
+        possibleCmd=queryWords[0]
+        if not hasIndex(globals.G_agent.commandKnowledgeCache,possibleCmd) then
+          //Try to learn this command
+          if debug then print green("[DEBUG] Agent: Attempting to learn new command: "+possibleCmd)
+          newKnowledge=globals.G_agent.getCommandInfo(possibleCmd)
+          if newKnowledge then
+            bestMatch=possibleCmd
+            bestScore=20
+            if debug then print green("[DEBUG] Agent: Successfully learned '"+possibleCmd+"'")
+          end if
+        end if
+      end if
+      if bestMatch and bestScore>=10 then
+        parsed.action=bestMatch
+        parsed.summary="Execute "+bestMatch+" command"
+        actionFound=true
+        if debug then print green("[DEBUG] Agent: Matched '"+cmd+"' to '"+bestMatch+"' from man page (score: "+bestScore+")")
+      end if
+    end if
+    //Try synonym expansion as last resort
+    if not actionFound then
+      expandedWord=globals.G_agent._expandWithSynonyms(cmd)
+      if expandedWord then
+        //Try again with the base word
+        if hasIndex(globals.G_agent._commandPatterns,expandedWord) then
+          pattern=globals.G_agent._commandPatterns[expandedWord]
+          parsed.action=pattern.action
+          parsed.summary=pattern.summary
+          actionFound=true
+          if debug then print green("[DEBUG] Agent: Synonym expansion '"+expandedWord+"' matched")
+        end if
+      end if
+    end if
+  end if
+  //Continue with special case handling based on detected action
+  if hasIndex(parsed,"action") then
+    //Write command - extract quoted content and filename after "to"
+    if parsed.action=="write" then
+      //Extract quoted content first
+      if indexOf(cmd,"""")!=null then
+        quoteStart=indexOf(cmd,"""")
+        afterFirstQuote=cmd[quoteStart+1:]
+        quoteEnd=indexOf(afterFirstQuote,"""")
+        if quoteEnd!=null then
+          parsed.content=afterFirstQuote[:quoteEnd]
+          if debug then print green("[DEBUG] Agent: Extracted quoted content: '"+parsed.content+"'")
+        end if
+      end if
+      //Extract filename after prepositions or at end
+      prepositions=[" to "," in "," into "," on "," onto "]
+      for prep in prepositions
+        if indexOf(cmd,prep)!=null then
+          prepIdx=indexOf(cmd,prep)
+          afterPrep=cmd[prepIdx+len(prep):]
+          //Get first word after preposition
+          filenameParts=split(trim(afterPrep)," ")
+          if len(filenameParts)>0 then
+            parsed.target=filenameParts[0]
+            if debug then print green("[DEBUG] Agent: Extracted filename '"+parsed.target+"' after '"+prep+"'")
+            break
+          end if
+        end if
+      end for
+      //If no preposition found, try to get last word as filename
+      if not hasIndex(parsed,"target") then
+        words=split(cmd," ")
+        if len(words)>0 then
+          //Get last word that's not inside quotes
+          lastWord=words[len(words)-1]
+          //Skip common words that aren't filenames
+          if lastWord!="file" and lastWord!="text" and len(lastWord)>0 then
+            parsed.target=lastWord
+            if debug then print green("[DEBUG] Agent: Using last word '"+parsed.target+"' as filename")
+          end if
+        end if
+      end if
+    end if
+    //Link command - extract source and destination from "from X to Y" pattern
+    if parsed.action=="ln" then
+      cmdRaw=lower(parsed.raw)  //Use lowercased version for indexOf
+      fromIdx=indexOf(cmdRaw," from ")
+      toIdx=indexOf(cmdRaw," to ")
+      if fromIdx!=null and toIdx!=null and toIdx>fromIdx then
+        //Extract source (between "from" and "to") from original case-preserved command
+        afterFrom=parsed.raw[fromIdx+6:]  //Skip " from "
+        beforeTo=afterFrom[:indexOf(lower(afterFrom)," to ")]
+        parsed.source=trim(beforeTo)
+        //Extract destination (after "to")
+        afterTo=parsed.raw[toIdx+4:]  //Skip " to "
+        destParts=split(trim(afterTo)," ")
+        if len(destParts)>0 then parsed.destination=destParts[0]
+        if debug then print green("[DEBUG] Agent: Extracted link source='"+parsed.source+"' destination='"+parsed.destination+"'")
+      end if
+    end if
+    //Mv/Cp commands - extract source and destination from "X to Y" pattern
+    if parsed.action=="mv" or parsed.action=="cp" then
+      cmdRaw=lower(parsed.raw)  //Use lowercased version for indexOf
+      toIdx=indexOf(cmdRaw," to ")
+      if toIdx!=null then
+        //Extract source (before "to") from original case-preserved command
+        beforeTo=parsed.raw[:toIdx]
+        //Remove command words (move/copy/mv/cp) from the beginning
+        cmdWords=["move","copy","rename","duplicate","mv","cp","Move","Copy","Rename","Duplicate"]
+        for cmdWord in cmdWords
+          if indexOf(beforeTo,cmdWord)!=null then
+            beforeTo=beforeTo.replace(cmdWord,"")
+            break
+          end if
+        end for
+        parsed.source=trim(beforeTo)
+        //Extract destination (after "to")
+        afterTo=parsed.raw[toIdx+4:]  //Skip " to "
+        destParts=split(trim(afterTo)," ")
+        if len(destParts)>0 then parsed.destination=destParts[0]
+        if debug then print green("[DEBUG] Agent: Extracted "+parsed.action+" source='"+parsed.source+"' destination='"+parsed.destination+"'")
+      end if
+    end if
+    //Chmod command - extract file and permission value from "of X to Y" or "chmod X to Y" pattern
+    if parsed.action=="chmod" then
+      cmdRaw=lower(parsed.raw)
+      ofIdx=indexOf(cmdRaw," of ")
+      toIdx=indexOf(cmdRaw," to ")
+      if ofIdx!=null and toIdx!=null and toIdx>ofIdx then
+        //Extract file (between "of" and "to")
+        afterOf=parsed.raw[ofIdx+4:]  //Skip " of "
+        beforeTo=afterOf[:indexOf(lower(afterOf)," to ")]
+        parsed.target=trim(beforeTo)
+        //Extract permission value (after "to")
+        afterTo=parsed.raw[toIdx+4:]  //Skip " to "
+        permParts=split(trim(afterTo)," ")
+        if len(permParts)>0 then
+          parsed.permValue=permParts[0]
+          if debug then print green("[DEBUG] Agent: Extracted chmod target='"+parsed.target+"' permValue='"+parsed.permValue+"'")
+        end if
+      else if toIdx!=null and indexOf(cmdRaw,"chmod")!=null then
+        //Handle "chmod X to Y" pattern (no "of")
+        chmodIdx=indexOf(cmdRaw,"chmod")
+        afterChmod=parsed.raw[chmodIdx+5:]  //Skip "chmod"
+        beforeTo=afterChmod[:indexOf(lower(afterChmod)," to ")]
+        parsed.target=trim(beforeTo)
+        //Extract permission value (after "to")
+        afterTo=parsed.raw[toIdx+4:]  //Skip " to "
+        permParts=split(trim(afterTo)," ")
+        if len(permParts)>0 then
+          parsed.permValue=permParts[0]
+          if debug then print green("[DEBUG] Agent: Extracted chmod target='"+parsed.target+"' permValue='"+parsed.permValue+"'")
+        end if
+      else
+        //Handle "give/grant full permissions to X" pattern
+        if indexOf(cmdRaw,"full permission")!=null or indexOf(cmdRaw,"full access")!=null then
+          parsed.permValue="777"
+          //Extract target - last word that's not "permission"/"permissions"/"access"
+          words=split(cmd," ")
+          i=len(words)-1;while i>=0
+            if words[i]!="permission" and words[i]!="permissions" and words[i]!="access" and words[i]!="to" and len(words[i])>0 then
+              parsed.target=parsed.raw.split(" ")[i]  //Get from original case-preserved command
+              break
+            end if
+          i-=1;end while
+          if debug then print green("[DEBUG] Agent: Extracted chmod target='"+parsed.target+"' with full permissions (777)")
+        else if indexOf(cmdRaw,"remove")!=null and indexOf(cmdRaw,"permission")!=null or indexOf(cmdRaw,"revoke")!=null and indexOf(cmdRaw,"permission")!=null then
+          parsed.permValue="000"
+          //Extract target - last word that's not "permission"/"permissions"/"all"
+          words=split(cmd," ")
+          i=len(words)-1;while i>=0
+            if words[i]!="permission" and words[i]!="permissions" and words[i]!="all" and words[i]!="to" and words[i]!="from" and len(words[i])>0 then
+              parsed.target=parsed.raw.split(" ")[i]  //Get from original case-preserved command
+              break
+            end if
+          i-=1;end while
+          if debug then print green("[DEBUG] Agent: Extracted chmod target='"+parsed.target+"' with no permissions (000)")
+        else if indexOf(cmdRaw,"read only")!=null or indexOf(cmdRaw,"readonly")!=null then
+          parsed.permValue="444"  //Read only for owner, group, and others
+          //Extract target - last word that's not "read"/"only"/"permission"
+          words=split(cmd," ")
+          i=len(words)-1;while i>=0
+            if words[i]!="read" and words[i]!="only" and words[i]!="permission" and words[i]!="permissions" and words[i]!="to" and len(words[i])>0 then
+              parsed.target=parsed.raw.split(" ")[i]  //Get from original case-preserved command
+              break
+            end if
+          i-=1;end while
+          if debug then print green("[DEBUG] Agent: Extracted chmod target='"+parsed.target+"' with read only (444)")
+        end if
+      end if
+    end if
+    //Chown/chgrp commands - extract file and owner/group from "of X to Y" pattern
+    if parsed.action=="chown" or parsed.action=="chgrp" then
+      cmdRaw=lower(parsed.raw)
+      ofIdx=indexOf(cmdRaw," of ")
+      toIdx=indexOf(cmdRaw," to ")
+      if ofIdx!=null and toIdx!=null and toIdx>ofIdx then
+        //Extract file (between "of" and "to")
+        afterOf=parsed.raw[ofIdx+4:]  //Skip " of "
+        beforeTo=afterOf[:indexOf(lower(afterOf)," to ")]
+        parsed.target=trim(beforeTo)
+        //Extract owner/group (after "to")
+        afterTo=parsed.raw[toIdx+4:]  //Skip " to "
+        ownerParts=split(trim(afterTo)," ")
+        if len(ownerParts)>0 then
+          if parsed.action=="chown" then
+            parsed.user=ownerParts[0]
+            if debug then print green("[DEBUG] Agent: Extracted chown target='"+parsed.target+"' user='"+parsed.user+"'")
+          else
+            parsed.group=ownerParts[0]
+            if debug then print green("[DEBUG] Agent: Extracted chgrp target='"+parsed.target+"' group='"+parsed.group+"'")
+          end if
+        end if
+      end if
+    end if
+    //Chog command - extract file and user from "of X to Y" or "chog USER FILE" pattern
+    if parsed.action=="chog" then
+      cmdRaw=lower(parsed.raw)
+      ofIdx=indexOf(cmdRaw," of ")
+      toIdx=indexOf(cmdRaw," to ")
+      if ofIdx!=null and toIdx!=null and toIdx>ofIdx then
+        //Extract file (between "of" and "to")
+        afterOf=parsed.raw[ofIdx+4:]  //Skip " of "
+        beforeTo=afterOf[:indexOf(lower(afterOf)," to ")]
+        parsed.target=trim(beforeTo)
+        //Extract user (after "to")
+        afterTo=parsed.raw[toIdx+4:]  //Skip " to "
+        userParts=split(trim(afterTo)," ")
+        if len(userParts)>0 then parsed.user=userParts[0]
+        if debug then print green("[DEBUG] Agent: Extracted chog target='"+parsed.target+"' user='"+parsed.user+"'")
+      else
+        //Handle direct "chog USER FILE" pattern
+        chogIdx=indexOf(cmdRaw,"chog")
+        if chogIdx!=null then
+          afterChog=parsed.raw[chogIdx+4:]  //Skip "chog"
+          parts=split(trim(afterChog)," ")
+          if len(parts)>=2 then
+            parsed.user=parts[0]
+            parsed.target=parts[1]
+            if debug then print green("[DEBUG] Agent: Extracted chog user='"+parsed.user+"' target='"+parsed.target+"'")
+          end if
+        end if
+      end if
+    end if
+    //Es command - extract IP/port or library from "scan [service] on [ip]" or "scan [library] library"
+    if parsed.action=="es" then
+      cmdRaw=lower(parsed.raw)
+      onIdx=indexOf(cmdRaw," on ")
+      libraryIdx=indexOf(cmdRaw," library")
+      //Pattern 1: "scan [service] on [ip]" -> es IP PORT
+      if onIdx!=null then
+        //Extract IP (after "on")
+        afterOn=parsed.raw[onIdx+4:]  //Skip " on "
+        ipParts=split(trim(afterOn)," ")
+        if len(ipParts)>0 then
+          parsed.target=ipParts[0]
+          //Extract service (before "on")
+          beforeOn=cmdRaw[:onIdx]
+          //Look for service keywords
+          serviceMap={"ssh":"22","ftp":"21","http":"80","web":"80","smtp":"25","router":"0"}
+          for service in indexes(serviceMap)
+            if indexOf(beforeOn,service)!=null then
+              parsed.port=serviceMap[service]
+              parsed.service=service
+              break
+            end if
+          end for
+          if debug then print green("[DEBUG] Agent: Extracted es target='"+parsed.target+"' port='"+parsed.port+"' service='"+parsed.service+"'")
+        end if
+      else if libraryIdx!=null then
+        //Pattern 2: "scan [library] library" -> es LIBRARY
+        beforeLibrary=cmdRaw[:libraryIdx]
+        //Extract library name (last word before "library")
+        words=split(trim(beforeLibrary)," ")
+        if len(words)>0 then
+          parsed.library=words[len(words)-1]
+          if debug then print green("[DEBUG] Agent: Extracted es library='"+parsed.library+"'")
+        end if
+      else
+        //Check if there's a direct library reference after "es"
+        esIdx=indexOf(cmdRaw,"es ")
+        if esIdx!=null then
+          afterEs=parsed.raw[esIdx+3:]  //Skip "es "
+          parts=split(trim(afterEs)," ")
+          if len(parts)>0 then
+            //Could be IP PORT or just LIBRARY
+            if len(parts)>=2 and indexOf(parts[0],".")!=null then
+              //Likely IP PORT format
+              parsed.target=parts[0]
+              parsed.port=parts[1]
+              if debug then print green("[DEBUG] Agent: Extracted es target='"+parsed.target+"' port='"+parsed.port+"'")
+            else
+              //Likely library name
+              parsed.library=parts[0]
+              if debug then print green("[DEBUG] Agent: Extracted es library='"+parsed.library+"'")
+            end if
+          end if
+        end if
+      end if
+    end if
+    //WiFi command - extract operation flags from natural language
+    if parsed.action=="iwlist" then
+      cmdRaw=lower(parsed.raw)
+      //Default to listing networks for any wifi query
+      parsed.flag="-l"
+      if indexOf(cmdRaw,"list")!=null or indexOf(cmdRaw,"show")!=null or indexOf(cmdRaw,"scan")!=null or indexOf(cmdRaw,"available")!=null then
+        parsed.flag="-l"
+        if debug then print green("[DEBUG] Agent: WiFi list networks detected, flag='-l'")
+      end if
+    end if
+    //Cat/read command - extract filename after read/view/display/show
+    if parsed.action=="cat" then
+      //Use case-preserved raw command for filename extraction
+      cmdRaw=lower(parsed.raw)
+      triggerWords=["read","view","display","show"]
+      for trigger in triggerWords
+        triggerIdx=indexOf(cmdRaw,trigger+" ")
+        if triggerIdx!=null then
+          afterTrigger=parsed.raw[triggerIdx+len(trigger)+1:]  //Skip trigger word and space using original case
+          //Handle "show me <file>" pattern
+          if trigger=="show" and indexOf(lower(afterTrigger),"me ")!=null then
+            afterMe=afterTrigger[indexOf(lower(afterTrigger),"me ")+3:]
+            filenameParts=split(trim(afterMe)," ")
+          else
+            filenameParts=split(trim(afterTrigger)," ")
+          end if
+          if len(filenameParts)>0 then
+            parsed.target=filenameParts[0]
+            if debug then print green("[DEBUG] Agent: Extracted filename '"+parsed.target+"' after '"+trigger+"'")
+            break
+          end if
+        end if
+      end for
+    end if
+    //Rm command - extract filename from "remove/delete X" pattern
+    if parsed.action=="rm" then
+      cmdRaw=lower(parsed.raw)
+      triggerWords=["remove","delete","erase"]
+      for trigger in triggerWords
+        triggerIdx=indexOf(cmdRaw,trigger+" ")
+        if triggerIdx!=null then
+          afterTrigger=parsed.raw[triggerIdx+len(trigger)+1:]  //Skip trigger word and space
+          filenameParts=split(trim(afterTrigger)," ")
+          if len(filenameParts)>0 then
+            parsed.target=filenameParts[0]
+            if debug then print green("[DEBUG] Agent: Extracted rm target='"+parsed.target+"' after '"+trigger+"'")
+            break
+          end if
+        end if
+      end for
+    end if
+    //Grep command - extract pattern and file from "search for X in Y"
+    if parsed.action=="grep" then
+      forIdx=indexOf(cmd," for ")
+      inIdx=indexOf(cmd," in ")
+      if forIdx!=null and inIdx!=null and inIdx>forIdx then
+        //Extract pattern (between "for" and "in")
+        afterFor=cmd[forIdx+5:]  //Skip " for "
+        beforeIn=afterFor[:indexOf(afterFor," in ")]
+        parsed.pattern=trim(beforeIn)
+        //Extract filename (after "in")
+        afterIn=cmd[inIdx+4:]  //Skip " in "
+        filenameParts=split(trim(afterIn)," ")
+        if len(filenameParts)>0 then parsed.target=filenameParts[0]
+        if debug then print green("[DEBUG] Agent: Extracted grep pattern='"+parsed.pattern+"' file='"+parsed.target+"'")
+      end if
+    end if
+    //Find command - extract pattern from "find files named X"
+    if parsed.action=="find" then
+      namedIdx=indexOf(cmd," named ")
+      calledIdx=indexOf(cmd," called ")
+      triggerIdx=null
+      triggerLen=0
+      if namedIdx!=null then
+        triggerIdx=namedIdx
+        triggerLen=7  //" named "
+      else if calledIdx!=null then
+        triggerIdx=calledIdx
+        triggerLen=8  //" called "
+      end if
+      if triggerIdx!=null then
+        //Extract pattern after "named" or "called"
+        afterTrigger=cmd[triggerIdx+triggerLen:]
+        patternParts=split(trim(afterTrigger)," ")
+        if len(patternParts)>0 then
+          parsed.pattern=patternParts[0]
+          //Clear target since we want to search current directory
+          if hasIndex(parsed,"target") and parsed.target==parsed.pattern then parsed.target=null
+          if debug then print green("[DEBUG] Agent: Extracted find pattern='"+parsed.pattern+"'")
+        end if
+      end if
+    end if
+    //Nmap command - detect special flags from keywords
+    if parsed.action=="nmap" then
+      if indexOf(cmd,"random")!=null then
+        parsed.flags="-r"
+        if debug then print green("[DEBUG] Agent: Detected 'random' for nmap, setting flags='-r'")
+      else if indexOf(cmd,"localhost")!=null or indexOf(cmd,"local")!=null then
+        parsed.flags="-l"
+        if debug then print green("[DEBUG] Agent: Detected 'localhost' for nmap, setting flags='-l'")
+      else if indexOf(cmd,"public")!=null then
+        parsed.flags="-p"
+        if debug then print green("[DEBUG] Agent: Detected 'public' for nmap, setting flags='-p'")
+      end if
+    end if
+    //File operations - extract filename/path from "called", "named", or "name"
+    fileOps=["touch","mkdir","rm","mv","cp","cat","write","grep","chmod","chown","copy","move","remove"]
+    if indexOf(fileOps,parsed.action)!=null then
+      if indexOf(cmd,"called")!=null or indexOf(cmd,"named")!=null or indexOf(cmd," name ")!=null then
+        triggerWord=null
+        if indexOf(cmd,"called")!=null then triggerWord="called"
+        if indexOf(cmd,"named")!=null then triggerWord="named"
+        if indexOf(cmd," name ")!=null then triggerWord=" name "
+        if triggerWord then
+          triggerIdx=indexOf(cmd,triggerWord)
+          afterTrigger=cmd[triggerIdx+len(triggerWord):]
+          nameParts=split(trim(afterTrigger)," ")
+          if len(nameParts)>0 then
+            parsed.target=nameParts[0]
+            if debug then print green("[DEBUG] Agent: Extracted filename '"+parsed.target+"' for "+parsed.action)
+          end if
+        end if
+      end if
+    end if
+    //chmod specific - parse permission values from natural language
+    if parsed.action=="chmod" then
+      //Map permission descriptions to chmod values
+      if indexOf(cmd,"remove all")!=null or indexOf(cmd,"no permissions")!=null or indexOf(cmd,"zero permissions")!=null then
+        parsed.permValue="000"
+        if debug then print green("[DEBUG] Agent: Mapped 'remove all permissions' to chmod 000")
+      else if indexOf(cmd,"full")!=null or indexOf(cmd,"all permissions")!=null or indexOf(cmd,"777")!=null then
+        parsed.permValue="777"
+        if debug then print green("[DEBUG] Agent: Mapped 'full permissions' to chmod 777")
+      else if indexOf(cmd,"read only")!=null or indexOf(cmd,"readonly")!=null then
+        parsed.permValue="444"
+        if debug then print green("[DEBUG] Agent: Mapped 'read only' to chmod 444")
+      else if indexOf(cmd,"executable")!=null or indexOf(cmd,"execute")!=null then
+        parsed.permValue="755"
+        if debug then print green("[DEBUG] Agent: Mapped 'executable' to chmod 755")
+      else
+        //Try to extract numeric permission value (777, 644, etc)
+        words=split(cmd," ")
+        for word in words
+          if len(word)==3 then
+            //Check if it's a valid 3-digit permission (0-7 for each digit)
+            isValid=true
+            i=0;while i<=2
+              digit=word[i].val
+              if digit==null or digit<0 or digit>7 then
+                isValid=false
+                break
+              end if
+            i+=1;end while
+            if isValid then
+              parsed.permValue=word
+              if debug then print green("[DEBUG] Agent: Extracted permission value: "+word)
+              break
+            end if
+          end if
+        end for
+      end if
+    end if
+    if parsed.action=="scan" then
+      //Detect tool preference
+      if indexOf(cmd,"nmap")!=null then parsed.tool="nmap" else parsed.tool="scan"
+      //Detect random scan flag
+      if indexOf(cmd,"random")!=null then
+        parsed.flag="-r"
+        //Don't set a target - scan -r handles finding a random network
+        if debug then print green("[DEBUG] Agent: Detected 'random' for scan, setting flag='-r'")
+      end if
+      //Detect local/localhost scan flag
+      if indexOf(cmd,"local")!=null or indexOf(cmd,"localhost")!=null then
+        parsed.flag="-l"
+        //Don't set a target - scan -l scans localhost
+        if debug then print green("[DEBUG] Agent: Detected 'local/localhost' for scan, setting flag='-l'")
+      end if
+      //Detect service type
+      if indexOf(cmd,"router")!=null then
+        parsed.service="router"
+      else if indexOf(cmd,"ssh")!=null then
+        parsed.service="ssh"
+      else if indexOf(cmd,"ftp")!=null then
+        parsed.service="ftp"
+      else if indexOf(cmd,"http")!=null or indexOf(cmd,"web")!=null then
+        parsed.service="http"
+      else if indexOf(cmd,"smtp")!=null or indexOf(cmd,"mail")!=null then
+        parsed.service="smtp"
+      end if
+      //Detect scan mode
+      if hasIndex(pattern,"subtypes") then
+        for subtypeName in indexes(pattern.subtypes)
+          subtype=pattern.subtypes[subtypeName]
+          for subKeyword in subtype.keywords
+            if indexOf(cmd,subKeyword)!=null then
+              parsed.scanMode=subtype.mode
+              parsed.summary=subtype.summary
+              break
+            end if
+          end for
+          if hasIndex(parsed,"scanMode") then break
+        end for
+      end if
+      //Check for 'system' keyword
+      if indexOf(cmd,"system")!=null then
+        parsed.scanMode="local"
+        parsed.summary="Scan local system"
+        parsed.tool="scan"  //Force scan for system scans
+      end if
+      //Smart defaults based on IP type
+      if not hasIndex(parsed,"scanMode") then
+        if len(ips)>0 then
+          parsed.scanMode="ip"
+          parsed.summary="Scan "+ips[0]
+          //Choose tool based on IP type
+          if globals.G_agent._isPrivateIp(ips[0]) then
+            parsed.tool="scan"  //Use scan for private IPs
+            parsed.scanMode="ip"  //Scan specific IP
+            parsed.summary="Scan "+ips[0]
+          else
+            //Public IP - prefer nmap (stealthier)
+            if not hasIndex(parsed,"tool") then parsed.tool="nmap"
+          end if
+        else
+          parsed.scanMode="auto"
+        end if
+      end if
+    else if parsed.action=="cd" then
+      //Extract path from cd command
+      words=split(command," ")
+      cdIdx=-1
+      _len=len(words);i=0;while i<_len
+        if words[i]=="cd" then
+          cdIdx=i
+          break
+        end if
+      i+=1;end while
+      if cdIdx>=0 and cdIdx+1<len(words) then
+        //Get the path after "cd"
+        pathWord=words[cdIdx+1]
+        //Map special keywords
+        if pathWord=="root" then
+          parsed.path="/"
+        else if pathWord=="home" then
+          parsed.path=""  //Empty means home directory
+        else
+          parsed.path=pathWord
+        end if
+      end if
+    else if parsed.action=="ls" then
+      //Extract path from ls command
+      words=split(command," ")
+      lsIdx=-1
+      _len=len(words);i=0;while i<_len
+        if words[i]=="ls" or words[i]=="list" then
+          lsIdx=i
+          break
+        end if
+      i+=1;end while
+      if lsIdx>=0 and lsIdx+1<len(words) then
+        //Get the path after "ls"
+        parsed.path=words[lsIdx+1]
+      end if
+    else if parsed.action=="decipher" then
+      //Extract hash if present (32-char hex string)
+      words=split(command," ")
+      for word in words
+        _len=len(word)
+        if _len==32 then
+          isHash=true
+          i=0;while i<_len
+            ch=word[i]
+            if indexOf("0123456789abcdefABCDEF",ch)==null then
+              isHash=false
+              break
+            end if
+          i+=1;end while
+          if isHash then
+            parsed.hash=lower(word)
+            break
+          end if
+        end if
+      end for
+    else if parsed.action=="run" then
+      //Extract script name from command
+      //Look for words after "run" keyword
+      words=split(cmd," ")
+      actionIdx=-1
+      _len=len(words);i=0;while i<_len
+        if words[i]=="run" or words[i]=="execute" then
+          actionIdx=i
+          break
+        end if
+      i+=1;end while
+      if actionIdx>=0 and actionIdx+1<len(words) then
+        //Get the script name immediately after "run"
+        scriptName=words[actionIdx+1]
+        //Remove file extension if present
+        if indexOf(scriptName,".src")!=null then scriptName=scriptName[:indexOf(scriptName,".src")]
+        parsed.scriptName=scriptName
+        parsed.summary="Run "+scriptName
+      end if
+    else if parsed.action=="hunt" then
+      //Parse hunt command with all options
+      //Hunt types: custom, lib, repo, rshell, ssh, ftp, special, employee, student, criminal, http, smtp, neuro, chat, bank, cam, router, wifi, awifi, file, sql
+      //Specific service types checked first, then generic types
+      specificTypes=["ssh","ftp","http","repo","rshell","smtp","router","wifi","awifi","sql","cam","bank","chat","neuro","employee","student","criminal"]
+      genericTypes=["lib","special","file","custom"]
+      //Check if user wants library download (has both "library"/"lib" and "download" keywords)
+      wantsLibraryDownload=false
+      if (indexOf(cmd,"library")!=null or indexOf(cmd," lib")!=null) and (indexOf(cmd,"download")!=null or indexOf(cmd,"-d")!=null) then wantsLibraryDownload=true
+      //Detect hunt type
+      huntType=null
+      huntName=null
+      //If wants library download with service name, treat as library hunt
+      if wantsLibraryDownload then
+        for htype in specificTypes
+          if indexOf(cmd,htype)!=null then
+            huntType="lib"
+            huntName=htype
+            break
+          end if
+        end for
+      end if
+      if not huntType then
+        for htype in specificTypes
+          if indexOf(cmd,htype)!=null then
+            huntType=htype
+            break
+          end if
+        end for
+      end if
+      //If no specific type found, check generic types
+      if not huntType then
+        for htype in genericTypes
+          if indexOf(cmd,htype)!=null then
+            huntType=htype
+            break
+          end if
+        end for
+      end if
+      //Default to custom if no type found
+      if not huntType then huntType="custom"
+      parsed.huntType=huntType
+      //Store huntName if detected from library download pattern
+      if huntName then parsed.huntName=huntName
+      //Parse version (-v)
+      if indexOf(cmd,"version")!=null then
+        //Extract version number (look for pattern: version X.X.X or v X.X.X)
+        versionIdx=indexOf(cmd,"version")
+        if versionIdx!=null then
+          afterVersion=cmd[versionIdx+7:]
+          //Extract first word after "version" as version number
+          versionParts=split(trim(afterVersion)," ")
+          if len(versionParts)>0 then parsed.version=versionParts[0]
+        else
+          //Try "v X.X.X" pattern
+          if indexOf(cmd," v ")!=null then
+            vIdx=indexOf(cmd," v ")
+            afterV=cmd[vIdx+3:]
+            versionParts=split(trim(afterV)," ")
+            if len(versionParts)>0 then parsed.version=versionParts[0]
+          end if
+        end if
+      end if
+      //Parse count (-c) - look for numbers or word numbers
+      numberWords=self._NUMBER_WORDS
+      countFound=false
+      count=0
+      //Check for explicit numbers
+      words=split(cmd," ")
+      _len=len(words);i=0;while i<_len
+        numVal=words[i].val
+        if numVal!=null and numVal>0 then
+          count=numVal
+          countFound=true
+          break
+        end if
+      i+=1;end while
+      //Check for word numbers if no numeric found
+      if not countFound then
+        for word in numberWords.indexes
+          if indexOf(cmd,word)!=null then
+            count=numberWords[word]
+            countFound=true
+            break
+          end if
+        end for
+      end if
+      //Only set count if explicitly found
+      if countFound then parsed.count=count
+      //Parse save flag (-s)
+      if indexOf(cmd,"save")!=null or indexOf(cmd,"-s")!=null then parsed.save=true
+      //Parse download flag (-d)
+      if indexOf(cmd,"download")!=null or indexOf(cmd,"-d")!=null then
+        parsed.download=true
+        if debug then print green("[DEBUG] Download flag detected in: "+cmd)
+      end if
+      //Parse kill flag (-k)
+      if indexOf(cmd,"kill")!=null or indexOf(cmd,"-k")!=null then parsed.kill=true
+      //Parse port (-p) for custom hunt
+      if huntType=="custom" then
+        //Look for port number
+        _len=len(words);i=0;while i<_len
+          if words[i]=="port" and i+1<len(words) then
+            portVal=words[i+1].val
+            if portVal!=null then parsed.port=portVal
+          end if
+        i+=1;end while
+      end if
+      //Parse name (-n) for lib, special, file hunts
+      if huntType=="lib" or huntType=="special" or huntType=="file" then
+        //Look for library/file name after hunt type
+        if indexOf(cmd,"named")!=null or indexOf(cmd,"called")!=null then
+          triggerWord=null
+          if indexOf(cmd,"named")!=null then triggerWord="named"
+          if indexOf(cmd,"called")!=null then triggerWord="called"
+          if triggerWord then
+            triggerIdx=indexOf(cmd,triggerWord)
+            afterTrigger=cmd[triggerIdx+len(triggerWord):]
+            nameParts=split(trim(afterTrigger)," ")
+            if len(nameParts)>0 then parsed.huntName=nameParts[0]
+          end if
+        else
+          //Look for pattern: "NAME library|special|file"
+          if huntType=="lib" and indexOf(cmd," lib")!=null then
+            libIdx=indexOf(cmd," lib")
+            beforeLib=cmd[:libIdx]
+            //Get last word before "lib"
+            beforeParts=split(trim(beforeLib)," ")
+            if len(beforeParts)>0 then
+              lastWord=beforeParts[len(beforeParts)-1]
+              //Check if it's not a command word
+              if indexOf("find hunt search look for get",lastWord)==null then parsed.huntName=lastWord
+            end if
+          else if huntType=="special" and indexOf(cmd," special")!=null then
+            specIdx=indexOf(cmd," special")
+            beforeSpec=cmd[:specIdx]
+            beforeParts=split(trim(beforeSpec)," ")
+            if len(beforeParts)>0 then
+              lastWord=beforeParts[len(beforeParts)-1]
+              if indexOf("find hunt search look for get",lastWord)==null then parsed.huntName=lastWord
+            end if
+          else if huntType=="file" and indexOf(cmd," file")!=null then
+            fileIdx=indexOf(cmd," file")
+            beforeFile=cmd[:fileIdx]
+            beforeParts=split(trim(beforeFile)," ")
+            if len(beforeParts)>0 then
+              lastWord=beforeParts[len(beforeParts)-1]
+              if indexOf("find hunt search look for get",lastWord)==null then parsed.huntName=lastWord
+            end if
+          end if
+        end if
+      end if
+      //Parse BSSID/ESSID for awifi
+      if huntType=="awifi" then
+        if indexOf(cmd,"bssid")!=null then
+          bssidIdx=indexOf(cmd,"bssid")
+          afterBssid=cmd[bssidIdx+5:]
+          bssidParts=split(trim(afterBssid)," ")
+          if len(bssidParts)>0 then parsed.bssid=bssidParts[0]
+        end if
+        if indexOf(cmd,"essid")!=null or indexOf(cmd,"network")!=null then
+          triggerWord=null
+          if indexOf(cmd,"essid")!=null then triggerWord="essid"
+          if indexOf(cmd,"network")!=null then triggerWord="network"
+          if triggerWord then
+            triggerIdx=indexOf(cmd,triggerWord)
+            afterTrigger=cmd[triggerIdx+len(triggerWord):]
+            essidParts=split(trim(afterTrigger)," ")
+            if len(essidParts)>0 then parsed.essid=essidParts[0]
+          end if
+        end if
+      end if
+      //Build summary
+      summaryParts=["Hunt for"]
+      if count>1 then summaryParts.push(str(count))
+      summaryParts.push(huntType)
+      if parsed.hasIndex("version") then summaryParts.push("v"+parsed.version)
+      if parsed.hasIndex("save") and parsed.save then summaryParts.push("(save)")
+      if parsed.hasIndex("download") and parsed.download then summaryParts.push("(download)")
+      parsed.summary=join(summaryParts," ")
+    else if parsed.action=="launch" then
+      //Extract filename from command
+      words=split(cmd," ")
+      _len=len(words);i=0;while i<_len
+        if words[i]=="launch" or words[i]=="execute" then
+          if i+1<len(words) then
+            parsed.path=words[i+1]
+            parsed.summary="Launch "+words[i+1]
+            break
+          end if
+        end if
+      i+=1;end while
+    else if parsed.action=="view" or parsed.action=="open" then
+      //Detect what to open/view (avoid matching "log" in "--login")
+      if (indexOf(cmd," log ")!=null or indexOf(cmd," log")!=null and indexOf(cmd,"--log")==null and indexOf(cmd,"login")==null) then
+        parsed.openType="log"
+        parsed.openFlag="-l"
+        //Check for path hints
+        if indexOf(cmd,"home")!=null then
+          parsed.searchLocation="home"
+          parsed.summary="View log file in home"
+        else
+          parsed.summary="View log"
+        end if
+      else
+        //Extract filename/path from command
+        //Look for words after "open" or "view" that look like file paths or filenames
+        words=split(cmd," ")
+        actionIdx=-1
+        _len=len(words);i=0;while i<_len
+          if words[i]=="open" or words[i]=="view" then
+            actionIdx=i
+            break
+          end if
+        i+=1;end while
+        if actionIdx>=0 and actionIdx+1<len(words) then
+          //Get the word immediately after "open"/"view"
+          filename=words[actionIdx+1]
+          filenameLower=lower(filename)
+          //Clean up common prefixes/suffixes
+          if indexOf(filename,"the")!=null or indexOf(filename,"a")!=null or indexOf(filename,"file")==0 then
+            //Skip these words and try next one
+            if actionIdx+2<len(words) then filename=words[actionIdx+2]
+            filenameLower=lower(filename)
+          end if
+          //Check if this is a system application name and map to correct flag
+          //Based on man page for open command
+          appFlag=null
+          appName=null
+          if indexOf(filenameLower,"terminal")!=null or indexOf(filenameLower,"term")!=null then
+            appFlag="-t"
+            appName="terminal"
+          else if indexOf(filenameLower,"browser")!=null or indexOf(filenameLower,"web")!=null then
+            appFlag="-b"
+            appName="browser"
+          else if indexOf(filenameLower,"email")!=null or indexOf(filenameLower,"mail")!=null then
+            appFlag="-e"
+            appName="email"
+          else if indexOf(filenameLower,"setting")!=null or indexOf(filenameLower,"set.exe")!=null then
+            appFlag="-s"
+            appName="settings"
+          else if indexOf(filenameLower,"file")!=null or indexOf(filenameLower,"explorer")!=null then
+            appFlag="-f"
+            appName="file explorer"
+          else if indexOf(filenameLower,"code")!=null or indexOf(filenameLower,"editor")!=null then
+            appFlag="-c"
+            appName="code editor"
+          else if indexOf(filenameLower,"note")!=null then
+            appFlag="-n"
+            appName="notepad"
+          else if indexOf(filenameLower,"scan")!=null then
+            appFlag="-w"
+            appName="LAN scanner"
+          else if indexOf(filenameLower,"config")!=null then
+            appFlag="-g"
+            appName="LAN config"
+          else if indexOf(filenameLower,"map")!=null then
+            appFlag="-m"
+            appName="network map"
+          else if indexOf(filenameLower,"pdf")!=null then
+            appFlag="-d"
+            appName="PDF reader"
+          else if indexOf(filenameLower,"image")!=null or indexOf(filenameLower,"img")!=null or indexOf(filenameLower,"picture")!=null then
+            appFlag="-i"
+            appName="image viewer"
+          else if indexOf(filenameLower,"admin")!=null then
+            appFlag="-a"
+            appName="admin monitor"
+          else if indexOf(filenameLower,"stock")!=null then
+            appFlag="-k"
+            appName="stocks"
+          else if indexOf(filenameLower,"exploit")!=null then
+            appFlag="-x"
+            appName="exploit report"
+          else if indexOf(filenameLower,"employee")!=null then
+            appFlag="-y"
+            appName="employee viewer"
+          else if indexOf(filenameLower,"traffic")!=null then
+            appFlag="-r"
+            appName="traffic network"
+          else if indexOf(filenameLower,"police")!=null then
+            appFlag="-p"
+            appName="police records"
+          else if indexOf(filenameLower,"student")!=null then
+            appFlag="-u"
+            appName="student viewer"
+          else if indexOf(filenameLower,"hire")!=null then
+            appFlag="-h"
+            appName="hire viewer"
+          else if indexOf(filenameLower,"chat")!=null or indexOf(filenameLower,"messenger")!=null then
+            appFlag="-j"
+            appName="chat"
+          end if
+          if appFlag then
+            //Recognized application
+            parsed.openType="application"
+            parsed.openFlag=appFlag
+            parsed.summary="Open "+appName
+          else
+            //Regular file
+            parsed.openType="file"
+            parsed.path=filename
+            parsed.summary="Open "+filename
+          end if
+        else
+          parsed.openType="file"
+          parsed.summary="Open file"
+        end if
+      end if
+    else if parsed.action=="browser" then
+      //Browser with optional bookmark
+      parsed.openType="browser"
+      parsed.openFlag="-b"
+      //Check for bookmark number
+      if indexOf(cmd,"bookmark")!=null then
+        words=split(cmd," ")
+        _len=len(words);i=0;while i<=_len
+          if words[i]=="bookmark" and i+1<len(words) then
+            bookmarkNum=to_int(words[i+1])
+            if bookmarkNum>0 then
+              parsed.bookmark=bookmarkNum
+              parsed.openFlag="-b -f "+bookmarkNum
+              parsed.summary="Open browser bookmark "+bookmarkNum
+            end if
+          end if
+        i+=1;end while
+      else
+        parsed.summary="Open browser"
+      end if
+    else if parsed.action=="fetch" then
+      //Fetch shell from target
+      parsed.fetchType="shell"
+      //Determine if root access is required
+      needRoot=false
+      if indexOf(cmd,"root")!=null then
+        needRoot=true
+      else if indexOf(cmd,"admin")!=null then
+        needRoot=true
+      else if indexOf(cmd,"elevated")!=null then
+        needRoot=true
+      else if indexOf(cmd,"best")!=null then
+        needRoot=true
+      else if indexOf(cmd,"highest")!=null then
+        needRoot=true
+      end if
+      parsed.needRoot=needRoot
+      //Check for library installation requests
+      libsToInstall=[]
+      if indexOf(cmd," and install ")!=null or indexOf(cmd," install ")!=null then
+        //Parse what to install (but avoid matching service names like "http" in "http shell")
+        if indexOf(cmd,"install http")!=null then push(libsToInstall,"http")
+        if indexOf(cmd,"install ssh")!=null then push(libsToInstall,"ssh")
+        if indexOf(cmd,"install ftp")!=null then push(libsToInstall,"ftp")
+        if indexOf(cmd,"install smtp")!=null then push(libsToInstall,"smtp")
+        if indexOf(cmd,"install rshell")!=null then push(libsToInstall,"rshell")
+        if indexOf(cmd,"install aptclient")!=null then push(libsToInstall,"aptclient")
+        if indexOf(cmd,"install crypto")!=null then push(libsToInstall,"crypto")
+        if indexOf(cmd,"install metaxploit")!=null then push(libsToInstall,"metaxploit")
+        if debug and len(libsToInstall)>0 then print green("[DEBUG] Fetch action - detected library installation: "+join(libsToInstall,", "))
+      end if
+      parsed.libsToInstall=libsToInstall
+      //Detect if headless (intermediate step) or interactive (final goal)
+      isHeadless=headlessMode  //Use option passed from multi-step execution
+      //Check for "store" keyword - forces headless mode
+      if indexOf(cmd,"store")!=null or indexOf(cmd,"save")!=null or indexOf(cmd,"for later")!=null then
+        isHeadless=true
+        parsed.shouldStore=true
+        if debug then print yellow("[DEBUG PARSER] Fetch action: Store detected, setting isHeadless=true and shouldStore=true")
+      end if
+      //Only check command patterns if headlessMode wasn't explicitly disabled by interactive shell request
+      if not isHeadless and headlessMode!=false then
+        if indexOf(cmd,"to")!=null or indexOf(cmd,"then")!=null or indexOf(cmd,"and then")!=null or indexOf(cmd,"also")!=null then
+          //But don't set headless if command explicitly requests interactive shell
+          if indexOf(cmd,"i need to use")==null and indexOf(cmd,"drop me into")==null and indexOf(cmd,"active shell")==null and indexOf(cmd,"use this shell")==null and indexOf(cmd,"use the shell")==null and indexOf(cmd,"open shell")==null and indexOf(cmd,"launch shell")==null then isHeadless=true
+        end if
+      end if
+      parsed.isHeadless=isHeadless
+      if debug then print yellow("[DEBUG PARSER] Fetch action: Final parsed.isHeadless=" + parsed.isHeadless + ", parsed.shouldStore=" + str(hasIndex(parsed,"shouldStore") and parsed.shouldStore))
+      //Check for exclusions first (not from X, but not X, except X, etc)
+      excludeServices=[]
+      excludeKeywords=self._EXCLUDE_KEYWORDS
+      for excludeWord in excludeKeywords
+        if indexOf(cmd,excludeWord)!=null then
+          excludeIdx=indexOf(cmd,excludeWord)
+          afterExclude=cmd[excludeIdx+len(excludeWord):]
+          //Check what services to exclude
+          if indexOf(afterExclude,"router")!=null then
+            if excludeServices.indexOf("router")==null then push(excludeServices,"router")
+          end if
+          if indexOf(afterExclude,"ssh")!=null then
+            if excludeServices.indexOf("ssh")==null then push(excludeServices,"ssh")
+          end if
+          if indexOf(afterExclude,"http")!=null or indexOf(afterExclude,"web")!=null then
+            if excludeServices.indexOf("http")==null then push(excludeServices,"http")
+          end if
+          if indexOf(afterExclude,"ftp")!=null then
+            if excludeServices.indexOf("ftp")==null then push(excludeServices,"ftp")
+          end if
+          if indexOf(afterExclude,"sql")!=null or indexOf(afterExclude,"database")!=null then
+            if excludeServices.indexOf("sql")==null then push(excludeServices,"sql")
+          end if
+          if indexOf(afterExclude,"smtp")!=null or indexOf(afterExclude,"mail")!=null then
+            if excludeServices.indexOf("smtp")==null then push(excludeServices,"smtp")
+          end if
+          if indexOf(afterExclude,"chat")!=null then
+            if excludeServices.indexOf("chat")==null then push(excludeServices,"chat")
+          end if
+          if indexOf(afterExclude,"rshell")!=null then
+            if excludeServices.indexOf("rshell")==null then push(excludeServices,"rshell")
+          end if
+        end if
+      end for
+      //Detect service type (router, ssh, ftp, http, chat, rshell, repo, cam, sql, smtp)
+      //Skip excluded services
+      detectedService=null
+      if indexOf(cmd,"router")!=null and excludeServices.indexOf("router")==null then
+        detectedService="router"
+      else if (indexOf(cmd,"ssh")!=null and indexOf(cmd,"install ssh")==null) and excludeServices.indexOf("ssh")==null then
+        detectedService="ssh"
+      else if (indexOf(cmd,"http")!=null and indexOf(cmd,"install http")==null or indexOf(cmd,"web")!=null) and excludeServices.indexOf("http")==null then
+        detectedService="http"
+      else if (indexOf(cmd,"ftp")!=null and indexOf(cmd,"install ftp")==null) and excludeServices.indexOf("ftp")==null then
+        detectedService="ftp"
+      else if indexOf(cmd,"chat")!=null and excludeServices.indexOf("chat")==null then
+        detectedService="chat"
+      else if (indexOf(cmd,"rshell")!=null and indexOf(cmd,"install rshell")==null) and excludeServices.indexOf("rshell")==null then
+        detectedService="rshell"
+      else if indexOf(cmd,"repo")!=null or indexOf(cmd,"repository")!=null then
+        detectedService="repo"
+      else if indexOf(cmd,"cam")!=null or indexOf(cmd,"camera")!=null then
+        detectedService="cam"
+      else if (indexOf(cmd,"sql")!=null or indexOf(cmd,"database")!=null) and excludeServices.indexOf("sql")==null then
+        detectedService="sql"
+      else if (indexOf(cmd,"smtp")!=null and indexOf(cmd,"install smtp")==null or indexOf(cmd,"mail")!=null) and excludeServices.indexOf("smtp")==null then
+        detectedService="smtp"
+      end if
+      //If no service detected (or all were excluded), try to pick first non-excluded available service
+      if not detectedService then
+        //Try services in order, skipping excluded ones
+        if excludeServices.indexOf("router")==null then
+          detectedService="router"
+        else if excludeServices.indexOf("ssh")==null then
+          detectedService="ssh"
+        else if excludeServices.indexOf("http")==null then
+          detectedService="http"
+        else if excludeServices.indexOf("ftp")==null then
+          detectedService="ftp"
+        else
+          detectedService="router"  //fallback if everything excluded
+        end if
+      end if
+      //Store detected service and build summary
+      parsed.service=detectedService
+      if detectedService=="router" then
+        parsed.summary="Fetch router shell"
+      else if detectedService=="ssh" then
+        parsed.summary="Fetch SSH shell"
+      else if detectedService=="http" then
+        parsed.summary="Fetch HTTP shell"
+      else if detectedService=="ftp" then
+        parsed.summary="Fetch FTP shell"
+      else if detectedService=="chat" then
+        parsed.summary="Fetch chat shell"
+      else if detectedService=="rshell" then
+        parsed.summary="Fetch rshell"
+      else if detectedService=="repo" then
+        parsed.summary="Fetch repo shell"
+      else if detectedService=="cam" then
+        parsed.summary="Fetch camera shell"
+      else if detectedService=="sql" then
+        parsed.summary="Fetch SQL shell"
+      else if detectedService=="smtp" then
+        parsed.summary="Fetch SMTP shell"
+      else
+        parsed.summary="Fetch shell"
+      end if
+      //Store exclusions for plan execution
+      if len(excludeServices)>0 then
+        parsed.excludeServices=excludeServices
+        if debug then print green("[DEBUG] Excluding services: "+join(excludeServices,", "))
+      end if
+      //Detect object type (s=shell, c=computer, f=file, l=lan, i=internal lan, d=disable fw, p=root pw, w=user pw)
+      if indexOf(cmd,"computer")!=null then
+        parsed.objectType="c"
+        parsed.summary=parsed.summary.replace("shell","computer")
+      else if indexOf(cmd,"file")!=null then
+        parsed.objectType="f"
+        parsed.summary=parsed.summary.replace("shell","file")
+      else if indexOf(cmd,"lan bounce")!=null then
+        parsed.objectType="l"
+        parsed.summary=parsed.summary+" (LAN bounce)"
+      else if indexOf(cmd,"internal lan")!=null then
+        parsed.objectType="i"
+        parsed.summary=parsed.summary+" (internal LAN)"
+      else if indexOf(cmd,"disable")!=null and indexOf(cmd,"firewall")!=null then
+        parsed.objectType="d"
+        parsed.summary="Disable firewall on "+parsed.service
+      else if indexOf(cmd,"root")!=null and indexOf(cmd,"password")!=null then
+        parsed.objectType="p"
+        parsed.summary="Change root password on "+parsed.service
+      else if indexOf(cmd,"user")!=null and indexOf(cmd,"password")!=null then
+        parsed.objectType="w"
+        parsed.summary="Change user password on "+parsed.service
+      else
+        parsed.objectType="s"  //default to shell
+      end if
+      //Check for auto-escalation keyword
+      if indexOf(cmd,"guest")!=null or indexOf(cmd,"su")!=null then
+        parsed.autoSu=true
+        parsed.summary=parsed.summary+" with auto-escalation"
+      end if
+      //Parse continuation commands after commas or 'also' keyword
+      //Example: "get me a proxy, also install a rshell server"
+      //Example: "get ssh from X, if not root then su, then show all accounts"
+      commaParts=split(command,",")
+      //Also check for 'also' keyword as alternative to commas
+      if len(commaParts)==1 and indexOf(lower(command),"also")!=null then
+        alsoIdx=indexOf(lower(command),"also")
+        if alsoIdx!=null and alsoIdx+5<len(command) then
+          firstPart=trim(command[:alsoIdx])
+          secondPart=trim(command[alsoIdx+5:])
+          commaParts=[firstPart,secondPart]
+          if debug then print green("Debug: Split by 'also' into: '"+firstPart+"' and '"+secondPart+"'")
+        end if
+      end if
+      _len=len(commaParts)
+      if _len>1 then
+        continuationParts=[]
+        i=1;while i<_len
+          part=trim(commaParts[i])
+          partLower=lower(part)
+          if debug then print green("[DEBUG] Processing comma part "+str(i)+": "+part)
+          //Check for "then" first (to handle "then show all accounts and open email local")
+          if indexOf(partLower,"then")!=null then
+            //Extract command after "then" - may contain multiple commands separated by "and"
+            thenIdx=indexOf(partLower,"then")
+            if thenIdx!=null and thenIdx+5<len(part) then
+              cmdAfterThen=trim(part[thenIdx+5:])
+              cmdAfterThenLower=lower(cmdAfterThen)
+              if debug then print green("Debug: Found 'then', extracting: "+cmdAfterThen)
+              //Handle multiple separators: "and then", "also", comma, or just "and"
+              andParts=[]
+              //First check for "and then" (treat as "then" separator, not "and")
+              if indexOf(cmdAfterThenLower," and then ")!=null then
+                andParts=split(cmdAfterThen," and then ")
+              else if indexOf(cmdAfterThenLower," also ")!=null then
+                //Split by "also"
+                andParts=split(cmdAfterThen," also ")
+              else if indexOf(cmdAfterThen,",")!=null then
+                //Split by comma
+                andParts=split(cmdAfterThen,",")
+              else if indexOf(cmdAfterThenLower," and ")!=null then
+                //Split by "and"
+                andParts=split(cmdAfterThen," and ")
+              else
+                //Single command
+                andParts=[cmdAfterThen]
+              end if
+              //Process each part
+              if len(andParts)>0 then
+                for andPart in andParts
+                  andPart=trim(andPart)
+                  andPartLower=lower(andPart)
+                  //Translate known patterns
+                  if indexOf(andPartLower,"ssh into")!=null or indexOf(andPartLower,"ftp into")!=null then
+                    //Parse: ssh/ftp into <ip> using <user> and password of <pass>
+                    protocol="ssh"
+                    if indexOf(andPartLower,"ftp into")!=null then protocol="ftp"
+                    //Extract IP
+                    ipMatch=null
+                    partsSplit=split(andPart," ")
+                    _len2=len(partsSplit);j=0;while j<_len2
+                      if indexOf(lower(partsSplit[j]),"into")!=null and j+1<len(partsSplit) then
+                        ipMatch=partsSplit[j+1]
+                        break
+                      end if
+                    j+=1;end while
+                    user="root"
+                    if indexOf(andPartLower,"using")!=null then
+                      _len2=len(partsSplit);j=0;while j<_len2
+                        if indexOf(lower(partsSplit[j]),"using")!=null and j+1<len(partsSplit) then
+                          user=partsSplit[j+1]
+                          break
+                        end if
+                      j+=1;end while
+                    end if
+                    password=null
+                    if indexOf(andPartLower,"password")!=null then
+                      _len2=len(partsSplit);j=0;while j<_len2
+                        if indexOf(lower(partsSplit[j]),"of")!=null and j+1<len(partsSplit) then
+                          prevWord=""
+                          if j>0 then prevWord=lower(partsSplit[j-1])
+                          if indexOf(prevWord,"password")!=null then
+                            password=partsSplit[j+1]
+                            break
+                          end if
+                        end if
+                      j+=1;end while
+                    end if
+                    //Build command (format: ssh -p password user@ip)
+                    if ipMatch!=null then
+                      connCmd=protocol
+                      if password!=null then connCmd+=" -p "+password
+                      connCmd+=" "+user+"@"+ipMatch
+                      push(continuationParts,connCmd)
+                    else
+                      push(continuationParts,andPart)
+                    end if
+                  else if (indexOf(andPartLower,"show")!=null or indexOf(andPartLower,"see")!=null) and indexOf(andPartLower,"account")!=null then
+                    //Determine list flag using centralized logic (no prompt during parsing)
+                    listCmd=globals.G_agent.getListFlag(false)
+                    if hasIndex(globals,"G_rainbowIndex") and globals.G_rainbowIndex and typeof(globals.G_rainbowIndex)=="map" and len(globals.G_rainbowIndex)>0 then listCmd="list -sB"
+                    push(continuationParts,listCmd)
+                  else if indexOf(andPartLower,"open")!=null and indexOf(andPartLower,"email")!=null and indexOf(andPartLower,"local")!=null then
+                    openCmd="open email --l"
+                    if indexOf(andPartLower,"with login")!=null or indexOf(andPartLower,"login")!=null then openCmd+=" --login"
+                    push(continuationParts,openCmd)
+                  else if indexOf(andPartLower,"open")!=null and indexOf(andPartLower,"browser")!=null and indexOf(andPartLower,"local")!=null then
+                    openCmd="open web --l"
+                    if indexOf(andPartLower,"with login")!=null or indexOf(andPartLower,"login")!=null then openCmd+=" --login"
+                    push(continuationParts,openCmd)
+                  else if indexOf(andPartLower,"open")!=null and indexOf(andPartLower,"local")!=null then
+                    openCmd="open term --l"
+                    if indexOf(andPartLower,"with login")!=null or indexOf(andPartLower,"login")!=null then openCmd+=" --login"
+                    push(continuationParts,openCmd)
+                  else
+                    push(continuationParts,andPart)
+                  end if
+                end for
+              end if
+            end if
+          else if (indexOf(partLower,"show")!=null or indexOf(partLower,"see")!=null) and indexOf(partLower,"account")!=null then
+            //Standalone "show all accounts" or "see all accounts" (without "then")
+            //Determine list flag using centralized logic (no prompt during parsing)
+            listCmd=globals.G_agent.getListFlag(false)
+            push(continuationParts,listCmd)
+            if debug then print green("[DEBUG] Added '"+listCmd+"' for show/see accounts")
+          else if indexOf(partLower,"if not root")!=null then
+            push(continuationParts,part)
+            if debug then print green("[DEBUG] Added 'if not root' part: "+part)
+          end if
+        i+=1;end while
+        if len(continuationParts)>0 then
+          //Store as array of commands for headless execution
+          parsed.continuationCommands=continuationParts
+          if debug then print green("[DEBUG] Built "+len(continuationParts)+" continuation commands")
+        end if
+      end if
+    else if parsed.action=="su" then
+      //su command - privilege escalation
+      parsed.suMode="auto"
+      //Check for conditions
+      if indexOf(cmd,"not root")!=null or indexOf(cmd,"guest")!=null then
+        parsed.suCondition="notRoot"
+        parsed.summary="Use su if not root"
+      else if indexOf(cmd,"if")!=null then
+        parsed.suCondition="conditional"
+        parsed.summary="Conditional su escalation"
+      else
+        parsed.suCondition="always"
+        parsed.summary="Use su command"
+      end if
+      //Check for commands after su using "then"
+      //Example: "if not root then su then list -sB"
+      //Use original command to preserve case of flags
+      suThenIdx=indexOf(cmd,"su then")
+      if suThenIdx==null then suThenIdx=indexOf(cmd,"use su then")
+      if suThenIdx!=null then
+        //Find where "then" starts after "su" in original command to preserve case
+        afterSuOrig=command[suThenIdx:]
+        thenIdx=indexOf(lower(afterSuOrig),"then")
+        if thenIdx!=null and thenIdx+5<len(afterSuOrig) then
+          postSuCmd=trim(afterSuOrig[thenIdx+5:])
+          postSuCmdLower=lower(postSuCmd)
+          //Handle multiple separators: "and then", "also", comma, or just "and"
+          andParts=[]
+          //First check for "and then" (treat as "then" separator, not "and")
+          if indexOf(postSuCmdLower," and then ")!=null then
+            andParts=split(postSuCmd," and then ")
+          else if indexOf(postSuCmdLower," also ")!=null then
+            //Split by "also"
+            andParts=split(postSuCmd," also ")
+          else if indexOf(postSuCmd,",")!=null then
+            //Split by comma
+            andParts=split(postSuCmd,",")
+          else if indexOf(postSuCmdLower," and ")!=null then
+            //Split by "and"
+            andParts=split(postSuCmd," and ")
+          else
+            //Single command
+            andParts=[postSuCmd]
+          end if
+          //Process each part
+          if len(andParts)>0 then
+            translatedParts=[]
+            for andPart in andParts
+              andPart=trim(andPart)
+              andPartLower=lower(andPart)
+              //Translate known patterns
+              if indexOf(andPartLower,"ssh into")!=null or indexOf(andPartLower,"ftp into")!=null then
+                //Parse: ssh/ftp into <ip> using <user> and password of <pass>
+                protocol="ssh"
+                if indexOf(andPartLower,"ftp into")!=null then protocol="ftp"
+                //Extract IP
+                ipMatch=null
+                partsSplit=split(andPart," ")
+                _len=len(partsSplit);i=0;while i<_len
+                  if indexOf(lower(partsSplit[i]),"into")!=null and i+1<len(partsSplit) then
+                    ipMatch=partsSplit[i+1]
+                    break
+                  end if
+                i+=1;end while
+                user="root"
+                if indexOf(andPartLower,"using")!=null then
+                  _len=len(partsSplit);i=0;while i<_len
+                    if indexOf(lower(partsSplit[i]),"using")!=null and i+1<len(partsSplit) then
+                      user=partsSplit[i+1]
+                      break
+                    end if
+                  i+=1;end while
+                end if
+                password=null
+                if indexOf(andPartLower,"password")!=null then
+                  _len=len(partsSplit);i=0;while i<_len
+                    if indexOf(lower(partsSplit[i]),"of")!=null and i+1<len(partsSplit) then
+                      prevWord=""
+                      if i>0 then prevWord=lower(partsSplit[i-1])
+                      if indexOf(prevWord,"password")!=null then
+                        password=partsSplit[i+1]
+                        break
+                      end if
+                    end if
+                  i+=1;end while
+                end if
+                //Build command (format: ssh -p password user@ip)
+                if ipMatch!=null then
+                  connCmd=protocol
+                  if password!=null then connCmd=connCmd+" -p "+password
+                  connCmd=connCmd+" "+user+"@"+ipMatch
+                  push(translatedParts,connCmd)
+                else
+                  push(translatedParts,andPart)
+                end if
+              else if indexOf(andPartLower,"show")!=null and indexOf(andPartLower,"account")!=null then
+                //Determine list flag using centralized logic (no prompt during parsing)
+                listCmd=globals.G_agent.getListFlag(false)
+                push(translatedParts,listCmd)
+              else if indexOf(andPartLower,"open")!=null and indexOf(andPartLower,"email")!=null and indexOf(andPartLower,"local")!=null then
+                openCmd="open email --l"
+                if indexOf(andPartLower,"with login")!=null or indexOf(andPartLower,"login")!=null then openCmd=openCmd+" --login"
+                push(translatedParts,openCmd)
+              else if indexOf(andPartLower,"open")!=null and indexOf(andPartLower,"browser")!=null and indexOf(andPartLower,"local")!=null then
+                openCmd="open web --l"
+                if indexOf(andPartLower,"with login")!=null or indexOf(andPartLower,"login")!=null then openCmd=openCmd+" --login"
+                push(translatedParts,openCmd)
+              else if indexOf(andPartLower,"open")!=null and indexOf(andPartLower,"local")!=null then
+                openCmd="open term --l"
+                if indexOf(andPartLower,"with login")!=null or indexOf(andPartLower,"login")!=null then openCmd+=" --login"
+                push(translatedParts,openCmd)
+              else
+                push(translatedParts,andPart)
+              end if
+            end for
+            parsed.postSuCommand=join(translatedParts," then ")
+          end if
+          if debug then print green("[DEBUG] Found post-su command: "+parsed.postSuCommand)
+        end if
+      end if
+    else if parsed.action=="proxy" or parsed.action=="pivot" then
+      //Proxy or pivot command - create special session
+      parsed.sessionType=parsed.action
+      parsed.summary="Create "+parsed.action+" session"
+      //Check for quiet/silent flag
+      if indexOf(cmd,"quiet")!=null or indexOf(cmd,"-q")!=null then
+        parsed.quiet=true
+        parsed.summary=parsed.summary+" (quiet)"
+      end if
+      //Parse continuation commands after commas or 'also' keyword
+      //Example: "get me a proxy, also install a rshell server"
+      commaParts=split(command,",")
+      //Also check for 'also' keyword as alternative to commas
+      if len(commaParts)==1 and indexOf(lower(command),"also")!=null then
+        alsoIdx=indexOf(lower(command),"also")
+        if alsoIdx!=null and alsoIdx+5<len(command) then
+          firstPart=trim(command[:alsoIdx])
+          secondPart=trim(command[alsoIdx+5:])
+          commaParts=[firstPart,secondPart]
+          if debug then print green("Debug: Split by 'also' into: '"+firstPart+"' and '"+secondPart+"'")
+        end if
+      end if
+      _len=len(commaParts)
+      if _len>1 then
+        continuationParts=[]
+        i=1;while i<_len
+          part=trim(commaParts[i])
+          partLower=lower(part)
+          if debug then print green("[DEBUG] Processing proxy/pivot continuation part "+str(i)+": "+part)
+          //Check for install commands
+          if indexOf(partLower,"install")!=null then
+            //Parse what to install
+            if indexOf(partLower,"rshell")!=null then
+              push(continuationParts,"libs -g -p /lib rshell")
+              if debug then print green("[DEBUG] Added rshell install command")
+            else if indexOf(partLower,"aptclient")!=null then
+              push(continuationParts,"libs -g -p /lib aptclient")
+            else if indexOf(partLower,"metaxploit")!=null then
+              push(continuationParts,"libs -g -p /lib metaxploit")
+            else if indexOf(partLower,"crypto")!=null then
+              push(continuationParts,"libs -g -p /lib crypto")
+            else
+              //Generic lib install - try to extract lib name
+              words=split(part," ")
+              for word in words
+                if word!="install" and word!="a" and word!="the" and word!="server" and len(word)>2 then
+                  push(continuationParts,"libs -g -p /lib "+word)
+                  if debug then print green("[DEBUG] Added generic lib install: "+word)
+                  break
+                end if
+              end for
+            end if
+          else if indexOf(partLower,"then")!=null then
+            //Extract command after "then"
+            thenIdx=indexOf(partLower,"then")
+            if thenIdx!=null and thenIdx+5<len(part) then
+              cmdAfterThen=trim(part[thenIdx+5:])
+              push(continuationParts,cmdAfterThen)
+              if debug then print green("Debug: Found 'then', extracting: "+cmdAfterThen)
+            end if
+          else
+            //Add the part as-is
+            push(continuationParts,part)
+          end if
+        i+=1;end while
+        if len(continuationParts)>0 then
+          //Store as array of commands for headless execution
+          parsed.continuationCommands=continuationParts
+          if debug then print green("[DEBUG] Built "+len(continuationParts)+" proxy/pivot continuation commands")
+        end if
+      end if
+    end if
+  end if
+  //If no action found, treat as direct command
+  if not actionFound then
+    //Check if a service was implied (router, ssh, ftp, etc.)
+    hasService=false
+    impliedService=null
+    if indexOf(cmd,"router")!=null then
+      hasService=true
+      impliedService="router"
+    else if indexOf(cmd,"ssh")!=null then
+      hasService=true
+      impliedService="ssh"
+    else if indexOf(cmd,"ftp")!=null then
+      hasService=true
+      impliedService="ftp"
+    else if indexOf(cmd,"http")!=null or indexOf(cmd,"web")!=null then
+      hasService=true
+      impliedService="http"
+    else if indexOf(cmd,"smtp")!=null or indexOf(cmd,"mail")!=null then
+      hasService=true
+      impliedService="smtp"
+    end if
+    //Special case: if we have an IP and service, infer scan action
+    if len(ips)>0 and hasService then
+      parsed.action="scan"
+      parsed.tool="scan"
+      parsed.service=impliedService
+      parsed.scanMode="ip"
+      parsed.summary="Scan "+impliedService+" on "+ips[0]
+      //Detect access type (shell, file, computer)
+      if indexOf(cmd,"shell")!=null then
+        parsed.accessType="shell"
+      else if indexOf(cmd,"file")!=null then
+        parsed.accessType="file"
+      else if indexOf(cmd,"computer")!=null then
+        parsed.accessType="computer"
+      else
+        parsed.accessType="shell"  //default
+      end if
+    else if len(ips)>0 then
+      //Just an IP with no service
+      //Public IPs get a prompt, private IPs default to scan
+      if globals.G_agent._isPrivateIp(ips[0]) then
+        //Private IP - scan that specific target
+        parsed.action="scan"
+        parsed.tool="scan"
+        parsed.scanMode="ip"
+        parsed.summary="Scan "+ips[0]
+      else
+        //Public IP - prompt for action
+        if len(ips)>0 then
+          parsed.action="promptIpAction"
+          parsed.target=ips[0]
+          parsed.summary="What do you want to do with "+ips[0]+"?"
+          parsed.defaultAction="nmap"
+          parsed.options=["nmap","scan","recon"]
+        else
+          parsed.action="directCommand"
+          parsed.command=command
+          parsed.summary="Execute: "+command
+        end if
+      end if
+    else
+      //No action detected - offer clarification if enabled
+      if globals.G_agent.config.promptOnAmbiguous then
+        outLvl=globals.G_agent.config.outputLevel
+        if outLvl>=1 then print yellow("Agent: I'm not sure what you want to do.")
+        choices=["scan","exploit","crack","fetch","show","find","cancel"]
+        choiceIdx=Gui.choiceHybrid(choices,{},len(choices)-1,false,true)
+        if choiceIdx>=0 and choiceIdx<len(choices)-1 then
+          //Re-parse with the chosen action prepended
+          newCmd=choices[choiceIdx]+" "+command
+          return globals.G_agent._parseCommand(Obj,newCmd,headlessMode)
+        end if
+        return {"error":"Command cancelled"}
+      end if
+      parsed.action="directCommand"
+      parsed.command=command
+      parsed.summary="Execute: "+command
+    end if
+  end if
+  //Detect goal using pattern map
+  for goalName in globals.G_agent._goalPatterns.indexes
+    goalPattern=globals.G_agent._goalPatterns[goalName]
+    for keyword in goalPattern.keywords
+      if indexOf(cmd,keyword)!=null then
+        parsed.goal=goalName
+        //Only add suffix if summary doesn't already mention the goal
+        if parsed.summary then
+          //Check if summary already mentions root access, admin, etc.
+          summaryLower=lower(parsed.summary)
+          suffixLower=lower(goalPattern.suffix)
+          //Don't add suffix if summary already contains "root access", "admin access", "user access", "guest access", "shell access", etc.
+          hasAccess=false
+          if indexOf(summaryLower,"root access")!=null then
+            hasAccess=true
+          else if indexOf(summaryLower,"admin access")!=null then
+            hasAccess=true
+          else if indexOf(summaryLower,"user access")!=null then
+            hasAccess=true
+          else if indexOf(summaryLower,"guest access")!=null then
+            hasAccess=true
+          else if indexOf(summaryLower,"shell access")!=null then
+            hasAccess=true
+          end if
+          if not hasAccess then parsed.summary=parsed.summary+" "+goalPattern.suffix
+        end if
+        break
+      end if
+    end for
+    if hasIndex(parsed,"goal") then break
+  end for
+  //If no target was found but action requires one, try to use current shell context
+  if not hasIndex(parsed,"target") or not parsed.target then
+    needsTargetActions=["fetch","scan","exploit","attack","crack","recon"]
+    if hasIndex(parsed,"action") then
+      for act in needsTargetActions
+        if parsed.action==act then
+          //Skip setting default target if scan has -r flag (random scan)
+          if parsed.action=="scan" and hasIndex(parsed,"flag") and parsed.flag=="-r" then
+            if debug then print green("[DEBUG] Agent: Scan with -r flag, skipping default target")
+            break
+          end if
+          //Try to get target from Obj context
+          if hasIndex(Obj,"net") and hasIndex(Obj.net,"router") then
+            parsed.target=Obj.net.router.public_ip
+            if debug then print green("[DEBUG] Agent: No target specified, using current router: "+parsed.target)
+          else if hasIndex(Obj,"host") then
+            parsed.target=Obj.host
+            if debug then print green("[DEBUG] Agent: No target specified, using current host: "+parsed.target)
+          end if
+          break
+        end if
+      end for
+    end if
+  end if
+  //Add target to summary if found
+  if hasIndex(parsed,"target") and hasIndex(parsed,"summary") and indexOf(parsed.summary,parsed.target)==null then parsed.summary=parsed.summary+" on "+parsed.target
+  return parsed
+end function
+// Multi-Target Operations - Expand subnet notation to IP list

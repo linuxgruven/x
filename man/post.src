@@ -1,0 +1,18 @@
+// Man page for post
+manPost="POST(1)                          X Shell Manual                          POST(1)
+
+<b>NAME</b>
+    post - Append text to global notes file
+<b>SYNOPSIS</b>
+    <b>post</b> TEXT
+<b>DESCRIPTION</b>
+    Append text to your global notes file. The notes file provides
+    centralized storage for important information across sessions.
+<b>EXAMPLE:</b>
+    post Found vulnerable SSH on 192.168.1.100
+    Add note to global notes file
+
+    post Password: admin123
+    Store credential in notes
+<b>SEE ALSO</b>
+    <b>editor</b>, <b>cat</b>"

@@ -1,0 +1,39 @@
+// Man page for addpass
+manAddpass="ADDPASS(1)                       X Shell Manual                       ADDPASS(1)
+
+<b>NAME</b>
+    addpass - Add password to rainbow tables
+<b>SYNOPSIS</b>
+    <b>addpass</b> [PASSWORD]
+<b>DESCRIPTION</b>
+    Add custom password to rainbow table database for hash cracking. Performs
+    duplicate check before insertion to maintain table integrity. Useful for
+    adding commonly used passwords, discovered credentials, and custom
+    wordlists to improve cracking success rates.
+<b>OPTIONS</b>
+    <b>addpass [PASSWORD]</b>
+    Add password to rainbow tables
+    Checks for duplicates first
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Add Common Passwords</color>
+    <b>addpass password123</b>
+    Add weak password
+
+    <b>addpass admin2024</b>
+    Add common variant
+
+    <color=#e4ff34># Add Discovered Credentials</color>
+    <b>addpass SecureP@ss987</b>
+    Add cracked password
+
+    <b>addpass CompanyName123</b>
+    Add organization-specific
+
+    <color=#e4ff34># Bulk Addition</color>
+    <b>addpass Welcome2024</b>
+    Add seasonal password
+
+    <b>addpass Summer2024</b>
+    Add another variant
+<b>SEE ALSO</b>
+    <b>rainbow</b>, <b>pass</b>, <b>hc</b>"

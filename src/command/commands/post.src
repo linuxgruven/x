@@ -1,0 +1,18 @@
+// =============================================================================
+// POST
+// Append a text entry to ~/data/notes; k=true joins without spaces (compact).
+// =============================================================================
+Command.post=function(argv,k=null)
+  if not argv then return Man.help(["post"])
+  sys=System.getSystem
+  notesPath=path(sys.dir.data)+"/notes"
+  notesFile=File(sys.computer,notesPath)
+  if not notesFile then
+    touch(sys.computer,path(sys.dir.data),"notes")
+    notesPath=path(sys.dir.data)+"/notes"
+    notesFile=File(sys.computer,notesPath)
+  end if
+  if not notesFile then return
+  if k then text=trim(join(argv,"")) else text=trim(join(argv," "))
+  if not get_content(notesFile) then set_content(notesFile,text) else set_content(notesFile,get_content(notesFile)+char(10)+text)
+end function

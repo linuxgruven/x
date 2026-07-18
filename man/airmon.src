@@ -1,0 +1,33 @@
+// Man page for airmon
+manAirmon="AIRMON(8)                        X Shell Manual                        AIRMON(8)
+
+<b>NAME</b>
+    airmon - start or stop your net interface monitor mode
+<b>SYNOPSIS</b>
+    <b>airmon</b> START or STOP INTERFACE
+<b>DESCRIPTION</b>
+    Used to enable monitor mode on wireless interfaces.
+    It may also be used to go back from monitor mode to managed mode.
+    Entering the <b>airmon</b> command without parameters will show the interfaces status.
+    It is the first step to be able to get the connection password of a wifi router.
+    The network card needs to be activated in monitor mode.
+<b>OPTIONS</b>
+    <b>START or STOP INTERFACE</b> - Toggle Monitor Mode
+      Put your net card in or out of monitor mode.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Enable Monitor Mode</color>
+    <b>airmon start wlan0</b>
+    Start monitor mode
+
+    <b>airmon start wlan1</b>
+    Start on wlan1
+
+    <color=#e4ff34># Disable Monitor Mode</color>
+    <b>airmon stop wlan0</b>
+    Stop monitor mode
+
+    <color=#e4ff34># Check Status</color>
+    <b>airmon</b>
+    Show interface status
+<b>SEE ALSO</b>
+    <b>aireplay</b>, <b>aircrack</b>, <b>iwconfig</b>"

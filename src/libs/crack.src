@@ -1,0 +1,1680 @@
+// =============================================================================
+// CRACK
+// Password cracking library; hash analysis, dictionary attacks, and cryptographic operations.
+// =============================================================================
+Crack={
+  // Numeric characters and symbols for password detection (map for O(1) lookup)
+  "isNum":{
+    "0":1,"1":1,"2":1,"3":1,"4":1,"5":1,"6":1,"7":1,"8":1,"9":1,
+    "!":1,"@":1,"#":1,"$":1,"%":1,"^":1,"&":1,"*":1,"(":1,")":1,
+    "-":1,"_":1,"=":1,"+":1,",":1,"<":1,".": 1,">":1,"/":1,"?":1,
+    "[":1,"{":1,"]":1,"}":1,"\\":1,"|": 1,";": 1,":": 1,"'":1
+  },
+  // Alphanumeric character set for brute force
+  "alpha":"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+  // Maximum password length for brute force
+  "max":64
+}
+// Returns: Array of password strings
+Crack.getPasswords=function
+  if globals.G_passwordCache then return globals.G_passwordCache
+  sys=System.getSystem
+  listDir=sys.dir.list
+  // Read passwords from all list files
+  passwords=[]
+  for f in get_files(listDir)
+    if indexOf(name(f),"list")==null then continue
+    if is_binary(f) then continue
+    if is_folder(f) then continue
+    ct=get_content(f)
+    if not ct then continue
+    // Add each password from file
+    for line in split(ct,char(10));if not line then continue;push(passwords,line);end for
+  end for
+  globals.G_passwordCache=passwords
+  return passwords
+end function
+Crack.clearPasswordCache=function;globals.G_passwordCache=null;end function
+// Manage rainbow table operations (generate, load, import, clear)
+// Args: argv (command array: [-n|-r|-l|-q|-m|-x|-k] [params])
+Crack.rainbow=function(argv)
+  if not argv then return Man.help(["rainbow"])
+	// Get command flag
+	Arg1=lower(argv[0])
+  // Generate new rainbow tables
+  generate=function(arg)
+    if globals.G_rainbow then globals.G_rainbow={}
+    if Crack.dump isa Error then return
+    Crack.load(true)
+  end function
+  // Delete and regenerate rainbow tables
+  regenerate=function(arg)
+Crack.deleteRainbowTables;Crack.dump;Crack.load(true)
+end function
+  // Build rainbow index for fast lookups (force rebuild)
+  loadTables=function(arg);Crack.buildRainbowIndex(1);end function
+  // Import passwords from directory of password list files
+  useFiles=function(arg)
+    // Prompt for directory path
+    Info.info("Enter the full path to the directory holding your password list files:")
+    h=Gui.input({"text":"Directory:"})
+    // Get directory as file object
+    if h and hasIndex(h,"/")!=null then h=Io.getFileObj(globals.G_main,h) else h=Io.folder(globals.G_main,globals.G_main.user.home,"Select the directory holding your password list files:")
+		if h isa Error then return Info.error("File not found:"+h)
+		if h isa Warning then return h
+    l=[]
+    s=len(globals.G_rainbow)
+    Info.info("Depending on the size of your password lists, this may take a while...")
+    // Read all files and build password list
+    for f in get_files(h);ct=get_content(f);if not ct then continue;l+=split(ct,char(10));end for
+    // Optionally delete source files
+    if Gui.yesNo("Remove pasword list files after proccessing?",false) then
+      for f in get_files(h);delete(f);end for
+    end if
+    if not len(l) then return Error.set("No password list(s) found, aborting...")
+    // Add MD5 hashes to rainbow tables
+    Info.info("Adding to the rainbow tables...")
+    for b in l;globals.G_rainbow[md5(b)]=b;end for
+    Info.info("Finished, added "+str(len(globals.G_rainbow)-s)+" passwords")
+  end function
+  // Generate passwords in memory with character sets
+  // Args: [charset_flags, length, count]
+  useMemory=function(arg)
+    if not len(arg)>=3 then return Error.set("Missing params")
+    useRandom=null
+    charset=""
+    upChars="ABCDEFGHJKLMNOPQRSTUVWXYZ"
+    loChars="abcdefghijklmnopqrstuvwxyz"
+    nums="0123456789"
+    syms="!@#$%^&*?_-"
+    // Flags: u=upper, l=lower, n=numbers, s=symbols, R=random length
+    flags=arg[0]
+    if indexOf(flags,"u")!=null then charset+=upChars
+    if indexOf(flags,"l")!=null then charset+=loChars
+    if indexOf(flags,"n")!=null then charset+=nums
+    if indexOf(flags,"s")!=null then charset+=syms
+    if indexOf(flags,"R")!=null then useRandom=1
+    maxLen=to_int(arg[1])
+    if not maxLen isa number then return Error.set("Invalid password length")
+    count=to_int(arg[2])
+    if not count isa number then return Error.set("Invalid count")
+    if len(charset)==0 then return Error.set("No character sets selected")
+    prevSize=len(globals.G_rainbow)
+    charsetLen=len(charset)
+    Info.info("Adding to the rainbow tables...")
+    j=1
+    while j<=count
+      pwd=""
+      pwdLen=maxLen
+      if useRandom then
+        pwdLen=floor(rnd*maxLen)
+        if pwdLen<1 then pwdLen=1
+      end if
+      i=1;while i<=pwdLen;idx=floor(rnd*charsetLen);if idx>=charsetLen then idx=charsetLen-1;pwd+=charset[idx];i+=1;end while
+      globals.G_rainbow[md5(pwd)]=pwd
+      j+=1
+    end while
+    Info.info("Finished, added "+str(len(globals.G_rainbow)-prevSize)+" passwords")
+  end function
+	// Markov chain password generator
+	// Learns character transition patterns from existing password lists
+	// Args: [order, count] (order=1-3, count=number to generate)
+	markov=function(arg)
+		if not arg or len(arg)<2 then return Error.set("Usage: rainbow -k ORDER COUNT [-s] (e.g. rainbow -k 2 50000 -s)")
+		order=to_int(arg[0])
+		if not order isa number or order<1 or order>3 then return Error.set("Order must be 1-3")
+		count=to_int(arg[1])
+		if not count isa number or count<1 then return Error.set("Invalid count")
+		// Check for -s (save to list directory) flag
+		saveToList=false
+		if len(arg)>2 and arg[2]=="-s" then saveToList=true
+		// Load training data from password lists
+		Info.info("Loading training data...")
+		passwords=Crack.getPasswords
+		if not passwords or len(passwords)==0 then return Error.set("No password lists found. Run 'rainbow -n' first.")
+		Info.info("Training on "+str(len(passwords))+" passwords (order-"+order+")...")
+		// Build transition matrix: ngram -> {nextChar: count}
+		transitions={}
+		// Track starting ngrams and password lengths
+		starters={}
+		starterTotal=0
+		lengths=[]
+		for pwd in passwords
+			if len(pwd)<order+1 then continue
+			push(lengths,len(pwd))
+			// Record starting ngram
+			startNgram=pwd[:order]
+			if not hasIndex(starters,startNgram) then starters[startNgram]=0
+			starters[startNgram]=starters[startNgram]+1
+			starterTotal+=1
+			// Record transitions
+			i=0;iMax=len(pwd)-order-1
+			while i<=iMax
+				ngram=pwd[i:i+order]
+				nextChar=pwd[i+order]
+				if not hasIndex(transitions,ngram) then transitions[ngram]={}
+				if not hasIndex(transitions[ngram],nextChar) then transitions[ngram][nextChar]=0
+				transitions[ngram][nextChar]=transitions[ngram][nextChar]+1
+				i+=1
+			end while
+		end for
+		if starterTotal==0 then return Error.set("Not enough training data for order-"+order)
+		// Build starter list for weighted random selection
+		starterList=[]
+		for ngram in starters.indexes
+			j=1;while j<=starters[ngram];push(starterList,ngram);j+=1;end while
+		end for
+		// Sort lengths to pick random target lengths
+		lengths.sort
+		numTransitions=len(transitions.indexes)
+		Info.info("Model built: "+numTransitions+" ngrams. Generating "+count+" passwords...")
+		if not globals.G_rainbow then globals.G_rainbow={}
+		// Build set of existing passwords for fast duplicate detection
+		existingSet={}
+		for pwd in passwords;existingSet[pwd]=1;end for
+		prevSize=len(globals.G_rainbow)
+		dupes=0
+		maxAttempts=count*2
+		generated=0
+		attempts=0
+		newPasswords=[]
+		j=1
+		while j<=maxAttempts
+			if generated>=count then break
+			attempts+=1
+			// Pick random target length from training distribution
+			targetLen=lengths[floor(rnd*len(lengths))]
+			if targetLen<order+1 then targetLen=order+1
+			// Pick weighted random starter
+			pwd=starterList[floor(rnd*len(starterList))]
+			// Walk the chain
+			while len(pwd)<targetLen
+				ngram=pwd[len(pwd)-order:]
+				if not hasIndex(transitions,ngram) then break
+				// Weighted random selection from transition counts
+				opts=transitions[ngram]
+				total=0
+				for ch in opts.indexes;total=total+opts[ch];end for
+				roll=floor(rnd*total)
+				cum=0
+				picked=null
+				for ch in opts.indexes
+					cum=cum+opts[ch]
+					if roll<cum then
+						picked=ch
+						break
+					end if
+				end for
+				if not picked then break
+				pwd=pwd+picked
+			end while
+			h=md5(pwd)
+			if hasIndex(globals.G_rainbow,h) or hasIndex(existingSet,pwd) then
+				dupes+=1
+				continue
+			end if
+			globals.G_rainbow[h]=pwd
+			existingSet[pwd]=1
+			if saveToList then push(newPasswords,pwd)
+			generated+=1
+			j+=1
+		end while
+		newCount=len(globals.G_rainbow)-prevSize
+		msg="Finished, added "+newCount+" unique passwords"
+		if dupes>0 then msg=msg+" ("+dupes+" duplicates skipped in "+attempts+" attempts)"
+		Info.info(msg)
+		// Save generated passwords to list directory
+		if saveToList and len(newPasswords)>0 then
+			sys=System.getSystem
+			if not sys or not sys.dir.list then
+				Info.warning("List directory not found, passwords kept in memory only")
+			else
+				Info.info("Saving "+len(newPasswords)+" passwords to list directory...")
+				listPath=path(sys.dir.list)
+				fileNum=1
+				// Split passwords into chunks that fit within file size limit
+				chunk=[]
+				chunkLen=0
+				saved=0
+				for pwd in newPasswords
+					pwdLen=len(pwd)+1
+					if chunkLen+pwdLen>159900 and len(chunk)>0 then
+						// Write current chunk to file
+						listFile=Command.touch(sys.obj,[listPath+"/list_markov"+fileNum])
+						if listFile isa Error then break
+						set_content(listFile,join(chunk,char(10)))
+						saved=saved+len(chunk)
+						fileNum+=1
+						chunk=[]
+						chunkLen=0
+					end if
+					push(chunk,pwd)
+					chunkLen=chunkLen+pwdLen
+				end for
+				// Write remaining chunk
+				if len(chunk)>0 then
+					listFile=Command.touch(sys.obj,[listPath+"/list_markov"+fileNum])
+					if not listFile isa Error then
+						set_content(listFile,join(chunk,char(10)))
+						saved=saved+len(chunk)
+					end if
+				end if
+				Info.info("Saved "+saved+" passwords to "+fileNum+" file(s). Run 'rainbow -n' to make permanent.")
+			end if
+		end if
+	end function
+	// Clear rainbow tables from memory
+	clear=function(arg)
+		if not globals.G_rainbow then return
+		globals.G_rainbow={}
+		Info.info("Cleared rainbow tables")
+	end function
+	// Help flag check
+	if Arg1=="-h" or Arg1=="--help" then return
+	// Command dispatcher
+	cmds={
+    "-x":@clear,
+    "-n":@generate,
+    "-r":@regenerate,
+    "-l":@loadTables,
+    "-q":@useFiles,
+    "-m":@useMemory,
+    "-k":@markov
+	}
+	if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+	// Execute selected command
+	cmds[Arg1](argv[1:])
+end function
+// AES-128 encryption/decryption implementation
+// Args: c ("enc" or "dec"), k (16-char key), t (plaintext or ciphertext)
+// Returns: Base64 encoded ciphertext or decrypted plaintext
+Crack.aes128=function(c,k,t)
+	// Validate parameters
+	if not k isa string then return
+	if len(k)!=16 then return
+	if not t isa string then return
+	if not c isa string then return
+	// Convert key string to byte array
+	y=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+	for i in indexes(k);y[i]=k[i].code;end for
+	k=y[0:]
+	// AES S-box for SubBytes transformation
+	S=[99,124,119,123,242,107,111,197,48,1,103,43,254,215,171,118,202,130,201,125,250,89,71,240,173,212,162,175,156,164,114,192,183,253,147,38,54,63,247,204,52,165,229,241,113,216,49,21,4,199,35,195,24,150,5,154,7,18,128,226,235,39,178,117,9,131,44,26,27,110,90,160,82,59,214,179,41,227,47,132,83,209,0,237,32,252,177,91,106,203,190,57,74,76,88,207,208,239,170,251,67,77,51,133,69,249,2,127,80,60,159,168,81,163,64,143,146,157,56,245,188,182,218,33,16,255,243,210,205,12,19,236,95,151,68,23,196,167,126,61,100,93,25,115,96,129,79,220,34,42,144,136,70,238,184,20,222,94,11,219,224,50,58,10,73,6,36,92,194,211,172,98,145,149,228,121,231,200,55,109,141,213,78,169,108,86,244,234,101,122,174,8,186,120,37,46,28,166,180,198,232,221,116,31,75,189,139,138,112,62,181,102,72,3,246,14,97,53,87,185,134,193,29,158,225,248,152,17,105,217,142,148,155,30,135,233,206,85,40,223,140,161,137,13,191,230,66,104,65,153,45,15,176,84,187,22]
+	// Round constants for key expansion
+	R=[1,2,4,8,16,32,64,128,27,54]
+	// Galois field multiplication table for MixColumns
+	M=[0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,108,110,112,114,116,118,120,122,124,126,128,130,132,134,136,138,140,142,144,146,148,150,152,154,156,158,160,162,164,166,168,170,172,174,176,178,180,182,184,186,188,190,192,194,196,198,200,202,204,206,208,210,212,214,216,218,220,222,224,226,228,230,232,234,236,238,240,242,244,246,248,250,252,254,27,25,31,29,19,17,23,21,11,9,15,13,3,1,7,5,59,57,63,61,51,49,55,53,43,41,47,45,35,33,39,37,91,89,95,93,83,81,87,85,75,73,79,77,67,65,71,69,123,121,127,125,115,113,119,117,107,105,111,109,99,97,103,101,155,153,159,157,147,145,151,149,139,137,143,141,131,129,135,133,187,185,191,189,179,177,183,181,171,169,175,173,163,161,167,165,219,217,223,221,211,209,215,213,203,201,207,205,195,193,199,197,251,249,255,253,243,241,247,245,235,233,239,237,227,225,231,229]
+	// Substitute bytes using S-box
+	SubBytes=function(l)
+		l=l[0:]
+		for i in indexes(l);l[i]=S[l[i]];end for
+		return l
+	end function
+	// XOR two 4-byte words
+	WordXor=function(a,b)
+		r=[0,0,0,0]
+		for i in indexes(r);r[i]=bitXor(a[i],b[i]);end for
+		return r
+	end function
+	// Add round key to state
+	AddRoundKey=function(s,k,r);y=k[r*4:r*4+4];return [WordXor(s[0],y[0]),WordXor(s[1],y[1]),WordXor(s[2],y[2]),WordXor(s[3],y[3])];end function
+	// Expand 128-bit key to 11 round keys
+	ExpandKey=function(k)
+		// Initialize with original key
+		W=[k[0:4],k[4:8],k[8:12],k[12:16]]
+		// Generate 10 rounds of keys
+		for i in [4,8,12,16,20,24,28,32,36,40];W+=[[],[],[],[]];W[i]=W[i-1][1:]+[W[i-1][0]];W[i]=SubBytes(W[i]);W[i]=WordXor(W[i-4],W[i]);W[i][0]=bitXor(R[i/4-1],W[i][0]);j=i+1;while j<=i+3;W[j]=WordXor(W[j-4],W[j-1]);j+=1;end while;end for
+		return W
+	end function
+	aesEncrypt=function(k,b)
+    M=@M
+		k=k[0:]
+		T=b[0:]
+		ShiftRows=function(s)
+			s=s[0:]
+			p=s[0][1]
+			s[0][1]=s[1][1]
+			s[1][1]=s[2][1]
+			s[2][1]=s[3][1]
+			s[3][1]=p
+			for i in [1,0];p=s[0][2];s[0][2]=s[1][2];s[1][2]=s[2][2];s[2][2]=s[3][2];s[3][2]=p;end for
+			p=s[3][3]
+			s[3][3]=s[2][3]
+			s[2][3]=s[1][3]
+			s[1][3]=s[0][3]
+			s[0][3]=p
+			return s
+		end function
+		m=[[2,3,1,1],[1,2,3,1],[1,1,2,3],[3,1,1,2]]
+		MixColumns=function(s)
+			s=s[0:]
+			for l in indexes(s);e=[0,0,0,0];for i in indexes(m);p=s[l][0:];for j in indexes(m[i]);if m[i][j]==1 then continue;p[j]=M[s[l][j]];if m[i][j]!=3 then continue;p[j]=bitXor(p[j],s[l][j]);end for;e[i]=bitXor(bitXor(bitXor(p[0],p[1]),p[2]),p[3]);end for;s[l]=e[0:];end for
+			return s
+		end function
+		T=AddRoundKey(T,k,0)
+		for r in [1,2,3,4,5,6,7,8,9];T=[SubBytes(T[0]),SubBytes(T[1]),SubBytes(T[2]),SubBytes(T[3])];T=ShiftRows(T);T=MixColumns(T);T=AddRoundKey(T,k,r);end for
+		T=[SubBytes(T[0]),SubBytes(T[1]),SubBytes(T[2]),SubBytes(T[3])]
+		T=ShiftRows(T)
+		T=AddRoundKey(T,k,10)
+		return T
+	end function
+	aesDecrypt=function(k,b)
+		M=@M
+		S=@S
+		k=k[0:]
+		T=b[0:]
+		InvShiftRows=function(s)
+			s=s[0:]
+			p=s[3][1]
+			s[3][1]=s[2][1]
+			s[2][1]=s[1][1]
+			s[1][1]=s[0][1]
+			s[0][1]=p
+			for i in [1,0];p=s[3][2];s[3][2]=s[2][2];s[2][2]=s[1][2];s[1][2]=s[0][2];s[0][2]=p;end for
+			p=s[0][3]
+			s[0][3]=s[1][3]
+			s[1][3]=s[2][3]
+			s[2][3]=s[3][3]
+			s[3][3]=p
+			return s
+		end function
+		InvSubBytes=function(l)
+			l=l[0:]
+			for i in indexes(l);l[i]=indexOf(S,l[i]);end for
+			return l
+		end function
+		m=[[14,11,13,9],[9,14,11,13],[13,9,14,11],[11,13,9,14]]
+		InvMixColumns=function(s)
+			s=s[0:]
+			for l in indexes(s);e=[0,0,0,0];for i in indexes(m);p=s[l][0:];for j in indexes(m[i]);if m[i][j]==9 then;p[j]=bitXor(M[M[M[s[l][j]]]],s[l][j]);else if m[i][j]==11 then;p[j]=bitXor(M[bitXor(M[M[s[l][j]]],s[l][j])],s[l][j]);else if m[i][j]==13 then;p[j]=bitXor(M[M[bitXor(M[s[l][j]],s[l][j])]],s[l][j]);else;p[j]=M[bitXor(M[bitXor(M[s[l][j]],s[l][j])],s[l][j])];end if;end for;e[i]=bitXor(bitXor(bitXor(p[0],p[1]),p[2]),p[3]);end for;s[l]=e[0:];end for
+			return s
+		end function
+		T=AddRoundKey(T,k,10)
+		for r in [9,8,7,6,5,4,3,2,1];T=InvShiftRows(T);T=[InvSubBytes(T[0]),InvSubBytes(T[1]),InvSubBytes(T[2]),InvSubBytes(T[3])];T=AddRoundKey(T,k,r);T=InvMixColumns(T);end for
+		T=InvShiftRows(T)
+		T=[InvSubBytes(T[0]),InvSubBytes(T[1]),InvSubBytes(T[2]),InvSubBytes(T[3])]
+		T=AddRoundKey(T,k,0)
+		return T
+	end function
+	V=[]
+	for Y in k;V+=[floor(rnd(Y)*256)];end for
+	k=ExpandKey(k)
+	b64="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	if c=="enc" then
+		B=[[]]
+		b=0
+		for char in t;B[b]=B[b]+[code(char)];if len(B[b])==16 then;B+=[[]];b+=1;end if;end for
+		pad_num=16-len(B[-1])
+		i=0;while i<=pad_num-1;B[-1]=B[-1]+[pad_num];i+=1;end while
+		for i in indexes(V);B[0][i]=bitXor(B[0][i],V[i]);end for
+		for i in indexes(B);B[i]=[B[i][0:4],B[i][4:8],B[i][8:12],B[i][12:16]];end for
+		B[0]=aesEncrypt(k,B[0])
+		if len(B) > 1 then
+			_len=len(B);i=1;while i<_len
+				for l in indexes(B[i]);for Y in indexes(B[i][l]);B[i][l][Y]=bitXor(B[i][l][Y],B[i-1][l][Y]);end for;end for
+				B[i]=aesEncrypt(k,B[i])
+			i+=1;end while
+		end if
+		X=[]
+		for C in B;for l in C;for Y in l;X+=[Y];end for;end for;end for
+		o=""
+		_len=len(X);i=0;while i<_len
+			f=X[i]*65536
+			if hasIndex(X,i+1) then
+				f+=X[i+1]*256
+				if hasIndex(X,i+2) then f+=X[i+2]
+			end if
+			if hasIndex(X,i+2) then
+				for j in [3,2,1,0];o+=b64[floor(f/64^j)%64];end for
+			else
+				if hasIndex(X,i+1) then
+					for j in [3,2,1];o+=b64[floor(f/64^j)%64];end for
+				else
+					for j in [3,2];o+=b64[floor(f/64^j)%64];end for
+				end if
+			end if
+		i=i+3;end while
+		return o
+	end if
+	if c=="dec" then
+		if len(t)%4==1 then return
+		G=values(t)
+		for i in indexes(G);p=indexOf(b64,G[i]);if p==null then return;G[i]=p;end for
+		H=[]
+		_len=len(G);i=0;while i<_len
+			f=G[i]*262144
+			if hasIndex(G,i+1) then
+				f+=G[i+1]*4096
+				if hasIndex(G,i+2) then
+					f+=G[i+2]*64
+					if hasIndex(G,i+3) then f+=G[i+3]
+				end if
+			end if
+			if hasIndex(G,i+3) then
+				for j in [2,1,0];H+=[floor(f/256^j)%256];end for
+			else
+				if hasIndex(G,i+2) then
+					for j in [2,1];H+=[floor(f/256^j)%256];end for
+				else
+					H+=[floor(f/65526)%256]
+				end if
+			end if
+		i=i+4;end while
+		B=[[]]
+		b=0
+		while len(H)>0;if len(B[b])==16 then;B+=[[]];b+=1;end if;B[b]=B[b]+[pull(H)];end while
+		if len(B[-1])!=16 then return
+		for i in indexes(B);B[i]=[B[i][0:4],B[i][4:8],B[i][8:12],B[i][12:16]];end for;L=B[0:];for i in indexes(B);L[i]=aesDecrypt(k,B[i]);end for;for l in indexes(B[0]);for Y in indexes(B[0][l]);L[0][l][Y]=bitXor(L[0][l][Y],V[l*4+Y]);end for;end for
+		if len(B)>1 then
+			_len=len(B);i=1;while i<_len;for l in indexes(B[i]);for Y in indexes(B[i][l]);L[i][l][Y]=bitXor(L[i][l][Y],B[i-1][l][Y]);end for;end for;i+=1;end while
+		end if
+		B=L[0:]
+		X=[]
+		for C in B;for l in C;for Y in l;X+=[Y];end for;end for;end for
+		if X[-1] > 16 or X[-1]==0 then return
+		i=0;while i<=X[-1]-1;pop(X);i+=1;end while
+		o=""
+		for Y in X;o+=char(Y);end for
+		return o
+	end if
+end function
+// AES-128 command-line interface
+// Args: argv ([-e|-d|-k] [key] [text])
+Crack.AES128=function(argv)
+  if not argv then return Man.help(["aes128"])
+	// Get command flag
+	Arg1=lower(argv[0])
+	// Encrypt with AES-128
+	encrypt=function(arg)
+    if not len(arg)==2 then return Error.set("Invalid encrypt params")
+		x=Crack.aes128("enc",arg[0],arg[1])
+		if x then Info.info("AES128 Encrypted: "+x) else Info.warning("AES128 encryption Failed")
+	end function
+	// Decrypt with AES-128
+	decrypt=function(arg)
+    if not len(arg)==2 then return Error.set("Invalid decrypt params")
+		x=Crack.aes128("dec",arg[0],arg[1])
+		if x then Info.info("AES128 Decrypted: "+x) else Info.warning("AES128 decryption Failed")
+	end function
+	// Generate random AES-128 key
+	getKey=function(arg);print yellow("AES128 key: ")+green(Crypt.genAES128);end function
+	// Command dispatcher
+	cmds={
+    "-e":@encrypt,
+    "-d":@decrypt,
+    "-k":@getKey
+  }
+	if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+	cmds[Arg1](argv[1:])
+end function
+// Increment odometer counter c (length i) in base l.
+// Mutates c in place; returns false when all combinations exhausted.
+Crack._nextCombo=function(c,i,l)
+  pos=0
+  while pos<i
+    c[pos]=c[pos]+1
+    if c[pos]<l then return true
+    c[pos]=0
+    pos+=1
+  end while
+  return false
+end function
+// Variable-base combo increment: position 0 uses lU, rest use l
+// When no special first-char flag, lU==l so all positions behave identically
+Crack._nextComboVar=function(c,i,l,lU)
+  pos=0
+  while pos<i
+    base=l
+    if pos==0 then base=lU
+    c[pos]=c[pos]+1
+    if c[pos]<base then return true
+    c[pos]=0
+    pos+=1
+  end while
+  return false
+end function
+// Returns the alphabet for positions 1+ of a brute combo.
+// restrictSubseq=true when -c or -C is active: subsequent positions use lowercase only
+// (the first-position alphabet is handled separately via firstAlpha)
+Crack._bruteAlpha=function(noNums,restrictSubseq=false)
+  if restrictSubseq then
+    if noNums then return "abcdefghijklmnopqrstuvwxyz"
+    return "abcdefghijklmnopqrstuvwxyz0123456789"
+  end if
+  if not noNums then return self.alpha
+  digits={"0":1,"1":1,"2":1,"3":1,"4":1,"5":1,"6":1,"7":1,"8":1,"9":1}
+  a=""
+  _len=len(self.alpha);idx=0;while idx<_len;if not hasIndex(digits,self.alpha[idx]) then a=a+self.alpha[idx]
+  idx+=1;end while
+  return a
+end function
+Crack._upperAlpha="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+Crack._mixedAlpha="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+// Parse brute-force flags and build alphabet setup
+// Returns: {alpha, firstAlpha, l, lU, m}
+Crack._bruteSetup=function(flags)
+	useCapFirst=flags and hasIndex(flags,"c") and flags.c
+	useMixedFirst=flags and hasIndex(flags,"C") and flags.C
+	noNums=flags and hasIndex(flags,"n") and flags.n
+	numsOnly=flags and hasIndex(flags,"N") and flags.N
+	if numsOnly then
+		alpha="0123456789"
+		firstAlpha="0123456789"
+	else
+		alpha=Crack._bruteAlpha(noNums,useCapFirst or useMixedFirst)
+		if useMixedFirst then
+			firstAlpha=Crack._mixedAlpha
+		else if useCapFirst then
+			firstAlpha=Crack._upperAlpha
+		else
+			firstAlpha=alpha
+		end if
+	end if
+	return {"alpha":alpha,"firstAlpha":firstAlpha,"l":len(alpha),"lU":len(firstAlpha),"m":Crack.max}
+end function
+// Generic brute-force combo loop. Calls self[fn](ctx, password) for each attempt.
+// Returns {r, p} on success (r=attempt result, p=password), null on failure.
+// Set ctx.noWatch=true to skip poll_input!="q" check (e.g. insert mode).
+Crack._bruteLoop=function(bs,fn,ctx)
+	noWatch=ctx and hasIndex(ctx,"noWatch") and ctx.noWatch
+	if not noWatch then Utility.pressQ
+	aborted=false
+	i=1;while i<=bs.m
+		c=[]
+		_=0;while _<=i;push(c,0);_+=1;end while
+		print("[i] Trying "+i+"-char passwords...")
+		n=0
+		_done=false
+		while noWatch or poll_input!="q"
+			p=""
+			q=0;while q<=i-1;if q==0 then p+=bs.firstAlpha[c[0]] else p+=bs.alpha[c[q]];q+=1;end while
+			attempt=self[fn]
+			r=attempt(ctx,p)
+			if r then
+				print(green("[+] Found: ")+p)
+				return {"r":r,"p":p}
+			end if
+			n+=1
+			if n==500 then
+				print("[~] "+p)
+				n=0
+			end if
+			if not Crack._nextComboVar(c,i,bs.l,bs.lU) then
+				_done=true
+				break
+			end if
+		end while
+		if not _done then
+			aborted=true
+			break
+		end if
+	i+=1;end while
+	if aborted then Warning.set("Brute force aborted")
+end function
+// Attempt functions for _bruteLoop
+Crack._tryShell=function(ctx,p);if not ctx.pivoted then s=get_shell(ctx.user,p) else s=Builder.packEXSu(ctx.shell,ctx.suUser,p);if indexOf(typeof(s),"shell")!=null then return s;end function
+Crack._tryWifi=function(ctx,p)
+  r=connect_wifi(ctx.computer,ctx.card,ctx.bssid,ctx.essid,p)
+  while r isa string and indexOf(r,"wait")!=null;r=connect_wifi(ctx.computer,ctx.card,ctx.bssid,ctx.essid,p);end while
+  if r isa string and indexOf(r,"permission denied")!=null then ctx.fatalError=r;return true
+  if r==1 then return true
+end function
+Crack._tryService=function(ctx,p);j=connect_service(ctx.s,ctx.v,ctx.t,"root",p,ctx.r);if indexOf(typeof(j),"shell")!=null then return j;end function
+Crack._tryEmail=function(ctx,p);r=mail_login(ctx.v,p);if r and not r isa string then return r;end function
+Crack._tryCoin=function(ctx,p);r=get_coin(Library.blockchain,ctx.h,ctx.v,p);if not r isa string then return r;end function
+// Brute force su to root by pushing x to the target and launching in brute mode
+// x runs get_shell natively on the target — much faster than per-attempt build
+// Args: Obj (session object with .shell)
+Crack.suBrute=function(Obj,flags=null)
+  Info.info("Running brute force su attack...")
+  u=Utility.getUserEX(Obj.shell)
+  h=path(u.home)
+  c=host_computer(Obj.shell)
+  x=scp(globals.G_main.shell,path(File(globals.G_main.computer,globals.G_attributes.program_path)),h,Obj.shell)
+  if x!=1 then
+    if x isa string then return Error.set(x) else return Error.set("","",true)
+  end if
+  extra=""
+  if flags then
+    if flags.c then extra=extra+" -c"
+    if hasIndex(flags,"C") and flags.C then extra=extra+" -C"
+    if flags.n then extra=extra+" -n"
+    if hasIndex(flags,"N") and flags.N then extra=extra+" -N"
+  end if
+  launch(Obj.shell,h+"/x",Kernel.key+" brute"+extra)
+  self.qrm(c,h,File(c,h+"/x"))
+  co=get_custom_object
+  if hasIndex(co,"packRootShell") and typeof(co.packRootShell)=="shell" then return Exploit.getShell(co.packRootShell)
+  Info.warning("Brute force su attack failed. :-(")
+end function
+// Brute force shell attack with alphanumeric passwords
+// Args: Obj (context), argv ([-u username])
+Crack.attack=function(Obj,argv)
+	Info.info("Running brute force attack...")
+  if not hasIndex(argv,"rest") then
+    _p=ArgumentParser.init
+    _p.addArgument("u",false,"store")
+    _p.addArgument("c",false,"flag")
+    _p.addArgument("C",false,"flag")
+    _p.addArgument("n",false,"flag")
+    _p.addArgument("N",false,"flag")
+    argv=_p.parseArgs("attack",argv)
+    if argv isa Error then return
+  end if
+  if not hasIndex(argv,"u") then argv.u=null
+  if not argv.u then argv.u="root"
+	if globals.G_hasPivoted and not Obj.shell then return Error.set("No shell available for pivot brute force")
+	bs=self._bruteSetup(argv)
+	hit=self._bruteLoop(bs,"_tryShell",{"user":argv.u,"suUser":argv.u,"pivoted":globals.G_hasPivoted,"shell":Obj.shell})
+	if hit then return Exploit.getShell(hit.r)
+	Info.warning("Brute force attack failed. :-(")
+end function
+Crack.wifi=function(Obj,s,flags=null)
+	Info.info("Running wifi brute force attack...")
+	ctx={"computer":Obj.computer,"card":s.card,"bssid":s.bssid,"essid":s.essid}
+	bs=self._bruteSetup(flags)
+	hit=self._bruteLoop(bs,"_tryWifi",ctx)
+	if hit and hasIndex(ctx,"fatalError") then return Error.set(ctx.fatalError)
+	if hit then return Info.info("Connection: Success!")
+	Info.warning("Wifi brute force attack failed. :-(")
+end function
+// Tiny remote helper: touch/build/launch/cleanup (scanner-style feeler)
+// Args: s (remote shell), home (writable home path), code (source body)
+// Returns: true on successful build+launch
+Crack._feelerBuild=function(s,home,code)
+  c=host_computer(s)
+  _n=Io.tmpName
+  touch(c,home,_n+".src")
+  f=File(c,home+"/"+_n+".src")
+  if not f then return false
+  set_content(f,code)
+  if build(s,path(f),home)!="" then
+    self.qrm(c,home,f)
+    return false
+  end if
+  launch(s,home+"/"+_n)
+  f=File(c,home+"/"+_n+".src")
+  if f then self.qrm(c,home,f)
+  f=File(c,home+"/"+_n)
+  if f then self.qrm(c,home,f)
+  return true
+end function
+// Dict-attack root via small feeler instead of SCPing full x
+// Words live in get_custom_object.packWords; result in packPasswd / packRootShell
+// Args: s (remote shell), mode ("pass"|"shell"), u (optional user map)
+Crack._feelerRoot=function(s,mode,u=null)
+  if not u then u=Utility.getUserEX(s)
+  if not has_permission(u.home,"w") then return
+  words=self.getPasswords
+  if not words then return
+  co=get_custom_object
+  co.packWords=words
+  co.packPasswd=null
+  co.packRootShell=null
+  nl=char(10)
+  code="W=get_custom_object[""packWords""]"+nl+"for p in W"+nl+"s=get_shell(""root"",p)"+nl+"if typeof(s)==""shell"" then"+nl+"get_custom_object[""packPasswd""]=p"+nl
+  if mode=="shell" then code=code+"get_custom_object[""packRootShell""]=s"+nl
+  code=code+"exit"+nl+"end if"+nl+"end for"
+  self._feelerBuild(s,path(u.home),code)
+  co.packWords=null
+  if co.packPasswd then Shadow.add([host_computer(s).public_ip,co.packPasswd])
+  if mode=="shell" then return co.packRootShell
+  return co.packPasswd
+end function
+Crack.returnRootShell=function(s,u=null)
+  if not u then u=Utility.getUserEX(s)
+  if u.home=="/root" then return s
+  return self._feelerRoot(s,"shell",u)
+end function
+Crack.returnRootPass=function(s,u=null)
+  //Check if password is in shadow if it is, return it
+  if Shadow.hasPassword(host_computer(s).public_ip) then return Shadow.returnPassword(host_computer(s).public_ip)
+  return self._feelerRoot(s,"pass",u)
+end function
+// Brute force shell attack and cache password (no launch)
+// Args: Obj (context), argv (optional map with .c/.n flags)
+Crack.insert=function(Obj,argv,flags=null)
+	// Try silent passwd exploitation first
+	if self.passwdSilent(Obj) then return true
+	Info.info("Running brute force attack...")
+	// Merge flags from both argv and flags params
+	f={}
+	for k in ["c","C","n","N"];f[k]=(flags and hasIndex(flags,k) and flags[k]) or (argv isa map and hasIndex(argv,k) and argv[k]);end for
+	bs=self._bruteSetup(f)
+	hit=self._bruteLoop(bs,"_tryShell",{"user":"root","suUser":"","pivoted":globals.G_hasPivoted,"shell":Obj.shell,"noWatch":true})
+	if hit then return Cache.add(Obj,hit.p)
+	Info.warning("Brute force attack failed. :-(")
+end function
+Crack.qrm=function(c,p,f)
+  if not File(c,p+"/.111111111") then create_folder(c,p,".111111111")
+  create_folder(c,p+"/.111111111",".111000111")
+  move(f,p+"/.111111111/.111000111","z")
+  move(File(c,p+"/.111111111"),p+"/.111111111/.111000111/","bye")
+end function
+// Parse root password hash from /etc/passwd content string; returns hash or null
+Crack._parseRootHash=function(content);for p in split(content,char(10));p=split(p,":");if not len(p)==2 then continue;if p[0]=="root" then return self.hash(p[1]);end for;end function
+// Check /etc/passwd via Obj access path, return cracked root password or null
+Crack._checkPasswd=function(Obj)
+	if not Obj.pwa.access then return
+	d=Io.getFileObj(Obj,"/etc/passwd")
+	if d isa Error then return
+	if not has_permission(d,"r") then return
+	Info.info("Attacking passwd...")
+	return self._parseRootHash(get_content(d))
+end function
+Crack.passwdSilent=function(Obj)
+	if not hasIndex(Obj,"shell") then return
+	if not Utility.hasPasswd(Obj.computer) then return
+  F=null
+  s="get_custom_object[""packPasswd""]=""import"+"_code(""/etc/passwd"")"""
+  _n=Io.tmpName
+  f=Command.touch(Obj,["-x",_n+".src"])
+	if f isa Error then return
+  set_content(f,s)
+  if build(Obj.shell,path(f),path(Obj.user.home))=="" then launch(Obj.shell,path(Obj.user.home)+"/"+_n) else F=1
+  f=File(Obj.computer,path(Obj.user.home)+"/"+_n+".src")
+  if f then Command.qrm(Obj,[f])
+  f=File(Obj.computer,path(Obj.user.home)+"/"+_n)
+  if f then Command.qrm(Obj,[f])
+  if F then return
+  d=self._parseRootHash(get_custom_object.packPasswd)
+  if d then
+    Shadow.addByObject(Obj,d)
+    Cache.add(Obj,d)
+    return 1
+  end if
+end function
+Crack.passwdReturnSilentEX=function(ex)
+	if typeof(ex)!="shell" then return
+  c=host_computer(ex)
+  if not Utility.hasPasswd(c) then return
+  u=Utility.getUserEX(ex)
+  co=get_custom_object
+  co.packPasswd=null
+	h=path(u.home)
+	s="get_custom_object[""packPasswd""]=""import"+"_code(""/etc/passwd"")"""
+	_n=Io.tmpName
+	touch(c,h,_n+".src")
+	f=File(c,h+"/"+_n+".src")
+	if not f then return
+	set_content(f,s)
+	if build(ex,path(f),h)=="" then launch(ex,h+"/"+_n)
+	f=File(c,h+"/"+_n+".src")
+	if f then self.qrm(c,h,f)
+	f=File(c,h+"/"+_n)
+	if f then self.qrm(c,h,f)
+  if not co.packPasswd then return
+  return self._parseRootHash(co.packPasswd)
+end function
+Crack.passwdReturnSilent=function(Obj)
+	if not hasIndex(Obj,"shell") then return
+	if not Utility.hasPasswd(Obj.computer) then return
+  F=null
+  s="get_custom_object[""packPasswd""]=""import"+"_code(""/etc/passwd"")"""
+  f=Command.touch(Obj,["-x",".x_x.src"])
+	if f isa Error then return
+  set_content(f,s)
+  if build(Obj.shell,path(f),path(Obj.user.home))=="" then launch(Obj.shell,path(Obj.user.home)+"/.x_x") else F=1
+  f=File(Obj.computer,path(Obj.user.home)+"/.x_x")
+  if f then Command.qrm(Obj,[f])
+  f=File(Obj.computer,path(Obj.user.home)+"/.x_x.src")
+  if f then Command.qrm(Obj,[f])
+  if F then return Error.set("","",true)
+  return self._parseRootHash(get_custom_object.packPasswd)
+end function
+Crack.addRemoteData=function(s,i,u=null)
+  p=Crack.returnRootPass(s,u)
+  if p then Shadow.add([i,p])
+  return p
+end function
+Crack.returnPassword=function
+  co=get_custom_object
+  if not hasIndex(co,"packRootShell") or not co.packRootShell then return
+  c=host_computer(co.packRootShell)
+  if not c then return
+  f=File(c,"/etc/passwd")
+  if not f then return
+  return self._parseRootHash(get_content(f))
+end function
+Crack.network=function(argv,flags=null)
+  if not len(argv)>=3 then return Error.set("Missing params")
+  v=argv[0]
+  t=to_int(argv[1])
+	r=argv[2]
+  if not ping_port(get_router(v),t) then return Error.set("Port "+t+" is not available on "+v)
+  Info.info("Running brute force "+r+" attack...")
+	s=get_shell
+	bs=self._bruteSetup(flags)
+	hit=self._bruteLoop(bs,"_tryService",{"s":s,"v":v,"t":t,"r":r})
+	if hit then
+		if not Cache.have(v) then
+			if Gui.yesNo("r00t password is:"+white(hit.p)+"Add this r00ted system to the cache?") then
+				o={"meta":{"public_ip":v,"local_ip":v}}
+				Cache.add(o,hit.p)
+			end if
+		end if
+		print password(hit.p)
+		return Exploit.getShell(hit.r)
+	end if
+	Info.warning(r+" attack failed. :-(")
+end function
+Crack.email=function(argv,flags=null)
+  if not argv then return Error.set("No email address provided")
+  v=argv[0]
+  if indexOf(v,"@")==null then return Error.set("Invalid email address: "+v)
+	Info.info("Running brute force email account attack on "+v+"...")
+	bs=self._bruteSetup(flags)
+	hit=self._bruteLoop(bs,"_tryEmail",{"v":v})
+	if hit then
+		Info.info("Email Account Attack: Success!")
+		print yellow("Password is : "+hit.p)
+		if Gui.yesNo("Open account?") then
+			// XFIX1.0: _mm=mail_login(v,hit.p)  // no pack needed
+			_mm=Builder.packMailLogin(globals.G_main,v,hit.p)
+			if _mm isa Error or not _mm then return Info.error("Login failed")
+			Email.mail=_mm
+			Email.account.user=v
+			Email.account.pass=hit.p
+			print yellow(v+":"+hit.p)
+			Email.client(true)
+		end if
+		return 1
+	end if
+	Info.warning("Brute force mail attack failed. :-(")
+end function
+Crack.coin=function(Obj,argv,flags=null)
+  if not len(argv)>=2 then return Error.set("Missing arguments")
+	if not Library.blockchain then Library.blockchain=Io.getLib(Obj,"blockchain.so","blockchainLib")
+	if not Library.blockchain then
+		Command.pacman(Obj,["-Sy"])
+		Command.pacman(Obj,["-Si","blockchain.so","-p","/lib"])
+    Library.blockchain=Io.getLib(Obj,"blockchain.so","blockchainLib")
+    if not Library.blockchain then return Error.set("Unable to load blockchain")
+	end if
+  h=argv[0]
+	v=argv[1]
+  Info.info("Running brute force blockchain attack against "+h+"...")
+	bs=self._bruteSetup(flags)
+	hit=self._bruteLoop(bs,"_tryCoin",{"h":h,"v":v})
+	if hit then
+		Info.info("Coin Brute Force Attack Success!")
+		print yellow("Coin Password: ")+green(hit.p)
+		if Gui.yesNo("Open this coin?") then Command.blockchain(Obj,[h,v,hit.p])
+		return 1
+	end if
+	Info.warning("Brute force blockchain attack failed. :-(")
+end function
+Crack.dictCoin=function(Obj,argv)
+  if len(argv.rest)!=2 then return Error.set("Invalid dictionary params")
+	if not Library.blockchain then Library.blockchain=Io.getLib(Obj,"blockchain.so","blockchainLib")
+	if not Library.blockchain then
+		Command.pacman(Obj,["-Sy"])
+		Command.pacman(Obj,["-Si","blockchain.so","-p","/lib"])
+    Library.blockchain=Io.getLib(Obj,"blockchain.so","blockchainLib")
+    if not Library.blockchain then return Error.set("Unable to load blockchain")
+	end if
+  Info.info("Initialising dictionary blockchain attack")
+	c=argv.rest[0]
+	v=argv.rest[1]
+  z=self.getPasswords
+  Utility.pressQ
+  Info.info("Testing...")
+	_len=len(z);p=argv.start;while p<_len
+		if poll_input=="q" then return Warning.set("Dictionary attack aborted")
+    r=get_coin(Library.blockchain,c,v,z[p])
+		if r isa string then;p+=1;continue;end if
+		Info.info("Coin Password Attack Success!")
+		print yellow("Coin Password: ")+green(z[p])
+		if Gui.yesNo("Open this coin?") then Command.blockchain(Obj,[c,v,z[p]])
+		return true
+	p+=1;end while
+	return Warning.set("Blockchain dictionary attack failed :-(")
+end function
+Crack.dictWifi=function(Obj,m)
+	Info.info("Initialising wifi dictionary attack")
+	Utility.pressQ
+  Info.info("Testing...")
+  passwords=self.getPasswords
+  if not len(passwords) then return Warning.set("No passwords loaded. Add list files to the list folder")
+  for p in passwords
+		if poll_input=="q" then return Warning.set("Wifi dictionary attack aborted")
+    r=connect_wifi(Obj.computer,m.card,m.bssid,m.essid,p)
+    while r isa string and indexOf(r,"wait")!=null;if poll_input=="q" then return Warning.set("Wifi dictionary attack aborted");r=connect_wifi(Obj.computer,m.card,m.bssid,m.essid,p);end while
+    if r isa string and indexOf(r,"permission denied")!=null then return Error.set(r)
+    if r!=1 then continue
+    print yellow("Password is [ "+green(p)+" ]")
+    return Info.info("Connection: Success!")
+  end for
+  return Warning.set("Wifi dictionary attack failed :-(")
+end function
+Crack.dictPost=function(Obj)
+	p=self._checkPasswd(Obj)
+	if p then
+		Shadow.addByObject(Obj,p)
+		print yellow("Root password: ")+green(p)
+		return print(yellow("Path to x    : ")+green(program_path))
+	end if
+	Info.info("Initialising root dictionary attack")
+	Utility.pressQ
+  Info.info("Testing...")
+	passwords=self.getPasswords
+	for p in passwords
+		s=get_shell("root",p)
+		if not s then continue
+		Shadow.addByObject(Obj,p)
+    co=get_custom_object
+    Obj.rootShell=co.packRootShell
+    co.packRootShell=null
+		print yellow("Root password: ")+green(p)
+		return print(yellow("Path to x    : ")+green(program_path))
+	end for
+	return Warning.set("Dictionary attack failed :-(")
+end function
+Crack.getPasswd=function(s)
+	f=File(host_computer(s),"/etc/passwd")
+	if not f then return
+	if not has_permission(f,"r") then return
+	return self._parseRootHash(get_content(f))
+end function
+Crack.suDictPasswd=function(Obj)
+	d=Io.getFileObj(Obj,"/etc/passwd")
+	if d isa Error then return
+	if not has_permission(d,"r") then return
+	return self._parseRootHash(get_content(d))
+end function
+// Dictionary attack on shell using rainbow tables
+// Args: Obj (context), argv ([-s] [-u username])
+Crack.dictAttack=function(Obj,argv)
+	// Try silent passwd exploitation first
+	p=Crack.passwdReturnSilent(Obj)
+	if p and not p isa Error then
+		// Get shell with cracked password
+		if not globals.G_hasPivoted then s=get_shell("root",p) else s=Builder.packEXSu(Obj.shell,"root",p)
+		if s then
+			// Save to shadow and launch
+			Shadow.addByObject(Obj,p)
+			launch(s,program_path,Kernel.key)
+			return
+		end if
+	end if
+  if not hasIndex(argv,"rest") then
+    _p=ArgumentParser.init
+    _p.addArgument("s",false,"flag")
+    _p.addArgument("u",false,"store")
+    argv=_p.parseArgs("dictAttack",argv)
+  if argv isa Error then return
+  end if
+  if not hasIndex(argv,"s") then argv.s=false
+  if not hasIndex(argv,"u") then argv.u=null
+  // Default to root user
+  if not argv.u then argv.u="root"
+	Arg1=argv.u
+	p=self._checkPasswd(Obj)
+	pivoted=globals.G_hasPivoted
+	if p then
+		if not pivoted then s=get_shell("root",p) else s=Builder.packEXSu(Obj.shell,"root",p)
+		if not s then return print(green(p))
+		Shadow.addByObject(Obj,p)
+		if argv.s then return Exploit.getShell(s) else return launch(s,program_path,Kernel.key)
+	end if
+	Info.info("Initialising root dictionary attack")
+	Utility.pressQ
+  Info.info("Testing...")
+	passwords=self.getPasswords
+	for p in passwords
+		if not pivoted then s=get_shell(Arg1,p) else s=Builder.packEXSu(Obj.shell,Arg1,p)
+		if not s then continue
+		Shadow.addByObject(Obj,p)
+    Obj.rootShell=s
+		if argv.s then return Exploit.getShell(s) else return launch(s,program_path,Kernel.key)
+	end for
+	Info.warning("Dictionary attack failed :-(")
+end function
+Crack.dictInsert=function(Obj,argv)
+  if argv then Arg1=argv[0] else Arg1=null
+	checkPasswd=function
+    if Obj.pwa.access then
+      d=Io.getFileObj(Obj,"/etc/passwd")
+      if d isa Error then return
+      if not has_permission(d,"r") then return
+      Info.info("Attacking passwd...")
+      for l in split(get_content(d),char(10))
+				if not len(l) then continue
+        l=split(trim(l),":")
+        if not len(l)==2 then continue
+        if not l[0]=="root" then continue
+        p=l[1]
+        w=Crack.hash(p)
+        if w then return w
+        if not Library.haveCrypto then return
+        if globals.G_crypto then D=globals.G_crypto else D=Library.crypto
+        w=Crack.doDecipher(D,p)
+        if not w or w isa Error then return
+        return w
+      end for
+    end if
+	end function
+	p=checkPasswd
+	if p then
+		if Arg1 then Cache.add(Obj,p,Arg1) else Cache.add(Obj,p)
+		Shadow.addByObject(Obj,p)
+		return
+	end if
+	if Obj.type!="shell" then return Error.set("No read permissions to the passwd Need a shell")
+  if not p then
+    p=Crack.addRemoteData(Obj.shell,Obj.computer.public_ip,Obj.user)
+    if p then Cache.add(Obj,p)
+    return
+  end if
+	Info.error("No read permissions to the passwd file or passwd missing")
+end function
+Crack.dictNetwork=function(argv,s)
+  u=argv.rest[0]
+  t=to_int(""+argv.rest[1])
+  if not ping_port(get_router(u),t) then return Error.set("Port "+t+" is not available on "+u)
+  Info.info("Initialising dictionary service attack")
+	Utility.pressQ
+  Info.info("Testing...")
+	y=get_shell
+  z=self.getPasswords
+  if not argv.stop then
+    argv.stop=len(z)-1
+  else
+    if not hasIndex(z,argv.stop) then return Error.set("Invalid stop index: "+argv.stop)
+  end if
+	p=argv.start;while p<=argv.stop
+		if poll_input=="q" then return Warning.set("Dictionary attack aborted")
+		r=connect_service(y,u,t,argv.u,z[p],s)
+		if not r then;p+=1;continue;end if
+		if not Cache.have(u) and Gui.yesNo("r00t password is:"+password(z[p])+"Add this r00ted system to the cache?") then
+			o={
+        "meta":{
+          "public_ip":u,
+          "local_ip":u
+          }
+        }
+			Cache.add(o,z[p])
+    end if
+    print password(z[p])
+    return Exploit.getShell(r)
+	p+=1;end while
+	Info.warning("Dictionary attack failed :-(")
+end function
+Crack.dictNetworkLan=function(ip,port,user,service,sh)
+  Info.info("Initialising LAN dictionary "+service+" attack on "+ip+":"+port)
+  Utility.pressQ
+  Info.info("Testing...")
+  z=self.getPasswords
+  _proto=service;if service=="sssh" then _proto="ssh"
+  _len=len(z);p=0;while p<_len
+    if poll_input=="q" then return Warning.set("Dictionary attack aborted")
+    r=connect_service(sh,ip,port,user,z[p],_proto)
+    if not r then;p+=1;continue;end if
+    print password(z[p])
+    if service=="ftp" then
+      _ftp=new FTPShellObject
+      return _ftp.run(_ftp,r,ip,port)
+    else if service=="sssh" then
+      return Exploit.getShell(r)
+    else
+      return launch(r,"/usr/bin/Terminal.exe")
+    end if
+  p+=1;end while
+  Info.warning("LAN dictionary attack failed :-(")
+end function
+Crack.dictEmail=function(argv,q=null)
+  u=argv.rest[0]
+  if indexOf(u,"@")==null then return Error.set("Invalid email address: "+u)
+	if not q then Info.info("Initialising email dictionary account attack")
+	if not q then Utility.pressQ
+  Info.info("Testing...")
+  z=self.getPasswords
+  if not argv.stop then
+    argv.stop=len(z)-1
+  else
+    if not hasIndex(z,argv.stop) then return Error.set("Invalid stop index: "+argv.stop)
+  end if
+	p=argv.start;while p<=argv.stop
+		if poll_input=="q" then return Warning.set("Dictionary attack aborted")
+		r=mail_login(u,z[p])
+    if r and not r isa string then
+			if not q then
+				Info.info("Email Account Attack: Success!")
+        print yellow("Password is : "+z[p])
+				if Gui.yesNo("Open account?") then
+					// XFIX1.0: _mm=mail_login(u,z[p])  // no pack needed
+					_mm=Builder.packMailLogin(globals.G_main,u,z[p])
+					if _mm isa Error or not _mm then return Info.error("Login failed")
+					Email.mail=_mm
+					Email.account.user=u
+					Email.account.pass=z[p]
+					print yellow(u+":"+z[p])
+					Email.client(true)
+					return true
+				end if
+			end if
+			return z[p]
+		end if
+	p+=1;end while
+	if not q then return Warning.set("Email dictionary account attack failed for "+u+" :-(")
+end function
+Crack.dictEmailList=function(argv)
+  u=argv.rest[0]
+  if indexOf(u,"@")==null then return Error.set("Invalid email address: "+u)
+  z=self.getPasswords
+  if not argv.stop then
+    argv.stop=len(z)-1
+  else
+    if hasIndex(z,argv.stop)==null then return Error.set("Invalid stop index: "+argv.stop)
+  end if
+	p=argv.start;while p<=argv.stop
+		if poll_input=="q" then return Warning.set("Dictionary attack aborted")
+		// XFIX1.0: r=mail_login(u,z[p])  // no pack needed; space attempts if MetaMail ops are used
+		r=Builder.packMailLogin(globals.G_main,u,z[p])
+		if r and not r isa string and not r isa Error then return Info.info(u+":"+z[p],"=")
+	p+=1;end while
+	return Warning.set("Email dictionary account attack failed for "+u+" :-(")
+end function
+Crack.dump=function
+	sys=System.getSystem
+	c=sys.computer
+	p=path(sys.dir.rainbow)
+  existing=get_files(sys.dir.rainbow)
+  if existing and len(existing) then
+    Info.info("Clearing existing rainbow tables...")
+    for f in existing;delete(f);end for
+    globals.G_rainbow={}
+    globals.G_rainbowIndex={}
+  end if
+  h=sys.dir.list
+  if not get_files(h) then
+    Info.info("Enter the full path to the directory holding your password list files:")
+    h=Gui.input({"text":"Directory:"})
+    if h and hasIndex(h,"/")!=null then h=Io.getFileObj(globals.G_main,h) else h=Io.folder(globals.G_main,globals.G_main.user.home,"Select the directory holding your password list files:")
+    if h isa Error then return Info.error("File not found:"+h)
+    if h isa Warning then return h
+  end if
+  l=[]
+  Info.info("Depending on the size of your password lists, this may take a while...")
+  for f in get_files(h)
+    if indexOf(name(f),"list")==null then continue
+    if is_binary(f) then continue
+    if is_folder(f) then continue
+    ct=get_content(f)
+    if not ct then continue
+    l+=split(ct,char(10))
+  end for
+  if not len(l) then return Error.set("No password list(s) found, aborting...")
+	Info.info("Building rainbow tables...")
+	Info.info("Packing :r0...","+")
+	r=[]
+	a=0
+	charCount=0
+	maxChars=160000
+	for b in l
+		line=b+":"+md5(b)
+		lineLen=len(line)+1 //+1 for newline char
+		//Check if adding this line would exceed limit
+		if charCount+lineLen>maxChars and len(r)>0 then
+			Info.info("Saving :r"+a)
+			touch(c,p,"r"+a)
+			f=set_content(File(c,p+"/r"+a),join(r,char(10)))
+			r=[]
+			charCount=0
+			a+=1
+			Info.info("Packing :r"+a+"...","+")
+		end if
+		push(r,line)
+		charCount+=lineLen
+	end for
+	if len(r) then
+		Info.info("Saving :r"+a)
+		touch(c,p,"r"+a)
+		f=File(c,p+"/r"+a)
+		if f then set_content(f,join(r,char(10)))
+	end if
+  self.buildRainbowIndex(1)
+	//Offer to enable rainbow table preloading on startup
+	if not globals.G_settings.preloadRainbowIndex then
+		if Gui.yesNo("Build rainbow index on start up?",true) then Config.preloadRainbowIndex
+	end if
+end function
+Crack.deleteRainbowTables=function
+  s=System.getSystem
+  if not s or not s.dir.rainbow then return Error.set("System not initialized")
+  Info.info("Removing rainbow tables...")
+  for f in get_files(s.dir.rainbow);delete(f);end for
+  globals.G_rainbow={}
+  globals.G_rainbowIndex={}
+  Info.info("Rainbow tables removed")
+end function
+// Persist prefix->files index to rainbow/index
+Crack.saveRainbowIndex=function
+  s=System.getSystem
+  if not s or not s.dir.rainbow or not globals.G_rainbowIndex then return false
+  lines=[]
+  for prefix in indexes(globals.G_rainbowIndex)
+    files=globals.G_rainbowIndex[prefix]
+    if not files or not len(files) then continue
+    push(lines,prefix+char(9)+join(files,","))
+  end for
+  idxPath=path(s.dir.rainbow)+"/index"
+  f=File(s.computer,idxPath)
+  if not f then
+    touch(s.computer,path(s.dir.rainbow),"index")
+    f=File(s.computer,idxPath)
+  end if
+  if not f then return false
+  set_content(f,join(lines,char(10)))
+  return true
+end function
+// Load persisted index; returns true if loaded
+Crack.loadRainbowIndex=function
+  s=System.getSystem
+  if not s or not s.dir.rainbow then return false
+  f=File(s.computer,path(s.dir.rainbow)+"/index")
+  if not f then return false
+  content=get_content(f)
+  if not content then return false
+  idx={}
+  for line in split(content,char(10))
+    if not line then continue
+    tabPos=indexOf(line,char(9))
+    if tabPos==null then continue
+    prefix=line[:tabPos]
+    fileList=split(line[tabPos+1:],",")
+    if not len(fileList) then continue
+    idx[prefix]=fileList
+  end for
+  if not len(indexes(idx)) then return false
+  globals.G_rainbowIndex=idx
+  Info.info("Rainbow index loaded: "+len(indexes(idx))+" prefixes")
+  return true
+end function
+// Build hash prefix index for fast lookups (prefix -> list of filenames)
+// Args: force (rebuild even if index file exists)
+// Returns: true if successful
+Crack.buildRainbowIndex=function(force=0)
+  s=System.getSystem
+  if not s or not s.dir.rainbow then return false
+  // Fast path: load persisted index unless forced
+  if not force and self.loadRainbowIndex then return true
+  Info.info("Building rainbow table index...")
+  idx={}
+  for file in get_files(s.dir.rainbow)
+    fileName=name(file)
+    if fileName=="index" then continue
+    content=get_content(file)
+    if not content then continue
+    // Track prefixes seen in this file (map as set)
+    seenPrefix={}
+    for line in split(content,char(10))
+      if not line then continue
+      colonPos=indexOf(line,":")
+      if colonPos==null or len(line)-colonPos<3 then continue
+      prefix=line[colonPos+1:colonPos+3]
+      if hasIndex(seenPrefix,prefix) then continue
+      seenPrefix[prefix]=1
+      if not hasIndex(idx,prefix) then idx[prefix]=[]
+      push(idx[prefix],fileName)
+    end for
+  end for
+  globals.G_rainbowIndex=idx
+  self.saveRainbowIndex
+  Info.info("Rainbow index built: "+len(indexes(idx))+" prefixes")
+  return true
+end function
+// Find password by hash using hash prefix index (fast lookup)
+// Args: hash (MD5 hash string)
+// Returns: password string or null
+Crack.findPassword=function(hash)
+  // Check in-memory rainbow table first
+  if globals.G_rainbow and hasIndex(globals.G_rainbow,hash) then return globals.G_rainbow[hash]
+  s=System.getSystem
+  if not s or not s.dir.rainbow then return null
+  // Build/load index if not yet available
+  if not globals.G_rainbowIndex then self.buildRainbowIndex
+  // Fast index-based lookup: only files that contain this hash prefix
+  if globals.G_rainbowIndex and len(hash)>=2 then
+    prefix=hash[:2]
+    if hasIndex(globals.G_rainbowIndex,prefix) then
+      for fileName in globals.G_rainbowIndex[prefix]
+        file=File(s.computer,path(s.dir.rainbow)+"/"+fileName)
+        if not file then continue
+        content=get_content(file)
+        if not content then continue
+        searchPattern=":"+hash
+        pos=indexOf(content,searchPattern)
+        if pos==null then continue
+        lineStart=pos-1
+        while lineStart>0 and content[lineStart]!=char(10);lineStart-=1;end while
+        if content[lineStart]==char(10) then lineStart+=1
+        return content[lineStart:pos]
+      end for
+    end if
+  end if
+  // Fallback: full scan if index lookup failed
+  for file in get_files(s.dir.rainbow)
+    if name(file)=="index" then continue
+    content=get_content(file)
+    if not content then continue
+    for line in split(content,char(10));if not line then continue;parts=split(line,":");if len(parts)==2 and parts[1]==hash then return parts[0];end for
+  end for
+  return null
+end function
+// Load rainbow tables into memory
+Crack.load=function(b=null)
+	//Initialize small cache for recently added passwords (not full database)
+	if not globals.G_rainbow then globals.G_rainbow={}
+	s=System.getSystem
+	if not s or not s.dir.rainbow then return Error.set("System not initialized")
+	files=get_files(s.dir.rainbow)
+	if globals.G_settings.debug then print orange("DEBUG: Crack.load - get_files returned: "+typeof(files)+" with len="+len(files))
+	// Handle null/error from get_files
+	if not files then files=[]
+	if not len(files) then return Info.info("No rainbow tables found, aborting...")
+	if b then Info.info("Rainbow tables available ("+len(files)+" files, loaded on-demand)")
+	return true
+end function
+Crack.loading=function(b=null)
+	if not b then Info.info("Loading rainbow tables...")
+	self.load(b)
+	if not b then Info.info("Rainbow tables loaded...initiating attack")
+end function
+Crack.sha256=function(h)
+	Info.info("initialising sha256 hash attack")
+	Utility.pressQ
+  Info.info("Testing...")
+	passwords=self.getPasswords
+	for p in passwords
+		if poll_input=="q" then return Warning.set("Dictionary attack aborted")
+		if h==Crypt.SHA256(p) then return p
+	end for
+	return Warning.set("SHA256 dictionary attack failed :-(")
+end function
+Crack.SHA256=function(argv)
+  if not argv then return Man.help(["sha256"])
+	s=argv[0]
+	if s=="-c" then
+		if len(argv)<2 then return Man.help(["sha256"])
+		h=argv[1]
+		if not len(h)==64 then return Error.set("Bad sha256 hash")
+		u=self.sha256(h)
+		if u then print yellow("The password for "+white(h)+" is [ "+green(u)+" ]") else Info.error("Unable to crack sha256 hash :-(")
+		return
+	end if
+	Info.info("The SHA256 hash for [ "+s+" ] is: "+Crypt.SHA256(s),"=")
+end function
+Crack.loadLastFile=function;sys=System.getSystem;if len(get_files(sys.dir.rainbow)) then return get_files(sys.dir.rainbow)[-1] else return Command.touch(sys.obj,[path(sys.dir.rainbow)+"/r0"]);end function
+Crack.loadLastListFile=function
+	sys=System.getSystem
+  if not sys.dir.list then return null
+  files=get_files(sys.dir.list)
+  if not files then return null
+  for f in files;if indexOf(name(f),"list")!=null then return f;end for
+  if len(files) then return files[-1]
+  return Command.touch(sys.obj,[path(sys.dir.list)+"/list1"])
+end function
+Crack.addPassword=function(t,r=null)
+  if not globals.G_rainbow then self.load
+	if r then
+		Info.info("Verifying :"+t)
+    if hasIndex(globals.G_rainbow,md5(t)) then return Info.info(t+" is already in the rainbow tables")
+    Info.info("Passed...Adding to the rainbow tables")
+	end if
+  // Add to rainbow table files (password:hash format)
+  f=self.loadLastFile
+  if f isa Error then return f
+  p=[]
+  plainPasswords=[]
+	if hasIndex(self.isNum,t[0]) then
+    m=md5(t)
+    globals.G_rainbow[m]=t
+		push(p,t+":"+m)
+    push(plainPasswords,t)
+  else
+    s=capitalize(t)
+    m=md5(s)
+    globals.G_rainbow[m]=s
+    push(p,s+":"+m)
+    s=lowerFirst(t)
+    m=md5(s)
+    globals.G_rainbow[m]=s
+    push(p,s+":"+m)
+    // For list files: add both cases if first char is a letter
+    if t[0].matches("[a-z]") then
+      push(plainPasswords,t)
+      push(plainPasswords,capitalize(t))
+    else if t[0].matches("[A-Z]") then
+      push(plainPasswords,t)
+      push(plainPasswords,lowerFirst(t))
+    else
+      push(plainPasswords,t)
+    end if
+	end if
+	if not get_content(f) then
+		set_content(f,join(p,char(10)))
+	else
+    r=join(p,char(10))
+		if (val(size(f))+len(r))>159900 then
+			sys=System.getSystem
+			f=Command.touch(sys.obj,[path(sys.dir.rainbow)+"/r"+(len(get_files(sys.dir.rainbow))+1)])
+			if f isa Error then return
+			set_content(f,r)
+		else
+			set_content(f,get_content(f)+char(10)+r)
+		end if
+	end if
+  // Add to list files (plain password format)
+  listFile=self.loadLastListFile
+  if listFile then
+    plainText=join(plainPasswords,char(10))
+    if not get_content(listFile) then
+      set_content(listFile,plainText)
+    else
+      if (val(size(listFile))+len(plainText))>159900 then
+        sys=System.getSystem
+        listFile=Command.touch(sys.obj,[path(sys.dir.list)+"/list"+(len(get_files(sys.dir.list))+1)])
+        if not listFile isa Error then set_content(listFile,plainText)
+      else
+        set_content(listFile,get_content(listFile)+char(10)+plainText)
+      end if
+    end if
+  end if
+  return true
+end function
+Crack.doDecipher=function(D,h)
+  // Validate hash format
+  if not h.matches("^[a-f0-9]{32}$") then
+    Info.warning(h+" is not a valid MD5 hash format")
+    return Error.set("","",true)
+  end if
+  r=decipher(D,h)
+  if not r then
+    Info.warning(h+" is not found in the game database - this is a fake hash")
+    return Error.set("","",true)
+  end if
+  return r
+end function
+// Crack MD5 hash using rainbow tables or decipher
+// Args: h (MD5 hash), a (allow decipher, default=true)
+// Returns: password if found, hash if not MD5 format, null/<fakehash> otherwise
+Crack._tryDecipher=function(h,addToRainbow=true)
+	if not Library.haveCrypto then return null
+	if globals.G_crypto then D=globals.G_crypto else D=Library.crypto
+	p=self.doDecipher(D,h)
+	if p isa Error then return "<fakehash>"
+	if addToRainbow then self.addPassword(p)
+	return p
+end function
+Crack.hash=function(h,a=true)
+  // Validate hash format (32 hex chars)
+  if not h.matches("^[a-f0-9]{32}$") then return h
+	// Check if rainbow table files exist
+	s=System.getSystem
+	if not s or not s.dir.rainbow then
+    if Gui.yesNo("Rainbow tables not found...use decipher?") then
+      addToRainbow=Gui.yesNo("Add this password to the rainbow tables?")
+      return self._tryDecipher(h,addToRainbow)
+    end if
+  end if
+	// Use fast index-based lookup if available
+	if globals.G_rainbowIndex then
+		password=self.findPassword(h)
+		if password then return password
+	else
+		// Fall back to in-memory cache (old method)
+		if not globals.G_rainbow then globals.G_rainbow={}
+		if hasIndex(globals.G_rainbow,h) then return globals.G_rainbow[h]
+		// Try stream-based lookup and build index if possible
+		password=self.findPassword(h)
+		if password then
+			// Cache it for next time
+			globals.G_rainbow[h]=password
+			return password
+		end if
+	end if
+	// Not found - offer decipher option
+	if a then
+		return self._tryDecipher(h)
+	else
+		if Gui.yesNo("Password not found in the rainbow tables...use decipher?") then
+			addToRainbow=Gui.yesNo("Add this password to the rainbow tables?")
+			return self._tryDecipher(h,addToRainbow)
+		end if
+	end if
+	return h
+end function
+Crack.edit=function(Obj)
+  if not globals.G_rainbow then
+    Info.info("Loading rainbow tables...")
+    self.load
+  end if
+  // Load passwords into map once for instant lookup
+  passwordMap={}
+  passwords=self.getPasswords
+  for p in passwords;passwordMap[p]=p;end for
+	while true
+		CH=[green("What action would you like to perform?")]
+		push(CH,yellow("Check if a password is already in the rainbow tables"))
+		push(CH,yellow("Add a password to the rainbow tables"))
+    push(CH,yellow("Password Notes"))
+		push(CH,iyellow("Forget it"))
+		UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true)
+		if UCH==len(CH)-1 then break
+		if UCH==1 then
+			t=Gui.input({"text":"Enter a password to check"})
+			if t==null then
+				Info.warning("You didn't enter anything...")
+				continue
+			end if
+			Utility.pressQ
+  Info.info("Testing...")
+			q=null
+      if hasIndex(passwordMap,t) then
+        Info.info("Bingo we have a winner :-)")
+        q=1
+      end if
+			if not q then
+				if Gui.yesNo("Password was not found in the database...add it?") then
+					self.addPassword(t)
+					// Update passwordMap with new password variants
+					if t[0].matches("[a-z]") then
+						passwordMap[t]=t
+						passwordMap[capitalize(t)]=capitalize(t)
+					else if t[0].matches("[A-Z]") then
+						passwordMap[t]=t
+						passwordMap[lowerFirst(t)]=lowerFirst(t)
+					else
+						passwordMap[t]=t
+					end if
+				end if
+			end if
+		else if UCH==2 then
+			t=Gui.input({"text":"Enter a password to add to the rainbow tables"})
+			if t==null then
+				Info.warning("You didn't enter anything...")
+				continue
+			end if
+			self.addPassword(t,1)
+			// Update passwordMap with new password variants
+			if t[0].matches("[a-z]") then
+				passwordMap[t]=t
+				passwordMap[capitalize(t)]=capitalize(t)
+			else if t[0].matches("[A-Z]") then
+				passwordMap[t]=t
+				passwordMap[lowerFirst(t)]=lowerFirst(t)
+			else
+				passwordMap[t]=t
+			end if
+			f=self.loadLastFile
+      if f isa Error then return f
+			_ct=get_content(f);if f and not _ct then
+				Info.info("You don't have any passwords to compare")
+				continue
+			end if
+			Info.info("checking...")
+			z=split(_ct,char(10))
+			i=0
+			d=null
+			sys=System.getSystem
+			for l in z
+				if not hasIndex(passwordMap,l) then continue
+				d=File(sys.computer,path(sys.dir.payload)+"/duplicates.txt")
+				if not d then
+					d=Command.touch(sys.obj,[path(sys.dir.payload)+"/duplicates.txt"])
+					if d isa Error then return
+				end if
+				_ct=get_content(d);if not _ct then set_content(d,l) else set_content(d,_ct+char(10)+l)
+				i+=1
+        remove(z,__l_idx)
+			end for
+			for b in z;self.addPassword(b);end for
+			if i==0 then
+				Info.info("You have 0 duplicate passwords")
+			else
+				print red("You have "+i+" duplicate passwords")
+				print red("They have been saved to:"+split(path(d),join("/")[:-1],"/")+"/duplicates.txt")
+			end if
+    else if UCH==3 then
+      print green("For every password added the password count will increase by 2")
+      print green("unless the password starts with a number {0-9} at wich case will")
+      print green("only increase by 1. The reason is as follows: when adding a new")
+      print green("password there will be 2 passwords added")
+      print green(Man.example+"test will result in {Test:md5 and test:md5")
+      print green("If the password starts with a number there will only be one password")
+      print green("added")
+      print green(Man.example+"1TeSt will result in {1TeSt:md5}")
+		end if
+	end while
+end function
+Crack.password=function(Obj,f)
+	if not has_permission(f,"r") then return Error.set("Don't have read permissions to [ "+name(f)+" ]")
+	labels={"passwd":"User","Bank.txt":"Bank Account","Mail.txt":"EMail Account"}
+	if not hasIndex(labels,name(f)) then return true
+	label=labels[name(f)]
+	z=[]
+	for l in split(get_content(f),char(10))
+		if not l then continue
+		l=split(trim(l),":")
+		if not len(l)==2 then continue
+		r=l[0]
+		x=l[1]
+		print blue("Cracking MD5 hash for "+green(label+": [ "+r+" ]"))
+		p=Crack.hash(x)
+		if not p then
+			if not Library.haveCrypto then return
+			if globals.G_crypto then D=globals.G_crypto else D=Library.crypto
+			if not Gui.yesNo("The password is not in the dictionary, would you like to use decipher?") then continue
+			p=Crack.doDecipher(D,x)
+			if not p or p isa Error then continue
+		end if
+		push(z,blue("The password for "+label+" "+white(r)+" is [ "+password(p)+" ]"))
+		if label=="User" and r=="root" then
+			Cache.add(Obj,p)
+			Cache.save
+		end if
+	end for
+	if z then print join(z,char(10))
+	return true
+end function

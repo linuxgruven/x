@@ -1,0 +1,213 @@
+// Man page for set
+manSet="SET(1)                           X Shell Manual                           SET(1)
+
+<b>NAME</b>
+    set - File and system modification utilities
+<b>SYNOPSIS</b>
+    <b>set -a</b>
+    <b>set -n</b> [[MESSAGE]]
+    <b>set -b -d</b> [[COUNT]] ([LENGTH]) ([PATH])
+    <b>set -b -n</b> [[NAME]] ([COUNT]) ([LENGTH]) ([PATH])
+    <b>set -b -m</b> [[MESSAGE]] ([COUNT]) ([LENGTH]) ([PATH])
+    <b>set -l</b>
+    <b>set -t</b> [[USER]] ([PASSWORD])
+    <b>set -u</b>
+    <b>set -s</b>
+    <b>set -e</b>
+    <b>set -f</b> [[PASSWORD]]
+    <b>set -z</b>
+    <b>set -x</b>
+    <b>set -o -f</b>
+    <b>set -o -d</b>
+    <b>set -g -f</b>
+    <b>set -g -d</b>
+    <b>set -c -f</b>
+    <b>set -c -d</b>
+    <b>set -i</b>
+    <b>set -p</b>
+    <b>set -q</b>
+    <b>set -rn</b> (TARGET_[PATH]) ([LENGTH])
+    <b>set --senc</b> [-u USER] [-P PASSWORD] [-p PORT] [--remove]
+<b>DESCRIPTION</b>
+    Comprehensive file and system modification toolkit. Creates notes, file bombs,
+    ghost accounts, and manages permissions. Handles owner, group, and chmod
+    operations. Creates archives and manipulates system settings. Includes
+    destructive system locking capabilities.
+<b>OPTIONS</b>
+    <b>-a</b>
+    Unlock all files
+    Remove all locks
+
+    <b>-n ([MESSAGE])</b>
+    Leave note in directory
+    Optional custom message
+
+    <b>-b -d ([COUNT]) ([LENGTH]) ([PATH])</b>
+    File bomb with defaults
+    Create multiple dummy files
+
+    <b>-b -n ([NAME]) ([COUNT]) ([LENGTH]) ([PATH])</b>
+    File bomb custom name
+    Named file bombing
+
+    <b>-b -m ([MESSAGE]) ([COUNT]) ([LENGTH]) ([PATH])</b>
+    File bomb custom message
+    Message-based bombing
+
+    <b>-l</b>
+    Toggle system logging
+    Enable or disable logs
+
+    <b>-t ([USER]) ([PASSWORD])</b>
+    Create ghost account
+    Default: tux / h4ck
+
+    <b>-u</b>
+    Edit users
+    User management
+
+    <b>-s</b>
+    Scriptkiddy website
+    Create website.html
+
+    <b>-e</b>
+    Email user settings
+    Manage email defaults
+    Prerequisites: shell, main, proxy, or pivot
+
+    <b>-f ([PASSWORD])</b>
+    Password-protected archive
+    Create encrypted archive from text
+    Prerequisites: shell, main, proxy, or pivot
+
+    <b>-z</b>
+    Zip archive from text
+    Create zip file
+    Prerequisites: shell, main, proxy, or pivot
+
+    <b>-x</b>
+    Hard lock system
+    Remove home, /bin, /usr/bin, passwd
+    <color=#ff4b4b>WARNING: DO NOT RUN ON HOME SYSTEM</color>
+    <color=#ff4b4b>THIS WILL BRICK YOUR SYSTEM</color>
+
+    <b>-o -f</b>
+    Change file owner
+    Modify ownership
+    Prerequisites: shell, main, proxy, or pivot
+
+    <b>-o -d</b>
+    Change directory owner
+    Recursive ownership
+    Prerequisites: shell, main, proxy, or pivot
+
+    <b>-g -f</b>
+    Change file group
+    Modify group ownership
+    Prerequisites: shell, main, proxy, or pivot
+
+    <b>-g -d</b>
+    Change directory group
+    Recursive group change
+    Prerequisites: shell, main, proxy, or pivot
+
+    <b>-c -f</b>
+    Change file permissions
+    Chmod file
+    Prerequisites: shell, main, proxy, or pivot
+
+    <b>-c -d</b>
+    Change directory permissions
+    Chmod directory
+    Prerequisites: shell, main, proxy, or pivot
+
+    <b>-i</b>
+    Set different LAN IP
+    Change host IP
+    Prerequisites: shell, main, proxy, or pivot
+
+    <b>-p</b>
+    Chmod payload directory
+    Guest access to payload
+
+    <b>-q</b>
+    Create apt sources.txt
+    Set to default
+
+    <b>-rn ([PATH]) ([LENGTH])</b>
+    Rename all files randomly
+    Default: current dir, length 20
+
+    <b>--senc [-u USER] [-P PASSWORD] [-p PORT] [--remove]</b>
+    Setup SSH encryption (S1 or R1)
+    -u: SSH username
+    -P: SSH password
+    -p: SSH port (default: 22)
+    --remove: Remove encryption
+    Prerequisites: shell, main, proxy, or pivot
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># File Operations</color>
+    <b>set -a</b>
+    Unlock all files
+
+    <b>set -n</b>
+    Leave default note
+
+    set -n Hacked by x
+    Custom note message
+
+    <color=#e4ff34># File Bombing</color>
+    <b>set -b -d 100 30 /home/victim/</b>
+    100 files, 30 char names
+
+    <b>set -b -n junk 50 15</b>
+    Named file bomb
+
+    set -b -m x was here 200 40
+    Message file bomb
+
+    <color=#e4ff34># User Management</color>
+    <b>set -t</b>
+    Create tux ghost account
+
+    <b>set -t admin p4ssw0rd</b>
+    Custom ghost account
+
+    <b>set -u</b>
+    Edit users
+
+    <color=#e4ff34># Permissions</color>
+    <b>set -o -f</b>
+    Change file owner
+
+    <b>set -g -d</b>
+    Change directory group
+
+    <b>set -c -f</b>
+    Chmod file
+
+    <color=#e4ff34># System Modification</color>
+    <b>set -l</b>
+    Toggle logging
+
+    <b>set -i</b>
+    Change LAN IP
+
+    <b>set -rn /home/victim 25</b>
+    Randomize filenames
+
+    <color=#e4ff34># Encryption</color>
+    <b>set --senc</b>
+    Setup encryption (prompts for creds)
+
+    <b>set --senc -u root -P password</b>
+    Setup with credentials
+
+    <b>set --senc --remove</b>
+    Remove encryption
+
+    <b>set --senc -u admin -p 22</b>
+    Prompts for password only
+<b>SEE ALSO</b>
+    <b>chmod</b>, <b>chown</b>, <b>sys</b>"

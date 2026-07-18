@@ -1,0 +1,18 @@
+// shell — scan IP, grab best shell exploit, run ifconfig
+// Usage: @shell <public_ip>
+// Example: @shell 91.0.0.1
+_print <color=#00bfff>=== Shell Test ===</color>
+_print yellow(Target: ) $1
+_print cyan(Scanning...)
+_setvar(scanResult, _scan $1)
+_setvar(portlist, _getvar(scanResult).port_info)
+_print green(Scan: ) len(portlist) white( port(s) found)
+_print cyan(Getting best shell exploit...)
+_shell $1
+if _holduser != root
+  _print cyan(Taking root...)
+  _hold su
+end if
+_print cyan(Running ifconfig on shell...)
+_hold ifconfig
+_print <color=#00bfff>=== done ===</color>

@@ -1,0 +1,5 @@
+// =============================================================================
+// PRINT
+// Display text output joined with spaces in yellow.
+// =============================================================================
+Command.print=function(argv);print yellow(join(argv," "));end function

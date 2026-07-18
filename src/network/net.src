@@ -1,0 +1,3320 @@
+// =============================================================================
+// NET
+// Network operations library; wraps scan, port, traceroute, DNS, ARP, and whois.
+// =============================================================================
+Net={
+  "FWPorts":{},
+  "buffer":""
+}
+//Service port and library mapping table
+Net.services={
+  0:{
+    "port":0,
+    "lib":"kernel_router.so",
+    "name":"router"
+    },
+  8080:{
+    "port":8080,
+    "lib":"kernel_router.so",
+    "name":"http"
+  },
+  22:{
+    "port":22,
+    "lib":"libssh.so",
+    "name":"ssh"
+  },
+  21:{
+    "port":21,
+    "lib":"libftp.so",
+    "name":"ftp"
+  },
+  80:{
+    "port":80,
+    "lib":"libhttp.so",
+    "name":"http"
+  },
+  6667:{
+    "port":6667,
+    "lib":"libchat.so",
+    "name":"chat"
+  },
+  1222:{
+    "port":1222,
+    "lib":"librshell.so",
+    "name":"rshell"
+  },
+  1542:{
+    "port":1542,
+    "lib":"librepository.so",
+    "name":"repository"
+  },
+  37777:{
+    "port":37777,
+    "lib":"libcam.so",
+    "name":"cam"
+  },
+  141:{
+    "port":141,
+    "lib":"libsql.so",
+    "name":"bank_account - (SQL)"
+  },
+  3306:{
+    "port":3306,
+    "lib":"libsql.so",
+    "name":"employees/students/criminals - (SQL)"
+  },
+  3307:{
+    "port":3307,
+    "lib":"libsql.so",
+    "name":"employees/criminals - (SQL)"
+  },
+  25:{
+    "port":25,
+    "lib":"libsmtp.so",
+    "name":"smtp"
+  },
+  5555:{
+    "port":5555,
+    "lib":"libadb.so",
+    "name":"adb"
+  },
+  1883:{
+    "port":1883,
+    "lib":"libsmartappliance.so",
+    "name":"app"
+  }
+}
+// Function: hasInternet
+// Purpose: Check if network connection is active and available
+// Args:
+//   Obj - Session object with .computer and .object properties
+// Returns: Boolean true if connected, Warning if no network
+Net.hasInternet=function(Obj)
+  //If working with file object, network not required
+  if typeof(Obj.object)=="file" then return true
+  if not is_network_active(Obj.computer) then return Warning.set(Text.nonet)
+  return true
+end function
+// Function: bounceLanFile
+// Purpose: Rotate through router/gateway pairs from file for network bouncing
+// Args:
+//   Obj - Session object with .computer property
+//   argv - Arguments array [filename, optional wait_time]
+// Returns: null (infinite loop) or Error/Warning
+Net.bounceLanFile=function(Obj,argv)
+  if self.hasInternet isa Warning then return
+  c=Obj.computer
+  //Verify using ethernet, not wifi
+  if active_net_card(c)=="WIFI" then return Warning.set("Can't use this with a wifi connection, try the -w flag")
+  if not argv then return Error.set("No file passed")
+  x=argv[0]
+  f=Io._getFile(Obj,x)
+  if f isa Error then return
+  t=split(get_content(f),char(10))
+  //Array to hold router/gateway pairs
+  z=[]
+  for _ in t
+    g=_
+    i=g
+    p=split(i,"\.")
+    i=join(p[:-1],".")
+    push(z,{
+      "router":i,
+      "gateway":g
+    })
+  end for
+  //Default wait time between bounces (seconds)
+  w=4
+  if len(argv)>2 then a=val(argv[1]) else a=null
+  if a isa number then w=a
+  //Gateway list range for random selection
+  min=0
+  max=len(t)-1
+  //IP last octet range for random generation
+  minr=2
+  maxr=255
+  Info.info("Use Ctrl+C to kill proccess")
+  //Infinite bounce loop
+  while 1;i=floor(rnd*(max-min+1)+min);connect_ethernet(c,"eth0",z[i].router+"."+floor(rnd*(maxr-minr+1)+minr),z[i].gateway);wait w;end while
+end function
+// Function: makeConnection
+// Purpose: Establish SSH or FTP connection to remote service
+// Args:
+//   Obj - Session object with .shell property
+//   argv - Arguments object with .rest array and .p port
+//   w - Service type ("ssh" or "ftp"), default "ssh"
+// Returns: Shell object, or map with shell and IP for FTP, or Error
+Net.makeConnection=function(Obj,argv,w="ssh")
+  c=split(argv.rest[0],"@")
+  if not len(c)>=2 then return Error.set("Invalid user format, use user@ip")
+  u=c[0]
+  if not u then return Error.set("Missing user name")
+  //Extract and resolve IP address
+  i=Net.lookup(c[1])
+  if not i then return Error.set("Invalid ip: "+c[1])
+  if not argv.P then
+    p=Gui.inputPass("Enter user password")
+    if not p or p=="" then return Error.set("Password is required for SSH connection")
+  else
+    p=argv.P
+  end if
+  if not p then return Error.set("Missing user password")
+  Info.info("Connecting...")
+  s=connect_service(Obj.shell,i,argv.p,u,p,w)
+  if s isa string then return Error.set(s)
+  if not s then return Error.set("Failed to connect")
+  if w=="ftp" then return {"shell":s,"public_ip":i,"port":argv.p} else return s
+end function
+// Function: wifiBouncer
+// Purpose: Rotate through WiFi networks from file for connection bouncing
+// Args:
+//   Obj - Session object with .computer property
+//   argv - Arguments array [filename, optional wait_time]
+// Returns: null (infinite loop) or Error/Warning
+Net.wifiBouncer=function(Obj,argv)
+  if self.hasInternet isa Warning then return
+  c=Obj.computer
+  //Verify using wifi, not ethernet
+  if active_net_card(c)=="ETHERNET" then return Warning.set("Can't use this with a lan connection, try the -l flag")
+  if not argv then return Error.set("Invalid params")
+  x=argv[0]
+  f=Io._getFile(Obj,x)
+  if f isa Error then return
+  t=split(get_content(f),char(10))
+  if not t then return Error.set("File is empty")
+  //Array to hold wifi credentials
+  z=[]
+  for _ in t
+    a=split(_,"\|")
+    if len(a)<3 then
+      a=split(_,"-")
+      if len(a)!=3 then continue
+    end if
+    push(z,{
+      "PASS":a[2],
+      "ESSID":a[1],
+      "BSSID":a[0]
+    })
+  end for
+  //Default wait time between bounces (seconds)
+  w=4
+  if len(argv)>=2 then a=val(argv[1]) else a=null
+  if a isa number then w=a
+  //Network list range for random selection
+  min=0
+  max=len(t)-1
+  Info.info("Use Ctrl+C to kill proccess")
+  //Infinite bounce loop
+  while 1;i=floor(rnd*(max-min+1)+min);connect_wifi(c,"wlan0",z[i].BSSID,z[i].ESSID,z[i].PASS);wait w;end while
+end function
+// Function: _loadWifiCreds
+// Purpose: Load wifi_creds file into map keyed by BSSID
+// Format: BSSID|ESSID|PASSWORD|clean/burned
+// Args:
+//   Obj - Session object with .computer, .dir properties
+// Returns: map keyed by BSSID with {BSSID,ESSID,PASS,flag} values, or null
+Net._loadWifiCreds=function(Obj)
+  credPath=path(Obj.dir.data)+"/wifi_creds"
+  f=File(Obj.computer,credPath)
+  if not f then return null
+  t=split(get_content(f),char(10))
+  if not t then return null
+  db={}
+  for _ in t
+    a=split(_,"\|")
+    if len(a)<3 then continue
+    flag="clean"
+    if len(a)>=4 then flag=a[3]
+    db[a[0]]={"BSSID":a[0],"ESSID":a[1],"PASS":a[2],"flag":flag}
+  end for
+  return db
+end function
+// Function: _saveWifiCreds
+// Purpose: Save wifi creds map to file
+// Args:
+//   Obj - Session object
+//   db - map keyed by BSSID with {BSSID,ESSID,PASS,flag} values
+// Returns: credPath on success, Error on failure
+Net._saveWifiCreds=function(Obj,db)
+  credPath=path(Obj.dir.data)+"/wifi_creds"
+  lines=[]
+  for k in indexes(db);e=db[k];push(lines,e.BSSID+"|"+e.ESSID+"|"+e.PASS+"|"+e.flag);end for
+  f=File(Obj.computer,credPath)
+  if f then delete(f)
+  touch(Obj.computer,path(Obj.dir.data),"wifi_creds")
+  f=File(Obj.computer,credPath)
+  if not f then return Error.set("Failed to create credentials file")
+  set_content(f,join(lines,char(10)))
+  return credPath
+end function
+// Function: wifiHopInit
+// Purpose: Crack all visible WiFi networks and save credentials to data file
+// Args:
+//   Obj - Session object with .net.wlan, .user, .computer properties
+// Returns: Credentials file path on success, Error/Warning on failure
+Net.wifiHopInit=function(Obj)
+  if not Obj.net.hasWifi then return Warning.set("Wifi is not active")
+  w=Obj.net.wlan
+  if not w or len(w)==0 then return Error.set("No WiFi networks found")
+  if not Library.haveCrypto then return
+  if globals.G_crypto then D=globals.G_crypto else D=Library.crypto
+  //Load existing credentials to skip already-cracked networks
+  existing=Net._loadWifiCreds(Obj)
+  if not existing then existing={}
+  //Start monitor mode
+  airmon(D,"start","wlan0")
+  newCount=0
+  _len=len(w)
+  i=0
+  while i<_len
+    n=w[i]
+    bssid=n[0]
+    signal=n[1]
+    essid=n[2]
+    //Skip if already cracked
+    if hasIndex(existing,bssid) then
+      Info.info("Skipping "+essid+" (already cracked)")
+      i=i+1
+      continue
+    end if
+    //Calculate ACK count from signal strength
+    a=ceil(300000/(to_int(signal.replace("%",""))+15))
+    Info.info("Cracking "+essid+" ("+bssid+") signal:"+signal+" ACKs:"+a+"...")
+    //Inject packets
+    aireplay(D,bssid,essid,a)
+    //Crack captured handshake
+    p=aircrack(D,"/home/"+Obj.user.name+"/file.cap")
+    //Clean up capture file
+    f=File(Obj.computer,path(Obj.user.home)+"/file.cap")
+    if f then delete(f)
+    if p!="null" and p then
+      Info.info("Cracked "+essid+": "+p,"+")
+      existing[bssid]={"BSSID":bssid,"ESSID":essid,"PASS":p,"flag":"clean"}
+      newCount=newCount+1
+    else
+      Info.error("Failed to crack "+essid)
+    end if
+    i=i+1
+  end while
+  if len(existing)==0 then return Error.set("Failed to crack any WiFi networks")
+  r=Net._saveWifiCreds(Obj,existing)
+  if r isa Error then return
+  Info.info("Saved "+len(existing)+" WiFi credentials ("+newCount+" new)","+")
+  return r
+end function
+// Function: wifiHop
+// Purpose: Load saved WiFi credentials and bounce between clean networks
+// Args:
+//   Obj - Session object with .computer, .dir properties
+//   waitTime - Seconds between hops (default 3)
+// Returns: null (infinite loop) or Error/Warning
+Net.wifiHop=function(Obj,waitTime=3)
+  if not Obj.net.hasWifi then return Warning.set("Wifi is not active")
+  c=Obj.computer
+  if active_net_card(c)=="ETHERNET" then return Warning.set("Can't hop on a LAN connection")
+  //Load credentials
+  db=Net._loadWifiCreds(Obj)
+  if not db then
+    Info.info("No WiFi credentials found, running init...")
+    r=Net.wifiHopInit(Obj)
+    if r isa Error or r isa Warning then return
+    db=Net._loadWifiCreds(Obj)
+    if not db then return Error.set("Failed to load credentials")
+  end if
+  //Filter to clean networks only
+  z=[]
+  for k in indexes(db);if db[k].flag=="clean" then push(z,db[k]);end for
+  if len(z)==0 then return Error.set("No clean networks available. Use 'iwlist hop list' or 'iwlist hop revive'")
+  //Start hopping
+  max=len(z)
+  last=-1
+  Info.info("Hopping between "+max+" clean networks ("+waitTime+"s interval). Ctrl+C to stop.")
+  while 1
+    i=floor(rnd*max)
+    if i==last and max>1 then i=(i+1)%max
+    last=i
+    Info.info("Hopping to "+z[i].ESSID+"...")
+    connect_wifi(c,"wlan0",z[i].BSSID,z[i].ESSID,z[i].PASS)
+    wait waitTime
+  end while
+end function
+// Function: wifiHopBurn
+// Purpose: Mark a network as burned so it won't be used during hopping
+// Args:
+//   Obj - Session object
+//   essid - ESSID of network to burn (optional, burns current if omitted)
+// Returns: null on success, Error on failure
+Net.wifiHopBurn=function(Obj,essid=null)
+  db=Net._loadWifiCreds(Obj)
+  if not db then return Error.set("No wifi_creds file. Run 'iwlist hop init' first")
+  if not essid then
+    //Burn current network
+    r=get_router(Obj.computer)
+    if not r then return Error.set("Not connected to any WiFi network")
+    bssid=r.bssid_name
+    if not hasIndex(db,bssid) then return Error.set("Current network not in arsenal")
+    db[bssid].flag="burned"
+    Net._saveWifiCreds(Obj,db)
+    Info.info("Burned "+db[bssid].ESSID+" — will not be used for hopping","!")
+    return
+  end if
+  //Find by index or ESSID
+  found=null
+  n=to_int(essid)
+  if n isa number and n>=0 then
+    keys=db.indexes
+    if n<len(keys) then found=keys[n]
+  end if
+  if not found then
+    for k in db.indexes
+      if lower(db[k].ESSID)==lower(essid) then
+        found=k
+        break
+      end if
+    end for
+  end if
+  if not found then return Error.set("Network '"+essid+"' not found in arsenal")
+  db[found].flag="burned"
+  Net._saveWifiCreds(Obj,db)
+  Info.info("Burned "+db[found].ESSID+" — will not be used for hopping","!")
+end function
+// Function: wifiHopRevive
+// Purpose: Un-burn a network, making it available for hopping again
+// Args:
+//   Obj - Session object
+//   essid - ESSID to revive, or "all"
+// Returns: null on success, Error on failure
+Net.wifiHopRevive=function(Obj,essid=null)
+  db=Net._loadWifiCreds(Obj)
+  if not db then return Error.set("No wifi_creds file. Run 'iwlist hop init' first")
+  if essid=="all" then
+    ct=0
+    for k in db.indexes
+      if db[k].flag=="burned" then
+        db[k].flag="clean"
+        ct=ct+1
+      end if
+    end for
+    if ct==0 then return Info.info("No burned networks to revive")
+    Net._saveWifiCreds(Obj,db)
+    Info.info("Revived "+ct+" networks","+")
+    return
+  end if
+  if not essid then return Error.set("Usage: iwlist hop revive <ESSID|INDEX|all>")
+  found=null
+  n=to_int(essid)
+  if n isa number and n>=0 then
+    keys=db.indexes
+    if n<len(keys) then found=keys[n]
+  end if
+  if not found then
+    for k in db.indexes
+      if lower(db[k].ESSID)==lower(essid) then
+        found=k
+        break
+      end if
+    end for
+  end if
+  if not found then return Error.set("Network '"+essid+"' not found in arsenal")
+  if db[found].flag=="clean" then return Info.info(essid+" is already clean")
+  db[found].flag="clean"
+  Net._saveWifiCreds(Obj,db)
+  Info.info("Revived "+db[found].ESSID,"+")
+end function
+// Function: wifiHopList
+// Purpose: Display all networks in the arsenal with their status
+// Args:
+//   Obj - Session object
+// Returns: null
+Net.wifiHopList=function(Obj)
+  db=Net._loadWifiCreds(Obj)
+  if not db or len(db)==0 then return Error.set("No wifi_creds file. Run 'iwlist hop init' first")
+  clean=0
+  burned=0
+  idx=0
+  for k in db.indexes
+    e=db[k]
+    if e.flag=="clean" then
+      print("  [" +idx+"] <color=#1EFF00>[clean]</color>  "+e.ESSID+" ("+e.BSSID+")")
+      clean=clean+1
+    else
+      print("  ["+idx+"] <color=#FF0000>[burned]</color> "+e.ESSID+" ("+e.BSSID+")")
+      burned=burned+1
+    end if
+    idx=idx+1
+  end for
+  Info.info(clean+" clean, "+burned+" burned")
+end function
+// Function: lanBouncer
+// Purpose: Rotate LAN IP address within subnet for stealth operations
+// Args:
+//   Obj - Session object with .computer property
+//   argv - Arguments array [wait_time, optional -l min, -x max]
+// Returns: null (infinite loop) or Warning
+Net.lanBouncer=function(Obj,argv)
+  if self.hasInternet isa Warning then return
+  c=Obj.computer
+  //Verify using ethernet, not wifi
+  if active_net_card(c)=="WIFI" then return Warning.set("Can't use this with a wifi connection, try the -w flag")
+  //Helper function to parse min/max IP range from arguments
+  getParams=function(arg)
+    //Default range: 2-255 (avoid .0 .1 .255 special IPs)
+    v={
+      "min":2,
+      "max":255
+    }
+    for i in arg
+      if i=="-l" then
+        v["min"]=to_int(arg[1])
+      else if i =="-x" then
+        v["max"]=to_int(arg[1])
+      end if
+    end for
+    return v
+  end function
+  v=getParams(argv)
+  //Default wait time between bounces (seconds)
+  w=4
+  if argv then a=val(argv[0]) else a=null
+  if a isa number then w=a
+  g=network_gateway(c)
+  i=g
+  p=split(i,"\.")
+  i=join(p[:-1],".")
+  Info.info("Use Ctrl+C to kill proccess")
+  //Infinite bounce loop
+  while 1;connect_ethernet(c,"eth0",i+"."+floor(rnd*(v.max-v.min+1)+v.min),g);wait w;end while
+end function
+// Function: checkChange
+// Purpose: Monitor and respond to network configuration changes
+// Args:
+//   Obj - Session object with .computer, .meta, .net properties
+// Returns: null (updates Obj metadata)
+Net.checkChange=function(Obj)
+  if Obj.computer.local_ip==Obj.meta.local_ip and active_net_card(Obj.computer)==Obj.net.active_net_card then return
+  //If public IP is 0.0.0.0, trigger failsafe recovery
+  if public_ip_pc(Obj.computer)=="0.0.0.0" then Rshell.failSafe(Obj.computer)
+  Obj.meta={
+    "public_ip":public_ip_pc(Obj.computer),
+    "local_ip":Obj.computer.local_ip
+  }
+  Obj.machineType=System.getMachine(Obj,Obj.meta.local_ip)
+  //Reinitialize network configuration
+  Obj.net=self.initNetwork(Obj)
+end function
+// Function: nslookup
+// Purpose: Perform DNS lookup on domain names, passthrough IPs
+// Args:
+//   i - Domain name or IP address string
+// Returns: IP address string
+Net.nslookup=function(i);if i[:3]=="www" then return nslookup(i) else return i;end function
+// Function: getRandomRouter
+// Purpose: Get random router object from network
+// Args: None (uses self.rip for random IP generation)
+// Returns: Router object
+Net.getRandomRouter=function
+  r=null
+  while not r;r=get_router(self.rip);end while
+  return r
+end function
+// Function: hunt
+// Purpose: Hunt and download specific libraries across network infrastructure
+// Args:
+//   Obj - Session object
+//   argv - Arguments array with flags:
+//     -c: Count limit -p: Port -v: Version -l: LAN file -f: Bounce file
+//     -n: Network -b: Library name -e: Exploit -d: Download -s: Scan -k: Kill
+// Returns: Library info or Error
+Net.hunt=function(Obj,argv)
+	if not argv then return Man.help(["hunt"])
+  Arg1=pull(argv)
+  _p=ArgumentParser.init
+  _p.addArgument("c",false,"storeNumber")
+  _p.addArgument("p",false,"storeNumber")
+  _p.addArgument("v",false,"store")
+  _p.addArgument("l",false,"store")
+  _p.addArgument("f",false,"store")
+  _p.addArgument("n",false,"store")
+  _p.addArgument("b",false,"store")
+  _p.addArgument("e",false,"store")
+  _p.addArgument("d",false,"flag")
+  _p.addArgument("s",false,"flag")
+  _p.addArgument("k",false,"flag")
+  _p.addArgument("x",false,"store")
+  _p.addArgument("m",false,"flag")
+  _p.addArgument("r",false,"flag")
+  _p.addArgument("t",false,"storeNumber")
+  _p.addArgument("I",false,"store")
+  _p.addArgument("L",false,"store")
+  _p.addArgument("R",false,"flag")
+  _p.addArgument("S",false,"flag")
+  _p.addArgument("F",false,"storeNumber")  // stop after N players found
+  _p.addArgument("q",false,"storeNumber")  // min rank required to attempt
+  _p.addArgument("Q",false,"flag")         // quiet mode
+  argv=_p.parseArgs("hunt",argv)
+  if argv isa Error then return
+  argv=_p.checkRedirect(Obj,"hunt",argv)
+  if argv isa Error then return
+  argv=_p.parsePath(Obj,argv)
+  if argv isa Error then return
+  //Helper function: Find or download a library on a remote system via exploit chain
+  //Args: target (router/object), ip (target IP), b (lib name), v (version or null)
+  //      opts: {download:bool, silent:bool, checkPorts:bool, preCacheMeta:bool}
+  _huntLib=function(target,ip,b,v,opts)
+    if not opts then opts={}
+    doDownload=hasIndex(opts,"download") and opts.download
+    isSilent=hasIndex(opts,"silent") and opts.silent
+    if doDownload then
+      if v then Info.info("Attempting to download "+b+" version "+v+"...") else Info.info("Attempting to download "+b+"...")
+    else
+      if v then Info.info("looking for "+b+" version "+v+"...") else Info.info("Looking for "+b+"...")
+    end if
+    if hasIndex(opts,"checkPorts") and opts.checkPorts then
+      if not used_ports(target) then return
+    end if
+    for m in Exploit.extract(target,ip)
+      if m isa Error then continue
+      if poll_input=="q" then return
+      if hasIndex(opts,"preCacheMeta") and opts.preCacheMeta then
+        if not Exploit.haveAlready(m.metaLib) then
+          Info.info("Adding "+lib_name(m.metaLib)+":"+version(m.metaLib))
+          Exploit.headless(m.metaLib)
+        else if Exploit.canScan(m.metaLib) then
+          Exploit.headless(m.metaLib)
+        end if
+      end if
+      s=null
+      _ck=Exploit.getCacheKey(m.metaLib)
+      if not hasIndex(globals.G_exploitCache,_ck) then Exploit.headless(m.metaLib)
+      for ez in Exploit._ex(_ck)
+        if poll_input=="q" then return
+        if ez.e=="s" then
+          ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"net")
+          if typeof(ex)!="shell" then continue
+          e=Exploit.tryShellEX(ex,true)
+          if not e or e isa Error then continue
+          M=Builder.packCOEX(e).metaxploit
+          if not M then continue
+          if not s then s=e
+          c=host_computer(e)
+          for f in get_files(File(c,"/lib"))
+            l=load(M,path(f))
+            if not Exploit.haveAlready(l) then
+              Info.info("Adding "+lib_name(l)+":"+version(l))
+              Exploit.headless(l)
+            else
+              if Exploit.canScan(l) then Exploit.headless(l)
+            end if
+            if indexOf(lib_name(l),b)!=null then
+              if v and v!=version(l) then
+                Info.info("Checking|Clearing log on "+green(c.public_ip)+":"+yellow(c.local_ip),"+")
+                Log.trylogwipe(e)
+                return Error.set(b+" version "+v+" not found, trying again...")
+              end if
+              Info.info("Checking|Clearing log on "+green(c.public_ip)+":"+yellow(c.local_ip),"+")
+              Log.trylogwipe(e)
+              if doDownload then
+                r=scp(e,path(f),path(globals.G_main.dir.current),globals.G_main.shell)
+                if r isa number then return Info.info(lib_name(l)+":"+version(l)+" downloaded")
+                if r isa string then return Error.set(r)
+              else
+                if isSilent then return "Found "+lib_name(l)+":"+version(l)+" at "+ip+":"+c.local_ip
+                return Info.info("Found "+lib_name(l)+":"+version(l)+" at "+ip+":"+c.local_ip)
+              end if
+            end if
+          end for
+          if s then
+            Info.info("Checking|Clearing log on "+green(host_computer(s).public_ip)+":"+yellow(host_computer(s).local_ip),"+")
+            Log.trylogwipe(s)
+          end if
+        end if
+      end for
+    end for
+    if v then return Error.set(b+" version "+v+" not found, trying again...") else return Error.set(b+" not found, trying again...")
+  end function
+  tryInfoSystemLocal=function(r,i,b,v,arg);return _huntLib(r,i,b,v,{"silent":arg.s});end function
+  tryDownloadSystemLocal=function(z,i,b,v);return _huntLib(z,i,b,v,{"download":true});end function
+  tryLanhackLib=function(z,i,b,v);return _huntLib(z,i,b,v,{"download":true});end function
+  tryDowloadLib=function(x,i,b,v);return _huntLib(x,i,b,v,{"download":true,"checkPorts":true,"preCacheMeta":true});end function
+  initRouterLib=function(arg)
+    if not arg.c then c=1 else c=arg.c
+    d=[]
+    if arg.v then Info.info("Scanning for "+c+" "+arg.l+":"+arg.v+"...") else Info.info("Scanning for "+c+" "+arg.l+"...")
+    while c
+      if poll_input=="q" then return
+      r=Net.getRandomRouter
+      if globals.G_settings.monitorDirtyips then Dirty.add(r.public_ip)
+      if argv.v then
+        if arg.v!=kernel_version(r) then continue
+      end if
+      if arg.d then
+        Info.info("Going after "+arg.l+":"+arg.v+" on "+r.public_ip)
+        if tryDowloadLib(r,r.public_ip,arg.l,arg.v) isa Error then continue
+      end if
+      if arg.s then push(d,ljust(r.public_ip+":0",22)+" - "+"router "+kernel_version(r)) else print ljust(white(r.public_ip+yellow(":")+"0"),22)+yellow(" - ")+("router "+kernel_version(r))
+      c-=1
+    end while
+    if not arg.s then return
+    arg["data"]=d
+    Info.info("Saving "+arg.redirectName)
+    return ArgumentParser.out(globals.G_main,arg)
+  end function
+  initNetLib=function(arg)
+    if not arg.c then c=1 else c=arg.c
+    d=[]
+    if arg.v then Info.info("Scanning for "+c+" "+arg.l+":"+arg.v+"...") else Info.info("Scanning for "+c+" "+arg.l+"...")
+    origL=arg.l
+    if arg.l=="sql" then arg.l="studentscriminalsemployeesbank_accountpolicesql"
+    while c
+      if poll_input=="q" then return
+      r=Net.getRandomRouter
+      if globals.G_settings.monitorDirtyips then Dirty.add(r.public_ip)
+      for p in used_ports(r)
+        z=split(port_info(r,p)," ")
+        if not len(z)>=2 then continue
+        l=z[0]
+        v=z[1]
+        if indexOf(arg.l,l)!=null then
+          //When matching sql-family port names (employees,students,etc) the actual lib_name is "sql"
+          if origL=="sql" then dlName="sql" else dlName=l
+          if arg.d then
+            if arg.v then
+              if arg.v!=v then continue
+              if tryDowloadLib(r,r.public_ip,dlName,arg.v) isa Error then
+                if tryLanhackLib(r,r.public_ip,dlName,arg.v) isa Error then continue else return
+              else
+                return
+              end if
+            else
+              if tryDowloadLib(r,r.public_ip,dlName,arg.v) isa Error then
+                if tryLanhackLib(r,r.public_ip,dlName,arg.v) isa Error then continue else return
+              else
+                return
+              end if
+            end if
+          else
+            if arg.v then
+              if arg.v!=v then continue
+              i=public_ip(r)
+              if arg.s then push(d,ljust(i+":"+str(port_number(p)),22)+" - "+port_info(r,p)) else print ljust(white(i+yellow(":")+str(port_number(p))),22)+yellow(" - ")+port_info(r,p)
+              c-=1
+              if c<=0 then break
+            else
+              i=public_ip(r)
+              if arg.s then push(d,ljust(i+":"+str(port_number(p)),22)+" - "+port_info(r,p)) else print ljust(white(i+yellow(":")+str(port_number(p))),22)+yellow(" - ")+port_info(r,p)
+              c-=1
+              if c<=0 then break
+            end if
+          end if
+        end if
+      end for
+    end while
+    if not arg.s then return
+    arg["data"]=d
+    Info.info("Saving "+arg.redirectName)
+    return ArgumentParser.out(globals.G_main,arg)
+  end function
+  initLocalLib=function(arg)
+    if not arg.c then c=1 else c=arg.c
+    d=[]
+    while c
+      if poll_input=="q" then return
+      x=Net.getRandomRouter
+      if arg.d then
+        if tryDownloadSystemLocal(x,x.public_ip,arg.l,arg.v) isa Error then continue else return
+      else if arg.s then
+        r=tryInfoSystemLocal(x,x.public_ip,arg.l,arg.v,arg)
+        if r isa Error then
+          continue
+        else if r isa string then
+          push(d,r)
+          c-=1
+        end if
+      else
+        r=tryInfoSystemLocal(x,x.public_ip,arg.l,arg.v,arg)
+        if r isa Error then continue else c-=1
+      end if
+    end while
+    if not arg.s then return
+    arg["data"]=d
+    Info.info("Saving "+arg.redirectName)
+    return ArgumentParser.out(globals.G_main,arg)
+  end function
+  tryDownloadFile=function(argv,x,i)
+    Info.info("Attempting a system hack for "+argv.n+"...")
+    for m in Exploit.extract(x,i)
+      if m isa Error then continue
+      if poll_input=="q" then return
+      _ck=Exploit.getCacheKey(m.metaLib)
+      if not hasIndex(globals.G_exploitCache,_ck) then Exploit.headless(m.metaLib)
+      s=null
+      for ez in Exploit._ex(_ck)
+        if poll_input=="q" then return
+        if ez.e=="s" then
+          ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"net")
+          if typeof(ex)!="shell" then continue
+          e=Exploit.tryShellEX(ex,true)
+          if not e or e isa Error then continue
+          if not s then s=e
+          c=host_computer(e)
+          a=Io.getAll(File(c,"/"))
+          if a isa Error then return a
+          for f in a
+            if indexOf(name(f),argv.n)!=null then
+              r=scp(e,path(f),path(globals.G_main.dir.current),globals.G_main.shell)
+              Info.info("Checking|Clearing log on "+green(host_computer(e).public_ip)+":"+yellow(host_computer(e).local_ip),"+")
+              Log.trylogwipe(e)
+              if r isa number then return Info.info(name(f)+" downloaded")
+              if r isa string then return Error.set(r)
+            end if
+          end for
+        end if
+      end for
+      if s then
+        Info.info("Checking|Clearing log on "+green(host_computer(s).public_ip)+":"+yellow(host_computer(s).local_ip),"+")
+        Log.trylogwipe(s)
+      end if
+    end for
+    return Error.set(argv.n+" not found, trying again...")
+  end function
+  tryInfoFile=function(argv,r,i)
+    Info.info("Attempting a system hack for "+argv.n+"...")
+    for m in Exploit.extract(r,i)
+      if m isa Error then continue
+      if poll_input=="q" then return
+      _ck=Exploit.getCacheKey(m.metaLib)
+      if not hasIndex(globals.G_exploitCache,_ck) then Exploit.headless(m.metaLib)
+      s=null
+      for ez in Exploit._ex(_ck)
+        if poll_input=="q" then return
+        if ez.e=="s" then
+          ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"net")
+          if typeof(ex)!="shell" then continue
+          e=Exploit.tryShellEX(ex,true)
+          if not e or e isa Error then continue
+          if not s then s=e
+          c=host_computer(e)
+          a=Io.getAll(File(c,"/"))
+          if a isa Error then return a
+          for f in a
+            if indexOf(name(f),argv.n)!=null then
+              Info.info("Checking|Clearing log on "+green(c.public_ip)+":"+yellow(c.local_ip),"+")
+              Log.trylogwipe(e)
+              if argv.s then return "Found "+name(f)+" at "+i+":"+c.local_ip
+              return Info.info("Found "+name(f)+" at "+i+":"+c.local_ip)
+            end if
+          end for
+        end if
+      end for
+      if s then
+        Info.info("Checking|Clearing log on "+green(host_computer(s).public_ip)+":"+yellow(host_computer(s).local_ip),"+")
+        Log.trylogwipe(s)
+      end if
+    end for
+    return Error.set(argv.n+" not found, trying again...")
+  end function
+  initFile=function(arg)
+    if not arg.c then c=1 else c=arg.c
+    d=[]
+    while c
+      if poll_input=="q" then return
+      x=Net.getRandomRouter
+      if arg.d then
+        if tryDownloadFile(arg,x,x.public_ip) isa Error then continue else return
+      else if arg.s then
+        r=tryInfoFile(arg,x,x.public_ip)
+        if r isa Error then
+          continue
+        else if r isa string then
+          push(d,r)
+          c-=1
+        end if
+      else
+        r=tryInfoFile(arg,x,x.public_ip)
+        if r isa Error then continue else c-=1
+      end if
+    end while
+    if not arg.s then return
+    arg["data"]=d
+    Info.info("Saving "+arg.redirectName)
+    return ArgumentParser.out(globals.G_main,arg)
+  end function
+  initCustom=function(arg)
+    if not arg.c then c=1 else c=arg.c
+    d=[]
+    while c
+      if poll_input=="q" then return
+      r=Net.getRandomRouter
+      for p in used_ports(r)
+        if port_number(p)!=arg.p then continue
+        i=public_ip(r)
+        if arg.s then push(d,ljust(i+":"+str(port_number(p)),22)+" - "+port_info(r,p)) else print ljust(white(i+yellow(":")+str(port_number(p))),22)+yellow(" - ")+port_info(r,p)
+        c-=1
+      end for
+    end while
+    if not arg.s then return
+    arg["data"]=d
+    Info.info("Saving "+arg.redirectName)
+    return ArgumentParser.out(globals.G_main,arg)
+  end function
+  initWifi=function(arg)
+    if not arg.c then c=1 else c=arg.c
+    d=[]
+    while c
+      if poll_input=="q" then return
+      r=Net.getRandomRouter
+      i=public_ip(r)
+      if arg.s then push(d,ljust(i+"@"+bssid_name(r),34)+" - "+essid_name(r)) else print ljust(white(i+yellow(":")+bssid_name(r)),56)+yellow(" - ")+essid_name(r)
+      c-=1
+    end while
+    if not arg.s then return
+    arg["data"]=d
+    Info.info("Saving "+arg.redirectName)
+    return ArgumentParser.out(globals.G_main,arg)
+  end function
+  initAwifi=function(arg)
+    c=1
+    d=[]
+    while c
+      if poll_input=="q" then return
+      r=Net.getRandomRouter
+      if arg.b!=bssid_name(r) and arg.e!=essid_name(r) then continue
+      i=public_ip(r)
+      if arg.s then push(d,ljust(i+"@"+bssid_name(r),34)+" - "+essid_name(r)) else print ljust(white(i+yellow(":")+bssid_name(r)),56)+yellow(" - ")+essid_name(r)
+      c-=1
+    end while
+    if not arg.s then return
+    arg["data"]=d
+    Info.info("Saving "+arg.redirectName)
+    return ArgumentParser.out(globals.G_main,arg)
+  end function
+  custom=function(arg)
+    if not arg.p then return Error.set("Missing port (-p)")
+    if arg.s then
+      arg["single"]=true
+      arg["redirect"]=true
+      arg["redirectPath"]=path(globals.G_main.dir.current)
+      arg["redirectName"]="custom.dat"
+    end if
+    initCustom(arg)
+  end function
+  lib=function(arg)
+    if not arg.n then return Error.set("No library name (-n)")
+    arg.l=arg.n
+    if arg.f then return initLocalLib(arg)
+    if arg.s then
+      arg["single"]=true
+      arg["redirect"]=true
+      arg["redirectPath"]=path(globals.G_main.dir.current)
+      arg["redirectName"]="lib.dat"
+    end if
+    initLocalLib(arg)
+  end function
+  file=function(arg)
+    if not arg.n then return Error.set("No file name (-n)")
+    if arg.f then return initFile(arg)
+    if arg.s then
+      arg["single"]=true
+      arg["redirect"]=true
+      arg["redirectPath"]=path(globals.G_main.dir.current)
+      arg["redirectName"]="file.dat"
+    end if
+    initFile(arg)
+  end function
+  // Data table dispatch for service-hunt commands: [libLabel, outFile, useRouterLib]
+  _svcTable={
+    "repo":["repository","repository.dat",false],
+    "rshell":["rshell","rshell.dat",false],
+    "ssh":["ssh","ssh.dat",false],
+    "ftp":["ftp","ftp.dat",false],
+    "special":["special","special.dat",false],
+    "employee":["employees","employees.dat",false],
+    "student":["students","students.dat",false],
+    "criminal":["criminals","criminals.dat",false],
+    "sql":["sql","sql.dat",false],
+    "http":["http","http.dat",false],
+    "smtp":["smtp","smtp.dat",false],
+    "neuro":["neuro","neuro.dat",false],
+    "chat":["chat","chat.dat",false],
+    "bank":["bank_account","bank.dat",false],
+    "cam":["cam","cam.dat",false],
+    "router":["kernel_router.so","router.dat",true]
+  }
+  wifi=function(arg)
+    if arg.s then
+      arg["single"]=true
+      arg["redirect"]=true
+      arg["redirectPath"]=path(globals.G_main.dir.current)
+      arg["redirectName"]="wifi.dat"
+    end if
+    initWifi(arg)
+  end function
+  awifi=function(arg)
+    if not arg.b then return Error.set("Missing bssid (-b)")
+    if not arg.e then return Error.set("Missing essid (-e)")
+    if arg.s then
+      arg["single"]=true
+      arg["redirect"]=true
+      arg["redirectPath"]=path(globals.G_main.dir.current)
+      arg["redirectName"]="wifi.dat"
+    end if
+    initAwifi(arg)
+  end function
+  // Hunt for player computers
+  // Reject networks with NPC services, >2 sub-routers, or non-192.168 LAN IPs
+  // Ranking: single device+3, ssh+1, rshell+2
+  // Flags: -m show hashes  -r crack hashes (needs crypto)  -x extra valid prefix  -s save report
+  player=function(arg)
+    rejectSvcs=["bank_account","students","criminals","cam","app","smtp","http","repo","neuro","employees","sql"]
+    validPfx=["192.168."]
+    if arg.x then push(validPfx,arg.x)
+    found=0
+    skipped=0
+    // IP pattern mode (-I flag, supports XXX/YYY wildcards like 0day neuro)
+    _ipPat=arg.I
+    _ipMode=_ipPat!=null and _ipPat!=""
+    _hasX=_ipMode and indexOf(_ipPat,"XXX")!=null
+    _hasY=_ipMode and indexOf(_ipPat,"YYY")!=null
+    _xOct=1
+    if arg.l then _xOct=val(arg.l)
+    _yOct=1
+    print ""
+    if _ipMode then print yellow("  Hunt Player — pattern: ")+white(_ipPat)+yellow("  [q=quit  n=skip]") else print yellow("  Hunt Player — scanning automatically  [q=quit  n=skip]")
+    print ""
+    _seen={}
+    _tMax=arg.t
+    if not _tMax then _tMax=6
+    _rMax=arg.c
+    if not _rMax then _rMax=3
+    _fMax=arg.F
+    _q=arg.Q
+    while true
+      _k=poll_input
+      if _k=="q" then break
+      if _ipMode then
+        if _xOct>255 then break
+        _curIp=_ipPat
+        if _hasX then _curIp=_curIp.replace("XXX",str(_xOct))
+        if _hasY then _curIp=_curIp.replace("YYY",str(_yOct))
+        // Advance for next iteration
+        if _hasY then
+          _yOct+=1
+          if _yOct>255 then
+            _yOct=1
+            _xOct+=1
+          end if
+        else if _hasX then
+          _xOct+=1
+        else
+          _xOct=999
+        end if
+        if _k=="n" then continue
+        r=get_router(_curIp)
+        if not r then
+          print "  "+yellow(_curIp)+" — no router"
+          skipped+=1
+          continue
+        end if
+      else
+        if _k=="n" then continue
+        r=Net.getRandomRouter
+        if not r then
+          print red("  No router, retrying")
+          continue
+        end if
+      end if
+      pub=public_ip(r)
+      if hasIndex(_seen,pub) then
+        skipped+=1
+        continue
+      end if
+      _seen[pub]=1
+      if globals.G_settings.monitorDirtyips then Dirty.add(pub)
+      if not _q then
+        print ""
+        print yellow("  Scanning: ")+white(pub)
+      end if
+      rank=0
+      devCount=0
+      hasSsh=false
+      hasRshell=false
+      // Direct assault mode: -L bypasses all filtering
+      if arg.L then
+        print "  "+white(pub)+yellow(" — direct: ")+white(arg.L)
+        targetIPs=[arg.L]
+      else
+        // Normal scan: filter and rank
+        lanIPs=devices_lan_ip(r)
+        if not lanIPs or len(lanIPs)==0 then
+          print "  "+white(pub)+yellow(" — no LAN devices")
+          skipped+=1
+          continue
+        end if
+        // Port scan — NPC services, sub-routers, ssh/rshell
+        rejected=false
+        rejectReason=""
+        routerCount=0
+        hasSsh=false
+        hasRshell=false
+        forwardedIPs={}
+        _ports=used_ports(r)
+        if _ports then
+          _pi=0
+          _plen=len(_ports)
+          while _pi<_plen
+            p=_ports[_pi]
+            _pi+=1
+            pInfoStr=port_info(r,p)
+            if not pInfoStr or not len(pInfoStr) then continue
+            pSvcL=lower(split(pInfoStr," ")[0])
+            _fwip=get_lan_ip(p)
+            if _fwip then forwardedIPs[_fwip]=true
+            if port_number(p)==8080 then
+              routerCount+=1
+              continue
+            end if
+            _ri=0
+            _rlen=len(rejectSvcs)
+            while _ri<_rlen
+              sv=rejectSvcs[_ri]
+              _ri+=1
+              if indexOf(pSvcL,sv)!=null then
+                rejected=true
+                rejectReason=split(pInfoStr," ")[0]
+                _ri=_rlen
+              end if
+            end while
+            if indexOf(pSvcL,"ssh")!=null then hasSsh=true
+            if indexOf(pSvcL,"rshell")!=null then hasRshell=true
+            if indexOf(pSvcL,"chat")!=null then hasRshell=true
+          end while
+        end if
+        if routerCount>_rMax then
+          print "  "+white(pub)+yellow(" — skip ")+red(str(routerCount)+" sub-routers")
+          skipped+=1
+          continue
+        end if
+        // Filter to validPfx only (drop 172.16.x.x, 10.x.x.x sub-router ranges)
+        filteredIPs=[]
+        _li=0
+        _lilen=len(lanIPs)
+        while _li<_lilen
+          lip=lanIPs[_li]
+          _li+=1
+          _pfi=0
+          _pflen=len(validPfx)
+          while _pfi<_pflen
+            pfx=validPfx[_pfi]
+            _pfi+=1
+            if indexOf(lip,pfx)==0 then
+              push(filteredIPs,lip)
+              _pfi=_pflen
+            end if
+          end while
+        end while
+        if len(filteredIPs)==0 then
+          print "  "+white(pub)+yellow(" — skip ")+red("no 192.168.x.x devices")
+          skipped+=1
+          continue
+        end if
+        lanIPs=filteredIPs
+        if len(lanIPs)>_tMax then
+          print "  "+white(pub)+yellow(" — skip ")+red("too many devices ("+str(len(lanIPs))+")")
+          skipped+=1
+          continue
+        end if
+        // Prefer no-port IPs (player workstations)
+        noPortIPs=[]
+        _npi=0
+        _nplen=len(lanIPs)
+        while _npi<_nplen
+          _lip=lanIPs[_npi]
+          _npi+=1
+          if not hasIndex(forwardedIPs,_lip) then push(noPortIPs,_lip)
+        end while
+        rank=0
+        if hasSsh then rank+=1
+        if hasRshell then rank+=2
+        devCount=len(lanIPs)
+        if rank<1 then
+          // No SSH or RShell — skip regardless of noPort devices
+          if rejected then print "  "+white(pub)+yellow(" — skip ")+red("NPC: "+rejectReason) else print "  "+white(pub)+yellow(" — skip ")+red("no player signals")
+          skipped+=1
+          continue
+        end if
+        if not _q then print "  "+white(pub)+" "+yellow("dev:")+str(devCount)+" "+yellow("noport:")+str(len(noPortIPs))+" "+yellow("ssh:")+str(hasSsh)+" "+yellow("rshell:")+str(hasRshell)+" "+yellow("rank:")+green("["+str(rank)+"]")
+        if len(noPortIPs)>0 then
+          // No-port devices = potential player workstations
+          targetIPs=noPortIPs
+        else
+          targetIPs=lanIPs
+        end if
+      end if
+      // -S flag: require SSH or RShell signal before attempting
+      if arg.S and not arg.L and not hasSsh and not hasRshell then
+        print "  "+white(pub)+yellow(" — skip ")+red("no SSH/RShell")
+        skipped+=1
+        continue
+      end if
+      // -q flag: minimum rank required
+      if arg.q and rank<arg.q then
+        print "  "+white(pub)+yellow(" — skip ")+red("rank "+str(rank)+" < "+str(arg.q))
+        skipped+=1
+        continue
+      end if
+      // Attack loop — player is always the highest IP; -L already provides single target
+      if not arg.L then
+        _bestIP=targetIPs[0]
+        _bestOct=val(split(_bestIP,"\.")[3])
+        _tii=1
+        _tilen=len(targetIPs)
+        while _tii<_tilen
+          _cip=targetIPs[_tii]
+          _tii+=1
+          _coct=val(split(_cip,"\.")[3])
+          if _coct>_bestOct then
+            _bestIP=_cip
+            _bestOct=_coct
+          end if
+        end while
+        targetIPs=[_bestIP]
+      end if
+      gotIn=false
+      _di=0
+      _dlen=len(targetIPs)
+      while _di<_dlen
+        targetLan=targetIPs[_di]
+        _di+=1
+        if not _q then print "    -> "+yellow(targetLan)
+        comp=null
+        if arg.R then
+          // -R flag: root bounce only
+          result=Mission.getRootBounce(pub,targetLan,{})
+          if not result isa list then
+            comp=result
+            if not _q then print green("    Got bounce")
+          end if
+        else
+          // Method 1: direct shell exploit
+          ex=Mission.getObjectShell(pub,targetLan)
+          if ex!=null and typeof(ex)=="shell" then
+            comp=host_computer(ex)
+            if not _q then print green("    Got shell")
+          else if globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex then
+            // Method 2: getRootBounce fallback
+            result=Mission.getRootBounce(pub,targetLan,{})
+            if not result isa list then
+              comp=result
+              if not _q then print green("    Got bounce")
+            end if
+          end if
+        end if
+        if not comp then
+          if not _q then print yellow("    no shell obtained")
+          continue
+        end if
+        // Verify player via process list — NPCs have 0 processes
+        procs=show_procs(comp)
+        if not procs or not len(trim(procs)) then
+          if not _q then print yellow("    NPC (no processes)")
+          continue
+        end if
+        _isPlayer=indexOf(procs,"kernel_task")!=null or indexOf(procs,"Xorg")!=null or indexOf(procs,"Terminal")!=null or indexOf(procs,"Chat")!=null
+        if not _isPlayer then
+          if not _q then print yellow("    NPC system")
+          continue
+        end if
+        // PLAYER CONFIRMED
+        gotIn=true
+        found+=1
+        if _fMax and found>=_fMax then _di=_dlen
+        // Read /etc/passwd
+        userInfo=""
+        pf=File(comp,"/etc/passwd")
+        if pf and has_permission(pf,"r") then userInfo=get_content(pf)
+        // Collect text files — .txt anywhere or no-extension in /home/ only; ≤5 lines, no binaries
+        txtFiles=[]
+        allF=Io.getAll(File(comp,"/"))
+        if not allF isa Error then
+          _tfi=0
+          _tflen=len(allF)
+          while _tfi<_tflen
+            f=allF[_tfi]
+            _tfi+=1
+            if is_folder(f) then continue
+            fn=name(f)
+            _fnl=lower(fn)
+            fp=path(f)
+            _isTxt=(_fnl[-4:]==".txt")
+            _inHome=(indexOf(fp,"/home/")==0)
+            if not _isTxt and not _inHome then continue
+            if not has_permission(f,"r") then continue
+            fc=get_content(f)
+            if not fc or not len(fc) then continue
+            if indexOf(fc,"can't open")==0 then continue
+            _fcLines=split(fc,char(10))
+            if len(_fcLines)>5 then continue
+            if len(fc)>50 then push(txtFiles,{"name":fn,"path":fp,"content":"(too large to display)"}) else push(txtFiles,{"name":fn,"path":fp,"content":fc})
+          end while
+        end if
+        // Print report
+        _hr="-"*42
+        print ""
+        print yellow(_hr)
+        print yellow("  *** PLAYER FOUND ***")
+        print yellow(_hr)
+        print blue("  Public IP : ")+white(pub)
+        print blue("  LAN IP    : ")+white(targetLan)
+        print blue("  Rank      : ")+green(str(rank))
+        print blue("  Devices   : ")+white(str(devCount))
+        if hasSsh then print blue("  SSH       : ")+green("yes") else print blue("  SSH       : ")+red("no")
+        if hasRshell then print blue("  RShell    : ")+green("yes") else print blue("  RShell    : ")+red("no")
+        print blue("  Router ver: ")+white(kernel_version(r))
+        // User accounts from /etc/passwd
+        _D=null
+        if globals.G_crypto then _D=globals.G_crypto else _D=Library.crypto
+        if len(userInfo) then
+          print ""
+          print yellow("  /etc/passwd:")
+          _ul=split(userInfo,char(10))
+          _uii=0
+          _uilen=len(_ul)
+          while _uii<_uilen
+            uLine=_ul[_uii]
+            _uii+=1
+            if not uLine or not len(uLine) then continue
+            uParts=split(uLine,":")
+            if len(uParts)>=2 then
+              uname=uParts[0]
+              uhash=uParts[1]
+              if arg.r and _D then
+                cracked=_D.decipher(uhash)
+                if cracked then print "  "+white(uname)+" : "+green(cracked)+" "+yellow("["+uhash+"]") else print "  "+white(uname)+" : "+yellow(uhash)
+              else if arg.m then
+                print "  "+white(uname)+" : "+yellow(uhash)
+              else
+                print "  "+white(uname)
+              end if
+            else
+              print "  "+white(uLine)
+            end if
+          end while
+        end if
+        // Process listing
+        print ""
+        print yellow("  Processes:")
+        _pl=split(procs,char(10))
+        _pli=0
+        _pllen=len(_pl)
+        while _pli<_pllen
+          procLine=_pl[_pli]
+          _pli+=1
+          if not procLine or not len(procLine) then continue
+          pParts=split(procLine," ")
+          if len(pParts)>=5 then
+            pName=pParts[4]
+            if pName=="kernel_task" or pName=="Xorg" then print "  "+green(pParts[0])+" "+yellow(pName) else print "  "+white(pParts[0])+" "+pName
+          else
+            print "  "+white(procLine)
+          end if
+        end while
+        // Text files (Mail.txt, Bank.txt, others)
+        _tfi2=0
+        _tf2len=len(txtFiles)
+        while _tfi2<_tf2len
+          tf=txtFiles[_tfi2]
+          _tfi2+=1
+          print ""
+          print yellow("  --- "+tf.name+" ("+tf.path+") ---")
+          _tcl=split(tf.content,char(10))
+          _tcli=0
+          _tcllen=len(_tcl)
+          while _tcli<_tcllen
+            tl=_tcl[_tcli]
+            _tcli+=1
+            if not tl or not len(tl) then continue
+            tParts=split(tl,":")
+            if len(tParts)>=2 then
+              th=tParts[1]
+              if arg.r and _D then
+                cracked2=_D.decipher(th)
+                if cracked2 then print "  "+blue(tParts[0])+" : "+green(cracked2)+" "+yellow("["+th+"]") else print "  "+blue(tParts[0])+" : "+yellow(th)
+              else if arg.m then
+                print "  "+blue(tParts[0])+" : "+yellow(th)
+              else
+                print "  "+white(tl)
+              end if
+            else
+              print "  "+white(tl)
+            end if
+          end while
+        end while
+        print yellow(_hr)
+        // Determine save/continue/quit action
+        if arg.s then _doSave=true else _doSave=Gui.yesNo("Save report?",false)
+        if _doSave then
+          reportName=pub.replace(".","_")+"_player.txt"
+          rParts=["=== PLAYER REPORT ===","Public: "+pub,"LAN: "+targetLan,"Rank: "+str(rank),"Router: "+kernel_version(r),"","=== /etc/passwd ===",userInfo,"","=== Processes ===",procs]
+          _tfi3=0
+          _tf3len=len(txtFiles)
+          while _tfi3<_tf3len
+            tf3=txtFiles[_tfi3]
+            _tfi3+=1
+            push(rParts,"")
+            push(rParts,"=== "+tf3.name+" ===")
+            push(rParts,tf3.content)
+          end while
+          rc=join(rParts,char(10))
+          touch(Obj.computer,path(Obj.dir.current),reportName)
+          rf2=File(Obj.computer,path(Obj.dir.current)+"/"+reportName)
+          if rf2 then
+            set_content(rf2,rc)
+            Info.info("Saved: "+reportName)
+          end if
+        end if
+        if Gui.yesNo("Use this computer?",false) then
+          Exploit.getComputer(comp)
+        end if
+        _di=_dlen
+      end while
+      if _fMax and found>=_fMax then break
+      if not gotIn then print yellow("  No access on ")+white(pub)
+      print ""
+    end while
+    print ""
+    print yellow("  Hunt complete — found: "+str(found)+"  skipped: "+str(skipped))
+  end function
+  cmds={
+    "file":@file,
+    "custom":@custom,
+    "lib":@lib,
+    "wifi":@wifi,
+    "awifi":@awifi,
+    "player":@player
+  }
+  if not hasIndex(cmds,Arg1) and not hasIndex(_svcTable,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+  Utility.pressQ
+  if hasIndex(cmds,Arg1) then
+    cmds[Arg1](argv)
+  else
+    _e=_svcTable[Arg1]
+    argv.l=_e[0]
+    if argv.f then
+      if _e[2] then return initRouterLib(argv) else return initNetLib(argv)
+    end if
+    if argv.s then
+      argv["single"]=true
+      argv["redirect"]=true
+      argv["redirectPath"]=path(globals.G_main.dir.current)
+      argv["redirectName"]=_e[1]
+    end if
+    if _e[2] then initRouterLib(argv) else initNetLib(argv)
+  end if
+end function
+Net.ipLoop=function(argv)
+  if not argv then argv=[]
+  _p=ArgumentParser.init
+  _p.addArgument("e",false,"store")   // extra params (exploit payload params)
+  _p.addArgument("l",false,"flag")    // list watch list
+  _p.addArgument("x",false,"flag")    // clear watch list
+  argv=_p.parseArgs("iploop",argv)
+  if argv isa Error then return
+  if argv.l then return Net.watchList
+  if argv.x then return Net.clearWatchList
+  // Pull stdin for IP
+  Arg1=null
+  hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  if hasPipeIn then
+    for _ln in split(globals.G_pipe.stdin,char(10))
+      _ln=trim(_ln)
+      if _ln then Arg1=_ln; break
+    end for
+  end if
+  if not Arg1 then
+    if argv.rest and len(argv.rest)>0 then Arg1=argv.rest[0]
+  end if
+  if not Arg1 then
+    Arg1=Gui.inputIP({"text":"Enter target public ip"})
+    if Arg1==null then return Error.set("No public IP entered")
+  end if
+  Arg2=argv.e
+  if not Arg2 and argv.rest and len(argv.rest)>1 then Arg2=argv.rest[1]
+  if not Arg2 and not hasPipeIn then Arg2=Gui.input({"text":"Enter extra params"})
+  C=len(globals.G_watchList)
+  Arg1=self.lookup(Arg1)
+  if not Arg1 then return Man.help(["iploop"])
+	r=get_router(Arg1)
+	if not r then return Warning.set("IP down")
+	z=Exploit.extract(r,Arg1)
+  if not z or z isa Error then return Error.set("No exploits found")
+  F=null
+  Info.info("Looping...")
+  Utility.pressQ
+  while true
+    _k=poll_input
+    if _k=="q" or _k=="x" then break
+    for m in z
+      if not hasIndex(globals.G_exploitCache,lib_name(m.metaLib)+"_"+version(m.metaLib)) then
+        Info.error("Database is out of date missing library: "+lib_name(m.metaLib)+"_"+version(m.metaLib))
+        continue
+      end if
+      x=Exploit._ex(Exploit.getCacheKey(m.metaLib))
+      if not x then continue
+      for e in x
+        if hasIndex(e,"ю") then
+          if e.ю isa number then
+            if indexOf(Exploit.getrtree(str(e.ю)),"active")==null then continue
+            if Arg2 then ex=Exploit.overflow(m.metaLib,e.m,e.s,Arg2,"net") else ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"net")
+            if not ex then continue
+            obj=typeof(ex)
+            i=md5(m.public_ip+e.m+e.s)
+            if indexOf(obj,"shell")!=null then
+              if hasIndex(globals.G_watchList,i) then continue
+              globals.G_watchList[i]={
+                "Exploit":typeof(ex),
+                "user":Utility.getUserEX(ex).user[0],
+                "object":ex,
+                "meta":m
+              }
+            else if obj=="computer" then
+              if hasIndex(globals.G_watchList,i) then continue
+              m.local_ip=ex.local_ip
+              globals.G_watchList[i]={
+                "Exploit":typeof(ex),
+                "user":Utility.getUserEX(ex).user[0],
+                "object":ex,
+                "meta":m
+              }
+            else if obj=="file" then
+              if hasIndex(globals.G_watchList,i) then continue
+              globals.G_watchList[i]={
+                "Exploit":typeof(ex),
+                "user":Utility.getUserEX(ex).user[0],
+                "object":ex,
+                "meta":m
+              }
+            end if
+          else
+            for q in split(e.ю,"Ш")
+              if indexOf(Exploit.getrtree(q),"active")==null then continue
+              if Arg2 then ex=Exploit.overflow(m.metaLib,e.m,e.s,Arg2,"net") else ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"net")
+              if not ex then continue
+              obj=typeof(ex)
+              i=md5(m.public_ip+e.m+e.s)
+              if indexOf(obj,"shell")!=null then
+                if hasIndex(globals.G_watchList,i) then continue
+                globals.G_watchList[i]={
+                  "Exploit":typeof(ex),
+                  "user":Utility.getUserEX(ex).user[0],
+                  "object":ex,
+                  "meta":m
+                }
+              else if obj=="computer" then
+                if hasIndex(globals.G_watchList,i) then continue
+                m.local_ip=ex.local_ip
+                globals.G_watchList[i]={
+                  "Exploit":typeof(ex),
+                  "user":Utility.getUserEX(ex).user[0],
+                  "object":ex,
+                  "meta":m
+                }
+              else if obj=="file" then
+                if hasIndex(globals.G_watchList,i) then continue
+                globals.G_watchList[i]={
+                  "Exploit":typeof(ex),
+                  "user":Utility.getUserEX(ex).user[0],
+                  "object":ex,
+                  "meta":m
+                }
+              end if
+            end for
+          end if
+        else
+          if not Arg2 then continue
+          if e.e!="l" then continue
+          if Arg2 then ex=Exploit.overflow(m.metaLib,e.m,e.s,Arg2,"net") else ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"net")
+          if not ex then continue
+          obj=typeof(ex)
+          i=md5(m.public_ip+e.m+e.s)
+          if indexOf(obj,"shell")!=null then
+            if hasIndex(globals.G_watchList,i) then continue
+            globals.G_watchList[i]={
+              "Exploit":typeof(ex),
+              "user":Utility.getUserEX(ex).user[0],
+              "object":ex,
+              "meta":m
+            }
+          else if obj=="computer" then
+            if hasIndex(globals.G_watchList,i) then continue
+            m.local_ip=ex.local_ip
+            globals.G_watchList[i]={
+              "Exploit":typeof(ex),
+              "user":Utility.getUserEX(ex).user[0],
+              "object":ex,
+              "meta":m
+            }
+          else if obj=="file" then
+            if hasIndex(globals.G_watchList,i) then continue
+            globals.G_watchList[i]={
+              "Exploit":typeof(ex),
+              "user":Utility.getUserEX(ex).user[0],
+              "object":ex,
+              "meta":m
+            }
+          end if
+        end if
+      end for
+    end for
+    if F then return self.watchList
+    if len(globals.G_watchList)>C then
+      if not F then
+        F=1
+        continue
+      end if
+    end if
+  end while
+end function
+Net.watchList=function
+  if not globals.G_watchList then return Info.info("You have no objects in the watch list")
+  while true
+		if globals.G_attributes.back then return
+    CH=[green("You have the folowing vectors to choose from:")]
+    for i in globals.G_watchList;push(CH,orange(ljust(i.value.Exploit,21,0,blue("-")))+formatUser(i.value.user)+" "+yellow(i.value.meta.local_ip)+char(10)+green("     ==> ")+green("Public ip:"+i.value.meta.public_ip)+yellow(" Lib:"+lib_name(i.value.meta.metaLib)+" "+version(i.value.meta.metaLib)));end for
+    push(CH,iyellow("Finished"))
+    UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+    if UCH==len(CH)-1 then break
+    if not hasIndex(indexes(globals.G_watchList),UCH-1) then continue
+    X=globals.G_watchList[indexes(globals.G_watchList)[UCH-1]]
+    if indexOf(X.Exploit,"shell")!=null then
+      Exploit.getShell(X.object)
+    else if X.Exploit=="computer" then
+      Exploit.getComputer(X.object)
+    else if X.Exploit=="file" then
+      Exploit.getFile(X.object,X.meta)
+    end if
+  end while
+end function
+Net.clearWatchList=function;globals.G_watchList={};Info.info("Watch list has been cleared");end function
+// Function: getRepo
+// Purpose: Find repository server on network (port 1542)
+// Args: None (uses self.rip for random IP generation)
+// Returns: Map with ip and port keys
+Net.getRepo=function
+	//Infinite search loop
+	while true
+		i=self.rip
+		r=get_router(i)
+    if typeof(r)!="router" then continue
+		z=used_ports(r)
+		for p in z;if indexOf(port_info(r,p),"repository")!=null then return {"ip":i,"port":port_number(p)};end for
+	end while
+end function
+// Function: wifiConnect
+// Purpose: Connect to WiFi network with credentials
+// Args:
+//   Obj - Session object with .net.hasWifi property
+//   argv - Arguments array [BSSID, ESSID, password]
+// Returns: 1 on success, Error/Warning on failure
+Net.wifiConnect=function(Obj,argv)
+	//Check if WiFi is available
+	if not Obj.net.hasWifi then return Warning.set("Wifi is not active")
+  //Validate 3 parameters provided (BSSID, ESSID, password)
+  if not len(argv)==3 then return Error.set("Invalid parameters")
+	//Extract BSSID (MAC address)
+	Arg1=argv[0]
+	//Extract ESSID (network name)
+	Arg2=argv[1]
+	Arg3=argv[2]
+	//Attempt WiFi connection
+	x=connect_wifi(Obj.computer,"wlan0",Arg1,Arg2,Arg3)
+	//Return success if connected
+	if x then return 1
+	//Return error if connection returned error string
+	if x isa string then return Error.set(x)
+	//Return error if network not found
+	if not x then return Error.set("Network not found")
+end function
+// Function: wifiCrack
+// Purpose: Automated WiFi cracking using aircrack tools
+// Args:
+//   Obj - Session object with .net.wlan and .user properties
+//   argv - Arguments array [wifi_id, optional ACK_count]
+// Returns: 1 on success, Error/Warning on failure
+Net.wifiCrack=function(Obj,argv)
+	//Check if WiFi is available
+	if not Obj.net.hasWifi then return Warning.set("Wifi is not active")
+  if not argv then return Error.set("Invalid options")
+  //Parse WiFi ID from arguments
+  Arg1=to_int(argv[0])
+  if not Arg1 isa number then return Error.set("Invalid wifi id")
+  //Get WiFi network list
+  w=Obj.net.wlan
+  if Arg1<0 or Arg1>len(w)-1 then return Error.set("Invalid wifi id")
+  //Check if crypto library is available
+  if not Library.haveCrypto then return
+  //Get crypto library (use global or load from Library)
+  if globals.G_crypto then D=globals.G_crypto else D=Library.crypto
+  //Start monitor mode on wlan0
+  airmon(D,"start","wlan0")
+	//Get selected network info
+	n=w[Arg1]
+	//Initialize ACK count variable
+	a=null
+	//Parse ACK count from arguments or calculate from signal strength
+	if len(argv)==2 then
+		a=to_int(argv[1])
+		//If invalid number, calculate based on signal strength (weaker = more ACKs needed)
+		if not a isa number then a=ceil(300000/(to_int(n[1].replace("%",""))+15))
+	else
+		//Calculate ACK count based on signal strength
+		a=ceil(300000/(to_int(n[1].replace("%",""))+15))
+	end if
+	//Display aireplay information
+	Info.info("Running aireplay on "+n[2]+" for "+a+" ACKs")
+	//Run aireplay to capture handshake packets
+	aireplay(D,n[0],n[2],a)
+	//Run aircrack on captured packets to recover password
+	p=aircrack(D,"/home/"+Obj.user.name+"/file.cap")
+	//Clean up capture file
+	f=File(Obj.computer,path(Obj.user.home)+"/file.cap")
+	if f then delete(f)
+	//Check if password was cracked
+	if p!="null" then
+		//Display recovered password
+		print yellow("Password for "+n[2]+" is : "+p)
+		//Prompt user to connect to network
+		if Gui.yesNo("Connect to "+n[2]+"?") then
+			if connect_wifi(Obj.computer,"wlan0",n[0],n[2],p)==1 then
+				Obj.net=Net.initNetwork(Obj)
+				return Info.info("Connection: Success!")
+			else
+				Info.error("Connection: Failed!")
+			end if
+		end if
+	//Password cracking failed
+	else
+		Info.error("Failed to get a wifi connection")
+	end if
+	return 1
+end function
+// Function: wifiBrute
+// Purpose: Brute force WiFi password using numerical patterns
+// Args:
+//   Obj - Session object with .net.wlan property
+//   x - WiFi ID number from network list
+// Returns: 1 on success, Error/Warning on failure
+Net.wifiBrute=function(Obj,x)
+	//Check if WiFi is available
+	if not Obj.net.hasWifi then return Warning.set("Wifi is not active")
+	//Validate WiFi ID is a number
+	if not x isa number then return Error.set("Wifi id expected")
+  if x<0 or x>len(Obj.net.wlan)-1 then return Error.set("Invalid wifi id")
+  //Start watcher app if enabled
+  //Reference selected network
+  Obj.net.wlan[x]
+  //Attempt brute force crack with Crack module
+  if Crack.wifi(Obj,{"card":"wlan0","bssid":Obj.net.wlan[x][0],"essid":Obj.net.wlan[x][2]}) then return 1
+end function
+// Function: wifiDict
+// Purpose: Dictionary attack on WiFi password using wordlist
+// Args:
+//   Obj - Session object with .net.wlan property
+//   x - WiFi ID number from network list
+// Returns: Boolean true on success, Error/Warning on failure
+Net.wifiDict=function(Obj,x)
+  //Check if WiFi is available
+  if not Obj.net.hasWifi then return Warning.set("Wifi is not active")
+  //Validate WiFi ID is a number
+  if not x isa number then return Error.set("Wifi id expected")
+  if x<0 or x>len(Obj.net.wlan)-1 then return Error.set("Invalid wifi id")
+  //Attempt dictionary crack with Crack module
+  if Crack.dictWifi(Obj,{"card":"wlan0","bssid":Obj.net.wlan[x][0],"essid":Obj.net.wlan[x][2]}) then return true
+end function
+// Function: initNetwork
+// Purpose: Initialize network metadata and configuration for session object
+// Args:
+//   Obj - Session object to initialize .net property
+//   r - Optional router object
+// Returns: Network configuration map
+Net.initNetwork=function(Obj,r=null)
+  //Reset existing network object if present
+  if hasIndex(Obj,"net") then Obj.net=null
+  net={}
+  net.devices={}
+  net.hasWifi=0
+  net.router=r
+  net.wlan=[]
+  net.lan=[]
+  net.hasInternet=is_network_active(Obj.computer)
+  net.active_net_card=active_net_card(Obj.computer)
+  //Parse network devices from computer
+  devicesList=split(trim(network_devices(Obj.computer)),char(10))
+  for deviceInfo in devicesList
+    //Handle empty device list with default eth0
+    if not len(deviceInfo) then
+      net.devices["eth0"]={"name":"eth0","chipset":"router/switch","supportMonitorMode":"false"}
+      continue
+    end if
+    //Parse device properties
+    parts=split(deviceInfo," ")
+    net.devices[parts[0]]={"name":parts[0],"chipset":parts[1],"supportMonitorMode":parts[2]}
+  end for
+  //Set router if internet is active
+  if net.hasInternet and r then net.router=r
+  //Configure network based on connection type
+  if net.active_net_card=="WIFI" then
+    net.hasWifi=1
+    //Get LAN devices from router
+    if net.router then net.lan=devices_lan_ip(net.router)
+    //Scan and parse available WiFi networks
+    for wifiEntry in sortWifi(wifi_networks(Obj.computer,"wlan0"));push(net.wlan,split(wifiEntry," "));end for
+  else if net.active_net_card=="ETHERNET" then
+    //Get LAN devices if internet active and router available
+    if net.hasInternet and net.router then net.lan=devices_lan_ip(net.router)
+  else if net.active_net_card=="NONE" then
+    //Early return if router doesn't match local network
+    if net.router and net.router.local_ip!=Obj.computer.local_ip then return net
+    //Get LAN devices if internet active and router available
+    if net.hasInternet and net.router then net.lan=devices_lan_ip(net.router)
+  end if
+  return net
+end function
+// Function: viewWifi
+// Purpose: Display available WiFi networks with signal strength color coding
+// Args:
+//   Obj - Session object with .net.wlan property
+// Returns: null or Warning
+Net.viewWifi=function(Obj)
+	//Helper function to format network with signal strength colors
+	formatPower=function(t)
+		//Parse signal strength percentage
+		p=to_int(t[1][:-1])
+		//Initialize BSSID color variable
+		b=null
+		//Color current network green, others white
+		if is_network_active(Obj.computer) then
+			if bssid_name(Obj.net.router)==t[0] then b=green(t[0]) else b=white(t[0])
+		else
+			b=white(t[0])
+		end if
+		//Strong signal (>=60%): green
+		if p>=60 then return b+" "+green(ljust(str(t[1]),5))+blue(t[2])
+		//Medium signal (40-59%): yellow
+		if p<=59 and p>=40 then return b+" "+yellow(ljust(str(t[1]),5))+blue(t[2])
+    //Weak signal (<40%): red
+    return b+" "+red(ljust(str(t[1]),5))+blue(t[2])
+	end function
+  //Check if WiFi is available
+  if not Obj.net.hasWifi then return Warning.set("Wifi is not active")
+	Info.info("WIFI Network Viewer")
+	//Array to hold formatted network list
+	n=[]
+	//Format each WiFi network with signal colors
+	for x in Obj.net.wlan;push(n,formatPower(x));end for
+	//Display formatted list without headers/numbers
+	listNHNC(n)
+end function
+// Function: firewallAccess
+// Purpose: Check if firewall has DENY rules blocking access
+// Args:
+//   r - Firewall rules list
+// Returns: Boolean true if DENY rules exist, null otherwise
+Net.firewallAccess=function(r)
+	//Validate rules is a list
+	if not r isa list then return
+	//Return if rules list empty
+	if not r then return
+	//Check each rule for DENY keyword
+	for z in r;if indexOf(z,"DENY")!=null then return true;end for
+end function
+// Net.lanShell: quick LAN exploit runner using cached network map (drive from shells)
+Net.lanShell=function(Obj,metaxploit)
+  statusMsg={"text":"","isError":0}
+  portMap={}      // ip -> ports map
+  ipList=[]       // ordered ip list
+  menuEntries=[]  // rendered menu rows
+  // Walk packed network topology into flat menu structures
+  genLan=function(devices)
+    for device in devices
+      if device["ports"] then
+        portMap[device["ip"]]=device["ports"]
+        portNumbers=[]
+        for portEntry in device["ports"];push(portNumbers,portEntry["port_number"]);end for
+        if not portNumbers then
+          push(ipList,device["ip"])
+          push(menuEntries,device["typeIcon"]+device["type"]+green(device["ip"]))
+        else
+          push(ipList,device["ip"])
+          push(menuEntries,device["typeIcon"]+device["type"]+green(device["ip"])+white(":"+portNumbers))
+        end if
+      else
+        push(ipList,device["ip"])
+        push(menuEntries,device["typeIcon"]+device["type"]+green(device["ip"]))
+      end if
+      if device["devices"] then genLan(device["devices"])
+    end for
+    return menuEntries
+  end function
+  Info.info("Building network map cache...")
+  packedNet=Builder.packNetwork(Obj)
+  if not packedNet then return Error.set("Sum ting wong")
+  menuEntries=genLan(packedNet)
+	while true
+    if globals.G_attributes.back then return
+    // Build the interactive menu for the current cache snapshot
+    choiceList=[green("Select a lan target [Currently on a "+Obj.machineType+" at "+Obj.computer.local_ip+"]")]
+    for entry in menuEntries;push(choiceList,entry);end for
+    push(choiceList,iyellow("Disable all firewalls"))
+    push(choiceList,iyellow("Refresh Lan Cache"))
+		push(choiceList,iyellow("I'm scared. Get me out of here!"))
+		if statusMsg.text then
+			if statusMsg.isError then Info.error(statusMsg.text) else Info.info(statusMsg.text)
+			statusMsg.text=""
+      statusMsg.isError=0
+		end if
+		userChoice=Gui.choiceHybrid(choiceList,{},len(choiceList)-1)
+    if userChoice==len(choiceList)-3 then
+      Info.info("Disabling all firewalls...")
+      // Try a downloaded exploit against any synthetic router port 0 entries
+      for portEntryMap in portMap
+        firewallDropped=false
+        for firewallPort in portEntryMap.value
+          if firewallDropped then break
+          if firewallPort["port_number"]==0 then
+            exploitSet=Exploit.extractLan(metaxploit,portEntryMap.value)
+            if not exploitSet then continue
+            for exploitResult in exploitSet
+              if firewallDropped then break
+              cachedExploits=Exploit._ex(Exploit.getCacheKey(exploitResult.metaLib))
+              if not len(cachedExploits) then continue
+              for exploitEntry in cachedExploits
+                if exploitEntry.e=="d" then
+                  Exploit.overflow(exploitResult.metaLib,exploitEntry.m,exploitEntry.s,null,"net")
+                  firewallDropped=true
+                  break
+                end if
+              end for
+            end for
+          end if
+        end for
+      end for
+      Info.info("Refreshing network map cache...")
+      packedNet=Builder.packNetwork(Obj)
+      if not packedNet then return Error.set("Sum ting wong")
+      portMap={}
+      ipList=[]
+      menuEntries=[]
+      menuEntries=genLan(packedNet)
+      continue
+    end if
+    if userChoice==len(choiceList)-2 then
+      Info.info("Refreshing network map cache...")
+      packedNet=Builder.packNetwork(Obj)
+      if not packedNet then return Error.set("Sum ting wong")
+      portMap={}
+      ipList=[]
+      menuEntries=[]
+      menuEntries=genLan(packedNet)
+      continue
+    end if
+		if userChoice==len(choiceList)-1 then break
+    if not hasIndex(portMap,ipList[userChoice-1]) then continue
+    if not portMap[ipList[userChoice-1]] then
+      Info.error("No ports found for "+ipList[userChoice-1])
+      continue
+    end if
+    // Extract targets for the selected host and pick an exploit path
+		extractedTargets=Exploit.extractLan(metaxploit,portMap[ipList[userChoice-1]])
+    if not extractedTargets then continue
+		attackTarget=Exploit.chooseLan(Obj,extractedTargets,portMap,false)
+    if not attackTarget then continue
+    if attackTarget isa string then
+      statusMsg.text=attackTarget
+      continue
+    end if
+		globals.G_gui=Gui.cp
+		while true
+      if globals.G_attributes.back then
+        Gui.cp=globals.G_gui
+        return
+      end if
+			if self.buffer then
+				print self.buffer
+				self.buffer=""
+			end if
+      // Present exploits for this target and execute the selection
+      choiceBuffer=Exploit.showData(Exploit._ex(Exploit.getCacheKey(attackTarget.metaLib)),"Choose which attack vector you would like to use:")
+      push(choiceBuffer,iyellow("I'm scared. Get me out of here!"))
+      userChoiceBuffer=Gui.choiceHybrid(choiceBuffer,{},len(choiceBuffer)-1)
+      if userChoiceBuffer==len(choiceBuffer)-1 then break
+      if not userChoiceBuffer then continue
+      exploitChoice=Exploit.get(attackTarget.metaLib)[userChoiceBuffer-1]
+      ex=Exploit.run(exploitChoice,attackTarget)
+      if ex isa string then
+        Info.error(ex)
+        continue
+			else if ex isa number and ex==1 then
+        if attackTarget.metaLib[userChoiceBuffer-1].port_number==0 or exploitChoice.e=="d" then self.buffer=green(Text.buffer.SF) else self.buffer=green(Text.buffer.SP)
+        continue
+			else if ex isa number and ex==0 then
+        if exploitChoice.e=="d" then self.buffer=red(Text.buffer.FF) else self.buffer=red(Text.buffer.FP)
+        continue
+			end if
+      Attack.getObject(typeof(ex),ex,attackTarget)
+      Gui.cp=globals.G_gui
+		end while
+	end while
+end function
+// Net.lanTarget: scan a single LAN IP using packed network topology
+Net.lanTarget=function(Obj,metaxploit,targetIp)
+  // Builder.packNetwork does ONE build/launch with all recursion in correct context
+  Info.info("Scanning "+targetIp+"...")
+  packedNet=Builder.packNetwork(Obj)
+  if not packedNet then return Info.error("Could not build network map")
+  // Recursively search the topology tree for the target node
+  findNode=function(nodes,target)
+    for node in nodes
+      if node["ip"]==target then return node
+      if node["devices"] then
+        found=findNode(node["devices"],target)
+        if found!=null then return found
+      end if
+    end for
+    return null
+  end function
+  node=findNode(packedNet,targetIp)
+  if not node then return Info.error("Could not find "+targetIp+" on this network")
+  ports=node["ports"]
+  // If target is a router (has port 8080), prepend port 0 via packRouter for correct IPs
+  _has8080=false
+  for _p in ports
+    if _p["port_number"]==8080 then _has8080=true;break
+  end for
+  if _has8080 then
+    subRouter=Builder.packRouter(Obj,targetIp)
+    if subRouter then ports=[{"port_number":0,"local_ip":local_ip(subRouter),"public_ip":public_ip(subRouter)}]+ports
+  end if
+  if not ports then return Info.error("No ports found for "+targetIp)
+  // Show the target's own firewall rules if it is a router with rules
+  if node["firewall_rules"] then
+    print green("Scanning firewall rules...")
+    Net.firewallRules(node["firewall_rules"])
+  end if
+  extractedTargets=Exploit.extractLan(metaxploit,ports)
+  if not extractedTargets then return Info.error("No attack vectors found for "+targetIp)
+  attackTarget=Exploit.chooseLan(Obj,extractedTargets,{},false)
+  if not attackTarget then return
+  if attackTarget isa string then return Info.error(attackTarget)
+  globals.G_gui=Gui.cp
+  buffer=""
+  while true
+    if globals.G_attributes.back then
+      Gui.cp=globals.G_gui
+      return
+    end if
+    if buffer then print buffer;buffer=""
+    CHB=Exploit.showData(Exploit._ex(Exploit.getCacheKey(attackTarget.metaLib)),"Choose which attack vector you would like to use:")
+    push(CHB,iyellow("I'm scared. Get me out of here!"))
+    UCB=Gui.choiceHybrid(CHB,{},len(CHB)-1)
+    if UCB==len(CHB)-1 then break
+    if not UCB then continue
+    exploitChoice=Exploit.get(attackTarget.metaLib)[UCB-1]
+    ex=Exploit.run(exploitChoice,attackTarget)
+    if ex isa string then
+      Info.error(ex)
+      continue
+    else if ex isa number and ex==1 then
+      if exploitChoice.e=="d" then buffer=green(Text.buffer.SF) else buffer=green(Text.buffer.SP)
+      continue
+    else if ex isa number and ex==0 then
+      if exploitChoice.e=="d" then buffer=red(Text.buffer.FF) else buffer=red(Text.buffer.FP)
+      continue
+    end if
+    Attack.getObject(typeof(ex),ex,attackTarget)
+    Gui.cp=globals.G_gui
+  end while
+end function
+// Net.lan: interactive LAN mapper/exploiter with cached topology
+Net.lan=function(Obj,metaxploit,targetIp=null)
+  msg={"text":"","isError":0}
+  portMap={}      // ip -> ports map
+  ipList=[]       // ordered ip list for menu
+  menuEntries=[]  // rendered entries for menu
+  // Recursively map devices, ports, and roles
+  deep=function(ip,seen)
+    deviceEntries=[]
+    if indexOf(seen,ip)!=null then return deviceEntries
+    node={
+      "ip":ip,
+      "ports":[],
+      "devices":[],
+      "type":blue("Workstation at --- "),
+      "typeIcon":blue("[-] "),
+      "firewall":false,
+      "firewall_rules":null
+    }
+    if not ping(get_shell,ip) then
+      push(deviceEntries,node)
+      return deviceEntries
+    end if
+    push(seen,ip)
+    routerObj=get_router(ip)
+    // Router/switch classification and firewall flagging
+    if routerObj!=null then
+      firewallRules=firewall_rules(routerObj)
+      if firewallRules isa list and firewallRules then
+        node["typeIcon"]=green("[F] ")
+        node["firewall"]=true
+        node["firewall_rules"]=firewallRules
+        for rule in firewallRules;if indexOf(rule,"DENY")!=null then node["typeIcon"]=red("[F] ");end for
+      end if
+      if local_ip(get_router(public_ip(routerObj)))==node["ip"] then
+        node["type"]=white("Edge Router at")+blue(" --- ")
+        if not node["firewall"] then node["typeIcon"]=blue("[+] ")
+      else
+        if get_switch(node["ip"]) then
+          node["type"]=yellow("Switch at")+blue(" -------- ")
+          if not node["firewall"] then node["typeIcon"]=yellow("[!] ")
+        else
+          node["type"]=white("Router at")+blue(" -------- ")
+          if not node["firewall"] then node["typeIcon"]=green("[+] ")
+        end if
+      end if
+      for devicePort in device_ports(routerObj,ip)
+        portEntry={}
+        if port_number(devicePort)==8080 then push(node["ports"],{"port_number":0,"local_ip":local_ip(routerObj),"public_ip":public_ip(routerObj)})
+        portEntry["port_number"]=port_number(devicePort)
+        portEntry["local_ip"]=get_lan_ip(devicePort)
+        portEntry["public_ip"]=public_ip(routerObj)
+        push(node["ports"],portEntry)
+      end for
+      for lanDevice in devices_lan_ip(routerObj)
+        if indexOf(seen,lanDevice)!=null or lanDevice==ip then continue
+        for child in deep(lanDevice,seen);push(node["devices"],child);end for
+      end for
+    else
+      parentRouter=get_router(seen[0])
+      if parentRouter!=null then
+        for devicePort in device_ports(parentRouter,ip)
+          portEntry={}
+          pn=port_number(devicePort)
+          portEntry["port_number"]=pn
+          portEntry["local_ip"]=get_lan_ip(devicePort)
+          portEntry["public_ip"]=public_ip(parentRouter)
+          if pn==1222 then
+            node["type"]=purple("Player at")+blue(" -------- ")
+          else if pn==37777 then
+            node["type"]=orange("Camera at")+blue(" -------- ")
+          else if pn==1883 then
+            node["type"]=orange("Appliance at")+blue(" ----- ")
+          else if pn==5555 then
+            node["type"]=orange("ADB|Phone at")+blue(" ----- ")
+          else if pn==6667 then
+            node["type"]=purple("Player at")+blue(" -------- ")
+          end if
+          push(node["ports"],portEntry)
+        end for
+      end if
+    end if
+    push(deviceEntries,node)
+    return deviceEntries
+  end function
+  // Flatten mapped devices into menu lists
+  genLan=function(items)
+    if not items isa list then return Error.set("Network unstable")
+    for l in items
+      if l["ports"] then
+        portMap[l["ip"]]=l["ports"]
+        portNumbers=[]
+        for portEntry in l["ports"];push(portNumbers,portEntry["port_number"]);end for
+        if not portNumbers then
+          push(ipList,l["ip"])
+          push(menuEntries,l["typeIcon"]+l["type"]+green(l["ip"]))
+        else
+          push(ipList,l["ip"])
+          push(menuEntries,l["typeIcon"]+l["type"]+green(l["ip"])+white(":"+portNumbers))
+        end if
+      else
+        push(ipList,l["ip"])
+        push(menuEntries,l["typeIcon"]+l["type"]+green(l["ip"]))
+      end if
+      if l["devices"] then genLan(l["devices"])
+    end for
+    return menuEntries
+  end function
+  Info.info("Building network map cache...")
+  menuEntries=genLan(deep(local_ip(get_router),[]))
+  if targetIp then
+    if not hasIndex(portMap,targetIp) then return Info.error("No ports found for "+targetIp)
+    if not portMap[targetIp] then return Info.error("No ports found for "+targetIp)
+    extractedTargets=Exploit.extractLan(metaxploit,portMap[targetIp])
+    if not extractedTargets then return
+    attackTarget=Exploit.chooseLan(Obj,extractedTargets,portMap,false)
+    if not attackTarget then return
+    if attackTarget isa string then return Info.error(attackTarget)
+    globals.G_gui=Gui.cp
+    while true
+      if globals.G_attributes.back then
+        Gui.cp=globals.G_gui
+        return
+      end if
+      CHB=Exploit.showData(Exploit._ex(Exploit.getCacheKey(attackTarget.metaLib)),"Choose which attack vector you would like to use:")
+      push(CHB,iyellow("I'm scared. Get me out of here!"))
+      UCB=Gui.choiceHybrid(CHB,{},len(CHB)-1)
+      if UCB==len(CHB)-1 then break
+      if not UCB then continue
+      exploitChoice=Exploit.get(attackTarget.metaLib)[UCB-1]
+      ex=Exploit.run(exploitChoice,attackTarget)
+      if ex isa string then
+        Info.error(ex)
+        continue
+      else if ex isa number and ex==1 then
+        if attackTarget.metaLib[UCB-1].port_number==0 or exploitChoice.e=="d" then self.buffer=green(Text.buffer.SF) else self.buffer=green(Text.buffer.SP)
+        continue
+      else if ex isa number and ex==0 then
+        if exploitChoice.e=="d" then self.buffer=red(Text.buffer.FF) else self.buffer=red(Text.buffer.FP)
+        continue
+      end if
+      Attack.getObject(typeof(ex),ex,attackTarget)
+      Gui.cp=globals.G_gui
+    end while
+    return
+  end if
+	while true
+    if globals.G_attributes.back then return
+    choiceList=[green("Select a lan target [Currently on a "+Obj.machineType+" at "+Obj.computer.local_ip+"]")]
+    for entry in menuEntries;push(choiceList,entry);end for
+    push(choiceList,iyellow("Disable all firewalls"))
+    push(choiceList,iyellow("Refresh Lan Cache"))
+		push(choiceList,iyellow("I'm scared. Get me out of here!"))
+		if msg.text then
+			if msg.isError then Info.error(msg.text) else Info.info(msg.text)
+			msg.text=""
+      msg.isError=0
+		end if
+		userChoice=Gui.choiceHybrid(choiceList,{},len(choiceList)-1)
+    if userChoice==len(choiceList)-3 then
+      Info.info("Disabling all firewalls...")
+      for portEntryMap in portMap
+        firewallDropped=false
+        for firewallPort in portEntryMap.value
+          if firewallDropped then break
+          if firewallPort["port_number"]==0 then
+            exploitSet=Exploit.extractLan(metaxploit,portEntryMap.value)
+            if not exploitSet then continue
+            for exploitResult in exploitSet
+              if firewallDropped then break
+              cachedExploits=Exploit._ex(Exploit.getCacheKey(exploitResult.metaLib))
+              if not len(cachedExploits) then continue
+              for exploitEntry in cachedExploits
+                if exploitEntry.e=="d" then
+                  Exploit.overflow(exploitResult.metaLib,exploitEntry.m,exploitEntry.s,null,"net")
+                  firewallDropped=true
+                  break
+                end if
+              end for
+            end for
+          end if
+        end for
+      end for
+      Info.info("Refreshing network map cache...")
+      portMap={}
+      ipList=[]
+      menuEntries=[]
+      menuEntries=genLan(deep(local_ip(get_router),[]))
+      continue
+    end if
+    if userChoice==len(choiceList)-2 then
+      Info.info("Refreshing network map cache...")
+      portMap={}
+      ipList=[]
+      menuEntries=[]
+      menuEntries=genLan(deep(local_ip(get_router),[]))
+      continue
+    end if
+		if userChoice==len(choiceList)-1 then break
+    if not hasIndex(portMap,ipList[userChoice-1]) then continue
+    if not portMap[ipList[userChoice-1]] then
+      Info.error("No ports found for "+ipList[userChoice-1])
+      continue
+    end if
+    extractedTargets=Exploit.extractLan(metaxploit,portMap[ipList[userChoice-1]])
+    if not extractedTargets then continue
+		attackTarget=Exploit.chooseLan(Obj,extractedTargets,portMap,false)
+    if not attackTarget then continue
+    if attackTarget isa string then
+      msg.text=attackTarget
+      continue
+    end if
+		globals.G_gui=Gui.cp
+		while true
+      if globals.G_attributes.back then
+        Gui.cp=globals.G_gui
+        return
+      end if
+			if self.buffer then
+				print self.buffer
+				self.buffer=""
+			end if
+      CHB=Exploit.showData(Exploit._ex(Exploit.getCacheKey(attackTarget.metaLib)),"Choose which attack vector you would like to use:")
+			push(CHB,iyellow("I'm scared. Get me out of here!"))
+			UCB=Gui.choiceHybrid(CHB,{},len(CHB)-1)
+			if UCB==len(CHB)-1 then break
+      if not UCB then continue
+      exploitChoice=Exploit.get(attackTarget.metaLib)[UCB-1]
+      ex=Exploit.run(exploitChoice,attackTarget)
+      if ex isa string then
+        Info.error(ex)
+        continue
+			else if ex isa number and ex==1 then
+        if attackTarget.metaLib[UCB-1].port_number==0 or exploitChoice.e=="d" then self.buffer=green(Text.buffer.SF) else self.buffer=green(Text.buffer.SP)
+        continue
+			else if ex isa number and ex==0 then
+        if exploitChoice.e=="d" then self.buffer=red(Text.buffer.FF) else self.buffer=red(Text.buffer.FP)
+        continue
+			end if
+      Attack.getObject(typeof(ex),ex,attackTarget)
+      Gui.cp=globals.G_gui
+		end while
+	end while
+end function
+Net.local=function(Obj)
+  r=Obj.net.router
+  if not r then return Error.set("Router is corupted")
+	Info.info("Scanning firewall rules...")
+  f=false
+	for i in devices_lan_ip(r)
+		j=get_router(i)
+		if not j then j=r
+    w=firewall_rules(j)
+    if w then
+      f=true
+      print green("[---] ")+white("Firewall Rules for:"+i)
+      self.firewallRules(w)
+    end if
+	end for
+  if not f then Info.info("No firewalls found")
+end function
+// Net.router: gather router metadata, firewall rules, and LAN device/port status
+Net.router=function(r)
+  if not r then return Error.set("Router is corupted")
+  // Initialize map for discovered LAN hosts
+  m={}
+  // Cache router addresses and kernel info to avoid repeat lookups
+  localIp=local_ip(r)
+  publicIp=public_ip(r)
+  routerKernel=kernel_version(r)
+  routerVersion=routerKernel
+  if not routerVersion then routerVersion="###.###.###"
+  // Show SSID/BSSID and public/private addressing
+  if essid_name(r)=="" then print red(rjust("No ESSID",32)) else print blue(rjust(essid_name(r),32))+yellow("   ("+bssid_name(r)+")")
+  print blue(rjust("Public IP",32))+white(" : ")+yellow(publicIp)
+  print blue(rjust("Private IP",32))+white(" : ")+yellow(localIp)
+  // Print WHOIS details for the public IP
+  for e in split(whois(publicIp),char(10))
+    if len(e)>1 then
+      w=split(e,":")
+      print blue(rjust(str(w[0]),32))+yellow(" :")+white(join(w[1:],""))
+    end if
+  end for
+  // Indicate router firmware version or corruption fallback
+  if routerKernel then print blue(rjust("Router is at version",32))+yellow(" : ")+white(routerKernel) else print error(rjust("Router is corupted",32))+yellow(" : ")+error(routerVersion)
+  // Fetch and render firewall rules
+  firewall=firewall_rules(r)
+  print green("Scanning firewall rules...")
+  if not firewall then print green("Firewall rules: N/A") else self.firewallRules(firewall)
+  print green("[---] ")+white("Edge Router at ")+yellow(localIp)
+  print green("[------•-->")+orange(" :")+green(ljust("0 router "+routerVersion,23))+green(" ---> ")+yellow(localIp)+white(":")+green(0)
+  // List router-exposed ports with reachability checks
+  for p in used_ports(r);pn=port_number(p);desc=port_info(r,p);if not is_closed(p) and ping_port(r,pn) then print green("[------•-->")+orange(" :")+green(ljust(pn+" "+desc,23))+green(" ---> ")+yellow(get_lan_ip(p))+white(":")+green(pn) else print green("[------•")+red("-X>")+orange(" :")+green(pn+" "+desc);end for
+  // Walk LAN devices, classify roles by port signatures, and print port status
+  for i in devices_lan_ip(r)
+    m[i]=i
+    if i==localIp then continue
+    ports=device_ports(r,i)
+    if not ports or ports isa string then
+      print green("[---] ")+blue("Workstation at ")+yellow(i)
+      print red("[------•--> No ports detected")
+      continue
+    end if
+    portNumbers=[]
+    for p in ports;push(portNumbers,port_number(p));end for
+    deviceLabel=blue("Workstation at ")
+    routerPortDesc=null
+    if indexOf(portNumbers,8080)!=null then
+      deviceLabel=white("Router at ---- ")
+      routerObj=get_router(i)
+      routerPortDesc="router "
+      // Prefer inner router kernel; fall back to edge router version
+      kv=routerVersion
+      if routerObj then
+        rv=kernel_version(routerObj)
+        if rv then kv=rv
+      end if
+      routerPortDesc+=kv
+    else if indexOf(portNumbers,1222)!=null or indexOf(portNumbers,6667)!=null then
+      deviceLabel=purple("Player at ---- ")
+    else if indexOf(portNumbers,37777)!=null then
+      deviceLabel=orange("Camera at ---- ")
+    else if indexOf(portNumbers,1883)!=null then
+      deviceLabel=orange("Appliance at - ")
+    end if
+    print green("[---] ")+deviceLabel+yellow(i)
+    // Inside LAN, router kernel port is typically inaccessible; mark as blocked
+    if routerPortDesc then print green("[------•")+red("-X>")+orange(" :")+green(ljust("0 "+routerPortDesc,18))
+    // For each device port, show reachability and description
+    for p in ports;pn=port_number(p);desc=port_info(r,p);if not is_closed(p) and ping_port(r,pn) then print green("[------•-->")+orange(" :")+green(ljust(pn+" "+desc,18)) else print green("[------•")+red("-X>")+orange(" :")+green(pn+" "+desc);end for
+  end for
+  return m
+end function
+Net.getRouters=function(r)
+  if not r then return Error.set("Router is corupted")
+  m=[]
+	for i in devices_lan_ip(r);h=Utility.machine(i,r);if indexOf(h,"Router")!=null or indexOf(h,"Switch")!=null then push(m,i);end for
+  return m
+end function
+Net.disableRouters=function(s=null)
+	c=0
+	for i in devices_lan_ip(get_router)
+		r=get_router(i)
+		if not r then continue
+		if not self.firewallAccess(firewall_rules(r)) then continue
+		for m in Exploit.extract(r,i)
+      if m isa Error then continue
+      if poll_input=="q" then return
+      x=Exploit._ex(Exploit.getCacheKey(m.metaLib))
+			if not len(x) then continue
+			for e in x;if e.e=="d" then Exploit.overflow(m.metaLib,e.m,e.s,i,"net");end for
+		end for
+		c+=1
+	end for
+	if s then
+		if c==0 then return Info.info("No routers were found")
+		if c==1 then return Info.info(c+" router was attacked")
+		return Info.info(c+" routers were attacked")
+	end if
+end function
+Net.firewallRules=function(w)
+	s={}
+  H=ljust("ACTION",10)+ljust("PORT",8)+ljust("SOURCE_IP",18)+"DESTINATION_IP"
+	for l in w
+		l=split(l," ")
+    if not len(l)==4 then continue
+		a=l[0]
+		if a=="DENY" then a=red(a) else a=green(a)
+		r={
+      "action":a,
+      "port":green(str(l[1])),
+      "source":blue(l[2]),
+      "destination":yellow(l[3])
+		}
+		s[__l_idx]=r
+	end for
+	p=[]
+	push(p,join([grey("ACTION"),grey("PORT"),grey("SOURCE_IP"),grey("DESTINATION_IP")],"  "))
+	for r in s;v=r.value;push(p,join([v.action,v.port,v.source,v.destination],"  "));end for
+	print format_columns(join(p,char(10)))
+end function
+Net._ripPattern="^(?!10\.)(?!127\.)(?!169\.254\.)(?!172\.(?:1[6-9]|2\d|3[0-1])\.)(?!192\.168\.)(?!192\.0\.0\.)(?!192\.0\.2\.)(?!192\.88\.99\.)(?!198\.(?:18|19)\.)(?!198\.51\.100\.)(?!203\.0\.113\.)(?!100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)(?:(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])\.(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d))$"
+Net.rip=function
+  while true
+    i=(floor(rnd*255)+1)+"."+floor(rnd*256)+"."+floor(rnd*256)+"."+floor(rnd*256)
+    if is_match(i,self._ripPattern) then
+      if globals.G_main.net.hasInternet then
+        if not is_lan_ip(i) and get_router(i) then return i
+      else
+        if not is_lan_ip(i) and is_valid_ip(i) then return i
+      end if
+    end if
+  end while
+end function
+Net.isPortsClose=function(s);for p in s;if is_closed(p) then return 1;end for;end function
+Net.getServices=function(i)
+	s={
+    "ftp":white("     [ "+green("FTP")+" ]-"),
+    "rshell":white("     [ "+purple("RSH")+" ]-"),
+    "ssh":white("     [ "+green("SSH")+" ]-"),
+    "smtp":white("     [ "+red("SMTP")+" ]-"),
+    "http":white("     [ "+red("HTTP")+" ]-"),
+    "cam":white("     [ "+red("CAM")+" ]-"),
+    "repository":white("     [ "+yellow("REPO")+" ]-"),
+    "chat":white("     [ "+purple("CHAT")+" ]-"),
+    "students":white("     [ "+red("SQL")+" ]-"),
+    "employees":white("     [ "+red("SQL")+" ]-"),
+    "criminals":white("     [ "+red("SQL")+" ]-"),
+    "bank_account":white("     [ "+red("SQL")+" ]-")
+	}
+	z=[]
+	r=get_router(i)
+	if not r then return char(10)+white("     [ "+red("Router Down")+" ]")
+	a=used_ports(r)
+	if not len(a) then return char(10)+white("     [ "+red("No Ports")+" ]")
+	for p in a;x=split(port_info(r,p)," ")[0];if hasIndex(s,x) then push(z,char(10)+s[x]+white(get_lan_ip(p)+":")+green(str(port_number(p))));end for
+	if not len(z) then return char(10)+white("     [ "+red("-0-")+" ]")
+	return join(z,"")
+end function
+Net.getServicesRaw=function(i)
+	s={
+    "ftp":"[ FTP ]-",
+    "rshell":"[ RSH ]-",
+    "ssh":"[ SSH ]-",
+    "smtp":"[ SMTP ]-",
+    "http":"[ HTTP ]-",
+    "cam":"[ CAM ]-",
+    "repository":"[ REPO ]-",
+    "chat":"[ CHAT ]-",
+    "students":"[ SQL ]-",
+    "employees":"[ SQL ]-",
+    "criminals":"[ SQL ]-",
+    "bank_account":"[ SQL ]-"
+	}
+	z=[]
+	r=get_router(i)
+	if not r then
+		push(z,"[ Router Down ]")
+		return join(z," ")
+	end if
+	a=used_ports(r)
+	if not len(a) then return
+	for p in a;x=split(port_info(r,p)," ")[-1];if hasIndex(s,x) then push(z,s[x]+get_lan_ip(p)+":"+str(port_number(p)));end for
+	if not z then push(z,"[ -0- ]")
+	return join(z," ")
+end function
+Net.lookup=function(i)
+  if not i then return
+	if is_valid_ip(i) then return i
+	if i[:3]=="www" then i=nslookup(i)
+	if not i=="Not found" then return i
+end function
+Net.netConfig=function
+	r=get_router
+	if essid_name(r)=="" then print red(rjust("No ESSID",32)) else print blue(rjust(essid_name(r),32))+yellow("   ("+bssid_name(r)+")")
+	print blue(rjust("Public IP",32))+white(" : ")+yellow(public_ip(r))
+	print blue(rjust("Private IP",32))+white(" : ")+yellow(local_ip(r))
+	if (network_gateway(globals.G_main.computer)!="0.0.0.0" and network_gateway(globals.G_main.computer)!=local_ip(r)) then print blue(rjust("Gateway",32))+white(" : ")+yellow(network_gateway(globals.G_main.computer))
+	for k in split(whois(public_ip(r)),char(10))
+		if len(k)>1 then
+			c=split(k,":")
+			print blue(rjust(str(c[0]),32))+yellow(" :")+white(join(c[1:],""))
+		end if
+	end for
+	if kernel_version(r) then print blue(rjust("Router is at version",32))+yellow(" : ")+white(kernel_version(r)) else print blue(rjust("Router is at version",32))+yellow(" : ")+error("Router is corupted")
+	q=firewall_rules(r)
+	print green("Scanning firewall rules...")
+	if not len(q) then print green("Firewall rules: N/Arg1") else Net.firewallRules(q)
+end function
+Net.addSession=function(x,t)
+  if not indexOf(typeof(x),"shell")!=null then return Error.set("Unable to establish a connection")
+  s=new{}
+  s.ip=public_ip_pc(host_computer(x))
+  s.lan=host_computer(x).local_ip
+  s.gateway=get_router(public_ip_pc(host_computer(x))).local_ip
+  s.shell=x
+	s.type=t
+  push(globals.G_netSessions,s)
+  Exploit.getShell(x)
+end function
+Net.connect=function(argv)
+  if not len(argv)>=4 then return Error.set("Invalid parameters")
+	Arg1=argv[0]
+	Arg2=argv[1]
+	Arg3=argv[2]
+	Arg4=argv[3]
+  self.addSession(connect_service(get_shell,Arg1,to_int(Arg2),Arg3,Arg4,E),E)
+end function
+Net.backSessions=function
+	if not len(globals.G_netSessions) then return Info.info("No network sessions found")
+	l=[]
+	for a in globals.G_netSessions;push(l,yellow("TYPE:"+green(a.type)+blue(" - ")+a.ip+"/"+a.lan));end for
+	Info.info("You have the following network sessions:")
+	listNHNC(l)
+end function
+Net.useSession=function(x)
+	if not len(globals.G_netSessions) then return Info.info("No network sessions found")
+	if not x isa number then return Error.set("Session id expected")
+	if not hasIndex(globals.G_netSessions,x) then return Error.set("Invalid network session id")
+	n=globals.G_netSessions[x]
+  Exploit.getShell(n.shell)
+end function
+Net.closeSession=function(x)
+	if not len(globals.G_netSessions) then return Info.info("No network sessions found")
+  if not x isa number then return Error.set("Session id expected")
+	if not hasIndex(globals.G_netSessions,x) then return Error.set("Invalid network session id")
+	w=globals.G_netSessions[x].type
+	remove(globals.G_netSessions,x)
+	Info.info("Removed session: "+w)
+end function
+Net.clearSessions=function;if not len(globals.G_netSessions) then return Info.info("No background sessions found");globals.G_netSessions=[];end function
+Net.pingPort=function(Obj,argv)
+  if not len(argv)>=2 then return Man.help(["pingport"])
+	_p=ArgumentParser.init
+  _p.addArgument("c",false,"storeNumber")
+  _p.addArgument("w",false,"storeNumber")
+  argv=_p.parseArgs("pingport",argv)
+	Arg1=argv[0]
+  if not is_valid_ip(Arg1) then return Error.set("Invalid IP")
+	Arg2=to_int(argv[1])
+  if not Arg2 isa number then return Error.set("Invalid port")
+  if Arg2<0 or Arg2>65535 then return Error.set("Invalid port")
+	if argv.c then
+    if not argv.w then argv.w=1
+		while argv.c
+			print white("Pining port "+green(str(Arg2))+" on "+green(Arg1)+" every "+yellow(str(argv.w))+" seconds...")
+      print white("Trys left: "+yellow(str(argv.c)))
+			r=get_router(Arg1)
+			p=ping_port(r,Arg2)
+			if p then
+				Attack.scan(Obj,Arg1)
+				break
+			end if
+			argv.c-=1
+			wait argv.w
+		end while
+		return Warning.set("); no one home")
+	end if
+	r=get_router(Arg1)
+	if not r then return Error.set("Unable to connect to router")
+	p=ping_port(r,Arg2)
+	if not p then return Error.set("Unable to connect to port")
+	i=split(port_info(r,p)," ")
+  if not len(i)==2 then return Error.set("Unable to connect to port")
+	s=null
+	if is_closed(p) then s=red("Closed") else s=green("Open")
+	print white("Port:         ")+green(str(Arg2))
+	print white("Port status:  ")+s
+	print white("Port type:    ")+yellow(i[0])
+	print white("Port version: ")+blue(i[1])
+end function
+Net.localPorts=function(Obj)
+	l=get_ports(Obj.computer)
+	if not len(l) then return Info.info("No ports found")
+	r=get_router(public_ip_pc(Obj.computer))
+	Info.info("Local ports:")
+	c=1
+	for p in l
+		i=split(port_info(r,p)," ")
+    if not len(i)==2 then continue
+		print white("Port:         ")+green(str(port_number(p)))
+		print white("Port status:  ")+green("Open")
+		print white("Port type:    ")+yellow(i[0])
+		print white("Port version: ")+blue(i[1])
+		if not c==len(l) then print white(""*40)
+	end for
+end function
+Net.installService=function(Obj,argv)
+	if not argv then return Man.help(["net"])
+  Arg1=lower(argv[0])
+	cmds={
+    "rshell":0,
+    "ssh":0,
+    "ftp":0,
+    "http":0,
+    "chat":0,
+    "repo":0
+  }
+	if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+  s=Arg1+"-server"
+  n=upper(Arg1)
+  R=null
+  for f in globals.G_virtualFiles
+    if indexOf(name(f.file),s)!=null then
+      x=scp(f.object,path(f.file),path(Obj.dir.current),Obj.object)
+      if x!=1 then return Error.set(x) else R=true
+      j=File(Obj.computer,path(Obj.dir.current)+"/"+name(f.file))
+      if j then rename(j,split(name(j),"FP"))[-1]
+      break
+    end if
+  end for
+  if not R then 
+    for f in get_files(globals.G_main.dir.share)
+      if indexOf(name(f),s)!=null then
+        Share.getFile(Obj,[str(__f_idx)])
+        R=1
+        break
+      end if
+    end for
+  end if
+  if not R then return Error.set("Failed to install the "+Arg1+" server (check firewall settings)")
+  f=File(Obj.computer,path(Obj.dir.current)+"/"+s)
+  if not f then return Error.set("Failed to download '"+s+"'")
+  if not File(Obj.computer,"/lib/aptclient.so") then
+    Info.info("aptclient.so not in /lib fetching from saved libs")
+    SavedLibs.install(Obj,["apt"])
+    if not File(Obj.computer,"/lib/aptclient.so") then
+      delete(f)
+      return Log.log(Obj)
+    end if
+    Library.aptclient=Io.getLib(Obj,"aptclient.so","aptclientLib")
+    if Library.aptclient then Info.info("AptClient loaded","+")
+    Command.pacman(Obj,["setup"])
+  end if
+  launch(Obj.object,path(f))
+  delete(f)
+  Log.log(Obj)
+  if not File(Obj.computer,"/lib/librshell.so") then return Error.set("Failed to install the "+Arg1+" server (check firewall settings)")
+  Info.info(n+" server installed and running")
+  Info.info("To add this "+Arg1+" server to your trusted ip list just issue folowing the command: "+yellow("sys -i "+Obj.meta.public_ip+" "+Arg1))
+  Info.info("To add this "+Arg1+" server to your cache system issue the folowing command: "+yellow("jack "+Arg1))
+  if Arg1=="rshell" then Rshell.import(Obj.meta.public_ip)
+end function
+Net.scanAll=function(argv)
+  if not globals.G_main.net.hasInternet then return Warning.set(Text.nonet)
+  _p=ArgumentParser.init
+  _p.addArgument("w",false,"store")
+  _p.addArgument("s",false,"store")
+  _p.addArgument("e",false,"store")
+  argv=_p.parseArgs("scan",argv)
+  if argv isa Error then return
+  if not argv.s then s=[1,0,0,0] else s=split(argv.s,"\.")
+  if len(s)!=4 then s=[1,0,0,0] else s=[val(s[0]),val(s[1]),val(s[2]),val(s[3])]
+  if not argv.e then e=[255,255,255,255] else e=split(argv.e,"\.")
+  if len(e)!=4 then e=[255,255,255,255] else e=[val(e[0]),val(e[1]),val(e[2]),val(e[3])]
+	t=time
+	o=0
+	Info.info("You have chosen a very long process")
+  Info.info("Kick back and grab a coffee, tea or beer if that is your thing")
+  if argv.w then Info.info("We are looking for the following whois data: "+yellow(argv.w))
+	j="-"*30
+	k="="*30
+	m=[]
+	print yellow("Scanning IP's from ")+white(join(s,"."))+yellow(" to ")+white(join(e,"."))
+  _=false
+  a=s[0]
+  while a<=e[0]
+    if _ then break
+    b=s[1]
+    while b<=e[1]
+      if _ then break
+      c=s[2]
+      while c<=e[2]
+        if _ then break
+        d=s[3]
+        while d<=e[3]
+          if poll_input=="q" then
+            _=true
+            break
+          end if
+          i=join([a,b,c,d],".")
+          if is_lan_ip(i) or whois(i)=="Address not found" then
+            d+=1
+            continue
+          end if
+          r=get_router(i)
+          if not r then
+            d+=1
+            continue
+          end if
+          if argv.w then
+            if indexOf(whois(i),argv.w)==null then
+              d+=1
+              continue
+            end if
+          end if
+          w=used_ports(r)
+          push(m,"+"+i)
+          push(m,j)
+          if not w then
+            push(m,ljust(" [0]",8)+"[router "+kernel_version(r)+"]")
+            push(m,k)
+            d+=1
+            continue
+          end if
+          push(m,ljust(" [0]",8)+"[router "+kernel_version(r)+"]")
+          for q in w;push(m,ljust(" "+"["+port_number(q)+"]",9)+"["+port_info(r,q)+"]");end for
+          push(m,k)
+          if len(m)>6200 then
+            o+=1
+            f=File(globals.G_main.computer,path(globals.G_main.user.home)+"/scan_ip_data"+o+".txt")
+            if not f then f=Command.touch(globals.G_main,[path(globals.G_main.user.home)+"/scan_ip_data"+o+".txt"])
+            if f isa Error then return
+            set_content(f,join(m,char(10)))
+            if o==1 then g="file" else g="files"
+            Info.info(o+" "+g+" has been writen to disk")
+            m=[]
+          end if
+          d+=1
+        end while
+        c+=1
+      end while
+      b+=1
+    end while
+    a+=1
+  end while
+  if m then
+    o+=1
+    f=File(globals.G_main.computer,path(globals.G_main.user.home)+"/scan_ip_data"+o+".txt")
+    if not f then f=Command.touch(globals.G_main,[path(globals.G_main.user.home)+"/scan_ip_data"+o+".txt"])
+    if f isa Error then return
+    set_content(f,join(m,char(10)))
+    if o==1 then g="file" else g="files"
+    Info.info(o+" "+g+" has been writen to disk")
+  end if
+	print (yellow("Process took:"))+(green(str(round(time-t,2))+" seconds"))
+end function
+Net.scanByValue=function(argv)
+  if not globals.G_main.net.hasInternet then return Warning.set(Text.nonet)
+	if not Library.haveMetaxploit then return
+	e=[]
+	while true
+    print blue("Referance:")
+    print yellow("kernel_router ssh ftp http chat rshell repository cam")
+    print yellow("bank_account employees students criminals smtp")
+    print green("------------------------------------------------------")
+		if e then
+			if len(e)==1 then print blue("Serching for "+e)
+			if len(e)==2 then print blue("Serching for libraries: "+join(e," and "))
+			if len(e)>2 then print blue("Serching for libraries: "+join(e,","))
+      print green("------------------------------------------------------")
+		end if
+    print yellow("type 's' when ready to start parsing servers")
+    print yellow("type 'c' to clear parsing queue")
+    print green("------------------------------------------------------")
+    r=Gui.input({"text":"What library would you like to search for (ssh 1.0.1)?"})
+    if r==null then break
+    if r=="x" then return
+    if r=="s" then break
+    if r=="c" then
+      e=[]
+      continue
+    end if
+    if r then push(e,r)
+  end while
+  if len(e) then
+    Info.info("Serching...")
+    while poll_input!="q"
+      c=0
+      i=self.rip
+      r=get_router(i)
+      if not r then continue
+      z=["kernel_router "+kernel_version(r)]
+      portMap={}
+      for p in used_ports(r);info=port_info(r,p);push(z,info);portMap[info]=true;end for
+      for a in e;if hasIndex(portMap,a) then c+=1;end for
+      if c==len(e) then return Attack.scan(globals.G_main,i)
+    end while
+  end if
+end function
+Net.recon=function(Obj,argv,stdin="",tty=true)
+  inputFromPipe=null
+  if stdin!=null and stdin!="" then
+    inputFromPipe=stdin
+    if inputFromPipe isa Error then return Error.set("","",true)
+    if typeof(inputFromPipe)!="string" then inputFromPipe=str(inputFromPipe)
+    inputFromPipe=trim(inputFromPipe)
+  end if
+  if not argv and not inputFromPipe then return Man.help(["recon"])
+  if not argv then argv=[]
+  _p=ArgumentParser.init
+  _p.addArgument("u",false,"flag")
+  _p.addArgument("a",false,"flag")
+  _p.addArgument("i",false,"store")
+  _p.addArgument("s",false,"flag")
+  _p.addArgument("r",false,"flag")
+  _p.addArgument("p",false,"store")
+  _p.addArgument("f",false,"store")
+  _p.addArgument("file",true,"store")
+  _p.addArgument("extreme",true,"flag")
+  _p.addArgument("save",true,"flag")
+  _p.addArgument("filter",true,"flag")
+  _p.addArgument("subjects",true,"flag")
+  _p.addArgument("view",true,"flag")
+  _p.addArgument("g",false,"flag")
+  _p.addArgument("grep",true,"storeArray")
+  argv=_p.parseArgs("recon",argv)
+  if argv isa Error then return
+  if not Obj then
+    argv.file=false
+    argv.save=false
+  end if
+  if argv.s then
+    if not argv.f then argv.f="decipher"
+    if not argv.p then argv.p="/etc"
+  end if
+  if not argv.extreme then argv.extreme=50 else argv.extreme=255
+  _netReconOut=[]
+  init=function(w,argv)
+    i=Net.lookup(w)
+    if not i then return Error.set("Invalid ip: "+i)
+    if indexOf(i,".")==null then return Error.set("[ "+i+" ] is not a valid ip")
+    if is_lan_ip(i) then return Error.set("[ "+i+" ] is a lan ip, enter a public ip")
+    r=get_router(i)
+    if not r then return Warning.set("IP down")
+    if globals.G_settings.monitorDirtyips then Dirty.add(i)
+    e=Exploit.extract(r,i)
+    if e isa Error then return
+		argv.rest+devices_lan_ip(r)
+    Attack.recon(r,e,argv)
+  end function
+  if argv.file then
+    f=Io._getFile(Obj,argv.file)
+    if f isa Error then return
+    for line in split(get_content(f),char(10));init(line,argv);end for
+  else if inputFromPipe then
+    for line in split(inputFromPipe,char(10))
+      line=trim(line)
+      if line then init(line,argv)
+    end for
+  else
+    init(argv.rest[0],argv)
+  end if
+  if not tty then return _netReconOut
+end function
+Net.service=function(Obj,argv)
+  if not argv then return Man.help(["service"])
+	Arg1=lower(argv[0])
+  // Data table for service install/start/stop: [label, libName, libPath, strictTypeCheck, importRshell]
+  _svcData={
+    "ssh":["SSH","libssh.so","/lib/libssh.so",false,false],
+    "rshell":["RShell","librshell.so","/lib/librshell.so",true,true],
+    "http":["HTTP","libhttp.so","/lib/libhttp.so",false,false],
+    "repo":["Repository","librepository.so","/lib/librepository.so",false,false],
+    "ftp":["FTP","libftp.so","/lib/libftp.so",false,false],
+    "chat":["Chat","libchat.so","/lib/libchat.so",false,false]
+  }
+  if hasIndex(_svcData,Arg1) then
+    if not argv[1:] then return Man.help(["service"])
+    _d=_svcData[Arg1]
+    _bin=Obj.services[Arg1].bin
+    _S=_bin and (not _d[3] or typeof(_bin)=="service")
+    _doInstall=function(ar)
+      if _S then return Warning.set(_d[0]+" is already installed, if not running then try to start the service with 'service "+Arg1+" start'")
+      if indexOf(Obj.type,"shell")==null then return Warning.set("This command is not available for a [ "+Obj.type+" ] object")
+      System.checkAptList(Obj)
+      Command.pacman(Obj,["-Si",_d[1],"-p","/lib"])
+      if not globals.G_hasPivoted then Obj.services[Arg1].bin=include_lib(_d[2]) else Obj.services[Arg1].bin=Builder.packLibrary(Obj,_d[2])
+      if Obj.services[Arg1].bin then
+        r=install_service(Obj.services[Arg1].bin)
+        if r!=1 then return Error.set(r)
+        Info.info(_d[0]+" service installed")
+        Info.info("Type [ open -b "+Obj.net.router.local_ip+":8080 ] to access the")
+        Info.info("router configuration to make sure the service is accesible")
+        Info.info("If "+Arg1+"d is not running or fully initalized then")
+        Info.info("restart x 'CTL+C' or re-log and type 'service "+Arg1+" start'")
+        if _d[4] then Rshell.import(Obj.meta.public_ip)
+      else
+        Info.error("Failed to install the "+Arg1+" service (check firewall settings)")
+      end if
+    end function
+    _start=function(ar)
+      if _S then
+        r=start_service(Obj.services[Arg1].bin)
+        if r isa string then Info.error(r) else Info.info(_d[0]+" service started")
+      else
+        Info.warning(_d[0]+" service is not installed")
+      end if
+    end function
+    _stop=function(ar)
+      if _S then
+        r=stop_service(Obj.services[Arg1].bin)
+        if r isa string then Info.error(r) else Info.info(_d[0]+" service stopped")
+      else
+        Info.warning(_d[0]+" service is not installed")
+      end if
+    end function
+    _sub=lower(argv[1])
+    _scmds={"stop":@_stop,"start":@_start,"-i":@_doInstall}
+    if hasIndex(_scmds,_sub) then _scmds[_sub](argv[2:]) else Info.error(Text.msg.flag+_sub+" ]")
+    return
+  end if
+	listlocal=function(arg)
+		s=[]
+		for i in Obj.services;if values(i)[1].bin and typeof(values(i)[1].bin)=="service" then push(s,yellow(i.key));end for
+    if not s then return Info.info("This system does not have any running services")
+		if len(s) then
+			if len(s)==1 then Info.info("Found only one potential service on this system:") else Info.info("Found the following potential services on this system:")
+			print(join(s,char(10)))
+		end if
+	end function
+	view=function(arg)
+		z=[]
+		for s in values(Net.services)
+			print white("-"*50)
+			print yellow("Port:")+green(str(s.port))
+			print yellow("Library:")+white(s.lib)
+			print yellow("Display Name:")+white(s.name)
+		end for
+		print white("-"*50)
+	end function
+	cmds={
+    "-v":@view,
+    "-l":@listlocal
+  }
+	if hasIndex(cmds,Arg1) then cmds[Arg1](argv[1:]) else Info.error("check your syntax...there is no service [ "+Arg1+" ]")
+end function
+Net.isPatched=function(m)
+  p=is_patched(m.metaLib,1)
+  if p isa string then return green("Patched To: "+p)
+  if p isa number and p==1 then return green("Patched") else return red("Not Patched")
+  if not p then return red("Not Patched")
+end function
+Net.netcat=function(Obj,argv)
+  f=File(Obj.computer,path(Obj.user.home)+"/n.src")
+  if f then Command.qrm(Obj,[path(Obj.user.home)+"/n.src"])
+  f=Command.touch(Obj,[path(Obj.user.home)+"/n.src"])
+  if not f then return Error.set("Failed to create the netcat script")
+  _sys=System.getSystem
+  _sf=File(_sys.computer,path(_sys.dir.srcTools)+"/netcat")
+  if not _sf then return Error.set("Missing netcat source")
+  set_content(f,get_content(_sf))
+  if build(Obj.shell,path(f),path(Obj.user.home))=="" then
+    Command.qrm(Obj,[path(f)])
+    a=File(Obj.computer,path(Obj.user.home)+"/n")
+    if a then
+      launch(Obj.shell,path(Obj.user.home)+"/n")
+      Command.qrm(Obj,[path(a)])
+    else
+      Command.qrm(Obj,[path(f)])
+      Error.set("Failed to launch the netcat script")
+    end if
+  else
+    Command.qrm(Obj,[path(f)])
+    Error.set("Failed to build the netcat script")
+  end if
+end function
+Net.loop=function(Obj,argv)
+  if not argv then argv=[]
+  if Obj.layer=="shell" then
+    if not Obj.packMetaxploit then
+      _=Builder.packCO(Obj)
+      if _ isa Error then return
+      Obj.packMetaxploit=_.metaxploit
+      Obj.packRouter=_.router
+    end if
+  end if
+  getIP=function(r,p);if len(r)==0 then return;for j in r;if port_number(j)==p then return get_lan_ip(j);end for;end function
+  remote=function(arg)
+    _p=ArgumentParser.init
+    _p.addArgument("m",false,"store")       // memory address
+    _p.addArgument("c",false,"store")       // code to inject
+    _p.addArgument("p",false,"store")       // extra params
+    _p.addArgument("w",false,"storeNumber") // wait time between attacks
+    arg=_p.parseArgs("loop -r",arg)
+    if arg isa Error then return
+    // Pull stdin for ip:port
+    hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+    G=null; E=null
+    if hasPipeIn then
+      for _ln in split(globals.G_pipe.stdin,char(10))
+        _ln=trim(_ln)
+        if not _ln then continue
+        if indexOf(_ln,":")!=null then
+          _parts=split(_ln,":")
+          G=_parts[0]; E=to_int(_parts[-1])
+        else
+          G=_ln
+        end if
+        break
+      end for
+    end if
+    // Positional: ip:port from rest[0] if not piped
+    if not G and arg.rest and len(arg.rest)>0 then
+      _tok=arg.rest[0]
+      if indexOf(_tok,":")!=null then
+        _parts=split(_tok,":")
+        G=_parts[0]; E=to_int(_parts[-1])
+      else
+        G=_tok
+      end if
+    end if
+    B=arg.w; D=arg.m; C=arg.c; P=arg.p
+    // Fallback positional (legacy: memaddr code wait [params])
+    if not D and arg.rest and len(arg.rest)>1 then D=arg.rest[1]
+    if not C and arg.rest and len(arg.rest)>2 then C=arg.rest[2]
+    if not B and arg.rest and len(arg.rest)>3 then B=to_int(arg.rest[3])
+    if not P and arg.rest and len(arg.rest)>4 then P=arg.rest[4]
+    // GUI prompts for anything still missing
+    if not G then
+      G=Gui.inputIP({"text":"Enter target public ip"})
+      if G==null then return Error.set("No public IP entered")
+    end if
+    if not E then
+      E=Gui.inputInt({"text":"Enter port"})
+      if not E isa number then return Error.set("No port entered")
+    end if
+    if E<0 or E>65535 then return Error.set("Port range is 0-65535")
+    if not D then
+      D=Gui.input({"text":"Enter memory address"})
+      if D==null then return Error.set("No memory address entered")
+    end if
+    if not C then
+      C=Gui.input({"text":"Enter unsecure value"})
+      if C==null then return Error.set("No unsecure value entered")
+    end if
+    if not P then P=Gui.input({"text":"Enter extra params"})
+    if not B then
+      B=Gui.inputInt({"text":"Enter wait time (time between attacks)"})
+      if not B isa number then return Error.set("No wait time entered")
+    end if
+    if not is_valid_ip(G) then G=nslookup(G)
+    if not is_valid_ip(G) then return Error.set("IP address invalid")
+    r=get_router(G)
+    if not r then return Error.set("Bad IP or router down")
+    if r isa string then return Error.set(r)
+    if E<0 or E>65535 then return Error.set("Port range is 0-65535")
+    _meta=null
+    if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then _meta=Obj.packMetaxploit else _meta=Library.metaxploit
+    n=net_use(_meta,G,E)
+    if not n then return Error.set("Cannot connect to net session")
+    l=dump_lib(n)
+    if not l then Error.set("Cannot dump library")
+    print yellow("-- Payload overview --")
+    print blue("Public IP     : "+G)
+    print blue("Port          : "+E)
+    print blue("Buffer zone   : "+D)
+    print blue("Code to inject: "+C)
+    if P then print blue("Extra params  : "+P)
+    print blue("Wait time     : "+B+" seconds")
+    Utility.pressQ
+    while true
+      _k=poll_input
+      if _k=="q" or _k=="x" then break
+      if P then ex=overflow(l,D,C,P) else ex=overflow(l,D,C)
+      if ex isa string then
+        wait B
+        continue
+      end if
+      if not ex then
+        wait B
+        continue
+      end if
+      if ex isa number then return Info.info("Payload success")
+      obj=typeof(ex)
+      if indexOf(obj,"shell")!=null then
+        return Exploit.getShell(ex)
+      else if obj=="computer" then
+        return Exploit.getComputer(ex)
+      else if obj=="file" then
+        i=getIP(used_ports(r),E)
+        if not i then i=G
+        return Exploit.getFile(ex,{"public_ip":G,"local_ip":i})
+      end if
+      wait B
+    end while
+  end function
+  local=function(arg)
+    _p=ArgumentParser.init
+    _p.addArgument("f",false,"store")       // library file path
+    _p.addArgument("m",false,"store")       // memory address
+    _p.addArgument("c",false,"store")       // code to inject
+    _p.addArgument("p",false,"store")       // extra params
+    _p.addArgument("w",false,"storeNumber") // wait time between attacks
+    arg=_p.parseArgs("loop -l",arg)
+    if arg isa Error then return
+    // Pull stdin for library path
+    hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+    A=arg.f
+    if not A and hasPipeIn then
+      for _ln in split(globals.G_pipe.stdin,char(10))
+        _ln=trim(_ln)
+        if _ln then A=_ln; break
+      end for
+    end if
+    if not A and arg.rest and len(arg.rest)>0 then A=arg.rest[0]
+    B=arg.w; _B=arg.m; _C=arg.c; E=arg.p
+    // Fallback positional (legacy: libpath memaddr code wait [params])
+    if not _B and arg.rest and len(arg.rest)>1 then _B=arg.rest[1]
+    if not _C and arg.rest and len(arg.rest)>2 then _C=arg.rest[2]
+    if not B and arg.rest and len(arg.rest)>3 then B=to_int(arg.rest[3])
+    if not E and arg.rest and len(arg.rest)>4 then E=arg.rest[4]
+    // GUI prompts for anything still missing
+    if not A then
+      _fo=Io.file(Obj,File(Obj.computer,"/lib"),"Select a library to exploit:")
+      if _fo isa Warning then return _fo
+      A=path(_fo)
+    end if
+    if not _B then
+      _B=Gui.input({"text":"Enter memory address"})
+      if _B==null then return Error.set("No memory address entered")
+    end if
+    if not _C then
+      _C=Gui.input({"text":"Enter unsecure value"})
+      if _C==null then return Error.set("No unsecure value entered")
+    end if
+    if not E then E=Gui.input({"text":"Enter extra params"})
+    if not B then
+      B=Gui.inputInt({"text":"Enter wait time (time between attacks)"})
+      if not B isa number then return Error.set("No wait time entered")
+    end if
+    A=File(Obj.computer,A)
+    if not A then return Error.set("Missing library path")
+    A=path(A)
+    r=get_router
+    p=r.public_ip
+    _meta=null
+    if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then _meta=Obj.packMetaxploit else _meta=Library.metaxploit
+    n=load(_meta,A)
+    if not n then return Error.set("Unable to load "+A)
+    print yellow("-- Payload overview --")
+    print blue("Library       : "+lib_name(n))
+    print blue("Buffer zone   : "+_B)
+    print blue("Code to inject: "+_C)
+    if E then print blue("Extra params  : "+E)
+    print blue("Wait time     : "+B+" seconds")
+    Utility.pressQ
+    while true
+      _k=poll_input
+      if _k=="q" or _k=="x" then break
+      if E then ex=overflow(n,_B,_C,E) else ex=overflow(n,_B,_C)
+      if ex isa string then
+        wait B
+        continue
+      end if
+      if not ex then
+        wait B
+        continue
+      end if
+      if ex isa number then return Info.info("Payload success")
+      obj=typeof(ex)
+      if indexOf(obj,"shell")!=null then
+        return Exploit.getShell(ex)
+      else if obj=="computer" then
+        return Exploit.getComputer(ex)
+      else if obj=="file" then
+        i=getIP(used_ports(r),E)
+        if not i then i=p
+        return Exploit.getFile(ex,{"public_ip":p,"local_ip":i})
+      end if
+      wait B
+    end while
+  end function
+  cmds={
+    "-r":@remote,
+    "-l":@local
+  }
+  if not argv or len(argv)==0 then return Man.help(["loop"])
+  Arg1=lower(argv[0])
+  if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+  cmds[Arg1](argv[1:])
+end function
+Net.sniff=function(Obj,argv)
+  if argv.deploy then return Builder.deploy(Obj,argv,"sniffer")
+  if hasIndex(Obj,"packMetaxploit") then M=Obj.packMetaxploit else M=Library.metaxploit
+  if not M then return Error.set("Metaxploit library is not available")
+  Info.info("waiting...")
+	s=sniffer(M,argv.save)
+	if not s then return Error.set("Sniffer failed to start")
+	print s
+  if argv.save then print yellow("Encode Source save to "+current_path+"/encode.src")
+	return true
+end function
+Net.snoop=function(Obj,argv)
+  Arg1=join(argv,"")
+	w={
+    "email":null,
+    "bank":null,
+    "passwd":null
+	}
+	x={
+    "dict":null,
+    "decipher":null
+	}
+  if not Arg1 then
+    w.email=1
+    w.bank=1
+    w.passwd=1
+  else
+    if indexOf(Arg1,"b")!=null then w.bank=1
+    if indexOf(Arg1,"p")!=null then w.passwd=1
+    if indexOf(Arg1,"e")!=null then w.email=1
+    if indexOf(Arg1,"B")!=null then x.dict=1
+    if indexOf(Arg1,"D")!=null then x.decipher=1
+    if x.dict and x.decipher then return Warning.set("Can't use both -B and -D")
+    if not w.email and not w.bank and not w.passwd then
+      w.email=1
+      w.bank=1
+      w.passwd=1
+    end if
+  end if
+	if x.dict then
+    Info.info("Using dictionary attack...")
+  else if x.decipher then
+    Info.info("Deciphering...")
+  end if
+	getData=function(f,w,x)
+		q=[]
+    check=function(h);if len(h)==32 then return true;end function
+		passwd=function
+			if not w.passwd then return
+			for l in split(get_content(f),char(10))
+				if not len(l) then continue
+        p=split(trim(l),":")
+        if not p then continue
+        if len(p)!=2 then continue
+        if not check(p[1]) then continue
+        h=p[1]
+				if x.dict then
+          r=Crack.hash(h)
+          if not r then r=h
+					push(q,password("User  Account: [ "+white(p[0])+" ] ")+char(10)+password("password:      [ "+white(r)+" ]"))
+				else if x.decipher then
+          r=Crack.doDecipher(globals.G_initCrypto,h)
+          if not r or r isa Error then r=h
+					push(q,password("User  Account: [ "+white(p[0])+" ] ")+char(10)+password("password:      [ "+white(r)+" ]"))
+				else
+          push(q,password("User  Account: [ "+white(p[0])+" ] ")+char(10)+password("hash:          [ "+white(h)+" ]"))
+        end if
+			end for
+			return
+		end function
+		bank=function
+			if not w.bank then return
+			for l in split(get_content(f),char(10))
+				if not len(l) then continue
+        p=split(trim(l),":")
+        if not p then continue
+        if len(p)!=2 then continue
+        if not check(p[1]) then continue
+        h=p[1]
+				if x.dict then
+          r=Crack.hash(h)
+          if not r then r=h
+					push(q,green("Bank  Account: [ "+white(p[0])+" ] ")+char(10)+green("password:      [ "+white(r)+" ]"))
+				else if x.decipher then
+          r=Crack.doDecipher(globals.G_initCrypto,h)
+          if not r or r isa Error then r=h
+					push(q,green("Bank  Account: [ "+white(p[0])+" ] ")+char(10)+green("password:      [ "+white(r)+" ]"))
+				else
+          push(q,green("Bank  Account: [ "+white(p[0])+" ] ")+char(10)+green("hash:          [ "+white(h)+" ]"))
+        end if
+			end for
+			return
+		end function
+		mail=function
+			if not w.email then return
+			for l in split(get_content(f),char(10))
+				if not len(l) then continue
+        p=split(trim(l),":")
+        if not p then continue
+        if len(p)!=2 then continue
+        if not check(p[1]) then continue
+        h=p[1]
+				if x.dict then
+          r=Crack.hash(h)
+          if not r then r=h
+					push(q,blue("Email Account: [ "+white(p[0])+" ] ")+char(10)+blue("password:      [ "+white(r)+" ]"))
+				else if x.decipher then
+          r=Crack.doDecipher(globals.G_initCrypto,h)
+          if not r or r isa Error then r=h
+					push(q,blue("Email Account: [ "+white(p[0])+" ] ")+char(10)+blue("password:      [ "+white(r)+" ]"))
+        else
+          push(q,blue("Email Account: [ "+white(p[0])+" ] ")+char(10)+blue("hash:          [ "+white(h)+" ]"))
+				end if
+			end for
+			return q
+		end function
+		cmds={
+      "passwd":@passwd,
+      "Bank.txt":@bank,
+      "Mail.txt":@mail
+		}
+		if hasIndex(cmds,name(f)) then cmds[name(f)]
+		return q
+	end function
+  q=[]
+  for f in Io.getAll(Obj.root);if not hasIndex(Io.names,name(f)) then continue;if not has_permission(f,"r") then continue;q+=getData(f,w,x);end for
+	if len(q) then
+		Info.info("Found the following Accounts:")
+		return print(join(q,char(10)))
+	end if
+	Info.info("No accounts found")
+end function

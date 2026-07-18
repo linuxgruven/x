@@ -1,0 +1,28 @@
+// =============================================================================
+// AIREPLAY
+// Inject packets on a target WiFi network to capture ingame handshakes.
+// =============================================================================
+Command.aireplay=function(argv,wlan)
+  if not argv or len(argv)<2 then return Man.help(["aireplay"])
+  if not Library.haveCrypto then return Error.set("crypto.so library not loaded")
+  if not Library.crypto then return Error.set("Failed to access crypto library")
+  bssid=argv[0]
+  essid=argv[1]
+  acks=-1
+  if len(argv)>2 then acks=argv[2]
+  if not bssid then return Error.set("Invalid BSSID - cannot be empty")
+  bssidPattern="^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+  if not is_match(bssid,bssidPattern) then return Error.set("Invalid BSSID format - must be XX:XX:XX:XX:XX:XX (e.g., AA:BB:CC:DD:EE:FF)")
+  if not essid then return Error.set("Invalid ESSID - cannot be empty")
+  if len(essid)<1 or len(essid)>32 then return Error.set("Invalid ESSID - must be between 1 and 32 characters")
+  if acks==-1 then
+    for wan in wlan;if wan[0]==bssid then acks=ceil(300000/(to_int(wan[1].replace("%",""))+15));end for
+  end if
+  Info.info("Replaying packets on network:")
+  Info.info("  BSSID: "+bssid)
+  Info.info("  ESSID: "+essid)
+  if acks!=-1 then Info.info("  ACKs: "+acks)
+  result=aireplay(Library.crypto,bssid,essid,acks)
+  if result isa string then return Error.set(result)
+  Info.info("Packet injection completed successfully")
+end function

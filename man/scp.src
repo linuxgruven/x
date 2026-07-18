@@ -1,0 +1,76 @@
+// Man page for scp
+manScp="SCP(1)                           X Shell Manual                           SCP(1)
+
+<b>NAME</b>
+    scp - Secure copy for remote file transfer
+<b>SYNOPSIS</b>
+    <b>scp</b> <b>-u</b> FILE (DESTINATION)
+    <b>scp</b> <b>-d</b> FILE (DESTINATION)
+    <b>find</b> PATTERN | <b>scp</b> <b>-u</b>/<b>-d</b> (DESTINATION)
+<b>DESCRIPTION</b>
+    Secure copy protocol for uploading and downloading files between local
+    and remote systems. Supports both individual files and entire folders.
+    When destination path is omitted, files transfer to current working
+    directory. Accepts filenames from stdin via pipe — each line or
+    space-separated token is treated as a source path. Essential for
+    data exfiltration and payload deployment.
+<b>OPTIONS</b>
+    <b>-u</b> FILE (DESTINATION)
+    Upload file or folder to remote system
+    Transfers from local to remote shell
+
+    <b>-d</b> FILE (DESTINATION)
+    Download file or folder from remote system
+    Transfers from remote shell to local
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Upload Files</color>
+    <b>scp -u /home/user/exploit.src</b>
+    Upload to remote current directory
+
+    <b>scp -u /home/user/payload.bin /home/victim/</b>
+    Upload to remote /home/victim/
+
+    <b>scp -u /home/user/tools /root</b>
+    Upload entire folder to /root
+
+    <color=#e4ff34># Download Files</color>
+    <b>scp -d /etc/passwd</b>
+    Download to local current directory
+
+    <b>scp -d /home/victim/data.txt /home/user/loot</b>
+    Download to specific local path
+
+    <b>scp -d /root/backup /home/user/recovered</b>
+    Download entire folder
+
+    <color=#e4ff34># Pipe Support</color>
+    <b>find *.log | scp -d</b>
+    Download every matched file to local current directory
+
+    <b>find *.log | scp -d /home/user/loot</b>
+    Download every matched file to /home/user/loot
+
+    <b>find *.src | scp -u /home/victim/</b>
+    Upload every matched file to remote /home/victim/
+
+    <b>find /var/log *.log | scp -d /home/user/logs</b>
+    Exfiltrate all logs from a directory in one command
+
+    <b>echo ""/etc/passwd"" | scp -d</b>
+    Download a single file via echo pipe
+
+    <color=#e4ff34># Data Exfiltration</color>
+    <b>scp -d /var/log/auth.log /home/user/logs</b>
+    Exfiltrate authentication logs
+
+    <b>scp -d /home/admin/.ssh /home/user/keys</b>
+    Extract SSH keys
+
+    <color=#e4ff34># Payload Deployment</color>
+    <b>scp -u /home/user/backdoor.src /home/victim/</b>
+    Deploy backdoor to target
+
+    <b>scp -u /home/user/rootkit /root/.hidden</b>
+    Install rootkit components
+<b>SEE ALSO</b>
+    <b>rsync</b>, <b>share</b>"

@@ -1,0 +1,21 @@
+// Man page for print
+manPrint="PRINT(1)                         X Shell Manual                         PRINT(1)
+
+<b>NAME</b>
+    print - Print text to terminal
+<b>SYNOPSIS</b>
+    <b>print</b> TEXT
+<b>DESCRIPTION</b>
+    Print text to screen. Internal func mainly used with command separator for
+    command chaining and script output.
+<b>OPTIONS</b>
+    <b>TEXT</b> - Output
+      Print text string to terminal.
+<b>EXAMPLE:</b>
+    <b>print Hello World</b>
+    Display message
+
+    <b>ls ; print Done listing files</b>
+    Print after command
+<b>SEE ALSO</b>
+    <b>echo</b>"

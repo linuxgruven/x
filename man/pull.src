@@ -1,0 +1,32 @@
+// Man page for pull
+manPull="PULL(1)                          X Shell Manual                          PULL(1)
+
+<b>NAME</b>
+    pull - Upload payload folder for fresh launch
+<b>SYNOPSIS</b>
+    <b>pull</b>
+<b>DESCRIPTION</b>
+    Payload uploader for fresh framework initialization. Transfers entire
+    payload folder contents required for framework operation. Must be executed
+    before launching to prevent empty framework launch. Only available from
+    pivoted instances.
+<b>OPTIONS</b>
+    <b>pull</b>
+    Upload full payload folder
+    Required before fresh launch
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Pre-Launch Setup</color>
+    <b>pull</b>
+    Upload payload data
+
+    <b>launch</b>
+    Start framework
+
+    <color=#e4ff34># Pivot Workflow</color>
+    <b>pull</b>
+    Upload to pivoted system
+
+    <b>start</b>
+    Initialize framework
+<b>SEE ALSO</b>
+    <b>pivot</b>"

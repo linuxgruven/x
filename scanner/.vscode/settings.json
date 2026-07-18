@@ -1,0 +1,11 @@
+{
+  "greybel.transpiler.excludedNamespaces": [
+    "poll_input",
+    "mail_login",
+    "fetch",
+    "read",
+    "send",
+    "delete_mail",
+    "delete_all"
+  ]
+}

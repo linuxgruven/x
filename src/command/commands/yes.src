@@ -1,0 +1,20 @@
+// =============================================================================
+// YES
+// Set global auto-yes flag to auto-confirm all Gui.yesNo prompts.
+// =============================================================================
+Command.yes=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("off",true,"flag")   // --off: disable auto-yes
+  _p.addArgument("c",false,"flag")     // -c: check current status
+  if not argv then argv=[]
+  argv=_p.parse("yes",argv,Obj)
+  if argv isa Error then return
+  if argv.c then
+    if globals.G_auto_yes then Info.info("Auto-yes is ON") else Info.info("Auto-yes is OFF")
+  else if argv.off then
+    globals.G_auto_yes=false
+  else
+    globals.G_auto_yes=true
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,"y")
+  end if
+end function

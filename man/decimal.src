@@ -1,0 +1,30 @@
+// Man page for decimal
+manDecimal="DECIMAL(1)                       X Shell Manual                       DECIMAL(1)
+
+<b>NAME</b>
+    decimal - Decimal number converter
+<b>SYNOPSIS</b>
+    <b>decimal -b DECIMAL</b>
+    <b>decimal -h DECIMAL</b>
+<b>DESCRIPTION</b>
+    Convert decimal numbers to binary or hexadecimal format.
+<b>OPTIONS</b>
+    <b>-b DECIMAL</b> - To Binary
+      Convert decimal to binary representation.
+
+    <b>-h DECIMAL</b> - To Hexadecimal
+      Convert decimal to hexadecimal representation.
+<b>EXAMPLE:</b>
+    <b>decimal -b 255</b>
+    Convert 255 to binary (11111111)
+
+    <b>decimal -h 255</b>
+    Convert 255 to hex (FF)
+
+    <b>decimal -b 42</b>
+    Convert 42 to binary (101010)
+
+    <b>decimal -h 1000</b>
+    Convert 1000 to hex (3E8)
+<b>SEE ALSO</b>
+    <b>bin</b>"

@@ -1,0 +1,11 @@
+// Simple menu example
+// Shows basic menu usage
+
+_print blue(=== SIMPLE MENU EXAMPLE ===)
+_print
+
+_setvar(choices, [Option A, Option B, Option C])
+_setvar(selected, menu(_getvar(choices), letters))
+
+_print You chose index: _getvar(selected)
+_print That was: _getvar(choices)[_getvar(selected)]

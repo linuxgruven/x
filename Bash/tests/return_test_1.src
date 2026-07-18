@@ -1,0 +1,387 @@
+// Return Test Part 1 - Sections 1-5
+
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>[PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>[FAIL]</color> _getvar(label) <color=#ffff00> expected:</color>_getvar(expected) <color=#ffff00> got:</color>_getvar(actual)
+  endif
+endfunc
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     RETURN TESTS PART 1 (Sections 1-5)</color>
+_print <color=#eb0cc6>============================================</color>
+_print
+
+// ===================================================================
+// SECTION 1 - STRING BUILTINS
+// ===================================================================
+_print <color=#00bfff>--- Section 1: String Builtins ---</color>
+
+// len - string
+_setvar(r, len(hello))
+assert(len of hello is 5, _getvar(r), 5)
+
+// len - empty string
+_setvar(s, )
+_setvar(r, len(_getvar(s)))
+assert(len of empty string is 0, _getvar(r), 0)
+
+// len - single char
+_setvar(r, len(x))
+assert(len of single char is 1, _getvar(r), 1)
+
+// len - list
+_setvar(arr, [a, b, c])
+_setvar(r, len(_getvar(arr)))
+assert(len of 3 item list is 3, _getvar(r), 3)
+
+// len - empty list
+_setvar(arr, [])
+_setvar(r, len(_getvar(arr)))
+assert(len of empty list is 0, _getvar(r), 0)
+
+// upper
+_setvar(r, upper(hello))
+assert(upper hello is HELLO, _getvar(r), HELLO)
+
+// upper - already uppercase
+_setvar(r, upper(HELLO))
+assert(upper HELLO stays HELLO, _getvar(r), HELLO)
+
+// upper - mixed case
+_setvar(r, upper(HeLLo))
+assert(upper mixed is HELLO, _getvar(r), HELLO)
+
+// lower
+_setvar(r, lower(HELLO))
+assert(lower HELLO is hello, _getvar(r), hello)
+
+// lower - already lowercase
+_setvar(r, lower(hello))
+assert(lower hello stays hello, _getvar(r), hello)
+
+// lower - mixed case
+_setvar(r, lower(HeLLo))
+assert(lower mixed is hello, _getvar(r), hello)
+
+// substr - two arg (start to end)
+_setvar(r, substr(hello, 1))
+assert(substr hello from 1 is ello, _getvar(r), ello)
+
+// substr - three arg (start to end)
+_setvar(r, substr(hello, 1, 3))
+assert(substr hello 1 to 3 is el, _getvar(r), el)
+
+// substr - from 0
+_setvar(r, substr(hello, 0, 5))
+assert(substr hello 0 to 5 is hello, _getvar(r), hello)
+
+// substr - single char
+_setvar(r, substr(hello, 0, 1))
+assert(substr hello 0 to 1 is h, _getvar(r), h)
+
+// substr - last char
+_setvar(r, substr(hello, 4, 5))
+assert(substr hello 4 to 5 is o, _getvar(r), o)
+
+// contains - found
+_setvar(r, contains(hello world, world))
+assert(contains hello world and world is 1, _getvar(r), 1)
+
+// contains - not found
+_setvar(r, contains(hello, xyz))
+assert(contains hello and xyz is 0, _getvar(r), 0)
+
+// contains - empty needle
+_setvar(r, contains(hello, ))
+assert(contains empty needle is 1, _getvar(r), 1)
+
+// contains - substring at start
+_setvar(r, contains(hello, hel))
+assert(contains at start is 1, _getvar(r), 1)
+
+// contains - substring at end
+_setvar(r, contains(hello, llo))
+assert(contains at end is 1, _getvar(r), 1)
+
+// replace - basic
+_setvar(r, replace(hello, l, x))
+assert(replace l with x in hello, _getvar(r), hexxo)
+
+// replace - no match leaves unchanged
+_setvar(r, replace(hello, z, x))
+assert(replace no match unchanged, _getvar(r), hello)
+
+// split_str - basic
+_setvar(arr, split_str(a-b-c, -))
+_setvar(r, len(_getvar(arr)))
+assert(split_str a-b-c by dash len 3, _getvar(r), 3)
+
+// trim_str - leading and trailing spaces
+_setvar(r, trim_str(  hello  ))
+assert(trim spaces from hello, _getvar(r), hello)
+
+// trim_str - no spaces
+_setvar(r, trim_str(hello))
+assert(trim no-space string unchanged, _getvar(r), hello)
+
+// concat - two strings
+_setvar(r, concat(foo, bar))
+assert(concat foo bar is foobar, _getvar(r), foobar)
+
+// concat - three strings
+_setvar(r, concat(a, b, c))
+assert(concat a b c is abc, _getvar(r), abc)
+
+// concat - with empty
+_setvar(r, concat(hello, ))
+assert(concat with empty is hello, _getvar(r), hello)
+
+// join - basic
+_setvar(arr, [a, b, c])
+_setvar(r, join(_getvar(arr), -))
+assert(join list with dash is a-b-c, _getvar(r), a-b-c)
+
+// join - single element
+_setvar(arr, [only])
+_setvar(r, join(_getvar(arr), ,))
+assert(join single element with comma delim, _getvar(r), only)
+
+// join - comma delimiter with multiple elements
+_setvar(arr, [a, b, c])
+_setvar(r, join(_getvar(arr), ,))
+_setvar(r_len, len(_getvar(r)))
+assert(join with comma len is 5, _getvar(r_len), 5)
+
+_print
+
+// ===================================================================
+// SECTION 2 - MATH BUILTINS
+// ===================================================================
+_print <color=#00bfff>--- Section 2: Math Builtins ---</color>
+
+// floor - positive decimal
+_setvar(r, floor(3.7))
+assert(floor 3.7 is 3, _getvar(r), 3)
+
+// floor - exact integer
+_setvar(r, floor(5))
+assert(floor 5 is 5, _getvar(r), 5)
+
+// floor - negative decimal
+_setvar(r, floor(-2.3))
+assert(floor -2.3 is -3, _getvar(r), -3)
+
+// ceil - positive decimal
+_setvar(r, ceil(3.2))
+assert(ceil 3.2 is 4, _getvar(r), 4)
+
+// ceil - exact integer
+_setvar(r, ceil(5))
+assert(ceil 5 is 5, _getvar(r), 5)
+
+// ceil - negative decimal
+_setvar(r, ceil(-2.7))
+assert(ceil -2.7 is -2, _getvar(r), -2)
+
+// abs - positive
+_setvar(r, abs(5))
+assert(abs 5 is 5, _getvar(r), 5)
+
+// abs - negative
+_setvar(r, abs(-5))
+assert(abs -5 is 5, _getvar(r), 5)
+
+// abs - zero
+_setvar(r, abs(0))
+assert(abs 0 is 0, _getvar(r), 0)
+
+// round - up
+_setvar(r, round(3.6))
+assert(round 3.6 is 4, _getvar(r), 4)
+
+// round - down
+_setvar(r, round(3.2))
+assert(round 3.2 is 3, _getvar(r), 3)
+
+// round - halfway
+_setvar(r, round(3.5))
+assert(round 3.5 is 4, _getvar(r), 4)
+
+// min - basic
+_setvar(r, min(3, 7))
+assert(min 3 7 is 3, _getvar(r), 3)
+
+// min - equal
+_setvar(r, min(5, 5))
+assert(min 5 5 is 5, _getvar(r), 5)
+
+// min - negative
+_setvar(r, min(-3, 3))
+assert(min -3 3 is -3, _getvar(r), -3)
+
+// max - basic
+_setvar(r, max(3, 7))
+assert(max 3 7 is 7, _getvar(r), 7)
+
+// max - equal
+_setvar(r, max(5, 5))
+assert(max 5 5 is 5, _getvar(r), 5)
+
+// max - negative
+_setvar(r, max(-3, 3))
+assert(max -3 3 is 3, _getvar(r), 3)
+
+// random - within range (test 5 times)
+_setvar(pass, 1)
+for i in range(1, 5)
+  _setvar(val, random(1, 10))
+  if _getvar(val) < 1
+    _setvar(pass, 0)
+  endif
+  if _getvar(val) > 10
+    _setvar(pass, 0)
+  endif
+endfor
+assert(random 1-10 always in range over 5 trials, _getvar(pass), 1)
+
+_print
+
+// ===================================================================
+// SECTION 3 - TYPE CASTING
+// ===================================================================
+_print <color=#00bfff>--- Section 3: Type Casting ---</color>
+
+// to_string - number to string
+_setvar(r, to_string(42))
+assert(to_string 42 is 42, _getvar(r), 42)
+
+// to_string - string stays string
+_setvar(r, to_string(hello))
+assert(to_string hello is hello, _getvar(r), hello)
+
+// to_int - string to int
+_setvar(r, to_int(42))
+assert(to_int 42 string is 42, _getvar(r), 42)
+
+// to_int - negative
+_setvar(r, to_int(-7))
+assert(to_int -7 is -7, _getvar(r), -7)
+
+// to_int - zero
+_setvar(r, to_int(0))
+assert(to_int 0 is 0, _getvar(r), 0)
+
+// to_float - string to float
+_setvar(r, to_float(3.14))
+assert(to_float 3.14 is 3.14, _getvar(r), 3.14)
+
+// to_float - integer input
+_setvar(r, to_float(5))
+assert(to_float 5 is 5, _getvar(r), 5)
+
+// to_yesno - truthy
+_setvar(r, to_yesno(1))
+assert(to_yesno 1 is yes, _getvar(r), yes)
+
+// to_yesno - falsy
+_setvar(r, to_yesno(0))
+assert(to_yesno 0 is no, _getvar(r), no)
+
+// to_truefalse - truthy
+_setvar(r, to_truefalse(1))
+assert(to_truefalse 1 is true, _getvar(r), true)
+
+// to_truefalse - falsy
+_setvar(r, to_truefalse(0))
+assert(to_truefalse 0 is false, _getvar(r), false)
+
+_print
+
+// ===================================================================
+// SECTION 4 - TYPE INTROSPECTION
+// ===================================================================
+_print <color=#00bfff>--- Section 4: Type Introspection ---</color>
+
+// typeof - string
+_setvar(s, hello)
+_setvar(r, typeof(s))
+assert(typeof string is string, _getvar(r), string)
+
+// typeof - list
+_setvar(arr, [1, 2])
+_setvar(r, typeof(arr))
+assert(typeof list is list, _getvar(r), list)
+
+// typeof_val - string
+_setvar(r, typeof_val(hello))
+assert(typeof_val string is string, _getvar(r), string)
+
+// typeof_val - list
+_setvar(arr, [a, b])
+_setvar(r, typeof_val(_getvar(arr)))
+assert(typeof_val list is list, _getvar(r), list)
+
+_print
+
+// ===================================================================
+// SECTION 5 - VARIABLE OPERATIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 5: Variable Operations ---</color>
+
+// _setvar and _getvar round-trip: string
+_setvar(test_str, hello)
+_setvar(r, _getvar(test_str))
+assert(set then get string is hello, _getvar(r), hello)
+
+// _setvar and _getvar round-trip: number
+_setvar(test_num, 42)
+_setvar(r, _getvar(test_num))
+assert(set then get number is 42, _getvar(r), 42)
+
+// _setvar expression evaluation
+_setvar(r, 10 + 5)
+assert(var eval addition is 15, _getvar(r), 15)
+
+// _setvar complex expression
+_setvar(r, 3 * 4 + 2)
+assert(var eval mixed ops is 14, _getvar(r), 14)
+
+// _push and len
+_setvar(arr, [])
+_push arr one
+_push arr two
+_push arr three
+_setvar(r, len(_getvar(arr)))
+assert(push 3 items len is 3, _getvar(r), 3)
+
+// _pop removes last
+_setvar(arr, [a, b, c])
+_pop arr
+_setvar(r, len(_getvar(arr)))
+assert(pop from 3 item list len is 2, _getvar(r), 2)
+
+// _pull removes first
+_setvar(arr, [a, b, c])
+_pull arr
+_setvar(r, len(_getvar(arr)))
+assert(pull from 3 item list len is 2, _getvar(r), 2)
+
+// _in - found
+_setvar(arr, [apple, banana, cherry])
+_setvar(r, _in(_getvar(arr), banana))
+assert(_in banana in list is 1, _getvar(r), 1)
+
+// _in - not found
+_setvar(arr, [apple, banana, cherry])
+_setvar(r, _in(_getvar(arr), grape))
+assert(_in grape not in list is 0, _getvar(r), 0)
+
+_print
+
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     PART 1 COMPLETE (Sections 1-5)</color>
+_print <color=#eb0cc6>============================================</color>
+_print

@@ -1,0 +1,83 @@
+// Man page for xclip
+manXclip="XCLIP(1)                         X Shell Manual                         XCLIP(1)
+
+<b>NAME</b>
+    xc - Clipboard utility for text storage
+
+<b>SYNOPSIS</b>
+    <b>xc</b>
+    <b>xc</b> TEXT
+    <b>xc --number</b> [NUMBER]
+    <b>xc</b> [-p] [INDEX]
+    <b>xc --clear</b>
+
+<b>DESCRIPTION</b>
+    Basic clipboard utility for storing and retrieving text values. The
+    clipboard resets when the terminal session closes. Useful for holding
+    temporary data in scripts or between commands. Supports redirects with
+    > and >> operators. The --post flag allows appending from standard input.
+    Redirect input is never printed to the terminal for security.
+
+<b>OPTIONS</b>
+    <b>xc</b> - View Clipboard
+      Display all current clipboard contents.
+      Shows all stored entries with their indices.
+
+    <b>xc TEXT</b> - Append Text
+      Append text string to clipboard.
+      Creates new entry at next available index.
+
+    <b>xc --number</b> [NUMBER] - Append Number
+      Append numeric value to clipboard.
+      Stores number as separate entry.
+
+    <b>xc</b> [-p] [INDEX] - Retrieve Entry
+      Return clipboard value at specified index.
+      Use -p flag for passive retrieval without display.
+
+    <b>xc --clear</b> - Clear Clipboard
+      Remove all entries from clipboard.
+      Resets clipboard to empty state.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Usage</color>
+    <b>xc</b>
+        View all clipboard entries
+
+    <b>xc password123</b>
+        Store password in clipboard
+
+    <color=#e4ff34># Store Values</color>
+    <b>xc --number 192</b>
+        Store numeric value
+
+    <b>xc target.local</b>
+        Store hostname
+
+    <color=#e4ff34># Retrieve Values</color>
+    <b>xc 0</b>
+        Get first clipboard entry
+
+    <b>xc -p 1</b>
+        Passive retrieval of second entry
+
+    <color=#e4ff34># Script Usage</color>
+    <b>xc exploit_data</b>
+        Store data for later use
+
+    <b>pass=xc(0)</b>
+        Retrieve in script variable
+
+    <color=#e4ff34># Clear Clipboard</color>
+    <b>xc --clear</b>
+        Remove all entries
+
+    <color=#e4ff34># Redirect Input</color>
+    <b>cat passwords.txt > xc</b>
+        Redirect file to clipboard
+
+    <b>scan -l >> xc</b>
+        Append scan output
+
+<b>SEE ALSO</b>
+    <b>cat</b>, <b>echo</b>, <b>editor</b>, <b>write</b>, <b>vi</b>"

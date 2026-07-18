@@ -1,0 +1,39 @@
+// Man page for cam
+manCam="CAM(1)                           X Shell Manual                           CAM(1)
+
+<b>NAME</b>
+    cam - Camera surveillance system interface
+<b>SYNOPSIS</b>
+    <b>cam -a</b>
+    <b>cam -v</b><b> LICENSE_PLATE PASSWORD</b>
+    <b>cam -c</b>
+<b>DESCRIPTION</b>
+    The cam utility provides an interface to traffic camera systems for
+    vehicle tracking and NPC location. It enables camera access, vehicle
+    search by license plate, and network administrator identification.
+<b>OPTIONS</b>
+    <b>-a</b> - Access Camera System
+      Open camera system GUI with controls to switch between cameras.
+
+    <b>-v LICENSE_PLATE PASSWORD</b> - Locate Vehicle
+      Search for vehicle using license plate and password credentials.
+      Returns vehicle location if found in camera network.
+
+    <b>-c</b> - Get Camera Admin
+      Display name of NPC responsible for traffic cameras on network.
+      Their credentials are required to access locate_vehicle method.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Camera Access</color>
+    <b>cam -a</b>
+    Open camera system and switch between cameras
+
+    <color=#e4ff34># Vehicle Tracking</color>
+    <b>cam -v ABC123 password</b>
+    Locate vehicle with license plate ABC123
+
+    <b>cam -v XYZ789 secret123</b>
+    Search for vehicle XYZ789 with credentials
+
+    <color=#e4ff34># Administrator Info</color>
+    <b>cam -c</b>
+    Get camera admin NPC name for credential access"

@@ -1,0 +1,124 @@
+// =============================================================================
+// ECHO
+// Print text to screen or redirect to file; filters comment tokens.
+// =============================================================================
+Command.echo=function(Obj,argv)
+	// Pass-through stdin if no argv provided
+	hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+	if not argv and not hasPipeInput then
+		if globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,"") else print ""
+		return
+	end if
+	if hasPipeInput and not argv then
+		for line in globals.G_pipe.stdin.split(char(10));if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,line) else print lime(line);end for
+		return
+	end if
+	// Check for -e flag (interpret escape sequences)
+	interpretEscapes=false
+	cleanArgs=[]
+	for arg in argv;if arg=="-e" then interpretEscapes=true else push(cleanArgs,arg);end for
+	argv=cleanArgs
+	// Strip curly quotes from arguments
+	cleanArgs=[]
+	if len(argv)==0 then argv=[""]
+	_len=len(argv)
+	i=0
+	while i<_len
+		arg=argv[i]
+		cleanArg=arg
+		// Strip any quote from first argument
+		if i==0 and len(arg)>=1 then
+			firstCode=code(arg[0])
+			// Strip any type of quote: " (8220), " (8221), " (34), ' (8216), ' (8217), ' (39)
+			if firstCode==8220 or firstCode==8221 or firstCode==34 or firstCode==8216 or firstCode==8217 or firstCode==39 then cleanArg=arg[1:]
+		end if
+		// Strip any quote from last argument
+		if i==len(argv)-1 and len(cleanArg)>=1 then
+			lastCode=code(cleanArg[-1])
+			// Strip any type of quote: " (8220), " (8221), " (34), ' (8216), ' (8217), ' (39)
+			if lastCode==8220 or lastCode==8221 or lastCode==34 or lastCode==8216 or lastCode==8217 or lastCode==39 then cleanArg=cleanArg[:-1]
+		end if
+		// Handle single-word case with both quotes
+		if len(cleanArg)>=2 then
+			firstCode=code(cleanArg[0])
+			lastCode=code(cleanArg[-1])
+			if (firstCode==8220 and lastCode==8221) or (firstCode==34 and lastCode==34) or (firstCode==8216 and lastCode==8217) or (firstCode==39 and lastCode==39) then cleanArg=cleanArg[1:-1]
+		end if
+		push(cleanArgs,cleanArg)
+    i+=1
+	end while
+	argv=cleanArgs
+	// Function to process escape sequences
+	processEscapes=function(text)
+		processed=""
+		_len=len(text)
+		i=0
+		while i<_len
+			currentCode=code(text[i])
+			if currentCode==92 and i+1<len(text) then
+				// Skip zero-width space (char 8203) that may be copied from man pages
+				nextIdx=i+1
+				if code(text[nextIdx])==8203 and nextIdx+1<len(text) then nextIdx+=1
+				nextChar=text[nextIdx]
+				charsToSkip=nextIdx-i+1
+				if nextChar=="n" then
+					processed=processed+char(10)  // newline
+					i=i+charsToSkip
+				else if nextChar=="t" then
+					processed=processed+char(9)   // tab
+					i=i+charsToSkip
+				else if nextChar=="r" then
+					processed=processed+char(13)  // carriage return
+					i=i+charsToSkip
+				else if code(nextChar)==92 then
+					processed=processed+char(92)      // literal backslash
+					i=i+charsToSkip
+				else
+					processed=processed+text[i]
+					i+=1
+				end if
+			else
+				processed=processed+text[i]
+				i+=1
+			end if
+		end while
+		return processed
+	end function
+	// Initialize argument parser for redirection handling
+	// Must run before building finalOutput so >> and filename are stripped first
+	_p=ArgumentParser.init
+	argv=_p.parseArgs("echo",argv)
+	if argv isa Error then return
+	argv=_p.checkRedirect(Obj,"echo",argv)
+	if argv isa Error then return
+	// Join remaining rest args to create base output (redirect tokens already stripped)
+	finalOutput=join(argv.rest," ")
+	// Process escape sequences if -e flag was used
+	if interpretEscapes then finalOutput=processEscapes(finalOutput)
+	// Check for PIPE_MODE - if enabled, buffer output to stdout
+	if globals.G_pipe.PIPE_MODE then
+		// If output contains newlines (from -e processing), split into separate lines
+		if indexOf(finalOutput,char(10))!=null then
+			lines=split(finalOutput,char(10))
+			for line in lines;push(globals.G_pipe.stdout,line);end for
+		else
+			push(globals.G_pipe.stdout,finalOutput)
+		end if
+		return
+	end if
+	// Check if we're in a pipe - if so, return data instead of printing (legacy support)
+	if globals.G_piping then return [finalOutput]
+	// Display mode - no redirection, print to screen in lime color
+	if not _p.write then
+		if indexOf(finalOutput,char(10))!=null then
+			lines=split(finalOutput,char(10))
+			for line in lines;print lime(line);end for
+		else
+			print lime(finalOutput)
+		end if
+		return
+	end if
+	// File output mode - redirect to file as plain text
+	argv["data"]=finalOutput
+	_p.out(Obj,argv)
+end function

@@ -1,0 +1,34 @@
+// =============================================================================
+// PING
+// Test network connectivity; auto-resolves hostnames with www. fallback.
+// =============================================================================
+Command.ping=function(Obj,argv)
+  if not argv then return Man.help(["ping"])
+  target=join(argv," ")
+  if not is_valid_ip(target) and nslookup(target) then target=nslookup(target)
+  if not is_valid_ip(target) and nslookup("www."+target) then target=nslookup("www."+target)
+  if not target or not is_valid_ip(target) then return Man.help(["ping"])
+  Info.info("Pinging "+target)
+  startTime=time
+  result=ping(Obj.shell,target)
+  elapsedMs=(time-startTime)*1000
+  if result then
+    if result isa string then return Error.set(result)
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+      push(globals.G_pipe.stdout,"target: "+target)
+      push(globals.G_pipe.stdout,"status: success")
+      push(globals.G_pipe.stdout,"elapsed_ms: "+elapsedMs)
+    else
+      Info.info("Ping successful")
+      Info.info("Elapsed time: "+elapsedMs+" ms")
+    end if
+  else
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+      push(globals.G_pipe.stdout,"target: "+target)
+      push(globals.G_pipe.stdout,"status: timeout")
+    else
+      Info.warning("Request timed out")
+    end if
+  end if
+  return result
+end function

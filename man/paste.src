@@ -1,0 +1,69 @@
+// Man page for paste
+manPaste="PASTE(1)                         X Shell Manual                         PASTE(1)
+
+<b>NAME</b>
+    paste - Merge lines of files side by side
+<b>SYNOPSIS</b>
+    <b>paste</b> FILE1 FILE2 [FILE...]
+    <b>paste -d</b> DELIM FILE1 FILE2
+    <b>paste -s</b> FILE
+    stdin | <b>paste</b> FILE
+<b>DESCRIPTION</b>
+    Merge corresponding lines from multiple files, joining them with a delimiter
+    (default: tab). Useful for building side-by-side tables, combining IP lists
+    with usernames, or merging columns of data from separate sources.
+<b>OPTIONS</b>
+    <b>FILE1 FILE2</b>
+    Merge files column by column, tab-separated.
+
+    <b>-d DELIM</b>
+    Use DELIM as the column separator instead of tab.
+    Use comma, space, or pipe as custom delimiters.
+
+    <b>-s</b>
+    Serial mode: merge all lines of each file into one
+    single tab-separated line per file.
+
+    <b>> FILE</b>
+    Redirect output to FILE (overwrite).
+
+    <b>>> FILE</b>
+    Append output to FILE.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man paste</b>.
+
+    In pipelines, place options/operands after the command:
+    cat ips.txt | <b>paste</b> -d , - users.txt ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Column Merge</color>
+    <b>paste ips.txt users.txt</b>
+    Merge IP list and user list side by side
+
+    <b>paste -d , ips.txt ports.txt</b>
+    Comma-separated: 192.168.1.1,22
+
+    <color=#e4ff34># Serial Mode</color>
+    <b>paste -s ips.txt</b>
+    Join all IPs onto one tab-separated line
+
+    <b>paste -s -d , ips.txt</b>
+    Join all IPs comma-separated
+
+    <color=#e4ff34># Pipeline Use</color>
+    <b>seq 1 5 | paste -s -d ,</b>
+    1,2,3,4,5 on one line
+
+    <b>cat hosts.txt | paste - ports.txt</b>
+    Zip stdin with a file column
+
+    <color=#e4ff34># Redirect to File</color>
+    <b>paste ips.txt users.txt > merged.txt</b>
+    Write merged columns to file
+
+    <b>paste -d , ips.txt ports.txt >> out.txt</b>
+    Append comma-separated output to file
+<b>SEE ALSO</b>
+    <b>seq</b>, <b>column</b>, <b>join</b>, <b>cut</b>"

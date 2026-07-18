@@ -1,0 +1,374 @@
+// =============================================================================
+// CONFIG
+// Configuration manager; loads, saves, and toggles X shell user preferences in .xrc.
+// =============================================================================
+Config={}
+//Settings registry - single source of truth for all configuration
+//Each setting has: key, default, type, prompt, description
+Config._settingsRegistry=[
+  {"key":"rshell","default":1,"type":"boolean","prompt":"Use rshell shell objects?","desc":"Use rshell shell objects"},
+  {"key":"shortPath","default":0,"type":"boolean","prompt":"Use short home path (~)?","promptDefault":false,"desc":"Use short home path (~)"},
+  {"key":"dsession","default":0,"type":"boolean","prompt":"Check for dsession before scanning?","promptDefault":false,"desc":"Check for dsession before scanning"},
+  {"key":"clearES","default":1,"type":"boolean","prompt":"Clear exploit scan (es) results on every scan?","desc":"Auto clear exploit scan results"},
+  {"key":"updateMetaOnStart","default":1,"type":"boolean","prompt":"Check for metaxploit updates on start up?","desc":"Check for metaxploit updates on startup"},
+  {"key":"preloadRainbowIndex","default":0,"type":"boolean","prompt":"Build rainbow index on start up?","promptDefault":false,"desc":"Build rainbow hash index on startup"},
+  {"key":"autoAddSessions","default":0,"type":"boolean","prompt":"Automaticaly insert|store sessions?","promptDefault":false,"desc":"Automatically insert sessions"},
+  {"key":"monitorDirtyips","default":0,"type":"boolean","prompt":"Log dirty router ip's?","promptDefault":false,"desc":"Log dirty router IPs"},
+  {"key":"dynamicLanIPS","default":0,"type":"boolean","prompt":"Use dynamic lan ip-tracking?","promptDefault":false,"desc":"Dynamic LAN IP tracking"},
+  {"key":"autoSolve","default":1,"type":"boolean","prompt":"Auto solve PObjects?","desc":"Auto solve PObjects"},
+  {"key":"pDebug","default":0,"type":"boolean","prompt":"Turn on PObject debugging?","desc":"PObject debugging"},
+  {"key":"debug","default":0,"type":"boolean","prompt":"Enable debug output?","promptDefault":false,"desc":"Debug output mode"},
+  {"key":"useProxyLog","default":0,"type":"boolean","prompt":"Use a proxy log to re-log incase of a crash?","desc":"Use proxy log for crash recovery"},
+  {"key":"shadow","default":1,"type":"boolean","prompt":"Clear the shadow cache on start up?","desc":"Clear shadow cache on startup"},
+  {"key":"digRshell","default":0,"type":"boolean","prompt":"Show rshell list after each dig|recon?","promptDefault":false,"desc":"Show rshell server list after dig|recon"},
+  {"key":"vulnerableLib","default":null,"type":"string","prompt":"Enter router attack library name (e.g. kernel_router.so):","desc":"Vulnerable library name"},
+  {"key":"vulnerableLibIndex","default":-1,"type":"number","prompt":"Enter router attack method number (use exp -p INDEX): ","promptDefault":-1,"desc":"Vulnerable library exploit index"},
+  {"key":"alias","default":{},"type":"map","desc":"Command aliases"}
+]
+//Get default configuration from registry
+Config._getDefaults=function
+  defaults={}
+  for setting in self._settingsRegistry;defaults[setting.key]=setting.default;end for
+  return defaults
+end function
+//Lazily build and cache a map of key→setting for O(1) lookups in _validateSetting
+Config._registryMap=null
+Config._getRegistryMap=function
+  if self._registryMap then return self._registryMap
+  self._registryMap={}
+  for s in self._settingsRegistry;self._registryMap[s.key]=s;end for
+  return self._registryMap
+end function
+//Validate a setting value based on its type
+Config._validateSetting=function(key,value)
+  //Find setting in registry (O(1) map lookup)
+  m=self._getRegistryMap
+  setting=m[key]
+  //Unknown setting
+  if not setting then return value
+  //Type validation
+  if setting.type=="boolean" then
+    //Coerce to number (0 or 1)
+    if value isa string then
+      if value=="true" or value=="1" then return 1
+      if value=="false" or value=="0" then return 0
+      return setting.default
+    end if
+    if value then return 1 else return 0
+  else if setting.type=="number" then
+    //Ensure number type
+    if value isa number then return value
+    if value isa string then
+      num=to_int(value)
+      if num then return num
+    end if
+    return setting.default
+  else if setting.type=="string" then
+    //Ensure string or null
+    if value isa string then return value
+    if value==null then return null
+    return str(value)
+  else if setting.type=="map" then
+    //Ensure map
+    if value isa map then return value
+    return setting.default
+  end if
+  return value
+end function
+//Load configuration from .xrc file or create defaults
+Config.load=function(Obj)
+  //Get .xrc config file
+  globals.G_CF=File(Obj.computer,path(Obj.dir.data)+"/.xrc")
+  cfContent=null
+  //Get default configuration from registry
+  c=self._getDefaults
+  //.xrc file doesn't exist
+  if not globals.G_CF then
+    //Use default configuration
+    globals.G_settings=c
+    //Exit without saving
+    return
+  //.xrc file exists
+  else
+    //Parse JSON configuration
+    cfContent=get_content(globals.G_CF)
+    m=System.parse(cfContent)
+  end if
+  //Nested function to save configuration
+  set=function(m=null)
+    //Merge existing config with defaults
+    if m then
+      //Build set of valid keys from registry
+      validKeys=[]
+      for setting in Config._settingsRegistry;validKeys.push(setting.key);if not hasIndex(m,setting.key) then m[setting.key]=setting.default;end for
+      //Remove keys no longer in registry
+      for k in m.indexes;if validKeys.indexOf(k)==null then m.remove(k);end for
+      //Validate all existing values
+      for k in m.indexes;m[k]=Config._validateSetting(k,m[k]);end for
+      //Save merged config to file
+      set_content(globals.G_CF,System.toJSON(m))
+      //Return merged config
+      return m
+    end if
+    //Save default config to file
+    set_content(globals.G_CF,System.toJSON(c))
+    //Return default config
+    return c
+  end function
+  //Empty file, create defaults
+  if not cfContent then m=set
+  //Invalid JSON, recreate defaults
+  if not m isa map then m=set
+  //Merge and validate (adds any new registry keys, validates existing)
+  m=set(m)
+  //Validate all loaded settings
+  for k in m.indexes;m[k]=Config._validateSetting(k,m[k]);end for
+  //Set global configuration
+  globals.G_settings=m
+//End load
+end function
+//Internal helper to toggle a setting and persist
+Config._toggle=function(k)
+  if not globals.G_CF then self.create
+  //Toggle boolean value
+  newValue=not globals.G_settings[k]
+  //Validate and set
+  globals.G_settings[k]=self._validateSetting(k,newValue)
+  return self.save
+end function
+//Reset setting(s) to registry defaults
+//Usage: Config.reset("rshell") or Config.reset (resets all)
+Config.reset=function(key=null)
+  if not globals.G_CF then self.create
+  //Reset single setting
+  if key then
+    //Find default in registry
+    for setting in self._settingsRegistry
+      if setting.key==key then
+        globals.G_settings[key]=setting.default
+        return self.save
+      end if
+    end for
+    //Unknown setting
+    return null
+  end if
+  //Reset all settings to defaults
+  globals.G_settings=self._getDefaults
+  Info.info("All settings reset to defaults")
+  self.current
+  return self.save
+end function
+//Display current configuration settings
+Config.current=function
+  Info.info("Current x settings:")
+  //Iterate through registry and display each setting
+  for setting in self._settingsRegistry
+    //Get current value
+    value=globals.G_settings[setting.key]
+    //Format boolean values
+    if setting.type=="boolean" then value=bool(value)
+    //Handle map type (alias)
+    if setting.type=="map" then
+      if len(value)==0 then
+        print yellow(setting.desc+" ")+white("(none)")
+      else
+        print yellow(setting.desc+":")
+        for k in value.indexes;print "  "+cyan(k)+" -> "+white(value[k]);end for
+      end if
+      continue
+    end if
+    //Display setting with description
+    print yellow(setting.desc+": ")+white(value)
+  end for
+//End current
+end function
+//Save current configuration to .xrc file
+Config.save=function
+  //No config file, cannot save
+  if not globals.G_CF then return
+  //Serialize and save config
+  return set_content(globals.G_CF,System.toJSON(globals.G_settings))
+end function
+//Toggle updateMetaOnStart setting
+Config.autoMeta=function;return self._toggle("updateMetaOnStart");end function
+//Toggle preloadRainbowIndex setting
+Config.preloadRainbowIndex=function;return self._toggle("preloadRainbowIndex");end function
+//Toggle autoAddSessions setting
+Config.autoAddSessions=function;return self._toggle("autoAddSessions");end function
+//Toggle monitorDirtyips setting
+Config.monitorDirtyips=function;return self._toggle("monitorDirtyips");end function
+//Toggle clearES setting
+Config.clearES=function;return self._toggle("clearES");end function
+//Toggle useProxyLog setting
+Config.useProxyLog=function;return self._toggle("useProxyLog");end function
+//Toggle dsession setting
+Config.dsession=function;return self._toggle("dsession");end function
+//Toggle dynamicLanIPS setting
+Config.dynamicLanIPS=function;return self._toggle("dynamicLanIPS");end function
+//Toggle autoSolve setting
+Config.autoSolve=function;return self._toggle("autoSolve");end function
+//Toggle pDebug setting
+Config.pDebug=function;return self._toggle("pDebug");end function
+//Toggle debug setting
+Config.debug=function;return self._toggle("debug");end function
+//Toggle shortPath setting
+Config.shortPath=function;return self._toggle("shortPath");end function
+//Toggle rshell setting
+Config.rshell=function;return self._toggle("rshell");end function
+//Toggle digRshell setting
+Config.digRshell=function;return self._toggle("digRshell");end function
+//Toggle shadow setting
+Config.shadow=function;return self._toggle("shadow");end function
+//Add a command alias
+//Usage: Config.aliasAdd("ll","ls -o")
+Config.aliasAdd=function(aliasName,command)
+  if not globals.G_CF then self.create
+  if not aliasName or not command then
+    Warning.set("Usage: Config.aliasAdd(aliasName, command)")
+    return null
+  end if
+  //Add or update alias
+  globals.G_settings.alias[aliasName]=command
+  Info.info("Alias added: "+cyan(aliasName)+" -> "+white(command))
+  return self.save
+//End aliasAdd
+end function
+//Remove a command alias
+//Usage: Config.aliasRemove("ll")
+Config.aliasRemove=function(aliasName)
+  if not globals.G_CF then self.create
+  if not aliasName then
+    Warning.set("Usage: Config.aliasRemove(aliasName)")
+    return null
+  end if
+  //Check if alias exists
+  if not hasIndex(globals.G_settings.alias,aliasName) then
+    Warning.set("Alias not found: "+aliasName)
+    return null
+  end if
+  //Remove alias
+  globals.G_settings.alias.remove(aliasName)
+  Info.info("Alias removed: "+aliasName)
+  return self.save
+//End aliasRemove
+end function
+//List all aliases
+//Usage: Config.aliasList
+Config.aliasList=function
+  aliases=globals.G_settings.alias
+  if len(aliases)==0 then
+    Info.info("No aliases defined")
+    return
+  end if
+  Info.info("Command aliases:")
+  for k in aliases.indexes;print cyan(k)+" -> "+white(aliases[k]);end for
+//End aliasList
+end function
+//Clear all aliases
+//Usage: Config.aliasClear
+Config.aliasClear=function
+  if not globals.G_CF then self.create
+  count=len(globals.G_settings.alias)
+  if count==0 then
+    Info.info("No aliases to clear")
+    return
+  end if
+  globals.G_settings.alias={}
+  Info.info("Cleared "+count+" alias(es)")
+  return self.save
+//End aliasClear
+end function
+//Turn all settings on
+Config.on=function
+  //Display info message
+  Info.info("Turning on all x settings...")
+  //Create config file if missing
+  if not globals.G_CF then self.create
+  //Enable all boolean settings using registry
+  for setting in self._settingsRegistry;if setting.type=="boolean" then globals.G_settings[setting.key]=1;end for
+  //Display current settings
+  self.current
+  //Save configuration
+  self.save
+//End on
+end function
+//Turn all settings off
+Config.off=function
+  //Display info message
+  Info.info("Turning off all x settings...")
+  //Create config file if missing
+  if not globals.G_CF then self.create
+  //Disable all boolean settings using registry
+  for setting in self._settingsRegistry;if setting.type=="boolean" then globals.G_settings[setting.key]=0;end for
+  //Display current settings
+  self.current
+  //Save configuration
+  self.save
+//End off
+end function
+//Interactively configure all settings
+Config.prompt=function
+  //Display info message
+  Info.info("Configuring x settings...")
+  //Create config file if missing
+  if not globals.G_CF then self.create
+  //Iterate through registry and prompt for each setting
+  for setting in self._settingsRegistry
+    //Skip alias (not implemented)
+    if setting.key=="alias" then continue
+    //Boolean settings
+    if setting.type=="boolean" then
+      //Get default (true if promptDefault not specified or is 1)
+      useDefault=true
+      if hasIndex(setting,"promptDefault") then useDefault=setting.promptDefault
+      //Prompt user
+      value=Gui.yesNo(setting.prompt,useDefault)
+      //Set validated value
+      globals.G_settings[setting.key]=self._validateSetting(setting.key,value)
+    //String settings
+    else if setting.type=="string" then
+      //Prompt user for string input
+      value=Gui.input({"text":setting.prompt})
+      //If user just hits enter (null), use default value
+      if value==null or value=="" then value=setting.default
+      //Set validated value
+      globals.G_settings[setting.key]=self._validateSetting(setting.key,value)
+    //Number settings
+    else if setting.type=="number" then
+      //Get default
+      useDefault=-1
+      if hasIndex(setting,"promptDefault") then useDefault=setting.promptDefault
+      //Prompt user for number input
+      value=Gui.inputInt({"text":setting.prompt,"default":useDefault})
+      //If user just hits enter (null), use default value
+      if value==null then value=setting.default
+      //Set validated value
+      globals.G_settings[setting.key]=self._validateSetting(setting.key,value)
+    end if
+  end for
+  //Display current settings
+  self.current
+  //Save configuration
+  self.save
+//End prompt
+end function
+//Create new .xrc configuration file
+Config.create=function
+  //.xrc already exists, exit
+  if File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.xrc") then return
+  //Create .xrc file
+  globals.G_CF=Command.touch(globals.G_main,[path(globals.G_main.dir.data)+"/.xrc"])
+  //File creation failed
+  if globals.G_CF isa Error then
+		//Clear file reference
+		globals.G_CF=null
+    //Use in-memory default configuration from registry
+    globals.G_settings=self._getDefaults
+    //Post warning
+    return Warning.set("Failed to create the x config file")
+  end if
+  //Set default configuration from registry
+  globals.G_settings=self._getDefaults
+  //Save configuration to file
+  self.save
+end function

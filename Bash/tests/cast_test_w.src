@@ -1,0 +1,1065 @@
+testCastTest="// Bash Cast & Coverage Test Script
+// Tests type casting, coercion, introspection, string builtins,
+// array edge cases, error paths, scoping, color functions,
+// and anything missed by stress/edge/pipe tests.
+
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>[PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>[FAIL]</color> _getvar(label) <color=#ffff00> expected:</color>_getvar(expected) <color=#ffff00> got:</color>_getvar(actual)
+  endif
+endfunc
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     BASH CAST & COVERAGE TESTS</color>
+_print <color=#eb0cc6>============================================</color>
+_print
+
+// ===================================================================
+// SECTION 1 - TYPE INTROSPECTION
+// ===================================================================
+_print <color=#00bfff>--- Section 1: Type Introspection ---</color>
+
+// typeof on string
+_setvar(s, hello)
+_setvar(r, typeof(_getvar(s)))
+assert(typeof string should be string, _getvar(r), string)
+
+// typeof_val on number (_setvar stores as string)
+_setvar(n, 42)
+_setvar(r, typeof_val(_getvar(n)))
+assert(typeof_val stored number is string, _getvar(r), string)
+
+// typeof_val on string
+_setvar(r, typeof_val(hello))
+assert(typeof_val of string literal should be string, _getvar(r), string)
+
+// typeof_val on list
+_setvar(arr, [1, 2, 3])
+_setvar(r, typeof_val(_getvar(arr)))
+assert(typeof_val of list should be list, _getvar(r), list)
+
+// typeof_val on empty string
+_setvar(es, )
+_setvar(r, typeof_val(_getvar(es)))
+assert(typeof_val of empty should be string, _getvar(r), string)
+
+_print
+
+// ===================================================================
+// SECTION 2 - TYPE CASTING THOROUGH
+// ===================================================================
+_print <color=#00bfff>--- Section 2: Type Casting ---</color>
+
+// to_int of float
+_setvar(r, to_int(7.9))
+assert(to_int 7.9 truncates to 7, _getvar(r), 7)
+
+// to_int of negative float (floors, not truncates)
+_setvar(r, to_int(-3.8))
+assert(to_int -3.8 floors to -4, _getvar(r), -4)
+
+// to_int of zero
+_setvar(r, to_int(0))
+assert(to_int 0 stays 0, _getvar(r), 0)
+
+// to_int of already-int
+_setvar(r, to_int(100))
+assert(to_int 100 stays 100, _getvar(r), 100)
+
+// to_float of integer
+_setvar(r, to_float(5))
+assert(to_float 5 should be 5, _getvar(r), 5)
+
+// to_float of negative
+_setvar(r, to_float(-7))
+assert(to_float -7 should be -7, _getvar(r), -7)
+
+// to_float of float
+_setvar(r, to_float(3.14))
+assert(to_float 3.14 stays 3.14, _getvar(r), 3.14)
+
+// to_string of zero
+_setvar(r, to_string(0))
+_setvar(r, len(_getvar(r)))
+assert(to_string of 0 has len 1, _getvar(r), 1)
+
+// to_string of negative
+_setvar(r, to_string(-5))
+_setvar(r, len(_getvar(r)))
+assert(to_string of -5 has len 2, _getvar(r), 2)
+
+// to_yesno of 1
+_setvar(r, to_yesno(1))
+assert(to_yesno 1 should be yes, _getvar(r), yes)
+
+// to_yesno of 0
+_setvar(r, to_yesno(0))
+assert(to_yesno 0 should be no, _getvar(r), no)
+
+// to_yesno of truthy string
+_setvar(r, to_yesno(true))
+assert(to_yesno true should be yes, _getvar(r), yes)
+
+// to_yesno of falsy
+_setvar(r, to_yesno())
+assert(to_yesno empty should be no, _getvar(r), no)
+
+// to_truefalse of 1
+_setvar(r, to_truefalse(1))
+assert(to_truefalse 1 should be true, _getvar(r), true)
+
+// to_truefalse of 0
+_setvar(r, to_truefalse(0))
+assert(to_truefalse 0 should be false, _getvar(r), false)
+
+// to_truefalse of string (only 1/true are truthy)
+_setvar(r, to_truefalse(yes))
+assert(to_truefalse yes should be false, _getvar(r), false)
+
+// to_truefalse of empty
+_setvar(r, to_truefalse())
+assert(to_truefalse empty should be false, _getvar(r), false)
+
+// Chained casts: int -> string -> len
+_setvar(num, 12345)
+_setvar(s, to_string(_getvar(num)))
+_setvar(r, len(_getvar(s)))
+assert(to_string of 12345 has len 5, _getvar(r), 5)
+
+// Cast from float to int to string
+_setvar(f, 9.87)
+_setvar(i, to_int(_getvar(f)))
+_setvar(s, to_string(_getvar(i)))
+assert(9.87 to_int is 9 then to_string is 9, _getvar(s), 9)
+
+_print
+
+// ===================================================================
+// SECTION 3 - STRING BUILTIN EDGE CASES
+// ===================================================================
+_print <color=#00bfff>--- Section 3: String Builtins ---</color>
+
+// substr 3-arg: start and end
+_setvar(r, substr(hello world, 0, 5))
+assert(substr hello world 0 to 5 is hello, _getvar(r), hello)
+
+// substr 2-arg: start to end of string
+_setvar(r, substr(hello world, 6))
+assert(substr hello world from 6 is world, _getvar(r), world)
+
+// substr from 0 of empty
+_setvar(r, substr(, 0))
+assert(substr empty from 0 is empty, _getvar(r), )
+
+// contains finds substring
+_setvar(r, contains(foobar, foo))
+assert(contains foobar has foo should be 1, _getvar(r), 1)
+
+// contains miss
+_setvar(r, contains(foobar, xyz))
+assert(contains foobar missing xyz should be 0, _getvar(r), 0)
+
+// contains at end
+_setvar(r, contains(foobar, bar))
+assert(contains foobar has bar should be 1, _getvar(r), 1)
+
+// contains empty search
+_setvar(r, contains(hello, ))
+assert(contains with empty search should be 1, _getvar(r), 1)
+
+// replace basic
+_setvar(r, replace(hello world, world, earth))
+assert(replace world with earth, _getvar(r), hello earth)
+
+// replace miss - string unchanged
+_setvar(r, replace(hello, xyz, abc))
+assert(replace miss leaves string unchanged, _getvar(r), hello)
+
+// replace with empty replacement (deletion)
+_setvar(r, replace(foobar, foo, ))
+assert(replace foo with empty deletes it, _getvar(r), bar)
+
+// split_str with missing delimiter - single element list
+_setvar(list, split_str(hello, x))
+_setvar(r, len(_getvar(list)))
+assert(split on missing delim gives 1 element, _getvar(r), 1)
+
+// split_str with multi-char delimiter
+_setvar(list, split_str(a::b::c, ::))
+_setvar(r, len(_getvar(list)))
+assert(split on :: gives 3 elements, _getvar(r), 3)
+
+// join on single element list
+_setvar(list, [only])
+_setvar(r, join(_getvar(list), _))
+assert(join single element is just that element, _getvar(r), only)
+
+// join on empty list
+_setvar(list, [])
+_setvar(r, join(_getvar(list), _))
+assert(join empty list is empty, _getvar(r), )
+
+// join with empty delimiter
+_setvar(list, [a, b, c])
+_setvar(r, join(_getvar(list), ))
+assert(join with empty delim concatenates abc, _getvar(r), abc)
+
+// concat with 3 args
+_setvar(r, concat(a, b, c))
+assert(concat 3 args is abc, _getvar(r), abc)
+
+// concat with 1 arg
+_setvar(r, concat(solo))
+assert(concat 1 arg is solo, _getvar(r), solo)
+
+// upper/lower with numbers in string
+_setvar(r, upper(abc123def))
+assert(upper of abc123def is ABC123DEF, _getvar(r), ABC123DEF)
+
+_setvar(r, lower(ABC123DEF))
+assert(lower of ABC123DEF is abc123def, _getvar(r), abc123def)
+
+_print
+
+// ===================================================================
+// SECTION 4 - ARRAY EDGE CASES
+// ===================================================================
+_print <color=#00bfff>--- Section 4: Array Edge Cases ---</color>
+
+// Single element list literal
+_setvar(arr, [solo])
+_setvar(r, len(_getvar(arr)))
+assert(single element list len is 1, _getvar(r), 1)
+
+// _in returns 1 (found) or 0 (not found)
+_setvar(arr, [a, b, c, d])
+_setvar(r, _in(_getvar(arr), c))
+assert(_in finds c returns 1, _getvar(r), 1)
+
+// _in miss - returns 0
+_setvar(r, _in(_getvar(arr), z))
+assert(_in misses z returns 0, _getvar(r), 0)
+
+// _in first element returns 1 (found)
+_setvar(r, _in(_getvar(arr), a))
+assert(_in finds a returns 1, _getvar(r), 1)
+
+// Push then check contents via for
+_setvar(arr, [])
+_push arr x
+_push arr y
+_push arr z
+_setvar(r, )
+for item in _getvar(arr)
+  _setvar(r, concat(_getvar(r), _getvar(item)))
+endfor
+assert(push x y z then concat via for is xyz, _getvar(r), xyz)
+
+// Pop removes last
+_setvar(arr, [a, b, c])
+_pop arr
+_setvar(r, len(_getvar(arr)))
+assert(pop from 3-element list gives 2, _getvar(r), 2)
+
+// Pull removes first
+_setvar(arr, [a, b, c])
+_pull arr
+_setvar(r, len(_getvar(arr)))
+assert(pull from 3-element list gives 2, _getvar(r), 2)
+
+// Multiple pops
+_setvar(arr, [a, b, c, d, e])
+_pop arr
+_pop arr
+_pop arr
+_setvar(r, len(_getvar(arr)))
+assert(triple pop from 5 leaves 2, _getvar(r), 2)
+
+// Interleaved push/pop
+_setvar(arr, [])
+_push arr 1
+_push arr 2
+_pop arr
+_push arr 3
+_setvar(r, len(_getvar(arr)))
+assert(push 1 push 2 pop push 3 gives len 2, _getvar(r), 2)
+
+// Array from split then push
+_setvar(arr, split_str(a_b_c, _))
+_push arr d
+_setvar(r, len(_getvar(arr)))
+assert(split 3 then push gives 4, _getvar(r), 4)
+
+// Empty array truthiness
+_setvar(arr, [])
+_setvar(r, no)
+if len(_getvar(arr)) > 0
+  _setvar(r, yes)
+endif
+assert(empty array len > 0 is false, _getvar(r), no)
+
+// List with numbers
+_setvar(arr, [10, 20, 30])
+_setvar(total, 0)
+for item in _getvar(arr)
+  _setvar(total, _getvar(total) + _getvar(item))
+endfor
+assert(sum of 10 20 30 array is 60, _getvar(total), 60)
+
+_print
+
+// ===================================================================
+// SECTION 5 - VARIABLE SCOPE & LIFECYCLE
+// ===================================================================
+_print <color=#00bfff>--- Section 5: Variable Scope & Lifecycle ---</color>
+
+// For-loop iterator value after loop
+_setvar(i, before)
+for i in range(1, 5)
+  // loop body
+endfor
+// After loop, does i retain last value or restore?
+// Engine restores previous scope, so it should be ""before""
+// But if the parser doesn't restore for-iter, it'll be 5
+// This tests the actual behavior
+_setvar(r, _getvar(i))
+if _getvar(r) == before
+  _print <color=#00ff00>[PASS]</color> for-loop iterator restored to pre-loop value
+elif _getvar(r) == 5
+  _print <color=#00ff00>[PASS]</color> for-loop iterator retains last value (5)
+else
+  _print <color=#ff0000>[FAIL]</color> for-loop iterator unexpected: _getvar(r)
+endif
+
+// Variable created in function does not leak
+func createVar()
+  _setvar(leaker, leaked_value)
+  _return ok
+endfunc
+_setvar(tmp, createVar())
+_setvar(r, _getvar(leaker))
+assert(variable created in func does not leak, _getvar(r), )
+
+// Function param name shadows outer variable
+_setvar(x, outer_x)
+func shadow(x)
+  _return _getvar(x)
+endfunc
+_setvar(inner, shadow(inner_x))
+assert(function param shadows outer, _getvar(inner), inner_x)
+assert(outer x unchanged after shadow call, _getvar(x), outer_x)
+
+// Multiple calls to same function - isolation
+func counter(n)
+  _setvar(local, _getvar(n) * 2)
+  _return _getvar(local)
+endfunc
+_setvar(a, counter(3))
+_setvar(b, counter(7))
+assert(counter 3 gives 6, _getvar(a), 6)
+assert(counter 7 gives 14, _getvar(b), 14)
+
+// Nested function: inner sees caller's passed args, not outer scope
+_setvar(val, outer)
+func inner()
+  _return _getvar(val)
+endfunc
+func outer_func()
+  _setvar(val, inside)
+  _setvar(r, inner())
+  _return _getvar(r)
+endfunc
+_setvar(r, outer_func())
+// inner() runs with its own saved scope restoration
+// so it should see the val from before outer_func set it
+// or it sees outer_func's val depending on scope model
+if _getvar(r) == outer
+  _print <color=#00ff00>[PASS]</color> nested func sees original outer scope
+elif _getvar(r) == inside
+  _print <color=#00ff00>[PASS]</color> nested func sees callers scope
+else
+  _print <color=#ff0000>[FAIL]</color> nested func scope unexpected: _getvar(r)
+endif
+
+// Variable set in loop body persists after loop
+_setvar(last, )
+for i in range(1, 5)
+  _setvar(last, _getvar(i))
+endfor
+assert(variable set in loop body persists after loop, _getvar(last), 5)
+
+// Overwriting a function definition
+func dup()
+  _return first
+endfunc
+func dup()
+  _return second
+endfunc
+_setvar(r, dup())
+assert(redefining func uses latest definition, _getvar(r), second)
+
+_print
+
+// ===================================================================
+// SECTION 6 - COERCION AND IMPLICIT CASTING
+// ===================================================================
+_print <color=#00bfff>--- Section 6: Implicit Coercion ---</color>
+
+// Number stored as string, then used in arithmetic
+_setvar(x, 10)
+_setvar(r, _getvar(x) + _getvar(x) + _getvar(x))
+assert(10 + 10 + 10 via stored vars is 30, _getvar(r), 30)
+
+// String that looks like number in comparison
+_setvar(x, 5)
+_setvar(r, no)
+if _getvar(x) > 3
+  _setvar(r, yes)
+endif
+assert(stored 5 compared to 3 works numerically, _getvar(r), yes)
+
+// Float stored then used in arithmetic
+_setvar(f, 2.5)
+_setvar(r, _getvar(f) * 4)
+assert(stored 2.5 times 4 is 10, _getvar(r), 10)
+
+// Concatenating number vars as strings via concat
+_setvar(a, 12)
+_setvar(b, 34)
+_setvar(r, concat(_getvar(a), _getvar(b)))
+assert(concat 12 and 34 is 1234 not 46, _getvar(r), 1234)
+
+// Boolean-like values in conditions
+_setvar(flag, true)
+_setvar(r, no)
+if _getvar(flag)
+  _setvar(r, yes)
+endif
+assert(string true is truthy, _getvar(r), yes)
+
+_setvar(flag, false)
+_setvar(r, no)
+if _getvar(flag)
+  _setvar(r, yes)
+endif
+// ""false"" is a non-empty string so likely truthy
+if _getvar(r) == yes
+  _print <color=#00ff00>[PASS]</color> string false is truthy (non-empty string)
+elif _getvar(r) == no
+  _print <color=#00ff00>[PASS]</color> string false is falsy (special handling)
+endif
+
+// Negative zero
+_setvar(r, -0)
+assert(negative zero should be 0, _getvar(r), 0)
+
+// Very large number
+_setvar(r, 999999 + 1)
+assert(999999 + 1 should be 1000000, _getvar(r), 1000000)
+
+// Small float precision
+_setvar(r, 0.001 + 0.002)
+if _getvar(r) > 0.002
+  _print <color=#00ff00>[PASS]</color> 0.001 + 0.002 gives reasonable result
+else
+  _print <color=#ff0000>[FAIL]</color> 0.001 + 0.002 unexpected: _getvar(r)
+endif
+
+_print
+
+// ===================================================================
+// SECTION 7 - SYSTEM CONTEXT BUILTINS
+// ===================================================================
+_print <color=#00bfff>--- Section 7: System Context ---</color>
+
+// get_user should return a non-empty string
+_setvar(u, get_user())
+_setvar(r, len(_getvar(u)))
+if _getvar(r) > 0
+  _print <color=#00ff00>[PASS]</color> get_user returns non-empty: _getvar(u)
+else
+  _print <color=#ff0000>[FAIL]</color> get_user returned empty
+endif
+
+// get_home should return a path
+_setvar(h, get_home())
+_setvar(r, contains(_getvar(h), /))
+assert(get_home contains a slash, _getvar(r), 1)
+
+// get_shell_type should return something
+_setvar(st, get_shell_type())
+_setvar(r, len(_getvar(st)))
+if _getvar(r) > 0
+  _print <color=#00ff00>[PASS]</color> get_shell_type returns: _getvar(st)
+else
+  _print <color=#ff0000>[FAIL]</color> get_shell_type returned empty
+endif
+
+// timestamp returns a number
+_setvar(t, timestamp())
+_setvar(r, to_int(_getvar(t)))
+if _getvar(r) > 0
+  _print <color=#00ff00>[PASS]</color> timestamp returns positive number
+else
+  _print <color=#ff0000>[FAIL]</color> timestamp unexpected: _getvar(t)
+endif
+
+// date returns a non-empty string
+_setvar(d, date())
+_setvar(r, len(_getvar(d)))
+if _getvar(r) > 0
+  _print <color=#00ff00>[PASS]</color> date returns: _getvar(d)
+else
+  _print <color=#ff0000>[FAIL]</color> date returned empty
+endif
+
+// get_computer_lan_ip returns an IP-like string
+_setvar(ip, get_computer_lan_ip())
+_setvar(r, contains(_getvar(ip), "".""))
+assert(get_computer_lan_ip contains a dot, _getvar(r), 1)
+
+// get_computer_public_ip returns an IP-like string
+_setvar(ip, get_computer_public_ip())
+_setvar(r, contains(_getvar(ip), "".""))
+assert(get_computer_public_ip contains a dot, _getvar(r), 1)
+
+_print
+
+// ===================================================================
+// SECTION 8 - COLOR FUNCTION SYNTAX
+// ===================================================================
+_print <color=#00bfff>--- Section 8: Color Functions ---</color>
+
+// Test color functions in _print don't crash
+_print red(RED_TEXT) green(GREEN_TEXT) blue(BLUE_TEXT)
+_print cyan(CYAN) magenta(MAGENTA) yellow(YELLOW)
+_print orange(ORANGE) lime(LIME) white(WHITE)
+_print purple(PURPLE) grey(GREY) bold(BOLD)
+_print liteblue(LITEBLUE) liteGrey(LITEGREY)
+_print error(ERROR_STYLE) bred(BRED_STYLE)
+_print iyellow(IYELLOW)
+_print <color=#00ff00>[PASS]</color> color functions rendered without crash
+
+_print
+
+// ===================================================================
+// SECTION 9 - CONDITIONAL LOGIC EXTENDED
+// ===================================================================
+_print <color=#00bfff>--- Section 9: Conditional Logic ---</color>
+
+// and operator
+_setvar(r, no)
+if 1 and 1
+  _setvar(r, yes)
+endif
+assert(1 and 1 should be true, _getvar(r), yes)
+
+_setvar(r, no)
+if 1 and 0
+  _setvar(r, yes)
+endif
+assert(1 and 0 should be false, _getvar(r), no)
+
+// or operator
+_setvar(r, no)
+if 0 or 1
+  _setvar(r, yes)
+endif
+assert(0 or 1 should be true, _getvar(r), yes)
+
+_setvar(r, no)
+if 0 or 0
+  _setvar(r, yes)
+endif
+assert(0 or 0 should be false, _getvar(r), no)
+
+// not operator
+_setvar(r, no)
+if not 0
+  _setvar(r, yes)
+endif
+assert(not 0 should be true, _getvar(r), yes)
+
+_setvar(r, no)
+if not 1
+  _setvar(r, yes)
+endif
+assert(not 1 should be false, _getvar(r), no)
+
+// Compound: and + or
+_setvar(r, no)
+if 1 and 1 or 0
+  _setvar(r, yes)
+endif
+assert(1 and 1 or 0 should be true, _getvar(r), yes)
+
+// Comparison with variables and arithmetic in condition
+_setvar(x, 10)
+_setvar(y, 20)
+_setvar(r, no)
+if _getvar(x) + _getvar(y) == 30
+  _setvar(r, yes)
+endif
+assert(x+y==30 in condition should be true, _getvar(r), yes)
+
+// String equality with variables
+_setvar(a, hello)
+_setvar(b, hello)
+_setvar(r, no)
+if _getvar(a) == _getvar(b)
+  _setvar(r, yes)
+endif
+assert(string var equality should work, _getvar(r), yes)
+
+// String inequality
+_setvar(a, hello)
+_setvar(b, world)
+_setvar(r, no)
+if _getvar(a) != _getvar(b)
+  _setvar(r, yes)
+endif
+assert(string var inequality should work, _getvar(r), yes)
+
+_print
+
+// ===================================================================
+// SECTION 10 - UNTIL LOOP
+// ===================================================================
+_print <color=#00bfff>--- Section 10: Until Loop ---</color>
+
+// Basic until
+_setvar(counter, 0)
+until _getvar(counter) == 5
+  _setvar(counter, _getvar(counter) + 1)
+enduntil
+assert(until counter reaches 5, _getvar(counter), 5)
+
+// Until with break
+_setvar(counter, 0)
+until _getvar(counter) == 100
+  _setvar(counter, _getvar(counter) + 1)
+  if _getvar(counter) == 3
+    break
+  endif
+enduntil
+assert(until with break at 3, _getvar(counter), 3)
+
+// Until that never executes (condition already true)
+_setvar(r, intact)
+_setvar(flag, 1)
+until _getvar(flag) == 1
+  _setvar(r, changed)
+enduntil
+assert(until with already-true condition should not execute, _getvar(r), intact)
+
+_print
+
+// ===================================================================
+// SECTION 11 - RANDOM AND DYNAMIC
+// ===================================================================
+_print <color=#00bfff>--- Section 11: Random & Dynamic ---</color>
+
+// random returns a number within range
+_setvar(r, random(1, 10))
+_setvar(ok, no)
+if _getvar(r) >= 1
+  if _getvar(r) <= 10
+    _setvar(ok, yes)
+  endif
+endif
+assert(random 1 to 10 is within range, _getvar(ok), yes)
+
+// random with same min and max
+_setvar(r, random(5, 5))
+assert(random 5 to 5 should be 5, _getvar(r), 5)
+
+// Multiple randoms are not all identical (probabilistic - small chance of false fail)
+_setvar(a, random(1, 1000000))
+_setvar(b, random(1, 1000000))
+_setvar(c, random(1, 1000000))
+_setvar(allSame, no)
+if _getvar(a) == _getvar(b)
+  if _getvar(b) == _getvar(c)
+    _setvar(allSame, yes)
+  endif
+endif
+if _getvar(allSame) == no
+  _print <color=#00ff00>[PASS]</color> three randoms are not all identical
+else
+  _print <color=#ffff00>[WARN]</color> three randoms happened to match (very unlikely)
+endif
+
+_print
+
+// ===================================================================
+// SECTION 12 - REPLACE EDGE CASES
+// ===================================================================
+_print <color=#00bfff>--- Section 12: Replace & String Ops ---</color>
+
+// Replace multi-char multi-occurrence
+_setvar(r, replace(abcXabc, abc, Z))
+if _getvar(r) == ZXZ
+  _print <color=#00ff00>[PASS]</color> replace replaces all occurrences
+elif _getvar(r) == ZXabc
+  _print <color=#00ff00>[PASS]</color> replace replaces first occurrence only
+else
+  _print <color=#ff0000>[FAIL]</color> replace multi-occurrence unexpected: _getvar(r)
+endif
+
+// Replace whole string with longer
+_setvar(r, replace(ab, ab, xyz))
+assert(replace whole string with longer, _getvar(r), xyz)
+
+// Replace with same string (no change)
+_setvar(r, replace(hello, hello, hello))
+assert(replace same with same is unchanged, _getvar(r), hello)
+
+// Nested replace
+_setvar(r, replace(hello world, hello, hi))
+_setvar(r, replace(_getvar(r), world, earth))
+assert(double replace hello world to hi earth, _getvar(r), hi earth)
+
+// Split with single char string
+_setvar(list, split_str(a, _))
+_setvar(r, len(_getvar(list)))
+assert(split single char no delim gives 1, _getvar(r), 1)
+
+// Substr 3-arg with variable (single-char and multi-char slices)
+_setvar(mystr, abcde)
+
+_setvar(r, substr(_getvar(mystr), 0, 1))
+assert(substr var 0 to 1 is a, _getvar(r), a)
+
+_setvar(r, substr(_getvar(mystr), 0, 3))
+assert(substr var 0 to 3 is abc, _getvar(r), abc)
+
+_setvar(r, substr(_getvar(mystr), 1, 3))
+assert(substr var 1 to 3 is bc, _getvar(r), bc)
+
+_setvar(r, substr(_getvar(mystr), 2, 3))
+assert(substr var 2 to 3 is c, _getvar(r), c)
+
+_setvar(r, substr(_getvar(mystr), 2, 4))
+assert(substr var 2 to 4 is cd, _getvar(r), cd)
+
+_setvar(r, substr(_getvar(mystr), 2, 5))
+assert(substr var 2 to 5 is cde, _getvar(r), cde)
+
+_setvar(r, substr(_getvar(mystr), 3, 5))
+assert(substr var 3 to 5 is de, _getvar(r), de)
+
+_setvar(r, substr(_getvar(mystr), 4, 5))
+assert(substr var 4 to 5 is e, _getvar(r), e)
+
+// Substr 3-arg with literal (single-char slice)
+_setvar(r, substr(abcde, 2, 3))
+assert(substr literal 2 to 3 is c, _getvar(r), c)
+
+// Substr 3-arg with different var name
+_setvar(zz, abcde)
+_setvar(r, substr(_getvar(zz), 2, 3))
+assert(substr other var 2 to 3 is c, _getvar(r), c)
+
+_print
+
+// ===================================================================
+// SECTION 13 - FUNCTION ADVANCED
+// ===================================================================
+_print <color=#00bfff>--- Section 13: Advanced Functions ---</color>
+
+// Function with multiple params
+func add(a, b)
+  _return _getvar(a) + _getvar(b)
+endfunc
+_setvar(r, add(3, 7))
+assert(add function 3 + 7 is 10, _getvar(r), 10)
+
+// Function with 3 params
+func clamp(val, lo, hi)
+  if _getvar(val) < _getvar(lo)
+    _return _getvar(lo)
+  elif _getvar(val) > _getvar(hi)
+    _return _getvar(hi)
+  else
+    _return _getvar(val)
+  endif
+endfunc
+_setvar(r, clamp(5, 1, 10))
+assert(clamp 5 between 1 and 10 stays 5, _getvar(r), 5)
+_setvar(r, clamp(-5, 1, 10))
+assert(clamp -5 between 1 and 10 clamps to 1, _getvar(r), 1)
+_setvar(r, clamp(50, 1, 10))
+assert(clamp 50 between 1 and 10 clamps to 10, _getvar(r), 10)
+
+// Function calling function with return used in arithmetic
+func double(n)
+  _return _getvar(n) * 2
+endfunc
+func quadruple(n)
+  _setvar(d, double(_getvar(n)))
+  _setvar(r, double(_getvar(d)))
+  _return _getvar(r)
+endfunc
+_setvar(r, quadruple(5))
+assert(quadruple 5 is 20, _getvar(r), 20)
+
+// Iterative summation (recursion hits engine depth limit)
+func sumTo(n)
+  _setvar(acc, 0)
+  _setvar(i, 1)
+  while _getvar(i) <= _getvar(n)
+    _setvar(acc, _getvar(acc) + _getvar(i))
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return _getvar(acc)
+endfunc
+_setvar(r, sumTo(10))
+assert(sumTo 10 is 55, _getvar(r), 55)
+
+// _return stringifies lists
+func makeList()
+  _setvar(l, [a, b, c])
+  _return _getvar(l)
+endfunc
+_setvar(result, makeList())
+_setvar(r, len(_getvar(result)))
+if _getvar(r) > 0
+  _print <color=#00ff00>[PASS]</color> makeList return is non-empty (len _getvar(r))
+else
+  _print <color=#ff0000>[FAIL]</color> makeList return is empty
+endif
+
+_print
+
+// ===================================================================
+// SECTION 14 - SWITCH EXTENDED
+// ===================================================================
+_print <color=#00bfff>--- Section 14: Switch Extended ---</color>
+
+// Switch with variable expression
+_setvar(cmd, run)
+_setvar(r, none)
+switch _getvar(cmd)
+  case start
+    _setvar(r, starting)
+  case run
+    _setvar(r, running)
+  case stop
+    _setvar(r, stopping)
+  default
+    _setvar(r, unknown)
+endswitch
+assert(switch on run matches case run, _getvar(r), running)
+
+// Switch first case match
+_setvar(val, 1)
+_setvar(r, miss)
+switch _getvar(val)
+  case 1
+    _setvar(r, first)
+  case 2
+    _setvar(r, second)
+endswitch
+assert(switch picks first matching case, _getvar(r), first)
+
+// Switch with numeric strings
+_setvar(val, 42)
+_setvar(r, miss)
+switch _getvar(val)
+  case 41
+    _setvar(r, wrong)
+  case 42
+    _setvar(r, correct)
+  case 43
+    _setvar(r, wrong)
+endswitch
+assert(switch matches number 42, _getvar(r), correct)
+
+// Switch with only default
+_setvar(val, anything)
+_setvar(r, miss)
+switch _getvar(val)
+  default
+    _setvar(r, default_only)
+endswitch
+assert(switch with only default hits it, _getvar(r), default_only)
+
+_print
+
+// ===================================================================
+// SECTION 15 - SEMICOLONS AND CHAINING
+// ===================================================================
+_print <color=#00bfff>--- Section 15: Semicolons & Chaining ---</color>
+
+// Multiple semicolons
+_setvar(a, 0) ; _setvar(b, 0) ; _setvar(c, 0)
+_setvar(a, 1) ; _setvar(b, 2) ; _setvar(c, 3)
+_setvar(r, _getvar(a) + _getvar(b) + _getvar(c))
+assert(triple semicolon chain a+b+c is 6, _getvar(r), 6)
+
+// Semicolon with function call
+func retval()
+  _return 99
+endfunc
+_setvar(x, 0) ; _setvar(x, retval())
+assert(semicolon then func call gives 99, _getvar(x), 99)
+
+_print
+
+// ===================================================================
+// SECTION 16 - WHILE LOOP EXTENDED
+// ===================================================================
+_print <color=#00bfff>--- Section 16: While Loop Extended ---</color>
+
+// While with compound condition
+_setvar(x, 0)
+_setvar(y, 10)
+_setvar(r, 0)
+while _getvar(x) < 5 and _getvar(y) > 5
+  _setvar(x, _getvar(x) + 1)
+  _setvar(y, _getvar(y) - 1)
+  _setvar(r, _getvar(r) + 1)
+endwhile
+assert(while with and condition ran 5 times, _getvar(r), 5)
+
+// While with continue
+_setvar(i, 0)
+_setvar(r, 0)
+while _getvar(i) < 10
+  _setvar(i, _getvar(i) + 1)
+  if _getvar(i) % 3 == 0
+    continue
+  endif
+  _setvar(r, _getvar(r) + 1)
+endwhile
+assert(while continue skips multiples of 3 gives 7, _getvar(r), 7)
+
+// Nested while loops
+_setvar(i, 0)
+_setvar(r, 0)
+while _getvar(i) < 3
+  _setvar(j, 0)
+  while _getvar(j) < 3
+    _setvar(r, _getvar(r) + 1)
+    _setvar(j, _getvar(j) + 1)
+  endwhile
+  _setvar(i, _getvar(i) + 1)
+endwhile
+assert(nested while 3x3 is 9, _getvar(r), 9)
+
+_print
+
+// ===================================================================
+// SECTION 17 - MATH BUILTIN COMBOS
+// ===================================================================
+_print <color=#00bfff>--- Section 17: Math Builtin Combos ---</color>
+
+// floor of negative
+_setvar(r, floor(-0.5))
+assert(floor of -0.5 is -1, _getvar(r), -1)
+
+// ceil of negative
+_setvar(r, ceil(-0.5))
+assert(ceil of -0.5 is 0, _getvar(r), 0)
+
+// round halfway uses bankers rounding (half to even)
+_setvar(r, round(2.5))
+assert(round 2.5 should be 2 (bankers), _getvar(r), 2)
+
+// abs of positive unchanged
+_setvar(r, abs(42))
+assert(abs of positive 42 is 42, _getvar(r), 42)
+
+// min/max with negatives
+_setvar(r, min(-5, 3))
+assert(min of -5 and 3 is -5, _getvar(r), -5)
+
+_setvar(r, max(-5, 3))
+assert(max of -5 and 3 is 3, _getvar(r), 3)
+
+// min/max with equal values
+_setvar(r, min(7, 7))
+assert(min of 7 and 7 is 7, _getvar(r), 7)
+
+_setvar(r, max(7, 7))
+assert(max of 7 and 7 is 7, _getvar(r), 7)
+
+// Chained math: abs(floor(x))
+_setvar(f, floor(-3.7))
+_setvar(r, abs(_getvar(f)))
+assert(abs of floor -3.7 is 4, _getvar(r), 4)
+
+// round then to_int
+_setvar(f, round(3.6))
+_setvar(r, to_int(_getvar(f)))
+assert(round 3.6 then to_int is 4, _getvar(r), 4)
+
+_print
+
+// ===================================================================
+// SECTION 18 - COMPLEX EXPRESSIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 18: Complex Expressions ---</color>
+
+// Arithmetic with multiple vars
+_setvar(a, 2)
+_setvar(b, 3)
+_setvar(c, 4)
+_setvar(r, _getvar(a) * _getvar(b) + _getvar(c))
+assert(2*3+4 should be 10, _getvar(r), 10)
+
+// Fibonacci via two vars swapping
+_setvar(a, 1)
+_setvar(b, 1)
+for i in range(1, 8)
+  _setvar(temp, _getvar(b))
+  _setvar(b, _getvar(a) + _getvar(b))
+  _setvar(a, _getvar(temp))
+endfor
+assert(fib after 8 more iterations is 55, _getvar(b), 55)
+
+// Countdown while loop
+_setvar(n, 100)
+while _getvar(n) > 0
+  _setvar(n, _getvar(n) - 10)
+endwhile
+assert(countdown 100 by 10s reaches 0, _getvar(n), 0)
+
+// Function in loop with condition
+func isEven(n)
+  _setvar(mod, _getvar(n) % 2)
+  if _getvar(mod) == 0
+    _return 1
+  else
+    _return 0
+  endif
+endfunc
+_setvar(evens, 0)
+for i in range(1, 20)
+  _setvar(check, isEven(_getvar(i)))
+  if _getvar(check) == 1
+    _setvar(evens, _getvar(evens) + 1)
+  endif
+endfor
+assert(count evens 1 to 20 is 10, _getvar(evens), 10)
+
+// Nested function + array (_return stringifies)
+func buildArray(n)
+  _setvar(arr, [])
+  for i in range(1, _getvar(n))
+    _push arr _getvar(i)
+  endfor
+  _return _getvar(arr)
+endfunc
+_setvar(result, buildArray(5))
+_setvar(r, contains(_getvar(result), 3))
+assert(buildArray return contains 3, _getvar(r), 1)
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     CAST & COVERAGE TESTS COMPLETE</color>
+_print <color=#eb0cc6>============================================</color>
+_print"

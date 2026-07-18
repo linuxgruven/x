@@ -1,0 +1,73 @@
+// Man page for cut
+manCut="CUT(1)                           X Shell Manual                           CUT(1)
+
+<b>NAME</b>
+    cut - extract sections from each line of a file
+<b>SYNOPSIS</b>
+    <b>cut -b</b> POSITIONS FILE
+    <b>cut -c</b> POSITIONS FILE
+    <b>cut -f</b> POSITIONS FILE
+    <b>cut -f</b> POSITIONS <b>-d</b> DELIMITER FILE
+<b>DESCRIPTION</b>
+    The <b>cut</b> command extracts sections from each line of a file.
+    You can specify byte positions, character positions, or field
+    positions. Position specifications can be a single position (1),
+    a range (1-5), an open-ended range (1- or -5), or multiple
+    comma-separated positions (1,3,5).
+<b>OPTIONS</b>
+    <b>-b POSITIONS</b>
+      Extract bytes at specified positions (1-indexed).
+      Formats: single (1), range (1-5), open (1- or -5), multiple (1,3,5)
+
+    <b>-c POSITIONS</b>
+      Extract characters at specified positions. Same format as -b.
+
+    <b>-f POSITIONS</b>
+      Extract fields. Default delimiter is tab.
+
+    <b>-d DELIMITER</b>
+      Specify custom field delimiter (use with -f).
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man cut</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>cut</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Character Extraction</color>
+    <b>cut -c 1-5 myfile.txt</b>
+    First 5 characters of each line
+
+    <b>cut -c 1,3,5 data.txt</b>
+    Characters at positions 1, 3, and 5
+
+    <b>cut -c 10- logfile.txt</b>
+    All characters from position 10 onwards
+
+    <color=#e4ff34># Field Extraction</color>
+    <b>cut -f 2,4 data.csv</b>
+    2nd and 4th fields with tab delimiter
+
+    <b>cut -f 1-3 -d : /etc/passwd</b>
+    First 3 fields with colon delimiter
+
+    <b>cut -f 1 -d , users.csv</b>
+    First field from CSV file
+
+    <color=#e4ff34># Byte Extraction</color>
+    <b>cut -b 1-10 binary.dat</b>
+    First 10 bytes of each line
+
+    <b>cut -b 5- data.bin</b>
+    All bytes from position 5 onwards
+
+    <color=#e4ff34># Complex Examples</color>
+    <b>cut -f 2,5,7 -d , report.csv</b>
+    Extract multiple columns from CSV
+
+    <b>cut -c 20-50 document.txt</b>
+    Extract middle section of each line
+<b>SEE ALSO</b>
+    <b>awk</b>, <b>grep</b>, <b>sed</b>, <b>wc</b>"

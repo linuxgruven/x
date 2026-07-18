@@ -1,0 +1,60 @@
+// =============================================================================
+// CD
+// Change directory; supports ~, -, .., back, glob patterns, and history.
+// =============================================================================
+Command.cd=function(Obj,argv)
+	if argv then target=argv[0] else target="~"
+	if target=="." then return
+	if hasIndex({"~":0,"-":0,"back":0,"..":0},target) then
+		if target=="~" then
+			Obj.dir.last=Obj.dir.current
+			Obj.dir.current=Obj.user.home
+		else if target=="-" or target=="back" then
+			if not Obj.dir.last then return Info.info("No back history")
+			temp=Obj.dir.current
+			Obj.dir.current=Obj.dir.last
+			Obj.dir.last=temp
+		else if target==".." then
+			// Navigate to parent directory, bail if already at root to prevent errors
+			if path(Obj.dir.current)=="/" then return
+			Obj.dir.last=Obj.dir.current
+			Obj.dir.current=parent(Obj.dir.current)
+		end if
+		return
+	end if
+	if indexOf(target,"*")!=null then
+		// Determine pattern type: prefix match (pattern*) or substring match (*pattern)
+		if target[:1]=="*" then patternType=0 else patternType=1
+		pattern=target.replace("\*","")
+		if not pattern then return Error.set("Invalid wildcard pattern")
+		matches=Io.fileFilterC(get_folders(Obj.dir.current),pattern,patternType)
+		if not matches then return Info.info("Found 0 matches for "+pattern)
+		choices=[green("Choose a directory:")]
+		for dir in matches;push(choices,dir);end for
+		push(choices,iyellow("Forget it"))
+		// Large result sets (>9) use scrollable choice menu, small sets use anykey for faster selection
+		if len(matches)>9 then selection=Gui.choiceHybrid(choices,{},len(choices)-1) else selection=Gui.choiceHybrid(choices,{},len(choices)-1,false,true)
+		if selection==len(choices)-1 then return
+		// Extract selected directory name, strip color codes from menu formatting
+		target=choices[selection].replace("<color=#ffffff>","").replace("</color>","")
+	end if
+	_p=ArgumentParser.init
+	argv=_p.parseArgs("cd",[target])
+	if argv isa Error then return
+	argv=_p.parsePath(Obj,argv)
+	if argv isa Error then return
+	if not argv.rest then return Error.set("Invalid directory path")
+	// Get directory file object - use l=true to NOT follow symlinks initially
+	directory=Io._getFile(Obj,argv.rest[0],false,true)
+	if directory isa Error then return directory
+	// Manually follow symlinks to ensure we get the real directory
+	while is_symlink(directory)
+		targetPath=path(directory,true)
+		if not targetPath then return Error.set("Broken symlink: "+target)
+		directory=Io.getFileObj(Obj,targetPath)
+		if directory isa Error then return Error.set("Broken symlink: "+target)
+	end while
+	if not is_folder(directory) then return Error.set("Not a directory: "+target)
+	Obj.dir.last=Obj.dir.current
+	Obj.dir.current=directory
+end function

@@ -1,0 +1,384 @@
+// =============================================================================
+// GUI
+// User interface library; formatted prompts, input validation, choice menus, progress bars, and dialogs.
+// =============================================================================
+Gui={
+  //Cancel instruction text
+  "cancel":" (enter ! to cancel)",
+  //Default instruction text
+  "default":" (enter to use: ",
+  //Command prompt footer
+  "cpf":":"+blue("~")+"$ ",
+  //Current prompt data (populated from system state)
+  "cp":{}
+}
+//Create progress bar string
+Gui.bar=function(a,b,c)
+  //Brief wait for visual effect
+  wait .02
+  //Return formatted progress bar
+	return ("["+("#"*a+"-"*(b-a))+"]==[ "+(c+"%")+" ]")
+end function
+//Update Gui.cp cache with session info from object
+Gui.updateCP=function(obj)
+	i=obj.meta.public_ip
+	if Shadow.hasPassword(i) then j=purple("•"+white("["+green("R")+"]")+"•") else j=purple("••")
+	self.cp={
+		"public_ip":i,
+		"local_ip":obj.meta.local_ip,
+		"user":obj.user.name,
+		"hw_unit":obj.hw_unit,
+		"pw":obj.pwa.icon,
+		"rootpw":j,
+		"machineType":obj.machineType
+	}
+end function
+//Build command prompt string for main loop
+//P: formatted path string, hint: optional footer label (e.g. "c = Close")
+Gui.cmdPrompt=function(P,hint="")
+	s=purple("•")+white("["+self.cp.hw_unit+"]")+purple("•")+white("["+self.cp.pw+"]")+self.cp.rootpw+purple("["+white(self.cp.user)+yellow("~")+self.cp.machineType+yellow("@")+orange(self.cp.public_ip)+yellow(":")+orange(self.cp.local_ip)+"]")+purple("<s> </s>["+white(P)+"]")+char(10)
+	if hint then return s+purple("•"+white("["+orange(hint)+"]")+"•")+white(self.cpf)
+	return s+purple("•<s>   </s>•")+white(self.cpf)
+end function
+//Display mixed number/letter choice menu
+Gui.choiceAlpha=function(z,o,d)
+  //Iterate through numbered choices
+	for c in z
+	  //First item is header
+		if __c_idx==0 then
+			print z[0]
+		  //Skip to next item
+			continue
+		end if
+	  //Format choice number
+		p=purple("["+white(str(__c_idx))+"]")
+	  //Single digit
+		if __c_idx<10 then
+      //Display with 3 spaces
+      print p+"   "+z[__c_idx]
+    //Double digit
+    else if __c_idx<100 then
+      //Display with 2 spaces
+      print p+"  "+z[__c_idx]
+    //Triple digit
+    else
+      //Display with 1 space
+      print p+" "+z[__c_idx]
+    end if
+	end for
+  //Iterate through letter choices
+	for j in o;p=white("["+purple(upper(j.key))+"]  ")+yellow(j.value);print p;end for
+  //Set default prompt text
+	s="default = "+d
+  //Input validation loop
+	while true
+	  //Get user input
+		i=user_input(self.prompt(s))
+	  //Empty input, return default
+		if not len(i) then return d
+	  //Invalid letter choice
+		if not hasIndex(o,lower(i)) then
+			Info.error("Not a valid choice")
+		  //Re-prompt
+			continue
+		end if
+	  //Return valid letter choice
+		return i
+	end while
+end function
+//Display hybrid choice menu accepting both numbers and letter shortcuts
+//z: Array of numbered menu items (first item is header)
+//shortcuts: Map of letter shortcuts to menu indices {"m": 1, "c": 2, etc}
+//d: Default choice index
+//skipNum: If true, don't add [1], [2] prefixes (array items already formatted)
+//Returns: Either numeric index or letter shortcut
+Gui.choiceHybrid=function(z,shortcuts={},d=null,skipNum=false,anykey=false,promptText=null)
+  //Input validation loop
+	while true
+	  //Iterate through numbered choices
+		for c in z
+		  //First item is header
+			if __c_idx==0 then
+				print z[0]
+			  //Skip to next item
+				continue
+			end if
+		  //Check if we should skip number formatting
+			if skipNum then
+			  //Print item as-is (already formatted with numbers)
+				print z[__c_idx]
+			else
+			  //Format choice number
+				p=purple("["+white(str(__c_idx))+"]")
+			  //Single digit
+				if __c_idx<10 then
+					//Display with 3 spaces
+					print p+"   "+z[__c_idx]
+				//Double digit
+				else if __c_idx<100 then
+					//Display with 2 spaces
+					print p+"  "+z[__c_idx]
+				//Triple digit
+				else
+					//Display with 1 space
+					print p+" "+z[__c_idx]
+				end if
+			end if
+		end for
+	  //Set default prompt text
+		if d!=null then
+			if d>-1 then
+				s="default = "+d
+			else
+				s=""
+				for k in indexes(shortcuts);if shortcuts[k]==d then s="default = "+k;end for
+			end if
+		else
+			s=""
+		end if
+	  //Build prompt
+		if promptText then fp=promptText+char(10)+purple("•"+white("["+orange(s)+"]")+"•")+white(self.cpf) else fp=self.prompt(s)
+	  //Get user input
+		if anykey then i=user_input(fp,0,1) else i=user_input(fp)
+	  //Empty input with default, return default
+		if not len(i) and d!=null then return d
+	  //Check if input is a letter shortcut
+		lowerInput=lower(i)
+		if hasIndex(shortcuts,lowerInput) then return shortcuts[lowerInput]
+	  //Try to convert to integer for numeric choice
+		numericChoice=to_int(i)
+	  //Invalid choice (not a number and not a valid shortcut)
+		if not numericChoice isa number or numericChoice<1 or numericChoice>=len(z) then
+			Info.error("Not a valid choice")
+		  //Re-prompt
+			continue
+		end if
+	  //Return valid numeric choice
+		return numericChoice
+	end while
+end function
+//Yes/no prompt with default
+Gui.yesNo=function(m="",d=true)
+  //Auto-yes: skip prompt and return true
+  if globals.G_auto_yes then return true
+  //Pipe stdin: consume first line as answer
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    _lines=globals.G_pipe.stdin.split(char(10))
+    _ans=lower(trim(_lines[0]))
+    if len(_lines)>1 then globals.G_pipe.stdin=join(_lines[1:],char(10)) else globals.G_pipe.stdin=null
+    if _ans and _ans[0]=="y" then return true
+    if _ans and _ans[0]=="n" then return false
+  end if
+  //Display message if provided
+	if m then print yellow(m)
+  //Set default prompt text
+	if d then p="Enter = [y]es" else p="Enter = [n]o"
+  //Input validation loop
+	while true
+	  //Get input (lowercase, any key mode)
+		r=lower(user_input(self.prompt(p),false,true))
+	  //Empty input, return default
+		if not r then return d
+	  //Yes selected
+		if r[0]=="y" then return true
+	  //No selected
+		if r[0]=="n" then return false
+	end while
+end function
+//Yes/no prompt with null default option
+Gui.yesNoNon=function(m="",d=null)
+  //Display message if provided
+	if m then print yellow(m)
+  //Set default prompt text
+	if d then p="Enter = [y]es" else p="Enter = [n]o"
+  //Input validation loop
+	while true
+	  //Get input (lowercase)
+		r=lower(user_input(self.prompt(p)))
+	  //Empty input, return default (can be null)
+		if not r then return d
+	  //Yes selected
+		if r[0]=="y" then return true
+	  //No selected
+		if r[0]=="n" then return false
+	end while
+end function
+//File deletion with optional confirmation
+Gui.delPrompt=function(f,a=null)
+  //Get file name
+	n=name(f)
+  //Auto-delete without confirmation
+  if a then
+	//Delete file
+	r=delete(f)
+	if r=="" then Info.info(n+ " deleted successfully") else Error.set(r)
+  //Require confirmation
+  else
+    //Confirm deletion
+    if self.yesNo("Are you sure you want to delete "+blue(n)+"?") then
+      //Delete file
+      r=delete(f)
+      if r=="" then Info.info(n+ " deleted successfully") else Error.set(r)
+    end if
+  end if
+end function
+//Generate formatted command prompt with system info
+Gui.prompt=function(p="")
+  //Prompt components
+	b={
+  //Hardware unit
+  "a":purple("•")+white("["+self.cp.hw_unit+"]"),
+  //Password status
+  "b":purple("•")+white("["+self.cp.pw+"]"),
+  //Root password indicator
+  "c":self.cp.rootpw,
+  //User and machine info
+  "d":purple("["+white(self.cp.user)+yellow("~")+self.cp.machineType+yellow("@")+orange(self.cp.public_ip)+yellow(":")+orange(self.cp.local_ip)+"]"),
+  //Response needed indicator
+  "e":purple("<s> </s>["+bold(yellow("NEED RESPONSE"))+"]"),
+  //Prompt text with footer
+  "f":char(10)+purple("•"+white("["+orange(p)+"]")+"•")+white(self.cpf)
+  }
+//Return concatenated prompt
+	return b.a+b.b+b.c+b.d+b.e+b.f
+end function
+//Generate REPL prompt with yellow REPL label
+Gui.replPrompt=function
+	b={
+  "a":purple("•")+white("["+self.cp.hw_unit+"]"),
+  "b":purple("•")+white("["+self.cp.pw+"]"),
+  "c":self.cp.rootpw,
+  "d":purple("["+white(self.cp.user)+yellow("~")+self.cp.machineType+yellow("@")+orange(self.cp.public_ip)+yellow(":")+orange(self.cp.local_ip)+"]"),
+  "e":purple("<s> </s>["+bold(yellow("NEED RESPONSE"))+"]"),
+  "f":char(10)+purple("•"+white("["+yellow("REPL")+"]")+"•")+white(self.cpf)
+  }
+	return b.a+b.b+b.c+b.d+b.e+b.f
+end function
+//Generate prompt with "x = Cancel" notice
+Gui.closeNR=function
+ //Prompt components
+	b={
+  //Hardware unit
+  "a":purple("•")+white("["+self.cp.hw_unit+"]"),
+  //Password status
+  "b":purple("•")+white("["+self.cp.pw+"]"),
+  //Root password indicator
+  "c":self.cp.rootpw,
+  //User and machine info
+  "d":purple("["+white(self.cp.user)+yellow("~")+self.cp.machineType+yellow("@")+orange(self.cp.public_ip)+yellow(":")+orange(self.cp.local_ip)+"]"),
+  //Response needed indicator
+  "e":purple("<s> </s>["+bold(yellow("NEED RESPONSE"))+"]"),
+  //Cancel notice with footer
+  "f":char(10)+purple("•"+white("["+bold(yellow("x = Cancel"))+"]")+"•")+white(self.cpf)
+  }
+//Return concatenated prompt
+	return b.a+b.b+b.c+b.d+b.e+b.f
+end function
+//Password input with hidden characters
+Gui.inputPass=function(m)
+  //Return password input (hidden)
+	return user_input(purple("•"+white("["+orange(m)+"]")+"•")+white(self.cpf),1)
+end function
+//Standard input without validation
+Gui.inputNull=function(m)
+  //Return user input
+  return user_input(purple("•"+white("["+orange(m)+"]")+"•")+white(self.cpf))
+end function
+//Validated string input with cancel/default support
+Gui.input=function(m)
+  //Set instruction text
+  if hasIndex(m,"default") then p=self.default+m.default+")" else p=self.cancel
+  //Initialize input
+  t=""
+  //Loop until non-empty input
+  while t==""
+    //Get user input
+    t=user_input(purple("•"+white("["+orange(m.text)+yellow(p)+"]")+"•")+white(self.cpf))
+    //Cancel character
+    if t=="!" then return
+    //Empty enter accepts default or cancels
+    if t=="" then
+      if hasIndex(m,"default") then return m.default else return
+    end if
+  end while
+  //Return validated input
+  return t
+end function
+Gui.inputInt=function(m)
+  //Set instruction text
+  if hasIndex(m,"default") then p=self.default+m.default+")" else p=self.cancel
+  //Initialize input
+  t=""
+  //Loop until valid integer
+  while t isa string
+    //Get raw input first
+    raw=user_input(purple("•"+white("["+orange(m.text)+yellow(p)+"]")+"•")+white(self.cpf))
+    //Cancel character
+    if raw=="!" then return
+    //Empty enter accepts default or cancels
+    if raw=="" then
+      if hasIndex(m,"default") then return m.default else return
+    end if
+    //Convert to integer
+    t=to_int(raw)
+    //Valid integer, exit loop
+    if t isa number then break
+  end while
+  //Return validated integer
+	return t
+end function
+//Validated IP address input with nslookup support
+Gui.inputIP=function(m)
+  //Set instruction text
+  if hasIndex(m,"default") then p=self.default+m.default+")" else p=self.cancel
+  //Initialize input
+  t=""
+  //Loop until valid IP
+  while not is_valid_ip(t)
+    //Convert domain to IP if starts with www
+    if t[:3]=="www" then t=nslookup(t)
+    //Valid IP, exit loop
+    if is_valid_ip(t) then break
+    //Get user input
+    t=user_input(purple("•"+white("["+orange(m.text)+yellow(p)+"]")+"•")+white(self.cpf))
+    //Cancel character
+    if t=="!" then return
+    //Empty enter accepts default or cancels
+    if t=="" then
+      if hasIndex(m,"default") then return m.default else return
+    end if
+  end while
+  //Return validated IP address
+	return t
+end function
+Gui.inputPassNS=function(m)
+  //Return password with special char
+	return user_input(purple("•"+white("["+orange(m)+"]")+"•")+white(self.cpf)+char(0))
+end function
+//Check /etc/passwd access and return status icon
+Gui.pwAccess=function(Obj)
+  //Initialize result object
+  _={
+    //Access flag (null or 1)
+    "access":null,
+    //Default icon (no access)
+    "icon":red("X")
+  }
+  //Get /etc/passwd file object
+	p=Io.getFileObj(Obj,"/etc/passwd")
+  //File access failed, return default
+	if p isa Error then return _
+  //Has read permission
+	if has_permission(p,"r") then
+    //Set access flag
+    _.access=1
+    //Set icon based on 0day status
+    if globals.G_Zday["0day"] then _.icon=green("0DAY") else _.icon=green("P")
+  //No read permission
+  else
+    //Set icon based on 0day status
+    if globals.G_Zday["0day"] then _.icon=red("0DAY") else _.icon=red("P")
+  end if
+  //Return access status object
+  return _
+end function

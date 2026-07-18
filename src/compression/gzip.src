@@ -1,0 +1,158 @@
+// =============================================================================
+// GZIP
+// Base64-like compress/decompress for files, directories, or text strings.
+// =============================================================================
+Gzip={}
+Gzip.gzip=function(Obj,argv)
+  if not argv then return Man.help(["gzip"])
+  Arg1=pull(argv)
+  _p=ArgumentParser.init
+  _p.addArgument("f",false,"store")
+  _p.addArgument("t",false,"flag")
+  _p.addArgument("r",false,"store")
+  _p.addArgument("force",true,"flag")
+  argv=_p.parseArgs("gzip",argv)
+  if argv isa Error then return
+  F=null
+  if argv.f then F=Io._getFile(Obj,argv.f)
+  if F isa Error then return
+	z="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  // Base64-like: 3-char chunks → 8-bit binary → 6-bit groups → charSet; pads to groups of 4
+  doCompress=function(s)
+    if not s then return
+    l=len(z)-1
+    d=null
+    p=[]
+    while s
+      w=s[:3]
+      s=s[len(w):]
+      y=[]
+      for i in w;b=Encoder.toBin(i.code);b="0"*(8-len(b))+b;y+=values(b);end for
+      push(p,y)
+    end while
+    d=""
+    for g in p
+      c=[]
+      // Split into 6-bit chunks
+      while g
+        Z=g[:6]
+        g=g[len(Z):]
+        while len(Z)<6;push(Z,"0");end while
+        push(c,Z)
+      end while
+      for i in c;d+=z[Encoder.toInt(join(i,""))%l];end for
+      // Add padding to make groups of 4
+      k=len(c)
+      while k!=4;d+="=";k+=1;end while
+    end for
+    return d
+  end function
+	// Compress file (-f), directory (-r), or text (rest args)
+	compress=function(arg)
+    if arg.f then
+      F=Io._getFile(Obj,arg.f)
+      if F isa Error then return
+      if not has_permission(F,"w") then return Error.set(Info.message.NOW)
+      c=doCompress(get_content(F))
+      if arg.t then
+        print white(c)
+      else
+        set_content(F,c)
+        rename(F,name(F)+".gz")
+      end if
+    else if arg.r then
+      F=Io._getFile(Obj,arg.r)
+      if F isa Error then return
+      for f in get_files(F)
+        if not has_permission(f,"w") then continue
+        c=doCompress(get_content(f))
+        if arg.t then
+          print white(c)
+        else
+          set_content(f,c)
+          rename(f,name(f)+".gz")
+        end if
+      end for
+    else
+      print white(doCompress(join(arg.rest," ")))
+    end if
+	end function
+  // Base64-like decode: 4-char chunks → 6-bit binary → 8-bit groups → char
+  doUncompress=function(s)
+    if not s then return
+    l=len(z)-1
+    d=null
+    p=[]
+    while s
+      c=[]
+      w=s[:4]
+      s=s[len(w):]
+      for i in w
+        if i=="=" then break
+        a=Encoder.toBin(indexOf(z,i))
+        a="0"*(6-len(a))+a
+        c+=values(a)
+      end for
+      push(p,c)
+    end while
+    d=""
+    for g in p
+      c=[]
+      // Split into 8-bit chunks
+      while g
+        Z=g[:8]
+        g=g[len(Z):]
+        k=len(Z)
+        if k<8 then Z.reverse
+        while len(Z)<8;push(Z,"0");end while
+        if k<8 then Z.reverse
+        push(c,Z)
+      end while
+      for i in c;d+=char(Encoder.toInt(join(i,"")));end for
+    end for
+    return d
+  end function
+	// Decompress file (-f), directory (-r), or text (rest args); --force bypasses .gz check
+	uncompress=function(arg)
+    if arg.f then
+      F=Io._getFile(Obj,arg.f)
+      if F isa Error then return
+      if not has_permission(F,"w") then return Error.set(Info.message.NOW)
+      // --force bypasses .gz extension requirement
+      if not endsWith(name(F),".gz") then
+        if not arg.force then return Error.set("File is not a gzip file use --force to force uncompress")
+      end if
+      c=doUncompress(get_content(F))
+      if arg.t then
+        print white(c)
+      else
+        set_content(F,c)
+        rename(F,name(F).replace(".gz",""))
+      end if
+    else if arg.r then
+      F=Io._getFile(Obj,arg.r)
+      if F isa Error then return
+      for f in get_files(F)
+        if not has_permission(f,"w") then continue
+        if not endsWith(name(f),".gz") then
+          if not arg.force then continue
+        end if
+        c=doUncompress(get_content(f))
+        if arg.t then
+          print white(c)
+        else
+          set_content(f,c)
+          rename(f,name(f).replace(".gz",""))
+        end if
+      end for
+    else
+      print white(doUncompress(join(arg.rest," ")))
+    end if
+	end function
+	cmds={
+    "-c":@compress,
+    "-u":@uncompress
+  }
+	if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+	cmds[Arg1](argv)
+end function

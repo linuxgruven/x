@@ -1,0 +1,387 @@
+// =============================================================================
+// SHARE
+// Shared file manager; distributes and synchronizes files across sessions and systems.
+// =============================================================================
+Share={}
+// Share._files - Get all files and folders from share directory
+Share._files=function;return get_files(globals.G_main.dir.share)+get_folders(globals.G_main.dir.share);end function
+// Share.manage - Interactive share folder manager with GUI
+// Args: Obj - Current session object
+// Returns: Nothing (interactive loop until user cancels)
+Share.manage=function(Obj)
+	// Interactive loop for share management
+	while true
+    // Get all files and folders from share directory
+    z=self._files
+    // Build display list
+    l=[]
+    Info.info("Current files in share:")
+    // Add yellow-colored file names to list
+    for a in z;push(l,yellow(name(a)));end for
+		// Display list without header/numbers/color
+		listNHNC(l)
+		// Build choice menu
+		CH=[green("Choose an option:")]
+    // Add get last file option (most recent)
+    push(CH,yellow("Get last file"))
+		// Add get file with prompt
+		push(CH,yellow("Get file..."))
+		// Add remove file with prompt
+		push(CH,yellow("Remove file..."))
+    // Add rename file with prompt
+    push(CH,yellow("Rename file..."))
+    // Add refresh option to reload list
+    push(CH,yellow("Refresh share list"))
+		// Add exit option
+		push(CH,iyellow("Forget it"))
+		// Show GUI choice with refresh as default
+		UCH=Gui.choiceHybrid(CH,{},len(CH)-2,false,true)
+		// Exit if user chose cancel
+		if UCH==len(CH)-1 then break
+    // Refresh list if user chose refresh option
+    if UCH==len(CH)-2 then continue
+    // Guard: no action possible if share is empty
+    if not len(z) then
+      Info.info("No files in the share folder")
+      continue
+    end if
+    // Get last file (most recent index)
+    if UCH==1 then
+      // Get last file by highest index
+      self.getFile(Obj,[str(len(z)-1)])
+    // Get file by user input
+    else if UCH==2 then
+      // Prompt for file index
+      r=Gui.input({"text":"Select a file"})
+      // Skip if user cancelled
+      if r==null then continue
+      // Get specified file
+      self.getFile(Obj,[r])
+    // Remove file by user input
+    else if UCH==3 then
+      // Prompt for file index to remove
+      r=Gui.input({"text":"Select a file to remove"})
+      // Skip if user cancelled
+      if r==null then continue
+      // Delete specified file
+      self.fileDel([r])
+    // Rename file by user input
+    else if UCH==4 then
+      // Prompt for file index to rename
+      r=Gui.input({"text":"Select a file to rename"})
+      // Skip if user cancelled
+      if r==null then continue
+      // Rename specified file
+      self.rename([r])
+    end if
+  end while
+end function
+// Share.fileView - Display all shared files
+// Args: None
+// Returns: Array of file objects or null if empty
+Share.fileView=function
+	// Get all files and folders from share directory
+	z=self._files
+	// Exit if no files in share
+	if not len(z) then return Info.info("No files in the share folder")
+  // Initialize display list
+  l=[]
+	// Build yellow-colored name list
+	for a in z;push(l,yellow(name(a)));end for
+	// Display header message
+	Info.info("You have the following shared files:")
+	// Display list without header/numbers/color
+	listNHNC(l)
+  // Return file array for further processing
+  return z
+end function
+// Share.getFile - Retrieve file from share to current session
+// Args: Obj - Current session object, argv - Arguments with -p flag and file indices
+// Returns: Nothing (transfers files to target directory)
+Share.getFile=function(Obj,argv)
+  // Parse optional -p path argument
+  _p=ArgumentParser.init
+  _p.addArgument("p",false,"store")
+  argv=_p.parseArgs("share",argv)
+  if argv isa Error then return
+  // Determine target directory (current or specified)
+  F=null
+  if not argv.p then F=Obj.dir.current else F=File(Obj.computer,argv.p)
+  // Resolve symlinks to actual path
+  if is_symlink(F) then F=File(Obj.computer,path(F,true))
+  // Validate target path exists
+  if not F then return Error.set("Invalid path")
+  // Warn if no write permissions (but continue)
+  if not has_permission(F,"w") then Info.warning("You do not have write permisions for "+path(F))
+  // Nested function to process single file by index
+  file=function(x,F)
+    // Get all files from share folder
+    z=Share._files
+    // Exit if no shared files
+    if not len(z) then return Info.info("No shared files found")
+    // Validate numeric index
+    if not x isa number then return Error.set("File id expected")
+    // Validate index exists
+    if not hasIndex(z,x) then return Error.set("Invalid file id")
+    // Get file object from share
+    n=z[x]
+    // Shell object uses scp for transfer
+    if indexOf(Obj.type,"shell")!=null then
+      // Get main system object
+      sys=System.getSystem
+      // Use scp from main system to current session
+      r=scp(sys.shell,path(n),path(F),Obj.object)
+      if r isa string then return Error.set(r)
+      // Get transferred file object
+      j=File(Obj.computer,path(F)+"/"+name(n))
+      // Remove unique suffix (everything after F) to restore original name
+      if j then rename(j,split(name(n),"F")[0])
+      return
+    end if
+    // Extract original filename (before F separator)
+    j=split(name(n),"F")[0]
+    // Binary/folder requires shell on both sides
+    if is_binary(n) or is_folder(n) then
+      // Determine file type for error message
+      if is_binary(n) then q="binary file" else q="directory"
+      Info.warning("Need a shell to get a "+q+", you're trying to use a "+Obj.type+" object")
+    else
+      // Computer object uses direct touch and set_content
+      if Obj.type=="computer" then
+        // Create file in target directory
+        r=touch(Obj.computer,path(F),j)
+        if r isa string then return Error.set(r)
+        // Copy content from share file
+        return set_content(File(Obj.computer,path(F)+"/"+j),get_content(n))
+      end if
+      // Other object types use Command.touch
+      q=Command.touch(Obj,[j])
+      if q isa Error then return
+      // Copy content from share file
+      set_content(q,get_content(n))
+    end if
+  end function
+  // Single file - process and return
+  if len(argv.rest)==1 then return file(to_int(argv.rest[0]),F)
+  // Multiple files - process each in loop
+  while argv.rest;file(to_int(pop(argv.rest)),F);end while
+end function
+// Share.filePeek - View shared file content
+// Args: x - File index
+// Returns: Nothing (displays content to stdout)
+Share.filePeek=function(x)
+	// Get all files from share folder
+	z=self._files
+	// Exit if no shared files
+	if not len(z) then return Info.info("No share files found")
+	// Validate numeric index
+	if not x isa number then return Error.set("File id expected")
+  // Validate index exists
+  if not hasIndex(z,x) then return Error.set("Invalid file id")
+	n=z[x]
+	// Display text file content line by line
+	if not is_binary(n) and not is_folder(n) then
+		// Split by newlines and print each line in white
+		for s in split(get_content(n),char(10));print white(s);end for
+	else
+		// Error for binary files or directories
+		if is_binary(n) then q="at binary files" else q="directories"
+		Info.error("Can't view "+q)
+	end if
+end function
+// Share.putFile - Add file to share with unique name/IP tag
+// Args: Obj - Current session object, argv - File paths or objects
+// Returns: Nothing (transfers files to share folder)
+Share.putFile=function(Obj,argv)
+  // Nested function to process single file
+  file=function(p)
+    // Get file object if string path provided
+    if p isa string then f=Io._getFile(Obj,p) else f=p
+    // Skip if file not found
+    if f isa Error then return
+    // Check read permissions
+    if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+    // Get main system object
+    sys=System.getSystem
+    // Shell object uses scp for transfer
+    if indexOf(Obj.type,"shell")!=null then
+      // Use scp from current session to main system share
+      e=scp(Obj.object,path(f),path(sys.dir.share),sys.shell)
+      if not e==1 then return Error.set(e)
+      // Get transferred file object
+      j=File(sys.computer,path(sys.dir.share)+"/"+name(f))
+      // Rename with unique suffix: nameF + IP tracking + random
+      if j then rename(j,name(f)+"F"+"P"+Obj.meta.public_ip+"L"+Obj.meta.local_ip+"S"+Crypt.genPassword(6))
+      return Info.info("Added file: "+name(f))
+    end if
+    // Text files can be transferred via content copy
+    if not is_binary(f) and not is_folder(f) then
+      // Create file in share folder
+      touch(sys.computer,path(sys.dir.share),name(f))
+      // Copy content to share file
+      set_content(File(sys.computer,path(sys.dir.share)+"/"+name(f)),get_content(f))
+      // Get created file object
+      j=File(sys.computer,path(sys.dir.share)+"/"+name(f))
+      // Rename with unique suffix: nameF + IP tracking + random
+      if j then rename(j,name(f)+"F"+"P"+Obj.meta.public_ip+"L"+Obj.meta.local_ip+"S"+Crypt.genPassword(6))
+      Info.info("Added file: "+name(f))
+    else
+      // Binary/folder requires shell on both sides
+      if is_binary(f) then q="binary file" else q="directory"
+      Info.warning("Need two shell's to put a "+q+" into the share folder")
+    end if
+  end function
+  // Single file - process and return
+  if len(argv)==1 then return file(argv[0])
+  // Multiple files - process each in loop
+  while argv;file(pop(argv));end while
+end function
+// Share.putFileName - Add file to share preserving original name
+// Args: Obj - Current session object, argv - File paths or objects
+// Returns: Nothing (transfers files to share folder with original names)
+Share.putFileName=function(Obj,argv)
+  // Nested function to process single file
+  file=function(p)
+    // Get file object if string path provided
+    if p isa string then f=Io._getFile(Obj,p) else f=p
+    // Skip if file not found
+    if f isa Error then return
+    // Check read permissions
+    if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+    // Get main system object
+    sys=System.getSystem
+    // Shell object uses scp for transfer
+    if indexOf(Obj.type,"shell")!=null then
+      // Use scp from current session to main system share
+      e=scp(Obj.object,path(f),path(sys.dir.share),sys.shell)
+      if not e==1 then return Error.set(e)
+      // File keeps original name (no unique suffix)
+      j=File(sys.computer,path(sys.dir.share)+"/"+name(f))
+      return Info.info("Added file: "+name(f))
+    end if
+    // Text files can be transferred via content copy
+    if not is_binary(f) and not is_folder(f) then
+      // Create file in share folder with original name
+      touch(sys.computer,path(sys.dir.share),name(f))
+      // Copy content to share file
+      set_content(File(sys.computer,path(sys.dir.share)+"/"+name(f)),get_content(f))
+      // File keeps original name (no unique suffix)
+      j=File(sys.computer,path(sys.dir.share)+"/"+name(f))
+      Info.info("Added file: "+name(f))
+    else
+      // Binary/folder requires shell on both sides
+      if is_binary(f) then q="binary file" else q="directory"
+      Info.warning("Need two shell's to put a "+q+" into the share folder")
+    end if
+  end function
+  // Single file - process and return
+  if len(argv)==1 then return file(argv[0])
+  // Multiple files - process each in loop
+  while argv;file(pop(argv));end while
+end function
+// Share.rename - Rename shared file
+// Args: argv - Arguments [file_index]
+// Returns: Nothing (renames file in share folder)
+Share.rename=function(argv)
+  if not argv then return Error.set("File id expected")
+  // Parse file index
+  x=to_int(argv[0])
+  // Validate numeric index
+  if not x isa number then return Error.set("File id expected")
+  // Get all files from share folder
+  z=self._files
+  // Validate index exists
+  if not hasIndex(z,x) then return Error.set("Invalid file id")
+  // Display format instructions
+  Info.info("Format: nameFdescription")
+  Info.warning("Do not forget the 'F'")
+  // Prompt for new name
+  a=Gui.input({"text":"Enter a new name"})
+  // Exit if user cancelled
+  if a==null then return Info.info("User Aborted","i",false)
+  // Store old name for display
+  n=name(z[x])
+  // Perform rename operation
+  r=rename(z[x],a)
+  // Error if rename failed
+  if r then return Error.set(r)
+  // Display success messages
+  Info.info("Renamed file: "+n)
+  Info.info("To: "+a)
+end function
+// Share.fileDel - Delete shared file by index
+// Args: argv - File indices to delete
+// Returns: Nothing (removes files from share folder)
+Share.fileDel=function(argv)
+  // Nested function to delete single file by index
+  file=function(x)
+    // Get all files from share folder
+    z=Share._files
+    // Exit if no shared files
+    if not len(z) then return Info.info("No share files found")
+    // Validate numeric index
+    if not x isa number then return Error.set("File id expected")
+    // Validate index exists
+    if not hasIndex(z,x) then return Error.set("Invalid file id")
+    // Store name for success message
+    n=name(z[x])
+    // Perform delete operation
+    r=delete(z[x])
+    // Error if delete failed
+    if r then return Error.set(r)
+    // Display success message
+    Info.info("Removed file: "+n)
+  end function
+  // Single file - process and return
+  if len(argv)==1 then return file(to_int(argv[0]))
+  // Convert to ints and sort descending to avoid index shifting
+  ids=[]
+  for a in argv;push(ids,to_int(a));end for
+  sort(ids)
+  // Delete highest index first
+  while ids;file(pop(ids));end while
+end function
+// Share.fileDelRange - Delete range of shared files
+// Args: None (prompts user via GUI)
+// Returns: Nothing (removes files in specified range)
+Share.fileDelRange=function
+  // Display shared files and get file array
+  z=self.fileView
+  // Exit if no files
+  if len(z)==0 then return
+  // Display format instructions
+  Info.info("Format:startIndex-endIndex")
+  // Prompt for range input
+  r=Gui.input({"text":"Enter a range"})
+  // Error if user cancelled
+  if r==null then return Error.set("No range entered")
+  l=split(r,"-")
+  // Validate format (must be two parts)
+  if len(l)!=2 then return Error.set("Invalid data")
+  // Parse start index
+  a=to_int(l[0])
+  // Parse end index
+  b=to_int(l[1])
+  // Validate both are numbers
+  if not a isa number or not b isa number then return Error.set("Must use numbers")
+  // Build list of valid indices in range
+  h=[]
+  i=a;while i<=b;if not hasIndex(z,i) then;i+=1;continue;end if;push(h,i);i+=1;end while
+  // Reverse to delete from highest to lowest (preserve indices)
+  reverse(h)
+  // Delete each file in range
+  for i in h;r=delete(z[i]);if r then Info.error(r);end for
+end function
+// Share.clear - Delete all shared files
+// Args: None
+// Returns: Nothing (clears entire share folder)
+Share.clear=function
+	// Get all files from share folder
+	z=self._files
+	// Exit if no files
+	if not len(z) then return Info.info("No share files found")
+  // Delete each file
+  for f in z;delete(f);end for
+	// Display success message
+	Info.info("All share files cleared")
+end function

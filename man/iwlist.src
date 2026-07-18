@@ -1,0 +1,136 @@
+// Man page for iwlist
+manIwlist="IWLIST(8)                        X Shell Manual                        IWLIST(8)
+
+<b>NAME</b>
+    iwlist - WiFi network interaction and cracking framework
+<b>SYNOPSIS</b>
+    <b>iwlist -l</b>
+    <b>iwlist -d</b> INDEX
+    <b>iwlist -b</b> INDEX
+    <b>iwlist -c</b> BSSID ESSID PASSWORD
+    <b>iwlist -k</b> INDEX [ACKS]
+    <b>iwlist hop</b> [init|list|burn|revive] [-t SECONDS]
+<b>DESCRIPTION</b>
+    iwlist framework for interacting with wireless networks. Provides tools
+    for listing available networks, connecting to access points, cracking
+    network passwords using dictionary or brute force attacks, and launching
+    deauthentication attacks. Use <b>iwlist -l</b> to display all available
+    wireless networks in range before performing attacks or connections.
+    The <b>hop</b> subcommand automates WiFi credential harvesting and network
+    bouncing for stealth operations.
+<b>OPTIONS</b>
+    <b>-l</b> - List Networks
+      Display all available WiFi networks in range.
+      Shows BSSID, ESSID, signal strength, and security.
+
+    <b>-d INDEX</b> - Dictionary Attack
+      Launch dictionary-based password attack on network.
+      Uses wordlist to attempt password cracking.
+
+    <b>-b INDEX</b> - Brute Force Attack
+      Launch brute force password attack on network.
+      Systematically tries all possible combinations.
+
+    <b>-c BSSID ESSID PASSWORD</b> - Connect
+      Connect to specified WiFi network with credentials.
+      Requires BSSID, ESSID, and password.
+
+    <b>-k INDEX</b> [ACKS] - Crack Network
+      Launch deauthentication attack to crack network.
+      Optional ACKS parameter for attack intensity.
+
+    <b>hop</b> - WiFi Hopping
+      Start bouncing between clean WiFi networks. Burned
+      networks are skipped. If no credentials file exists,
+      runs init automatically. Use Ctrl+C to stop hopping.
+
+    <b>hop init</b> - Initialize Credentials
+      Crack all visible WiFi networks and save credentials
+      to data directory for hopping. Skips already-cracked
+      networks. Does not start hopping.
+
+    <b>hop -t SECONDS</b> - Hop with Interval
+      Start hopping with custom interval between network
+      switches. Default is 3 seconds.
+
+    <b>hop list</b> - List Arsenal
+      Show all networks in the credential database with
+      their status (clean or burned).
+
+    <b>hop burn</b> [ESSID|INDEX] - Burn Network
+      Mark a network as burned so it won't be used during
+      hopping. Accepts ESSID or index from 'hop list'.
+      If no argument given, burns current network.
+
+    <b>hop revive</b> <ESSID|INDEX|all> - Revive Network
+      Un-burn a network, making it available for hopping
+      again. Accepts ESSID or index from 'hop list'.
+      Use 'all' to revive all burned networks.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># List Networks</color>
+    <b>iwlist -l</b>
+    Show all WiFi networks in range
+
+    <color=#e4ff34># Dictionary Attack</color>
+    <b>iwlist -d 0</b>
+    Dictionary attack on first network
+
+    <b>iwlist -d 2</b>
+    Dictionary attack on third network
+
+    <color=#e4ff34># Brute Force Attack</color>
+    <b>iwlist -b 0</b>
+    Brute force attack on first network
+
+    <b>iwlist -b 1</b>
+    Brute force attack on second network
+
+    <color=#e4ff34># Connect to Network</color>
+    <b>iwlist -c 00:11:22:33:44:55 HomeNetwork password123</b>
+    Connect with full credentials
+
+    <b>iwlist -c AA:BB:CC:DD:EE:FF GuestWiFi guest123</b>
+    Connect to guest network
+
+    <color=#e4ff34># Crack Network</color>
+    <b>iwlist -k 0</b>
+    Crack first network
+
+    <b>iwlist -k 1 5000</b>
+    Crack second network with 5000 ACKS
+
+    <color=#e4ff34># Combined Workflow</color>
+    <b>iwlist -l</b>
+    List networks first
+    <b>iwlist -d 0</b>
+    Then launch dictionary attack
+
+    <color=#e4ff34># WiFi Hopping</color>
+    <b>iwlist hop init</b>
+    Crack all networks and save credentials
+
+    <b>iwlist hop</b>
+    Start hopping (auto-inits if no creds)
+
+    <b>iwlist hop -t 5</b>
+    Hop with 5 second interval
+
+    <b>iwlist hop list</b>
+    Show all networks and their clean/burned status
+
+    <b>iwlist hop burn</b>
+    Burn current connected network
+
+    <b>iwlist hop burn Yco</b>
+    Burn network by ESSID
+
+    <b>iwlist hop burn 2</b>
+    Burn network by index from hop list
+
+    <b>iwlist hop revive Yco</b>
+    Un-burn a specific network
+
+    <b>iwlist hop revive all</b>
+    Revive all burned networks
+<b>SEE ALSO</b>
+    <b>hunt</b>, <b>scan</b>"

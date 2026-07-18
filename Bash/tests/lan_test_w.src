@@ -1,0 +1,18 @@
+testLanTest="_print <color=#00bfff>=== LAN Test ===</color>
+_print yellow(Target: ) $1
+_print cyan(Getting shell and scanning LAN...)
+_setvar(r, _lan $1)
+_print _getvar(r)
+_setvar(ips, map_keys(_getvar(r)))
+_print green(Devices: ) len(_getvar(ips))
+for ip in _getvar(ips)
+  _setvar(ports, map_get(_getvar(r), _getvar(ip)))
+  _print white(  ) _getvar(ip) cyan([) len(_getvar(ports)) cyan(port(s)])
+  for port in _getvar(ports)
+    _setvar(portNum, _getvar(port).port)
+    _setvar(svc, _getvar(port).service)
+    _print white(    ) yellow(_getvar(portNum)) cyan(_getvar(svc))
+    // attack vector: ip=_getvar(ip)  port=_getvar(portNum)  service=_getvar(svc)  (svc = ""name version"" raw string)
+  end for
+end for
+_print <color=#00bfff>=== done ===</color>"

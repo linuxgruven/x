@@ -1,0 +1,158 @@
+toolScanlan="deep=function(targetIP,visited,depth="""")
+	results=[]
+	if indexOf(visited,targetIP)!=null then return results
+	isReachable=ping(get_shell,targetIP)
+	device={""ip"":targetIP,""is_reachable"":isReachable,""ports"":[],""devices"":[],""main_router"":false,""type"":""device"",""kernel_version"":null,""has_firewall"":false,""fw_rules"":null}
+	if not isReachable then
+		push(results,device)
+		return results
+	end if
+	push(visited,targetIP)
+	router=get_router(targetIP)
+	if router!=null then
+		fwRules=firewall_rules(router)
+		if fwRules isa list and fwRules then device[""has_firewall""]=true;device[""fw_rules""]=fwRules
+		if get_router(public_ip(router)).local_ip==device[""ip""] then device[""main_router""]=true
+		device[""kernel_version""]=kernel_version(router)
+		device[""type""]=""router""
+		for port in device_ports(router,targetIP)
+			portData={}
+			if port_number(port)==8080 then
+				push(device[""ports""],{""status"":""open"",""port_number"":0,""service_name"":""router"",""service_version"":kernel_version(router),""lan_ip"":local_ip(router)})
+				if get_switch(local_ip(router))!=null then device[""type""]=""switch""
+				if ping_port(router,8080) then portData[""status""]=""open"" else portData[""status""]=""closed""
+			else
+				portData[""status""]=""open""
+			end if
+			lanIP=""unknown""
+			if indexOf(port_info(router,port),"" "")!=null then
+				portInfoStr=port_info(router,port)
+				lanIP=get_lan_ip(port)
+			end if
+			portInfoStr=port_info(router,port)
+			infoParts=split(portInfoStr,"" "")
+			portData[""port_number""]=port_number(port)
+			portData[""service_name""]=infoParts[0]
+			portData[""service_version""]=infoParts[1]
+			portData[""lan_ip""]=lanIP
+			push(device[""ports""],portData)
+		end for
+		lanDevices=devices_lan_ip(router)
+		for lanDevice in lanDevices
+			if indexOf(visited,lanDevice)!=null or lanDevice==targetIP then continue
+			subResults=deep(lanDevice,visited,depth+""    "")
+			for subDevice in subResults
+				push(device[""devices""],subDevice)
+			end for
+		end for
+	else
+		mainRouter=get_router(visited[0])
+		if mainRouter!=null then
+			for port in device_ports(mainRouter,targetIP)
+				portData={}
+				portData[""status""]=""open""
+				lanIP=""unknown""
+				if indexOf(port_info(mainRouter,port),"" "")!=null then
+					portInfoStr=port_info(mainRouter,port)
+					lanIP=get_lan_ip(port)
+				end if
+				portInfoStr=port_info(mainRouter,port)
+				infoParts=split(portInfoStr,"" "")
+				portData[""port_number""]=port_number(port)
+				portData[""service_name""]=infoParts[0]
+				portData[""service_version""]=infoParts[1]
+				portData[""lan_ip""]=lanIP
+				push(device[""ports""],portData)
+			end for
+		end if
+	end if
+	push(results,device)
+	return results
+end function
+printData=function(scanResults,depth="""")
+	for node in scanResults
+		prefix=""|--""
+		subPrefix=""|     ""
+		if not node[""is_reachable""] then
+			prefix=""|---- DEVICE""
+			print(""<b>""+prefix+"" [""+node[""ip""]+""]</b>"")
+			print(""<color=#ff4b4b>""+subPrefix+""|- IP NOT REACHABLE</color>"")
+			continue
+		end if
+		isCCTV=false
+		isSAPP=false
+		isRSHL=false
+		isADB=false
+		for port in node[""ports""]
+			if port[""port_number""]==37777 then
+				isCCTV=true
+			else if port[""port_number""]==1883 then
+				isSAPP=true
+			else if port[""port_number""]==5555 then
+				isADB=true
+			else if port[""port_number""]==1222 then
+				isRSHL=true
+			end if
+		end for
+		if isCCTV then
+			prefix=""|---- CCTV""
+			subPrefix=""|     ""
+		else if isSAPP then
+			prefix=""|---- SAPP""
+			subPrefix=""|     ""
+		else if isADB then
+			prefix=""|---- ADB""
+			subPrefix=""|     ""
+		else if isRSHL then
+			prefix=""|---- RSHL""
+			subPrefix=""|     ""
+		else if node[""type""]==""router"" then
+			if node[""main_router""] then prefix=""|-- EDGE ROUTER"" else prefix=""|-- ROUTER""
+			subPrefix=""|   ""
+		else if node[""type""]==""switch"" then
+			prefix=""|-- SWITCH""
+			subPrefix=""|   ""
+		else
+			prefix=""|---- WORKSTATION""
+			subPrefix=""|     ""
+		end if
+		if node[""has_firewall""] then
+			if node[""kernel_version""]!=null then print(""<color=#e4ff34><b>""+prefix+"" [""+node[""ip""]+""|KERNEL VERSION:""+node[""kernel_version""]+""]</b></color>"") else print(""<color=#e4ff34><b>""+prefix+"" [""+node[""ip""]+""]</b></color>"")
+		else
+			if node[""kernel_version""]!=null then
+				print(""<b>""+prefix+"" [""+node[""ip""]+""|KERNEL VERSION:""+node[""kernel_version""]+""]</b>"")
+			else
+				youTag=""""
+				if node[""ip""]==host_computer(get_shell).local_ip then youTag=""<b><color=#20ff98>[YOU]</color></b>""
+				print(""<b>""+prefix+"" [""+node[""ip""]+""]</b>""+youTag)
+			end if
+		end if
+		if node[""fw_rules""] then
+			fwParts=[]
+			for fwRule in node[""fw_rules""]
+				ruleParts=split(fwRule,"" "")
+				if len(ruleParts)<2 then continue
+				ruleLabel=ruleParts[0]+"":""+ruleParts[1]
+				if len(ruleParts)>=4 and ruleParts[3]!=""Any"" then ruleLabel=ruleLabel+""-> ""+ruleParts[3]
+				if ruleParts[0]==""DENY"" then push(fwParts,""<color=#ff4b4b>""+ruleLabel+""</color>"") else push(fwParts,""<color=#20ff98>""+ruleLabel+""</color>"")
+			end for
+			if len(fwParts) then print(""<color=#e4ff34>""+subPrefix+""|- FIREWALL: </color>""+join(fwParts,"" | ""))
+		end if
+		if node[""ports""] then
+			for port in node[""ports""]
+				portInfoStr=""PORT:""+port[""port_number""]+""|""+upper(port[""status""])+""|""+upper(port[""service_name""])+""|""+port[""service_version""]
+				if port[""lan_ip""]!=node[""ip""] then portInfoStr=portInfoStr+""|ROUTED TO:""+port[""lan_ip""]
+				if upper(port[""status""])==""OPEN"" then print(""<color=#20ff98>""+subPrefix+""|- ""+portInfoStr+""</color>"") else print(""<color=#ff4b4b>""+subPrefix+""|- ""+portInfoStr+""</color>"")
+			end for
+		else
+			print(""<color=#ff4b4b>""+subPrefix+""|- NO OPEN PORTS</color>"")
+		end if
+		if node[""devices""] then printData(node[""devices""],""    "")
+	end for
+end function
+print(""<b>/ START SCANLAN >></b>"")
+print(""<b>| START PROBE [PUBLIC_IP:""+public_ip(get_router)+""]</b>"")
+scanResults=deep(local_ip(get_router),[],"""")
+printData(scanResults)
+print(""<b>| END PROBE</b>"")
+print(""<b>\ END SCANLAN <<</b>"")"

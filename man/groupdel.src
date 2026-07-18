@@ -1,0 +1,30 @@
+// Man page for groupdel
+manGroupdel="GROUPDEL(8)                      X Shell Manual                      GROUPDEL(8)
+
+<b>NAME</b>
+    groupdel - used to remove a user from a group
+<b>SYNOPSIS</b>
+    <b>groupdel </b><b>USER </b><b>GROUP</b>
+<b>DESCRIPTION</b>
+    Remove user from specified group. Group management for access control.
+    Must have appropriate permissions to modify group membership.
+<b>OPTIONS</b>
+    <b>USER</b>
+    Username to modify
+    Remove from group
+
+    <b>GROUP</b>
+    Target group name
+    Group to leave
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Remove from Group</color>
+    <b>groupdel tux staff</b>
+    Remove tux from staff
+
+    <b>groupdel guest users</b>
+    Remove guest from users
+
+    <b>groupdel hacker admin</b>
+    Revoke admin access
+<b>SEE ALSO</b>
+    <b>groupadd</b>, <b>groups</b>, <b>useradd</b>"

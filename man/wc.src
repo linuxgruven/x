@@ -1,0 +1,49 @@
+// Man page for wc
+manWc="WC(1)                            X Shell Manual                            WC(1)
+
+<b>NAME</b>
+    wc - Count words, lines, and characters
+<b>SYNOPSIS</b>
+    <b>wc</b> (<b>-l</b>) FILE [FILE...]
+    <b>wc</b> (<b>-w</b>) FILE [FILE...]
+    <b>wc</b> (<b>-c</b>) FILE [FILE...]
+    <b>wc</b> (<b>-p</b>) PARAMS
+<b>DESCRIPTION</b>
+    Count lines, words, or characters in files or parameters. Useful
+    for analyzing file size and content statistics.
+    Supports glob patterns: <b>wc -l *.txt</b>, <b>wc -l src/**/*.src</b>
+<b>OPTIONS</b>
+    <b>-l FILE</b> - Line Count
+      Count number of lines in file.
+
+    <b>-w FILE</b> - Word Count
+      Count number of words in file.
+
+    <b>-c FILE</b> - Character Count
+      Count number of characters in file.
+
+    <b>-p PARAMS</b> - Parameter Count
+      Count characters in command-line parameters.
+<b>NOTES</b>
+    Command mode processes single files only. For multiple files with
+    individual counts and totals, use pipe mode:
+
+    <b>wc -l file1 file2 file3</b>  (pipe mode only)
+    Shows count per file plus total line
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man wc</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>wc</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <b>wc -l /etc/passwd</b>
+    Count users in passwd file
+
+    <b>wc -w document.txt</b>
+    Count words in document
+
+    <b>wc -p</b> how many chars in this sentence
+    Count characters in text"

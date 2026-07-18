@@ -1,0 +1,65 @@
+// Man page for jump
+manJump="JUMP(1)                          X Shell Manual                          JUMP(1)
+
+<b>NAME</b>
+    jump - Switch to a different network
+<b>SYNOPSIS</b>
+    <b>jump </b><b>LANIP </b><b>GATEWAY</b>
+    <b>jump </b><b>BSSID </b><b>ESSID </b><b>PASSWORD</b>
+<b>DESCRIPTION</b>
+    Network pivot utility for switching between different networks. Supports
+    both wired ethernet connections and wireless WiFi networks. For ethernet,
+    specify the LAN IP and gateway. For WiFi, provide the BSSID, ESSID, and
+    password. Essential for lateral movement across network boundaries and
+    accessing isolated network segments during penetration testing.
+<b>OPTIONS</b>
+    <b>LANIP GATEWAY</b> - Ethernet Jump
+      Switch to wired network using LAN IP and gateway.
+      Requires ethernet card.
+
+    <b>BSSID ESSID PASSWORD</b> - WiFi Jump
+      Connect to wireless network using BSSID, ESSID, and password.
+      Requires WiFi card.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Ethernet Network Jump</color>
+    <b>jump 172.16.13.6 172.16.13.1</b>
+    Jump to 172.16.13.0 network
+
+    <b>jump 10.0.5.10 10.0.5.1</b>
+    Switch to 10.0.5.0 network
+
+    <b>jump 192.168.100.50 192.168.100.1</b>
+    Pivot to corporate network
+
+    <color=#e4ff34># WiFi Network Jump</color>
+    <b>jump 52:3C:6B:75:37:67 Lorox_G2SS haxxed</b>
+    Connect to WiFi network
+
+    <b>jump A1:B2:C3:D4:E5:F6 OfficeNet password123</b>
+    Join office wireless
+
+    <b>jump 00:11:22:33:44:55 GuestWiFi open</b>
+    Connect to guest network
+
+    <color=#e4ff34># Lateral Movement</color>
+    <b>jump 192.168.50.20 192.168.50.1</b>
+    Move to DMZ network
+
+    <b>jump 172.31.10.5 172.31.10.1</b>
+    Access internal segment
+
+    <color=#e4ff34># Network Reconnaissance</color>
+    <b>iwlist</b>
+    List available WiFi networks first
+
+    <b>jump AA:BB:CC:DD:EE:FF TargetSSID cracked_pass</b>
+    Connect after WiFi crack
+
+    <color=#e4ff34># Multi-Network Attack</color>
+    <b>jump 10.10.10.50 10.10.10.1</b>
+    First network pivot
+
+    <b>scan -l</b>
+    Scan new network
+<b>SEE ALSO</b>
+    <b>iwlist</b>, <b>scan</b>"

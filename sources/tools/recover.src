@@ -1,0 +1,60 @@
+toolRecover="msg=""Recovery Menu""+char(10)+""-h = Program usage""+char(10)+""-b = Backup essential files for full recovery""+char(10)+""-r = Restore all missing files""
+if active_user!=""root"" then exit(""Error: root access needed!"")
+action=params.pull
+if not action then exit(msg)
+if action==""-h"" then exit(msg)
+essentialFiles=[""/boot/System.map"",""/boot/initrd.img"",""/boot/kernel.img"",""/etc/xorg.conf"",""/etc/fstab"",""/sys/xorg.sys"",""/sys/network.cfg"",""/sys/config.sys"",""/lib/init.so"",""/lib/net.so"",""/lib/kernel_module.so"",""/lib/aptclient.so"",""/bin/ssh"",""/bin/chmod"",""/bin/useradd"",""/bin/reboot"",""/bin/sudo"",""/bin/rm"",""/bin/apt-get"",""/usr/bin/Terminal.exe"",""/usr/bin/Browser.exe"",""/usr/bin/FileExplorer.exe"",""/usr/bin/Settings.exe"",""/usr/bin/LogViewer.exe"",""/usr/bin/CodeEditor.exe"",""/usr/bin/Mail.exe"",""/usr/bin/Notepad.exe"",""/usr/bin/ScanLan.exe""]
+computer=host_computer(get_shell)
+if action==""-r"" then
+	backupFolder=File(computer,""/.rec"")
+	if not backupFolder then exit(""Error: No backup found!"")
+	restoreFile=function(entry)
+		originalPath=path(entry).remove(""/.rec"")
+		parentDir=path(parent(entry)).remove(""/.rec"")
+		if File(computer,originalPath) then return
+		if not File(computer,""/""+name(parent(parent(entry)))) then create_folder(computer,""/"",name(parent(parent(entry))))
+		if not File(computer,""/""+name(parent(parent(entry)))+""/""+name(parent(entry))) then create_folder(computer,""/""+name(parent(parent(entry))),name(parent(entry)))
+		if not File(computer,""/""+name(parent(entry))) then create_folder(computer,""/"",name(parent(entry)))
+		print ""Recovering: ""+originalPath
+		copy(entry,parentDir,name(entry))
+	end function
+	listFiles=function(obj)
+		for entry in get_folders(obj)
+			listFiles(entry)
+		end for
+		for entry in get_files(obj)
+			restoreFile(entry)
+		end for
+	end function
+	listFiles(backupFolder)
+	exit(""Successfully recovered! chmod the files and run reboot.'"")
+end if
+if action==""-b"" then
+	recFolder=File(computer,""/.rec"")
+	if recFolder then
+		print ""Deleting previous backup...""
+		delete(recFolder)
+	end if
+	create_folder(computer,""/"","".rec"")
+	recFolder=File(computer,""/.rec"")
+	for entry in essentialFiles
+		entry=File(computer,entry)
+		if entry then
+			print ""Backing up: ""+path(entry)
+			if not File(computer,""/.rec/""+name(parent(parent(entry)))) then create_folder(computer,""/.rec"",name(parent(parent(entry))))
+			if not File(computer,""/.rec/""+name(parent(parent(entry)))+""/""+name(parent(entry))) then create_folder(computer,""/.rec/""+name(parent(parent(entry))),name(parent(entry)))
+			if not File(computer,""/.rec/""+name(parent(entry))) then create_folder(computer,""/.rec"",name(parent(entry)))
+			if File(computer,""/.rec""+path(parent(entry))+""/""+name(entry)) then delete(File(computer,""/.rec""+path(parent(entry))+""/""+name(entry)))
+			copy(entry,""/.rec""+path(parent(entry)),name(entry))
+		end if
+	end for
+	print ""Making program copy...""
+	copy(File(computer,program_path),""/.rec"",""rec"")
+	chmod(recFolder,""u-wrx"",1)
+	chmod(recFolder,""g-wrx"",1)
+	chmod(recFolder,""o-wrx"",1)
+	set_owner(recFolder,""root"",1)
+	set_group(recFolder,""root"",1)
+	exit(""Successfully backed up! Run '/.rec/rec -r' to recover."")
+end if
+exit(""Error: invalid action."")"

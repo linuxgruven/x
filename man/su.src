@@ -1,0 +1,87 @@
+// Man page for su
+manSu="SU(8)                            X Shell Manual                            SU(8)
+
+<b>NAME</b>
+    su - use to elevate access or change access.
+
+<b>SYNOPSIS</b>
+    <b>su </b><b>root|su</b>
+    <b>su </b><b>-r</b>
+    <b>su </b><b>-e</b> [<b>-u</b> [<b>USER</b>]] <b>BINARY [</b><b>PARAMS</b><b>]</b>
+    <b>su </b><b>-s</b> [<b>-u</b> [<b>USER</b>]]
+    <b>su </b><b>-t</b> [<b>--start</b> [<b>-u</b> [<b>USER</b>]]
+    <b>su </b><b>-l</b> [<b>-u</b> [<b>USER</b>]]
+    <b>su </b><b>-w</b> [<b>-u</b> [<b>USER</b>]]
+    <b>su </b><b>-p</b>
+    <b>su </b><b>-b</b> [<b>-u</b> [<b>USER</b>]] [<b>-c</b>] [<b>-C</b>] [<b>-n</b>] [<b>-N</b>]
+    <b>su </b><b>-d</b> [<b>-u</b> [<b>USER</b>]]
+    <b>su </b><b>-u </b><b>USER</b> [<b>PASSWORD</b>]
+<b>DESCRIPTION</b>
+    Options (u) will assume we are using user root|super if not provided.
+    It allows users to run programs with administrator security privileges,
+    also known as root|super user. It can also be used to access as any other user
+    registered on the machine, using the -u parameter.
+    The <b>su</b> command can be executed to obtain root|super permissions only for
+    the execution of that command.
+<b>OPTIONS</b>
+    <b>su </b><b>root|su</b>
+        Use local exploits to get a root|super user shell.
+    <b>su </b><b>-r</b>
+        Attempt to get a root|super user shell.
+    <b>su </b><b>-e</b> [<b>-u</b> [<b>USER</b>]] <b>BINARY [</b><b>PARAMS</b><b>]</b>
+        Execute a binary with user permissions.
+    <b>su </b><b>-s</b> [<b>-u</b> [<b>USER</b>]]
+        Start a shell session with user permissions.
+    <b>su </b><b>-t</b> [<b>--start</b>] [<b>-u</b> [<b>USER</b>]]
+        Start a terminal with user permissions. If the --start flag is used,
+        then will close x to a terminal.
+    <b>su </b><b>-l</b> [<b>-u</b> [<b>USER</b>]]
+        Re-launch x in user mode.
+    <b>su </b><b>-w</b> [<b>-u</b> [<b>USER</b>]]
+        Wipes the system log file.
+    <b>su </b><b>-p</b>
+        Prints the contents of passwd.
+    <b>su </b><b>-b</b> [<b>-u</b> [<b>USER</b>]] [<b>-c</b>] [<b>-C</b>] [<b>-n</b>] [<b>-N</b>]
+        Use a brute force attack against the user account.
+        Optional <b>-c</b> restricts position 0 to uppercase and positions 1+ to lowercase.
+        Optional <b>-C</b> allows any letter case at position 0 (a-z+A-Z), positions 1+ lowercase.
+        Optional <b>-n</b> excludes digits from the character set.
+        Optional <b>-N</b> restricts to digits 0-9 only (overrides all other flags).
+    <b>su </b><b>-d</b> [<b>-u</b> [<b>USER</b>]]
+        Use a dictionary attack against the user account.
+    <b>su </b><b>-u </b><b>USER</b> [<b>PASSWORD</b>]
+        Open a shell as USER using PASSWORD.
+<b>EXAMPLE:</b>
+    su -e rm file.txt
+    su -s
+    su -s tux
+
+<b>SHELL USAGE</b>
+    When called from a shell environment, su provides simplified access:
+
+<b>SYNOPSIS</b>
+    <b>su</b>
+    <b>su </b><b>PASSWORD</b>
+    <b>su </b><b>-b</b> [-c] [-C] [-n] [-N]
+<b>DESCRIPTION</b>
+    Use <b>su</b> to elevate to root|super user.
+<b>OPTIONS</b>
+    <b>su</b>
+        Attempt to get a root shell.
+    <b>su </b><b>PASSWORD</b>
+        Attempt to get a root shell using a password.
+    <b>su </b><b>-b</b>
+        Brute force attempt to get a root shell.
+    <b>su -b -c</b>
+        Brute force with capitals-first passwords only.
+    <b>su -b -C</b>
+        Brute force with mixed-case first char (a-z+A-Z at position 0).
+    <b>su -b -n</b>
+        Brute force with letters-only passwords (no digits).
+    <b>su -b -c -n</b>
+        Brute force with uppercase-first, letters-only passwords.
+    <b>su -b -N</b>
+        Brute force with digits-only passwords (0-9).
+
+<b>SEE ALSO</b>
+    <b>proot</b>"

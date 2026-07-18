@@ -1,0 +1,938 @@
+// =============================================================================
+// MISSIONS
+// Mission library; management and automation utilities for X shell missions.
+// =============================================================================
+Mission={}
+Mission.attrs=["type","completed"]
+Mission.extractBold=function(text)
+	startTag=indexOf(text,"<b>")
+	endTag=indexOf(text,"</b>")
+	if startTag!=null and endTag!=null then return text[startTag+3:endTag].trim
+	return null
+end function
+Mission._ensureCache=function(metaLib)
+  if Exploit.haveAlready(metaLib) then
+    if Exploit.canScan(metaLib) then Exploit.headless(metaLib)
+  else
+    z=Exploit.get(metaLib)
+    if not z then return false
+    Info.info("Adding "+lib_name(metaLib)+":"+version(metaLib))
+    Exploit.headless(metaLib)
+  end if
+  return true
+end function
+Mission.getObject=function(public,local,i,needRoot=false)
+  router=get_router(public)
+  if not router then return
+  if typeof(router)=="router" then
+    fallbackResult=null
+    _ports=Exploit.extract(router,public)
+    if _ports isa Error then return
+    for m in _ports
+      if m isa Error then continue
+      if m.local_ip!=local and not (hasIndex(i,"anyUser") and i.anyUser) then continue
+      if not self._ensureCache(m.metaLib) then break
+      for ez in Exploit._ex(Exploit.getCacheKey(m.metaLib))
+        if needRoot then
+          if ez.u=="r" then
+            x=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"missions")
+            if not x or x isa number then continue
+            if ez.e=="s" then return x
+            if not fallbackResult then fallbackResult=x
+          end if
+        else
+          validUser=false
+          if hasIndex(i,"anyUser") and i.anyUser then
+            if ez.u=="u" or ez.u=="r" then validUser=true
+          else
+            if ez.u=="u" or ez.u=="r" or ez.u=="g" then validUser=true
+          end if
+          if validUser and (ez.e!="l" and ez.e!="i") then
+            x=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"missions")
+            if not x or x isa number then continue
+            if ez.e=="s" then return x
+            if not fallbackResult then fallbackResult=x
+          end if
+        end if
+      end for
+    end for
+    if fallbackResult then return fallbackResult
+  end if
+end function
+Mission.getObjectShell=function(public,local=null)
+  router=get_router(public)
+  if not router then return
+  if typeof(router)=="router" then
+    rootShell=null
+    userShell=null
+    guestShell=null
+    _ports=Exploit.extract(router,public)
+    if _ports isa Error then return
+    for m in _ports
+      if m isa Error then continue
+      if local!=null then
+        if m.local_ip!=local then continue
+      else
+        if __m_idx==0 then continue
+      end if
+      if not self._ensureCache(m.metaLib) then break
+      for ez in Exploit._ex(Exploit.getCacheKey(m.metaLib))
+        if ez.e=="s" then
+          x=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"missions")
+          if not x or x isa number then continue
+          if ez.u=="r" then
+            if not rootShell then rootShell=x
+          else if ez.u=="u" then
+            if not userShell then userShell=x
+          else if ez.u=="g" then
+            if not guestShell then guestShell=x
+          end if
+        end if
+      end for
+    end for
+    if rootShell then return rootShell
+    if userShell then return userShell
+    if guestShell then return guestShell
+  end if
+end function
+Mission.getPasswd=function(obj,i)
+  passwdFile=Io.getFileObj(obj,"/etc/passwd")
+  if passwdFile isa Error then return ["error",yellow("Could not retrieve /etc/passwd")]
+  if not has_permission(passwdFile,"r") then return ["error",yellow("No read permission on /etc/passwd")]
+  // Read passwd file content
+  for line in split(get_content(passwdFile),char(10));if not line then continue;pass=split(line,":");if i.anyUser==true or pass[0]==i.username then return ["success",Crack.hash(pass[1])];end for
+  return ["error",yellow("Could not find the specified user in /etc/passwd")]
+end function
+Mission.getRootBounce=function(public,local,i)
+  if not globals.G_settings.vulnerableLib or not globals.G_settings.vulnerableLibIndex then return ["error",yellow("Vulnerable library or index not set in settings")]
+  //check if we have a shell on the router
+  ex=Attack.scanCustom([public,"router","s"],true)
+  if typeof(ex)!="shell" then return ["error",yellow("Could not get a shell on the router")]
+  shell=Exploit.getShell(ex,false,[],true)
+  //check if we are root
+  if shell.user.raw!="root" then shell=ShellObject.headlessSu(shell)
+  if shell isa Error then
+    if hasIndex(i,"anyUser") and i.anyUser then
+      r=Crack.returnRootPass(ex)
+      if not r isa Error then return ["success",r]
+    else
+      return ["error",yellow("Could not get root on the router")]
+    end if
+  end if
+  //Check to make sure we are root
+  if shell.user.raw!="root" then return ["error",yellow("Could not get a root shell on the router")]
+  //Wipe the log
+  Log.shellLog(shell.shell)
+  //Load the vulnerable library
+  SavedLibs.getFile(shell,["-p","/lib",globals.G_settings.vulnerableLib])
+  //Need to pack metaxploit
+  ShellObject.packMeta(shell)
+  //need to run scan --l on the target using globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex
+  computer=Exploit.scanLocalCustom(shell,[globals.G_settings.vulnerableLib,globals.G_settings.vulnerableLibIndex,local],true,true)
+  if computer isa Error then return ["error",yellow("Unable to get a computer bounce to the target")]
+  if typeof(computer)!="computer" then return ["error",yellow("Unable to get target computer on "+local)]
+  return computer
+end function
+Mission.init=function(m)
+	self.mail=m
+	self.inbox=m.inbox
+	self.metaMail=m.inbox.metaMail
+	self.completed=false
+	self._c=self._strip(m.content)
+	if indexOf(self._c,"customer is satisfied")!=null then self.completed=true
+	self.setType
+end function
+Mission.setType=function
+	if indexOf(self._c,"academic record")!=null then
+		self.type="academic"
+	else if indexOf(self._c,"police record")!=null then
+		self.type="police"
+  else if indexOf(self._c,"stop working")!=null then
+    self.type="corruption"
+	else if indexOf(self._c,"enter a remote machine and get a file")!=null then
+		self.type="getfile"
+	else if indexOf(self._c,"delete a file that could incriminate")!=null then
+		self.type="deletefile"
+	else if indexOf(self._c,"login credentials")!=null then
+		self.type="credentials"
+	else if indexOf(self._c,"phantom supplier")!=null then
+		self.type="fraud"
+	else if indexOf(self._c,"corrupt backup files")!=null then
+		self.type="sabotage"
+	else if indexOf(self._c,"leaking confidential information")!=null then
+		self.type="espionage"
+	else
+		self.type="unknown"
+	end if
+end function
+Mission.getHeadless=function(ex,m=null)
+  type=typeof(ex)
+  if type=="shell" then
+    _=new ShellObject
+    return _.run(_,ex,false,[],true)
+  else if type=="computer" then
+    _=new ComputerObject
+    return _.run(_,ex,true)
+  else if type=="file" then
+    _=new FileObject
+    return _.run(_,ex,m,true)
+  end if
+end function
+Mission.info=function
+	if self.type=="academic" then
+		return self.getAcademic
+	else if self.type=="police" then
+		return self.getPolice
+  else if self.type=="corruption" then
+    return self.getCorruption
+	else if self.type=="getfile" then
+		return self.getRemoteFile
+	else if self.type=="deletefile" then
+		return self.getDeleteFile
+	else if self.type=="credentials" then
+		return self.getCredentials
+	else if self.type=="fraud" then
+		return self.getFraud
+	else if self.type=="sabotage" then
+		return self.getSabotage
+	else if self.type=="espionage" then
+		return self.getEspionage
+	end if
+end function
+Mission._strip=function(t)
+	// Strip HTML/rich-text tags
+	while true
+		s=indexOf(t,"<")
+		if s==null then break
+		e=indexOf(t,">")
+		if e==null then break
+		t=t[:s]+t[e+1:]
+	end while
+	// Strip ANSI escape codes
+	n=len(t)
+	i=0
+	out=[]
+	while i<n
+		ch=t[i]
+		if ch==char(27) and i+1<n and t[i+1]=="[" then
+			i=i+2
+			while i<n
+				c=t[i]
+				if (c>="A" and c<="Z") or (c>="a" and c<="z") then
+					i=i+1
+					break
+				end if
+				i=i+1
+			end while
+			continue
+		end if
+		push(out,ch)
+		i=i+1
+	end while
+	return join(out,"").trim
+end function
+Mission._find=function(key)
+	idx=indexOf(self._c,key)
+	if idx==null then return null
+	return self._c[idx+len(key):]
+end function
+Mission.getCorruption=function
+  i={}
+  i.skip=false
+  //Extract IP
+  t=self._find("public IP of the victim is ")
+  if not t then
+    i.answer=yellow("Could not parse corruption mission IP from mail")
+    i.skip=true
+    return i
+  end if
+  i.ip=split(split(t,"\. ")[0],char(10))[0].trim
+  //Extract target LAN IP
+  t=self._find("victim's local IP is ")
+  if not t then
+    i.answer=yellow("Could not parse corruption mission target IP from mail")
+    i.skip=true
+    return i
+  end if
+  i.target=split(t,char(10))[0].trim
+  //We should first check if the lan ip is forwarded by the router
+  ex=self.getObject(i.ip,i.target,i,true)
+  if ex then
+    if typeof(ex)=="shell" then
+      obj=self.getHeadless(ex,{"public_ip":i.ip,"local_ip":i.target})
+      if obj.user.raw!="root" then obj=ShellObject.headlessSu(obj)
+      if not obj isa Error then
+        Log.shellLog(obj.shell)
+        obj.commands["rn"](["/boot","boots"])
+        obj.commands["home"]
+        i.answer=green("Successfully corrupted the target's boot process")
+        return i
+      end if
+    end if
+  end if
+  //If we reach here, we couldn't get a shell on the target via router bounce
+  //Check that we have vulnerable lib settings
+  if not globals.G_settings.vulnerableLib or not globals.G_settings.vulnerableLibIndex then
+    i={}
+    i.answer=yellow("Vulnerable library or index not set in settings")
+    i.skip=true
+    return i
+  end if
+  //Attack via router bounce
+  obj=self.getRootBounce(i.ip,i.target,i)
+  if obj isa list then
+    i.answer=obj[1]
+    i.skip=true
+    return i
+  end if
+  if typeof(obj)!="computer" then
+    i.answer=yellow("Could not get target computer on "+i.target)
+    i.skip=true
+    return i
+  end if
+  computer=self.getHeadless(obj,{"public_ip":i.ip,"local_ip":i.target})
+  if computer.user.raw!="root" then
+    i.answer=yellow("Lost our root computer, most likely Admin is cock blocking")
+    i.skip=true
+    return i
+  end if
+  Log.computerLog(computer.computer)
+  computer.commands["rn"](["/boot","boots"])
+  computer.commands["home"]
+  i.answer=green("Successfully corrupted the target's boot process")
+  return i
+end function
+Mission.getAcademic=function
+	i={}
+  i.skip=false
+	//Extract public IP
+	t=self._find("public IP of the victim is ")
+	if not t then
+		i.answer=yellow("Could not parse academic mission IP")
+		i.skip=true
+		return i
+	end if
+	i.ip=split(t,char(10))[0].trim
+	//Extract LAN IP
+	t=self._find("database is located is ")
+	if not t then
+		i.answer=yellow("Could not parse academic mission target IP")
+		i.skip=true
+		return i
+	end if
+	i.target=split(t,char(10))[0].trim
+	//Extract student name
+	t=self._find("modify belongs to: ")
+	if not t then
+		i.answer=yellow("Could not parse academic mission student name")
+		i.skip=true
+		return i
+	end if
+	i.student=split(t,char(10))[0].replace(":","").replace("\.","").trim
+	//Extract subject
+	t=self._find("modify the subject ")
+	if not t then
+		i.answer=yellow("Could not parse academic mission subject")
+		i.skip=true
+		return i
+	end if
+	i.subject=split(t," to ")[0].trim
+	//Determine requested action
+	if indexOf(self._c,"academic qualification by at least one point")!=null then
+		i.requested="Add 1 to the current grade"
+	else if indexOf(self._c,"change the note to approved at least")!=null then
+		i.requested="Change the grade to 8 or better, or just add 7 the the current grade"
+	end if
+  //We need to get a shell on the target Lan first
+  ex=self.getObjectShell(i.ip)
+  if typeof(ex)!="shell" then
+    i.answer=yellow("Could not get a shell from the network "+i.ip)
+    i.skip=true
+    return i
+  end if
+  obj=self.getHeadless(ex,{"public_ip":i.ip,"local_ip":i.target})
+  Command.open(globals.G_main,["admin"])
+  Command.open(obj,["student"])
+  print green("Modify the academic record as follows:")
+  print green("Student: ")+white(i.student)
+  print green("Subject: ")+white(i.subject)
+  print green(" Action: ")+white(i.requested)
+  if Gui.yesNo("Did you successfully modify the academic record?") then
+    i.answer=green("Successfully modified academic record for "+i.student)
+  else
+    i.answer=yellow("Failed to modify academic record for "+i.student)
+    i.skip=true
+  end if
+  //Clear the log
+  if obj.user.raw!="root" then obj=ShellObject.headlessSu(obj)
+  if not obj isa Error then Log.shellLog(obj.shell)
+  return i
+end function
+Mission.getPolice=function
+	i={}
+	i.skip=false
+	//Extract public IP
+	t=self._find("public IP of the victim is ")
+	if not t then
+		i.answer=yellow("Could not parse police mission IP")
+		i.skip=true
+		return i
+	end if
+	i.ip=split(t,char(10))[0].trim
+  i.target=i.ip
+	//Extract convict name
+	t=self._find("modify belongs to: ")
+	if not t then
+		i.answer=yellow("Could not parse police mission convict name")
+		i.skip=true
+		return i
+	end if
+	i.convict=split(t,char(10))[0].replace(":","").replace("\.","").trim
+	//Determine action type and extract details
+	if indexOf(self._c,"delete the record completely")!=null then
+		i.type="deleteComplete"
+		i.requested="Delete the entire police record for "+i.convict
+	else if indexOf(self._c,"client wants to delete the charge")!=null then
+		i.type="delete"
+		t=self._find("delete the charge of ")
+		i.charge=split(t,"\.")[0].trim
+		i.requested="Delete the charge: "+i.charge
+	else if indexOf(self._c,"client wants to add the charge")!=null then
+		i.type="add"
+		t=self._find("add the charge of ")
+		i.charge=split(t," in the year")[0].trim
+		t=self._find("in the year ")
+		i.year=split(t,"\.")[0].trim
+		i.requested="Add charge: "+i.charge+" in year "+i.year
+	else if indexOf(self._c,"client wants to modify the charge")!=null then
+		i.type="modify"
+		t=self._find("modify the charge of ")
+		i.charge=split(t," so that")[0].trim
+		t=self._find("date of the crime is ")
+		i.change=split(t,char(10))[0].trim
+		i.requested="Modify charge: "+i.charge+" - Change date to: "+i.change
+	end if
+  //We need to get a shell on the target Lan first
+  ex=self.getObjectShell(i.ip)
+  if typeof(ex)!="shell" then
+    i.answer=yellow("Could not get a shell from the network "+i.ip)
+    i.skip=true
+    return i
+  end if
+  obj=self.getHeadless(ex,{"public_ip":i.ip,"local_ip":i.target})
+  Command.open(globals.G_main,["admin"])
+  Command.open(obj,["police"])
+  print green("Modify the police record as follows:")
+  print green("Convict: ")+white(i.convict)
+  if hasIndex(i,"charge") then print green(" Charge: ")+white(i.charge)
+  if hasIndex(i,"year") then print green("   Year: ")+white(i.year)
+  if hasIndex(i,"change") then print green(" Change: ")+white(i.change)
+  print green(" Action: ")+white(i.requested)
+  if Gui.yesNo("Did you successfully modify the police record?") then
+    i.answer=green("Successfully modified police record for "+i.convict)
+  else
+    i.answer=yellow("Failed to modify police record for "+i.convict)
+    i.skip=true
+  end if
+  //Clear the log
+  if obj.user.raw!="root" then obj=ShellObject.headlessSu(obj)
+  if not obj isa Error then Log.shellLog(obj.shell)
+  return i
+end function
+Mission.getRemoteFile=function
+	i={}
+  i.skip=false
+	//Extract public IP
+	t=self._find("public IP of the victim is ")
+	if not t then
+		i.answer=yellow("Could not parse getfile mission IP")
+		i.skip=true
+		return i
+	end if
+	i.ip=split(split(t," and")[0],char(10))[0].trim
+	//Extract target LAN IP
+	t=self._find("local IP where the file is located is ")
+	if not t then
+		i.answer=yellow("Could not parse getfile mission target IP")
+		i.skip=true
+		return i
+	end if
+	i.target=split(t," ")[0].trim
+	//Extract file path
+	t=self._find("on the path ")
+	if t then
+		i.filePath=split(t,char(10))[0].trim
+		if i.filePath[-1:]=="." then i.filePath=i.filePath[:-1]
+	else
+		i.filePath=""
+	end if
+  i.needRshell=false
+  //Check the router to see if we can get a shell on the target directly
+  ex=self.getObjectShell(i.ip,i.target)
+  if ex and typeof(ex)=="shell" then
+    obj=self.getHeadless(ex,{"public_ip":i.ip,"local_ip":i.target})
+    fileObj=Io.getFileObj(obj,i.filePath)
+    if not fileObj isa Error then
+      Io.download(obj,[i.filePath])
+      i.answer=green("Successfully downloaded "+split(i.filePath,"/")[-1]+" via direct shell on target")
+      return i
+    end if
+  end if
+  i.needRshell=true
+  //Check if rshell bypass is enabled
+  if not globals.G_rshell.servers and not self.inbox.bypassRshell then
+    i.answer=yellow("No RShell servers available")
+    i.skip=true
+    return i
+  end if
+  if not globals.G_settings.vulnerableLib or not globals.G_settings.vulnerableLibIndex then
+    i={}
+    i.answer=yellow("Vulnerable library or index not set in settings")
+    i.skip=true
+    return i
+  end if
+  //Attack via router bounce
+  obj=self.getRootBounce(i.ip,i.target,i)
+  if obj isa list then
+    i.answer=obj[1]
+    i.skip=true
+    return i
+  end if
+  if typeof(obj)!="computer" then
+    i.answer=yellow("Could not get target computer on "+i.target)
+    i.skip=true
+    return i
+  end if
+  computer=self.getHeadless(obj,{"public_ip":i.ip,"local_ip":i.target})
+  if computer.user.raw=="root" then Log.computerLog(computer.computer)
+  Net.snoop(computer,["-B"])
+  Command.open(computer,["email","--login","--l"])
+  if globals.G_rshell.servers then
+    if globals.G_settings.rshell then Rshell.list else RshellLite.list
+  end if
+  if Gui.yesNo("Did you successfully download the file?") then
+    i.answer=green("Successfully downloaded "+split(i.filePath,"/")[-1]+" via router bounce")
+  else
+    i.answer=yellow("Failed to download the file")
+    i.skip=true
+  end if
+  return i
+end function
+Mission.getDeleteFile=function
+	i={}
+  i.skip=false
+	//Extract public IP
+	t=self._find("at the public IP ")
+	if not t then
+		t=self._find("at the ")
+	end if
+	if not t then
+		i.answer=yellow("Could not parse deletefile mission IP")
+		i.skip=true
+		return i
+	end if
+	i.ip=split(split(t," and")[0]," address")[0].trim
+	//Extract LAN IP
+	t=self._find("the local IP ")
+	if not t then
+		t=self._find("in the LAN ")
+	end if
+	if not t then
+		i.answer=yellow("Could not parse deletefile mission target IP")
+		i.skip=true
+		return i
+	end if
+	i.target=split(t,"\. ")[0].trim
+  ex=self.getObject(i.ip,i.target,i,true)
+  if ex and not ex isa list then
+    obj=self.getHeadless(ex,{"public_ip":i.ip,"local_ip":i.target})
+    files=Io.getAll(obj.root)
+    for file in files
+      if indexOf(name(file),".bin")!=null then
+        if has_permission(file,"w") then
+          Command.qrm(obj,[path(file)])
+          i.answer=green("Successfully deleted "+name(file)+" from target")
+          return i
+        end if
+      end if
+    end for
+  end if
+  //If we reach here, the target lan ip was not forwarded by the router
+  //try for a root bounce
+  obj=self.getRootBounce(i.ip,i.target,i)
+  if obj isa list then
+    i.answer=obj[1]
+    i.skip=true
+    return i
+  end if
+  if typeof(obj)!="computer" then
+    i.answer=yellow("Could not get target computer on "+i.target)
+    i.skip=true
+    return i
+  end if
+  computer=self.getHeadless(obj,{"public_ip":i.ip,"local_ip":i.target})
+  if computer.user.raw=="root" then Log.computerLog(computer.computer)
+  files=Io.getAll(computer.root)
+  for file in files
+    if indexOf(name(file),".bin")!=null then
+      if has_permission(file,"w") then
+        Command.qrm(computer,[path(file)])
+        i.answer=green("Successfully deleted "+name(file)+" from target")
+        return i
+      end if
+    end if
+  end for
+  //If we reach here, we couldn't find the file
+  //Lets try for a rshell
+  i.needRshell=true
+  //Check if rshell bypass is enabled
+  if not globals.G_rshell.servers and not self.inbox.bypassRshell then
+    i.answer=yellow("No RShell servers available")
+    i.skip=true
+    return i
+  end if
+  if not globals.G_settings.vulnerableLib or not globals.G_settings.vulnerableLibIndex then
+    i={}
+    i.answer=yellow("Vulnerable library or index not set in settings")
+    i.skip=true
+    return i
+  end if
+  //Attack via router bounce
+  obj=self.getRootBounce(i.ip,i.target,i)
+  if obj isa list then
+    i.answer=obj[1]
+    i.skip=true
+    return i
+  end if
+  if typeof(obj)!="computer" then
+    i.answer=yellow("Could not get target computer on "+i.target)
+    i.skip=true
+    return i
+  end if
+  computer=self.getHeadless(obj,{"public_ip":i.ip,"local_ip":i.target})
+  if computer.user.raw!="root" then
+    i.answer=yellow("Lost our root computer, most likely Admin is cock blocking")
+    i.skip=true
+    return i
+  end if
+  if computer.user.raw=="root" then Log.computerLog(computer.computer)
+  files=Io.getAll(computer.root)
+	if not files isa Error then
+    for file in files
+      if name(file)=="system.log" then continue
+      if is_folder(file) then continue
+      fileExt=split(name(file),"\.")[-1]
+      if hasIndex(Text.specialFiles,fileExt)!=null then
+        print green(name(file)+":")
+        print "  "+white(path(file))
+      end if
+    end for
+  end if
+  Net.snoop(computer,["-B"])
+  Command.open(computer,["email","--login","--l"])
+  if globals.G_rshell.servers then
+    if globals.G_settings.rshell then Rshell.list else RshellLite.list
+  end if
+  if Gui.yesNo("Did you successfully delete the .bin file?") then
+    i.answer=green("Successfully deleted .bin file via router bounce")
+  else
+    i.answer=yellow("Failed to delete the .bin file")
+    i.skip=true
+  end if
+  return i
+end function
+Mission.getCredentials=function
+	i={}
+  i.skip=false
+	//Check if specific user or any user
+	if indexOf(self._c,"credentials of any user")!=null then
+		i.anyUser=true
+		i.username="Any User"
+	else if indexOf(self._c,"credentials of the user")!=null then
+		//Extract specific username
+		t=self._find("credentials of the user ")
+		i.username=split(t,"\.")[0].trim
+		i.anyUser=false
+	end if
+	//Extract public IP
+	t=self._find("public IP of the victim is ")
+	if not t then
+		i.answer=yellow("Could not parse credentials mission IP")
+		i.skip=true
+		return i
+	end if
+	i.ip=split(split(t,"\. ")[0],char(10))[0].trim
+	//Extract LAN IP
+	t=self._find("victim's local IP is ")
+	if not t then
+		i.answer=yellow("Could not parse credentials mission target IP")
+		i.skip=true
+		return i
+	end if
+	i.target=split(t,char(10))[0].trim
+  //We should first check if the lan ip is forwarded by the router
+  ex=self.getObject(i.ip,i.target,i,false)
+  if typeof(ex)=="shell" and i.anyUser then
+    r=Crack.returnRootPass(ex)
+    if not r isa Error then
+      i.answer=r
+      return i
+    end if
+  end if
+  if ex and not ex isa list then
+    obj=null
+    obj=self.getHeadless(ex,{"public_ip":i.ip,"local_ip":i.target})
+    result=self.getPasswd(obj,i)
+    if result[0]=="success" then
+      i.answer=result[1]
+      return i
+    end if
+  end if
+  //If we reach here, we couldn't get the credentials from a edge router bounce
+  //try for a root bounce
+  obj=self.getRootBounce(i.ip,i.target,i)
+  if obj isa list and obj[0]=="success" then
+    i.answer=obj[1]
+    return i
+  end if
+  if typeof(obj)!="computer" then
+    i.answer=yellow("Could not get target computer on "+i.target)
+    i.skip=true
+    return i
+  end if
+  obj=self.getHeadless(obj,{"public_ip":i.ip,"local_ip":i.target})
+  Log.computerLog(obj.computer)
+  result=self.getPasswd(obj,i)
+  i.answer=result[1]
+  if result[0]=="error" then i.skip=true
+  return i
+end function
+Mission.getFraud=function
+  i={}
+  i.skip=false
+  //Extract suspect name
+  t=self._find("suspects that ")
+  if t then i.suspect=split(t," has")[0].trim
+  //Extract public IP
+  t=self._find("public IP ")
+  if t then i.ip=split(t,",")[0].trim
+  //Extract local IP
+  t=self._find("local IP ")
+  if t then i.target=split(t,"\. ")[0].trim
+  i.answer=yellow("Fraud mission not yet automated. Manual investigation required.")
+  i.skip=true
+  return i
+end function
+Mission.getSabotage=function
+  i={}
+  i.skip=false
+  //Extract suspect name
+  t=self._find("Investigate ")
+  if t then i.suspect=split(t," and")[0].trim
+  //Extract public IP
+  t=self._find("public IP ")
+  if t then i.ip=split(t," on")[0].trim
+  //Extract local IP
+  t=self._find("local IP ")
+  if t then i.target=split(t,"\. ")[0].trim
+  i.answer=yellow("Sabotage mission not yet automated. Manual investigation required.")
+  i.skip=true
+  return i
+end function
+Mission.getEspionage=function
+  i={}
+  i.skip=false
+  //Extract suspect name
+  t=self._find("suspects that ")
+  if t then i.suspect=split(t," has")[0].trim
+  //Extract public IP
+  t=self._find("public IP ")
+  if t then i.ip=split(t,",")[0].trim
+  //Extract local IP
+  t=self._find("local IP ")
+  if t then i.target=split(t,"\. ")[0].trim
+  i.answer=yellow("Espionage mission not yet automated. Manual investigation required.")
+  i.skip=true
+  return i
+end function
+Mail={}
+Mail.attrs=["id","from","subject"]
+Mail.init=function(i,s)
+	self.inbox=i
+	self.metaMail=i.metaMail
+	self.id=s[indexOf(s,"MailID: "):][8:].split(char(10))[0]
+	self.from=s[indexOf(s,"From: "):][6:].split(char(10))[0]
+	self.subject=s[indexOf(s,"Subject: "):][9:].split(char(10))[0]
+	// XFIX1.0: MetaMail ops have a 2s global cooldown
+	// XFIX1.0: System.tryWait(2)
+	self.content=read(self.metaMail,self.id)
+	self.content=self.content[indexOf(self.content,"Subject: "):].split(char(10))[1:].join(char(10))
+	if self.isMission==true then
+		self.mission=new Mission
+		self.mission.init(self)
+	end if
+end function
+Mail.isMission=function;return self.subject=="Mission Contract";end function
+Inbox={}
+Inbox.account={"user":null,"pass":null}
+Inbox.init=function(argv)
+  self.metaMail=null
+  credsFile=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/.erc")
+  if credsFile then
+    content=get_content(credsFile)
+    if content then
+      // Decrypt credentials (format: user::pass)
+      decrypted=Encryption.encrypt(content,Kernel.key,false)
+      parts=split(decrypted,"::")
+      if len(parts)==2 then
+        self.account.user=parts[0]
+        self.account.pass=parts[1]
+        self.metaMail=mail_login(self.account.user,self.account.pass)
+      end if
+    end if
+  end if
+  // If no creds file or login failed, try argv
+  if not self.metaMail or self.metaMail isa string then
+    if argv and len(argv)>1 then self.metaMail=mail_login(argv[0],argv[1])
+  end if
+  // If still no login, setup account
+  if not self.metaMail or self.metaMail isa string then Email.setup(true)
+  // Final check
+  if typeof(self.metaMail)!="MetaMail" then
+    if self.metaMail isa string then return Error.set(self.metaMail) else return Error.set("Failed to login to the local mail account.")
+  end if
+end function
+Inbox.list=function
+	// XFIX1.0: MetaMail ops have a 2s global cooldown
+	// XFIX1.0: System.tryWait(2)
+	s=fetch(self.metaMail)
+	for i in indexes(s);m=new Mail;m.init(self,s[i]);s[i]=m;end for
+	return s
+end function
+Inbox.missions=function
+	f=function(o);return o.isMission==true;end function
+	m=self.list.select(@f)
+	f=function(o);return o.mission;end function
+	m=m.map(@f)
+	f=function(o);return o.type;end function
+	m=m.sort(@f)
+	return m
+end function
+Inbox.stats=function
+	missions=self.missions
+	stats={}
+	stats.total=len(missions)
+	stats.completed=0
+	stats.pending=0
+	stats.academic=0
+	stats.police=0
+	stats.corruption=0
+	stats.getfile=0
+	stats.deletefile=0
+	stats.credentials=0
+	stats.fraud=0
+	stats.sabotage=0
+	stats.espionage=0
+	stats.academicCompleted=0
+	stats.policeCompleted=0
+	stats.corruptionCompleted=0
+	stats.getfileCompleted=0
+	stats.deletefileCompleted=0
+	stats.credentialsCompleted=0
+	stats.fraudCompleted=0
+	stats.sabotageCompleted=0
+	stats.espionageCompleted=0
+	for mission in missions
+		t=mission.type
+		if mission.completed then
+			stats.completed+=1
+			if t=="academic" then
+				stats.academicCompleted+=1
+			else if t=="police" then
+				stats.policeCompleted+=1
+			else if t=="corruption" then
+				stats.corruptionCompleted+=1
+			else if t=="getfile" then
+				stats.getfileCompleted+=1
+			else if t=="deletefile" then
+				stats.deletefileCompleted+=1
+			else if t=="credentials" then
+				stats.credentialsCompleted+=1
+			else if t=="fraud" then
+				stats.fraudCompleted+=1
+			else if t=="sabotage" then
+				stats.sabotageCompleted+=1
+			else if t=="espionage" then
+				stats.espionageCompleted+=1
+			end if
+		else
+			stats.pending+=1
+		end if
+		if t=="academic" then
+			stats.academic+=1
+		else if t=="police" then
+			stats.police+=1
+		else if t=="corruption" then
+			stats.corruption+=1
+		else if t=="getfile" then
+			stats.getfile+=1
+		else if t=="deletefile" then
+			stats.deletefile+=1
+		else if t=="credentials" then
+			stats.credentials+=1
+		else if t=="fraud" then
+			stats.fraud+=1
+		else if t=="sabotage" then
+			stats.sabotage+=1
+		else if t=="espionage" then
+			stats.espionage+=1
+		end if
+	end for
+	return stats
+end function
+Inbox.display=function
+	stats=self.stats
+	Info.info("Mission Statistics:")
+	print yellow("Total missions: ")+white(str(stats.total))
+	print yellow("Completed: ")+green(str(stats.completed))+yellow(" | Pending: ")+orange(str(stats.pending))
+	print ""
+	print yellow("Academic: ")+white(str(stats.academic))+yellow(" (Completed: ")+green(str(stats.academicCompleted))+yellow(")")
+	print yellow("Police: ")+white(str(stats.police))+yellow(" (Completed: ")+green(str(stats.policeCompleted))+yellow(")")
+	print yellow("Corruption: ")+white(str(stats.corruption))+yellow(" (Completed: ")+green(str(stats.corruptionCompleted))+yellow(")")
+	print yellow("Get File: ")+white(str(stats.getfile))+yellow(" (Completed: ")+green(str(stats.getfileCompleted))+yellow(")")
+	print yellow("Delete File: ")+white(str(stats.deletefile))+yellow(" (Completed: ")+green(str(stats.deletefileCompleted))+yellow(")")
+	print yellow("Credentials: ")+white(str(stats.credentials))+yellow(" (Completed: ")+green(str(stats.credentialsCompleted))+yellow(")")
+	print ""
+	missions=self.missions
+	if not missions or not len(missions) then return Info.info("No missions found")
+	Info.info("Mission Details:")
+	for mission in missions
+		status="["+green("+")+"]"
+		if not mission.completed then status="["+red("-")+"]"
+		missionType=mission.type.upper
+		if mission.type=="academic" then missionType=cyan(missionType)
+		if mission.type=="police" then missionType=yellow(missionType)
+		if mission.type=="corruption" then missionType=red(missionType)
+		if mission.type=="getfile" then missionType=green(missionType)
+		if mission.type=="deletefile" then missionType=orange(missionType)
+		if mission.type=="credentials" then missionType=white(missionType)
+		print(status+" "+missionType)
+		info=mission.info
+		if info.skip then
+			print "  "+info.answer
+		else
+			print "  "+white("Target: ")+green(info.ip)
+			if hasIndex(info,"target") then print "  "+white("LAN IP: ")+green(info.target)
+			if hasIndex(info,"anyUser") then
+				if info.anyUser then
+					print "  "+white("Any User: ")+green(info.answer)
+				else
+					print "  "+white("Username: ")+green(info.username)
+					print "  "+white("Password: ")+green(info.answer)
+				end if
+			end if
+			if hasIndex(info,"filePattern") then print "  "+white("File Pattern: ")+green(info.filePattern)
+			if hasIndex(info,"filePath") then print "  "+white("File Path: ")+green(info.filePath)
+		end if
+	end for
+end function

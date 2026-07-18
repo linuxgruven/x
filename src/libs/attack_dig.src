@@ -1,0 +1,1226 @@
+// =============================================================================
+// ATTACK_DIG
+// Deep vulnerability scanning and investigation operations.
+// =============================================================================
+Attack.dig=function(Obj,argv)
+	// Data storage + print functions — before cache handler so cache can reuse them
+	Records={}
+	PIP=null
+	_hashCache={}
+	_crackHash=function(h)
+		if hasIndex(outer._hashCache,h) then return outer._hashCache[h]
+		p=Crack.hash(h)
+		outer._hashCache[h]=p
+		return p
+	end function
+	_ensureRecord=function(ip,uname)
+		if not hasIndex(outer.Records,ip) then outer.Records[ip]={"users":{},"deviceFiles":[]}
+		if uname and not hasIndex(outer.Records[ip].users,uname) then
+			outer.Records[ip].users[uname]={"email":null,"bank":null,"rshell":null,"user":null,"files":[],"subj":[]}
+		end if
+	end function
+	printData=function
+		if globals.G_pipe.PIPE_MODE then
+			for _pl in prepData;push(globals.G_pipe.stdout,_pl);end for
+			return
+		end if
+		_f=""
+		while true
+			if globals.G_Zday["rshell"] then print blue("RSHELL SERVER IP - : "+globals.G_Zday["rshell"])
+			_anyPrinted=false
+			for ipRec in outer.Records
+				_ip=ipRec.key
+				_rec=ipRec.value
+				_devPrinted=false
+				for uRec in _rec.users
+					_uname=uRec.key
+					_u=uRec.value
+					if _f then
+						_chk=_uname+" "+_ip
+						if _u.user then _chk=_chk+" "+_u.user.pass
+						if _u.email then _chk=_chk+" "+_u.email.addr+" "+_u.email.pass
+						if _u.bank then _chk=_chk+" "+_u.bank.account+" "+_u.bank.pass
+						if _u.rshell then _chk=_chk+" "+_u.rshell.addr+" "+_u.rshell.pass
+						if _u.files then
+							for _fe in _u.files
+								_chk=_chk+" "+_fe.path
+								if _fe.content then _chk=_chk+" "+_fe.content
+							end for
+						end if
+						if indexOf(_chk,_f)==null then continue
+					end if
+					if not _devPrinted then
+						if _anyPrinted then print white("="*45)
+						print orange("DEVICE: "+_ip)
+						_devPrinted=true
+					end if
+					_anyPrinted=true
+					print white("-"*45)
+					print purple("USER: "+_uname)
+					if _u.user then
+						if _u.user.probe then print yellow(" *** "+purple("PLAYER SYSTEM")+" ***")
+						print blue("PASSWORD --------- : ")+yellow(_u.user.pass)
+					end if
+					if _u.email then
+						print yellow("EMAIL ------------ : "+_u.email.addr)
+						print yellow("EMAIL PASS ------- : "+_u.email.pass)
+					end if
+					if _u.bank then
+						print blue("BANK # ----------- : "+_u.bank.account)
+						print blue("BANK PASS -------- : "+_u.bank.pass)
+					end if
+					if _u.rshell then
+						print yellow("RSHELL EMAIL ----- : "+_u.rshell.addr)
+						print yellow("RSHELL PASS ------ : "+_u.rshell.pass)
+					end if
+					if _u.subj and len(_u.subj)>0 then
+						print blue("EMAIL SUBJECTS --- :")
+						for _subj in _u.subj
+							if indexOf(lower(_subj),"re:")!=null then print yellow("  ~ ")+blue(_subj) else print blue("  "+_subj)
+						end for
+					end if
+					if _u.email and _u.email.bins and len(_u.email.bins)>0 then
+						print green("HOME FILES ------- :")
+						_bIdx=1
+						for _b in _u.email.bins
+							if indexOf(lower(_b),".log")!=null then print yellow("  "+_bIdx+") "+_b) else print cyan("  "+_bIdx+") "+_b)
+							_bIdx=_bIdx+1
+						end for
+					end if
+					if _u.files and len(_u.files)>0 then
+						_hasAny=false
+						for _fe in _u.files;if _fe.content or (hasIndex(_fe,"status") and _fe.status) then _hasAny=true;end for
+						if argv.files or argv.view or _hasAny then
+							print green("FILES ------------ :")
+							if len(_u.files)>10 then
+								print cyan("  ["+str(len(_u.files))+" files]")
+							else
+								_fIdx=1
+								for _fe in _u.files
+									_fLine="  "+str(_fIdx)+") "+_fe.path
+									if hasIndex(_fe,"status") and _fe.status then _fLine=_fLine+" ==> "+_fe.status
+									print purple(_fLine)
+									_fIdx=_fIdx+1
+									if _fe.content then
+										for _cl in split(_fe.content,char(10))
+											if _f and indexOf(_cl,_f)==null then continue
+											print white("    "+_cl)
+										end for
+									end if
+								end for
+							end if
+						end if
+					end if
+				end for
+				if _rec.deviceFiles and len(_rec.deviceFiles)>0 then
+					if true then
+						if not _devPrinted then
+							if _anyPrinted then print white("="*45)
+							print orange("DEVICE: "+_ip)
+							_devPrinted=true
+						end if
+						_anyPrinted=true
+						print white("-"*45)
+						print green("SYSTEM FILES ----- :")
+						_dirGroups={}
+						for _dfe in _rec.deviceFiles
+							_parts=split(_dfe.path,"/")
+							_dir="/"
+							if len(_parts)>2 then
+								_dparts=[]
+								_di=0
+								while _di<len(_parts)-1
+									push(_dparts,_parts[_di])
+									_di=_di+1
+								end while
+								_dir=join(_dparts,"/")
+								if _dir=="" then _dir="/"
+							end if
+							if not hasIndex(_dirGroups,_dir) then _dirGroups[_dir]=[]
+							push(_dirGroups[_dir],_dfe)
+						end for
+						for _dg in _dirGroups
+							_ddir=_dg.key
+							_dfiles=_dg.value
+							print cyan("  "+_ddir+" ["+str(len(_dfiles))+" files]")
+							for _dfe in _dfiles
+								_showName=len(_dfiles)<10
+								_hasContent=_dfe.content!=null
+								if not _showName and not _hasContent then continue
+								_dfLine="    "+_dfe.path
+								if hasIndex(_dfe,"status") and _dfe.status then _dfLine=_dfLine+" ==> "+_dfe.status
+								print cyan(_dfLine)
+								if _hasContent then
+									for _cl in split(_dfe.content,char(10))
+										if _f and indexOf(_cl,_f)==null then continue
+										print white("      "+_cl)
+									end for
+								end if
+							end for
+						end for
+					end if
+				end if
+			end for
+			if not _anyPrinted then print white("No data found.")
+			print white("="*45)
+			if not argv.filter then break
+			_f=Gui.input({"text":"Enter some filter data (type '!' to stop filtering)"})
+			if _f==null then break
+		end while
+	end function
+	printV=function
+		for _l in V;print _l;end for
+	end function
+	prepData=function
+		y=[]
+		push(y,"/"*45)
+		push(y,"Public IP:"+outer.PIP)
+		push(y,"/"*45)
+		for ipRec in outer.Records
+			_ip=ipRec.key
+			_rec=ipRec.value
+			push(y,"="*45)
+			push(y,"DEVICE: "+_ip)
+			for uRec in _rec.users
+				_uname=uRec.key
+				_u=uRec.value
+				push(y,"-"*45)
+				push(y,"USER: "+_uname)
+				if _u.user then push(y,"PASSWORD --------- : "+_u.user.pass)
+				if _u.email then
+					push(y,"EMAIL ------------ : "+_u.email.addr)
+					push(y,"EMAIL PASS ------- : "+_u.email.pass)
+					if _u.email.bins and len(_u.email.bins)>0 then
+						push(y,"HOME FILES ------- :")
+						_bIdx=1
+						for _b in _u.email.bins;push(y,"  "+_bIdx+") "+_b);_bIdx=_bIdx+1;end for
+					end if
+				end if
+				if _u.bank then
+					push(y,"BANK # ----------- : "+_u.bank.account)
+					push(y,"BANK PASS -------- : "+_u.bank.pass)
+				end if
+				if _u.rshell then
+					push(y,"RSHELL EMAIL ----- : "+_u.rshell.addr)
+					push(y,"RSHELL PASS ------ : "+_u.rshell.pass)
+				end if
+				if _u.files and len(_u.files)>0 then
+					push(y,"FILES ------------ :")
+					for _fe in _u.files;push(y,"  "+_fe.path);end for
+				end if
+			end for
+			if _rec.deviceFiles and len(_rec.deviceFiles)>0 then
+				push(y,"SYSTEM FILES ----- :")
+				for _dfe in _rec.deviceFiles;push(y,"  "+_dfe.path);end for
+			end if
+		end for
+		return y
+	end function
+	// Handle cache subcommand before router guard — cache only needs GCO
+	if argv and argv[0]=="cache" then
+		pull(argv)
+		_p=ArgumentParser.init
+		_p.addArgument("filter",true,"flag")
+		_p.addArgument("grep",true,"storeArray")
+		_p.addArgument("dump",true,"flag")
+		_p.addArgument("all",true,"flag")
+		_p.addArgument("email",true,"flag")
+		_p.addArgument("bank",true,"flag")
+		_p.addArgument("rshell",true,"flag")
+		_p.addArgument("user",true,"flag")
+		_p.addArgument("quiet",true,"flag")
+		_p.addArgument("raw",true,"flag")
+		argv=_p.parseArgs("dig",argv)
+		if argv isa Error then return
+		if not globals.G_digCache then return Info.info("No cached dig results")
+		arg=argv.rest
+		if not arg or not len(arg) then
+			Info.info("Cached dig results:")
+			for k in globals.G_digCache;print white("  "+k.key+" ("+k.value.type+")");end for
+			return
+		end if
+		if arg[0]=="clear" then
+			if len(arg)>1 then
+				if not hasIndex(globals.G_digCache,arg[1]) then return Info.warning("No cache entry '"+arg[1]+"'")
+				remove(globals.G_digCache,arg[1])
+				return Info.info("Cleared '"+arg[1]+"'")
+			end if
+			if not Gui.yesNo("Clear all cached dig results?",true) then return
+			globals.G_digCache={}
+			return Info.info("All cached results cleared")
+		end if
+		if not hasIndex(globals.G_digCache,arg[0]) then return Info.warning("No cache entry '"+arg[0]+"'")
+		d=globals.G_digCache[arg[0]]
+		Records=d.Records
+		PIP=d.PIP
+		if not argv.quiet and len(outer.Records)>0 then printData
+		if argv.raw or argv.list or argv.text then
+			if argv.list then return values(d.Records)
+			if argv.text then return join(values(d.Records),char(10))
+			return d.Records
+		end if
+		if argv.dump then
+			_prep=_dFns[_type]
+			_gm=globals.G_main
+			f=File(_gm.computer,path(_gm.dir.current)+"/digData.txt")
+			if not f then f=Command.touch(_gm,[path(_gm.dir.current)+"/digData.txt"])
+			if f isa Error then return
+			_ct=get_content(f);if not _ct then set_content(f,join(_prep,char(10))) else set_content(f,_ct+char(10)+join(_prep,char(10)))
+			Info.info("Dumped to "+path(_gm.dir.current)+"/digData.txt")
+		end if
+		return
+	end if
+  Arg1=pull(argv)
+  _rawArgv=argv[:]
+  if Arg1!="obj" then globals.G_digObj=[]
+  // -x/-rm/-sw/obj bypass the main parser; dispatched after all functions are defined
+  if Arg1!="-x" and Arg1!="-rm" and Arg1!="-sw" and Arg1!="obj" then
+  // Verify we're on a router/switch
+  if indexOf(Obj.machineType,"Router")==null and indexOf(Obj.machineType,"Switch")==null then return Warning.set("You are not on a router, you can't use this command")
+  _p=ArgumentParser.init
+  _p.addArgument("f",false,"store","decipher")
+  _p.addArgument("p",false,"store","/")
+  _p.addArgument("s",false,"flag")
+  _p.addArgument("files",true,"flag")
+  _p.addArgument("view",true,"flag")
+  _p.addArgument("i",false,"store")
+  _p.addArgument("filter",true,"flag")
+  _p.addArgument("grep",true,"storeArray")
+  _p.addArgument("router",true,"flag")
+  _p.addArgument("extreme",true,"storeNumber",50)
+  _p.addArgument("lwipe",true,"flag")
+  _p.addArgument("wipe",true,"flag")
+  _p.addArgument("clean",true,"flag")
+  _p.addArgument("all",true,"flag")
+  _p.addArgument("subject",true,"flag")
+  _p.addArgument("cache",true,"store")
+  _p.addArgument("quiet",true,"flag")
+  _p.addArgument("raw",true,"flag")
+  _p.addArgument("list",true,"flag")
+  _p.addArgument("text",true,"flag")
+  _p.addArgument("root",true,"flag")
+  argv=_p.parseArgs("dig",argv)
+  if argv isa Error then return
+  if argv.i then argv.i=split(argv.i,",") else argv.i=[]
+  if argv.wipe and argv.clean then return Error.set("--wipe and --clean are mutually exclusive")
+  end if
+	saveToCache=function(type)
+		name=Obj.computer.public_ip
+		if argv.cache and argv.cache!="!" then name=argv.cache
+		if not globals.G_digCache then globals.G_digCache={}
+		globals.G_digCache[name]={"Records":outer.Records,"PIP":outer.PIP,"type":type}
+		Info.info("Cached as '"+name+"'")
+	end function
+	init=function
+		d={}
+		if Obj.layer=="shell" then
+      if not Obj.packMetaxploit or not Obj.packRouter then
+        _=Builder.packCO(Obj)
+        if _ isa Error then return
+        Obj.packMetaxploit=_.metaxploit
+        Obj.packRouter=_.router
+        d["metaxploit"]=_.metaxploit
+				d["router"]=_.router
+      else
+        d["metaxploit"]=Obj.packMetaxploit
+				d["router"]=Obj.packRouter
+      end if
+		else
+			d["metaxploit"]=Library.metaxploit
+			d["router"]=get_router
+		end if
+		outer.PIP=public_ip(d.router)
+		return d
+	end function
+	getips=function(c)
+		d=devices_lan_ip(c)
+    if len(argv.i)>0 then
+      z=[]
+      for _iip in argv.i
+        j=split(_iip,"\.")
+        pop(j)
+        t=join(j,".")
+        for ii in clone(d);if indexOf(ii,t)!=null and not z.contains(ii) then push(z,ii);end for
+      end for
+      d=z
+    end if
+		r=[]
+		for i in d
+			p=device_ports(c,i)
+			if p then
+				for q in p
+					if port_number(q)==8080 then
+						push(r,i)
+						break
+					end if
+				end for
+			end if
+		end for
+		return r
+	end function
+	_getRootBounce=function(z)
+		if not globals.G_settings.vulnerableLib or not globals.G_settings.vulnerableLibIndex then return
+		rootShell=Obj
+		if Obj.user.raw!="root" then
+			//su to root on the router
+			rootShell=ShellObject.headlessSu(Obj)
+			if rootShell isa Error then return
+			if rootShell.user.raw!="root" then return
+		end if
+		//Install the vulnerable lib to /lib — getBounces will load and exploit it
+		_rlib=globals.G_settings.vulnerableLib
+		SavedLibs.getFile(rootShell,["-p","/lib",_rlib])
+		//Close the elevated shell only if we opened a new one
+		if rootShell!=Obj then
+			if hasIndex(rootShell.commands,"close") then rootShell.commands["close"]([])
+		end if
+		return Attack.getBounces({"Obj":Obj,"c":z})
+	end function
+	_scanLan=function(m,z,routerMsg)
+		if not z then z=init
+		if not z then return
+		if not m then
+			if argv.root then m=_getRootBounce(z)
+			if not m then m=Attack.getBounces({"Obj":Obj,"c":z})
+		end if
+		if not m then
+			Warning.set("Could not obtain a shell on the router")
+			return null
+		end if
+		i=getips(z.router)
+		if not i then
+			Info.info("No routers found")
+			return null
+		end if
+		result=[]
+		if len(argv.i)>0 then
+			for _iip in argv.i
+				ex=overflow(m.lib,m.memory,m.unsec,_iip)
+				if typeof(ex)!="computer" then continue
+				if argv.lwipe then Log.computerLog(ex)
+				push(result,ex)
+				push(globals.G_digObj,{"ip":ex.local_ip,"ex":ex})
+			end for
+		else
+			for _ in i
+				v=split(_,"\.")
+				x=join(v[:-1],".")+"."
+				r=0
+				a=0;while a<=argv.extreme
+					t=x+a
+					ex=overflow(m.lib,m.memory,m.unsec,t)
+					if ex==null then
+						if r>=30 then break
+						r+=1
+					end if
+					if typeof(ex)!="computer" then
+						a+=1
+						continue
+					end if
+					if argv.lwipe then Log.computerLog(ex)
+					push(result,ex)
+					push(globals.G_digObj,{"ip":ex.local_ip,"ex":ex})
+				a+=1;end while
+			end for
+		end if
+		if argv.router then
+			if not routerMsg then routerMsg="Checking routers..."
+			Info.info(routerMsg)
+			for _ in i;ex=overflow(m.lib,m.memory,m.unsec,_);if typeof(ex)!="computer" then continue;push(result,ex);push(globals.G_digObj,{"ip":ex.local_ip,"ex":ex});end for
+		end if
+		return result
+	end function
+	_extractUsers=function(ex)
+		f=File(ex,"/etc/passwd")
+		if f then
+			if has_permission(f,"r") then
+				Info.info("Cracking credentials...")
+				for q in split(get_content(f),char(10))
+					if not q then continue
+					q=split(trim(q),":")
+					if not len(q)==2 then continue
+					_hash=_crackHash(q[1])
+					_skip=false
+					_dup=false
+					for _ipRec in outer.Records
+						for _uRec in _ipRec.value.users
+							if _uRec.value.user==null then continue
+							if _uRec.key==q[0] and _uRec.value.user.pass==_hash then _skip=true
+							if _uRec.key==q[0] then _dup=true
+						end for
+					end for
+					if _skip then continue
+					_dname=q[0]
+					if _dup then _dname=q[0]+" ["+ex.local_ip+"]"
+					_ensureRecord(ex.local_ip,q[0])
+					outer.Records[ex.local_ip].users[q[0]].user={"name":_dname,"pass":_hash,"probe":System.probeEX(ex)}
+				end for
+			end if
+		end if
+	end function
+	_extractEmail=function(ex,doWipe,doClean)
+		for h in get_folders(File(ex,"/home"))
+			if name(h)=="guest" then continue
+			_uname=name(h)
+			found=false
+			for c in get_files(File(ex,"/home/"+_uname+"/Config"))
+				if not name(c)=="Mail.txt" then continue
+				content=get_content(c)
+				if not content then content=""
+				s=split(content,":")
+				if not len(s)==2 then continue
+				_ensureRecord(ex.local_ip,_uname)
+				if outer.Records[ex.local_ip].users[_uname].email then continue
+				bins=[]
+				for hf in get_files(h)
+					n=name(hf)
+					if is_binary(hf) then
+						push(bins,n)
+					else if n[-4:]==".txt" and n!="Bank.txt" and n!="Mail.txt" then
+						push(bins,n)
+					end if
+				end for
+				outer.Records[ex.local_ip].users[_uname].email={"name":_uname,"addr":s[0],"pass":_crackHash(s[1]),"bins":bins}
+				if doWipe then
+					delete(c)
+				else if doClean then
+					set_content(c,"")
+				end if
+				found=true
+			end for
+			if not found then
+				_ensureRecord(ex.local_ip,_uname)
+				if not outer.Records[ex.local_ip].users[_uname].email then outer.Records[ex.local_ip].users[_uname].email={"name":_uname,"addr":"MISSING","pass":"MISSING","bins":[]}
+			end if
+		end for
+	end function
+	_extractBank=function(ex,doWipe,doClean)
+		for h in get_folders(File(ex,"/home"))
+			if name(h)=="guest" then continue
+			_uname=name(h)
+			_ensureRecord(ex.local_ip,_uname)
+			if outer.Records[ex.local_ip].users[_uname].bank then continue
+			for c in get_files(File(ex,"/home/"+_uname+"/Config"))
+				if not name(c)=="Bank.txt" then continue
+				content=get_content(c)
+				if not content then content=""
+				s=split(content,":")
+				if not len(s)==2 then continue
+				outer.Records[ex.local_ip].users[_uname].bank={"name":_uname,"account":s[0],"pass":_crackHash(s[1])}
+				if doWipe then
+					delete(c)
+				else if doClean then
+					set_content(c,"")
+				end if
+			end for
+			if not outer.Records[ex.local_ip].users[_uname].bank then outer.Records[ex.local_ip].users[_uname].bank={"name":_uname,"account":"MISSING","pass":"MISSING"}
+		end for
+	end function
+	_extractRshell=function(ex)
+		for h in get_folders(File(ex,"/home"))
+			if name(h)=="guest" then continue
+			_uname=name(h)
+			for c in get_files(File(ex,"/home/"+_uname+"/Config"))
+				if not name(c)=="Mail.txt" then continue
+				content=get_content(c)
+				if not content then content=""
+				s=split(content,":")
+				if not len(s)==2 then continue
+				_ensureRecord(ex.local_ip,_uname)
+				if outer.Records[ex.local_ip].users[_uname].rshell then continue
+				outer.Records[ex.local_ip].users[_uname].rshell={"name":_uname,"addr":s[0],"pass":_crackHash(s[1])}
+			end for
+		end for
+	end function
+	populateAll=function(m=null,z=null)
+		computers=_scanLan(m,z)
+		if not computers isa list then return
+		Info.info("Cracking passwords on "+len(computers)+" machine(s)...")
+		for ex in computers
+			Info.info("  "+ex.local_ip+" - cracking...")
+			_extractUsers(ex)
+			_extractEmail(ex,false,false)
+			_extractBank(ex,false,false)
+			if argv.files or argv.view then
+				_extractHomeFiles(ex)
+				_extractSysFiles(ex)
+			end if
+		end for
+	end function
+	_fetchSubjects=function
+		Info.info("Reading emails...")
+		// XFIX1.0: MetaMail 2s cooldown; packMailLogin not needed (use mail_login).
+		// XFIX1.0: _firstLogin=true
+		for ipRec in outer.Records
+			for uRec in ipRec.value.users
+				_em=uRec.value.email
+				if not _em or _em.addr=="MISSING" then continue
+				// XFIX1.0: if not _firstLogin then System.tryWait(2)
+				// XFIX1.0: _firstLogin=false
+				// XFIX1.0: mm=mail_login(_em.addr,_em.pass)
+				mm=Builder.packMailLogin(Obj,_em.addr,_em.pass)
+				if not mm or mm isa Error then continue
+				// XFIX1.0: System.tryWait(2)  // before each fetch if login path has no wait
+				mails=fetch(mm)
+				if not mails isa list then continue
+				_subjects=[]
+				for mail in mails
+					segs=split(mail,char(10))
+					if len(segs)>=5 then push(_subjects,segs[4][9:])
+				end for
+				if len(_subjects)>0 then uRec.value.subj=_subjects
+			end for
+		end for
+	end function
+	populateEmail=function(m=null,z=null)
+		computers=_scanLan(m,z)
+		if not computers isa list then return
+		Info.info("Cracking passwords on "+len(computers)+" machine(s)...")
+		for ex in computers
+			Info.info("  "+ex.local_ip+" - cracking...")
+			_extractEmail(ex,argv.wipe,argv.clean)
+			if argv.files or argv.view then
+				_extractHomeFiles(ex)
+				_extractSysFiles(ex)
+			end if
+		end for
+	end function
+	populateBank=function(m=null,z=null)
+		computers=_scanLan(m,z)
+		if not computers isa list then return
+		Info.info("Cracking passwords on "+len(computers)+" machine(s)...")
+		for ex in computers;Info.info("  "+ex.local_ip+" - cracking...");_extractBank(ex,argv.wipe,argv.clean);end for
+	end function
+	populateRshell=function(m=null,z=null)
+		computers=_scanLan(m,z)
+		if not computers isa list then return
+		Info.info("Cracking passwords on "+len(computers)+" machine(s)...")
+		for ex in computers;Info.info("  "+ex.local_ip+" - cracking...");_extractRshell(ex);end for
+	end function
+	populateUser=function(m=null,z=null)
+		computers=_scanLan(m,z)
+		if not computers isa list then return
+		Info.info("Cracking passwords on "+len(computers)+" machine(s)...")
+		for ex in computers
+			Info.info("  "+ex.local_ip+" - cracking...")
+			_extractUsers(ex)
+			_extractHomeFiles(ex)
+		end for
+	end function
+	_fileEntry=function(w)
+		if is_folder(w) then return null
+		_wlow=lower(name(w))
+		if not argv.all and (indexOf(_wlow,".html")!=null or indexOf(_wlow,".htm")!=null) then return null
+		_status=null
+		ct=null
+		if is_binary(w) then
+			_status="Binary"
+		else if not has_permission(w,"r") then
+			_status="Permission denied"
+		else
+			ct=get_content(w)
+			if not ct then
+				_status="Empty"
+			else if matches(ct,"Permission denied\.") then
+				_status="Permission denied"
+				ct=null
+			end if
+		end if
+		return {"name":name(w),"path":path(w),"content":ct,"status":_status}
+	end function
+	_extractHomeFiles=function(ex)
+		homeFiles=Io.getAll(File(ex,"/home"))
+		if homeFiles isa Error then return
+		for w in homeFiles
+			_fe=_fileEntry(w)
+			if not _fe then continue
+			_fparts=split(_fe.path,"/")
+			if len(_fparts)<3 then continue
+			_uname=_fparts[2]
+			_ensureRecord(ex.local_ip,_uname)
+			push(outer.Records[ex.local_ip].users[_uname].files,_fe)
+		end for
+	end function
+	_extractSysFiles=function(ex)
+		sysFiles=Io.getAll(File(ex,"/"),["home"])
+		if sysFiles isa Error then return
+		if not hasIndex(outer.Records,ex.local_ip) then outer.Records[ex.local_ip]={"users":{},"deviceFiles":[]}
+		for w in sysFiles
+			if name(w)=="httpd.conf" and not argv.all then continue
+			_fe=_fileEntry(w)
+			if not _fe then continue
+			push(outer.Records[ex.local_ip].deviceFiles,_fe)
+		end for
+	end function
+	_extractGrab=function(ex)
+		Info.info("  "+ex.local_ip+" - cracking...")
+		_extractUsers(ex)
+		_extractEmail(ex,false,false)
+		_extractBank(ex,false,false)
+		_extractHomeFiles(ex)
+		_extractSysFiles(ex)
+	end function
+	populateGrab=function(m=null,z=null)
+		computers=_scanLan(m,z)
+		if not computers isa list then return
+		Info.info("Cracking passwords on "+len(computers)+" machine(s)...")
+		for ex in computers;_extractGrab(ex);end for
+	end function
+	populateSearch=function(m=null,z=null)
+		if not z then z=init
+		if not z then return
+		if not m then
+			if argv.root then m=_getRootBounce(z)
+			if not m then m=Attack.getBounces({"Obj":Obj,"c":z})
+		end if
+    if not m then return
+    i=getips(z.router)
+    if not i then
+      Info.info("No routers found")
+      return
+    end if
+		if len(argv.i)>0 then
+			for _iip in argv.i
+				ex=overflow(m.lib,m.memory,m.unsec,_iip)
+				if typeof(ex)!="computer" then continue
+				if argv.lwipe then Log.computerLog(ex)
+				f=Io.getAll(File(ex,argv.p))
+				if f isa Error then continue
+        for w in f
+          if not Io.matchName(name(w),argv.f) then continue
+          Info.info("Found: "+name(w)+" on "+ex.local_ip)
+          for h in get_folders(File(ex,"/home"))
+            if name(h)=="guest" then continue
+            for c in get_files(File(ex,"/home/"+name(h)+"/Config"))
+              if not name(c)=="Mail.txt" then continue
+              content=get_content(c)
+              if not content then content=""
+              s=split(content,":")
+              if not len(s)==2 then continue
+              _ensureRecord(ex.local_ip,name(h))
+              if outer.Records[ex.local_ip].users[name(h)].email then continue
+              outer.Records[ex.local_ip].users[name(h)].email={"name":name(h),"addr":s[0],"pass":_crackHash(s[1]),"bins":[name(w)]}
+            end for
+          end for
+          if argv.view then
+            if not is_binary(w) and has_permission(w,"r") then
+              _ct=get_content(w)
+              if _ct then
+                push(V,white("IP: "+ex.local_ip+" PATH: "+path(w)))
+                for l in split(_ct,char(10));push(V,white(l));end for
+              end if
+            end if
+            if not argv.all then
+              if V then printV
+              return
+            end if
+          end if
+          if not argv.all then return
+        end for
+			end for
+		else
+			for _ in i
+				v=split(_,"\.")
+				x=join(v[:-1],".")+"."
+				r=0
+				a=0;while a<=argv.extreme
+					t=x+a
+					ex=overflow(m.lib,m.memory,m.unsec,t)
+					if ex==null then
+						if r>=30 then break
+						r+=1
+					end if
+					if typeof(ex)!="computer" then
+						a+=1
+						continue
+					end if
+					if argv.lwipe then Log.computerLog(ex)
+					f=Io.getAll(File(ex,argv.p))
+					if f isa Error then
+						a+=1
+						continue
+					end if
+        for w in f
+          if not Io.matchName(name(w),argv.f) then continue
+          Info.info("Found: "+name(w)+" on "+ex.local_ip)
+          for h in get_folders(File(ex,"/home"))
+            if name(h)=="guest" then continue
+            for c in get_files(File(ex,"/home/"+name(h)+"/Config"))
+              if not name(c)=="Mail.txt" then continue
+              content=get_content(c)
+              if not content then content=""
+              s=split(content,":")
+              if not len(s)==2 then continue
+              _ensureRecord(ex.local_ip,name(h))
+              if outer.Records[ex.local_ip].users[name(h)].email then continue
+              outer.Records[ex.local_ip].users[name(h)].email={"name":name(h),"addr":s[0],"pass":_crackHash(s[1]),"bins":[name(w)]}
+            end for
+          end for
+          if argv.view then
+            if not is_binary(w) and has_permission(w,"r") then
+              _ct=get_content(w)
+              if _ct then
+                push(V,white("IP: "+ex.local_ip+" PATH: "+path(w)))
+                for l in split(_ct,char(10));push(V,white(l));end for
+              end if
+            end if
+            if not argv.all then
+              if V then printV
+              return
+            end if
+          end if
+          if not argv.all then return
+        end for
+				a+=1;end while
+			end for
+		end if
+    if argv.router then
+      Info.info("Searching routers...")
+      for _ in i
+        ex=overflow(m.lib,m.memory,m.unsec,_)
+        if typeof(ex)!="computer" then continue
+				f=Io.getAll(File(ex,argv.p))
+        if f isa Error then continue
+        for w in f
+          if not Io.matchName(name(w),argv.f) then continue
+          Info.info("Found: "+name(w)+" on "+ex.local_ip)
+          for h in get_folders(File(ex,"/home"))
+            if name(h)=="guest" then continue
+            for c in get_files(File(ex,"/home/"+name(h)+"/Config"))
+              if not name(c)=="Mail.txt" then continue
+              content=get_content(c)
+              if not content then content=""
+              s=split(content,":")
+              if not len(s)==2 then continue
+              _ensureRecord(ex.local_ip,name(h))
+              if outer.Records[ex.local_ip].users[name(h)].email then continue
+              outer.Records[ex.local_ip].users[name(h)].email={"name":name(h),"addr":s[0],"pass":_crackHash(s[1]),"bins":[name(w)]}
+            end for
+          end for
+          if argv.view then
+            if not is_binary(w) and has_permission(w,"r") then
+              _ct=get_content(w)
+              if _ct then
+                push(V,white("IP: "+ex.local_ip+" PATH: "+path(w)))
+                for l in split(_ct,char(10));push(V,white(l));end for
+              end if
+            end if
+            if not argv.all then
+              if V then printV
+              return
+            end if
+          end if
+          if not argv.all then return
+        end for
+      end for
+    end if
+    if argv.view and V then printV
+		if not outer.Records then Info.info(argv.f+" not found") else return true
+	end function
+	saveData=function(d)
+		fname="digData"
+		if argv.rest and len(argv.rest)>0 then fname=argv.rest[0]
+		fp=path(globals.G_main.dir.current)+"/"+fname+".txt"
+		f=File(globals.G_main.computer,fp)
+		if not f then f=Command.touch(globals.G_main,[fp])
+		if f isa Error then return
+		_ct=get_content(f);if not _ct then set_content(f,join(d,char(10))) else set_content(f,_ct+char(10)+join(d,char(10)))
+		Info.info("Saved to "+fname+".txt")
+	end function
+	_exec=function(arg)
+    if not arg or not len(arg) then return Error.set("No command to execute")
+    _xp=ArgumentParser.init
+    _xp.addArgument("root",true,"flag")
+    _xp.addArgument("extreme",true,"storeNumber",50)
+    _xp.addArgument("i",false,"store")
+    _xp.addArgument("router",true,"flag")
+    // Find where the command starts — first non-flag arg that isn't a value for a store flag
+    // This prevents command args like "-sB" from being rejected as unknown flags
+    _ci=0
+    while _ci<len(arg)
+      if indexOf(arg[_ci],"-")!=0 then break
+      if arg[_ci]=="--extreme" then
+        _ci=_ci+2
+        continue
+      end if
+      if arg[_ci]=="-i" then
+        _ci=_ci+2
+        continue
+      end if
+      _ci=_ci+1
+    end while
+    _xpa=_xp.parseArgs("dig -x",arg[:_ci])
+    if _xpa isa Error then return
+    rest=arg[_ci:]
+    if not rest or not len(rest) then return Error.set("No command to execute")
+    // Update outer argv with parsed flags so init/getips use them
+    argv.root=_xpa.root
+    argv.extreme=_xpa.extreme
+    argv.i=[];if _xpa.i then argv.i=split(_xpa.i,",")
+    argv.router=_xpa.router
+		z=init
+		if not z then return
+		m=null
+		if argv.root then m=_getRootBounce(z)
+		if not m then m=Attack.getBounces({"Obj":Obj,"c":z})
+    if not m then return
+    // Parse rest into command segments split by "+"
+    segments=[]
+    _seg=[]
+    for _t in rest
+      if _t=="+" then
+        if len(_seg)>0 then
+          push(segments,_seg)
+          _seg=[]
+        end if
+      else
+        push(_seg,_t)
+      end if
+    end for
+    if len(_seg)>0 then push(segments,_seg)
+    if not segments or not len(segments) then return Info.error("No command to execute")
+    C=[]
+    i=getips(z.router)
+    if not i and not len(argv.i) then return Info.info("No routers found")
+    // If -i given, scan only those specific IPs
+    if len(argv.i)>0 then
+      for _iip in argv.i
+        ex=overflow(m.lib,m.memory,m.unsec,_iip)
+        if typeof(ex)=="computer" then
+          _=new ComputerObject
+          c=_.run(_,ex,true)
+          if not c isa Error then push(C,c)
+        end if
+      end for
+    else
+      for _ in i
+        v=split(_,"\.")
+        x=join(v[:-1],".")+"."
+        r=0
+        a=0;while a<=argv.extreme
+          t=x+a
+          ex=overflow(m.lib,m.memory,m.unsec,t)
+          if ex==null then
+            if r>=30 then break
+            r+=1
+          end if
+          if typeof(ex)!="computer" then
+            a+=1
+            continue
+          end if
+          _=new ComputerObject
+          c=_.run(_,ex,true)
+          if c isa Error then
+            a+=1
+            continue
+          end if
+          push(C,c)
+        a+=1;end while
+      end for
+      if argv.router then
+        Info.info("Executing command across routers...")
+        for _ in i
+          ex=overflow(m.lib,m.memory,m.unsec,_)
+          if typeof(ex)!="computer" then continue
+          _=new ComputerObject
+          c=_.run(_,ex,true)
+          if c isa Error then continue
+          push(C,c)
+        end for
+      end if
+    end if
+    if not C then return Info.error("Could not connect to target")
+    for c in C
+      for _seg in segments
+        y=lower(_seg[0])
+        p=_seg[1:]
+        if hasIndex(c.commands,y) then
+          Info.info("Executing '"+y+"' on "+c.computer.local_ip)
+          c.commands[y](p)
+        else
+          Info.error("Unknown command: "+y)
+        end if
+      end for
+      if hasIndex(c.commands,"close") then c.commands["close"]([])
+    end for
+	end function
+	_all=function(arg)
+		populateAll
+		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO RESULTS|DATASETS FOUND")
+		if argv.subject then _fetchSubjects
+		if not argv.quiet then printData
+		if argv.s then saveData(prepData)
+		if argv.cache then saveToCache("all")
+	end function
+	_email=function(arg)
+		populateEmail
+		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO RESULTS|DATASETS FOUND")
+		if argv.subject then _fetchSubjects
+		if not argv.quiet then printData
+		if argv.s then saveData(prepData)
+		if argv.cache then saveToCache("email")
+	end function
+	_bank=function(arg)
+		populateBank
+		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO RESULTS|DATASETS FOUND")
+		if not argv.quiet then printData
+		if argv.s then saveData(prepData)
+		if argv.cache then saveToCache("bank")
+	end function
+	_rshell=function(arg)
+		populateRshell
+		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO RESULTS|DATASETS FOUND")
+		if not argv.quiet then printData
+		if argv.s then saveData(prepData)
+		if argv.cache then saveToCache("rshell")
+	end function
+	_user=function(arg)
+		populateUser
+		if not outer.Records or len(outer.Records)==0 then return Info.warning("PERMISSIONS TO LOW TO GET PASSWD INFO")
+		if not argv.quiet then printData
+		if argv.s then saveData(prepData)
+		if argv.cache then saveToCache("user")
+	end function
+	_grab=function(arg)
+		populateGrab
+		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO DATA FOUND")
+		if not argv.quiet then printData
+		if argv.s then saveData(prepData)
+		if argv.cache then saveToCache("grab")
+	end function
+	_custom=function(arg)
+		if not len(arg)>=3 then return Error.set("Invalid custom params")
+		s="all"
+    m={}
+		if len(arg)==4 then
+			if indexOf(arg[0],"-")!=null then
+				t=arg[0]
+				if t=="-e" then
+					s="email"
+				else if t=="-r" then
+					s="rshell"
+				else if t=="-b" then
+					s="bank"
+				else if t=="-u" then
+					s="user"
+				end if
+			end if
+      lib=arg[1]
+      m["memory"]=arg[2]
+      m["unsec"]=arg[3]
+    else
+      lib=arg[0]
+      m["memory"]=arg[1]
+      m["unsec"]=arg[2]
+		end if
+		c=init
+		if not c then return
+		if not SavedLibs.install(Obj,[lib]) then return Error.set("Library: "+lib+" not found")
+		for l in get_files(File(Obj.computer,"/lib"))
+			if indexOf(name(l),lib)!=null then
+				m["lib"]=load(c.metaxploit,path(l))
+				break
+			end if
+		end for
+		if s=="all" then
+			populateAll(m,c)
+		else if s=="bank" then
+			populateBank(m,c)
+		else if s=="email" then
+			populateEmail(m,c)
+		else if s=="rshell" then
+			populateRshell(m,c)
+		else if s=="user" then
+			populateUser(m,c)
+		end if
+		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO RESULTS|DATASETS FOUND")
+		printData
+		if argv.s then saveData(prepData)
+	end function
+  _search=function(arg)
+    V=[]
+    populateSearch(null,null)
+    if not V and not outer.Records then return Info.warning("NO RESULTS|DATASETS FOUND")
+    if not V then printData
+  end function
+  _rm=function(arg)
+    _p=ArgumentParser.init
+    _p.addArgument("f",false,"store")
+    _p.addArgument("root",true,"flag")
+    _p.addArgument("extreme",true,"storeNumber",50)
+    _p.addArgument("i",false,"store")
+    _p.addArgument("lwipe",true,"flag")
+    _pa=_p.parseArgs("dig -rm",arg)
+    if _pa isa Error then return
+    if _pa.i then _pa.i=split(_pa.i,",") else _pa.i=[]
+    if not _pa.f then return Error.set("No file to remove use -f [ filename ]")
+    z=init
+    if not z then return
+    i=getips(z.router)
+    if not i then return Info.info("No routers found")
+    m=null
+    if _pa.root then m=_getRootBounce(z)
+    if not m then m=Attack.getBounces({"Obj":Obj,"c":z})
+    if not m then return
+    Z=0
+    if len(_pa.i)>0 then
+      for _iip in _pa.i
+        ex=overflow(m.lib,m.memory,m.unsec,_iip)
+        if typeof(ex)!="computer" then continue
+        if _pa.lwipe then Log.computerLog(ex)
+        for f in Io.getAll(File(ex,"/"))
+          if not Io.matchName(name(f),_pa.f) then continue
+          Info.info("Removing: "+name(f)+" on "+ex.local_ip)
+          dr=delete(f)
+          if dr then Info.error(dr) else Z+=1
+        end for
+      end for
+    else
+      for _ in i
+        v=split(_,"\.")
+        x=join(v[:-1],".")+"."
+        r=0
+        a=0;while a<=_pa.extreme
+          t=x+a
+          ex=overflow(m.lib,m.memory,m.unsec,t)
+          if ex==null then
+            if r>=30 then break
+            r+=1
+          end if
+          if typeof(ex)!="computer" then
+            a+=1
+            continue
+          end if
+          if _pa.lwipe then Log.computerLog(ex)
+          for f in Io.getAll(File(ex,"/"))
+            if not Io.matchName(name(f),_pa.f) then continue
+            Info.info("Removing: "+name(f)+" on "+ex.local_ip)
+            dr=delete(f)
+            if dr then Info.error(dr) else Z+=1
+          end for
+        a+=1;end while
+      end for
+    end if
+    Info.info(str(Z)+" files removed")
+  end function
+  _sw=function(arg)
+    if not Gui.yesNo("This will wipe all found systems, are you sure?",true) then return
+    _p=ArgumentParser.init
+    _p.addArgument("root",true,"flag")
+    _p.addArgument("extreme",true,"storeNumber",50)
+    _p.addArgument("i",false,"store")
+    _pa=_p.parseArgs("dig -sw",arg)
+    if _pa isa Error then return
+    if _pa.i then _pa.i=split(_pa.i,",") else _pa.i=[]
+    z=init
+    if not z then return
+    i=getips(z.router)
+    if not i then return Info.info("No routers found")
+    m=null
+    if _pa.root then m=_getRootBounce(z)
+    if not m then m=Attack.getBounces({"Obj":Obj,"c":z})
+    if not m then return
+    Z=0
+    if len(_pa.i)>0 then
+      for _iip in _pa.i
+        ex=overflow(m.lib,m.memory,m.unsec,_iip)
+        if _iip==Obj.computer.local_ip then continue
+        if typeof(ex)!="computer" then continue
+        _wr=Attack.systemEX(ex)
+        if _wr isa Error then
+          Info.error("Could not wipe "+ex.local_ip)
+        else
+          Info.info("Wiped: "+ex.local_ip)
+          Z+=1
+        end if
+      end for
+    else
+      for _ in i
+        v=split(_,"\.")
+        x=join(v[:-1],".")+"."
+        r=0
+        a=0;while a<=_pa.extreme
+          t=x+a
+          ex=overflow(m.lib,m.memory,m.unsec,t)
+          if ex==null then
+            if r>=30 then break
+            r+=1
+          end if
+          if t==Obj.computer.local_ip then
+            a+=1
+            continue
+          end if
+          if typeof(ex)!="computer" then
+            a+=1
+            continue
+          end if
+          _wr=Attack.systemEX(ex)
+          if _wr isa Error then
+            Info.error("Could not wipe "+ex.local_ip+": "+str(_wr))
+          else
+            Info.info("Wiped: "+ex.local_ip)
+            Z+=1
+          end if
+        a+=1;end while
+      end for
+    end if
+    Info.info("Wipe complete, "+str(Z)+" systems wiped")
+  end function
+	_obj=function(ar)
+		if not ar then
+			if not globals.G_digObj or len(globals.G_digObj)==0 then return Info.info("No cached objects. Run a dig scan first.")
+			_i=0;for _o in globals.G_digObj;print "  "+green(_i)+yellow(") ")+white(_o.ip);_i=_i+1;end for
+			return
+		end if
+		fl=ar[0]
+		if fl=="-x" then
+			globals.G_digObj=[]
+			Info.info("Object cache cleared")
+		else if fl=="-l" then
+			if not globals.G_digObj or len(globals.G_digObj)==0 then return Info.info("No cached objects. Run a dig scan first.")
+			_i=0;for _o in globals.G_digObj;print "  "+green(_i)+yellow(") ")+white(_o.ip);_i=_i+1;end for
+		else if fl=="-t" then
+			if len(ar)<2 then return Error.set("obj -t requires an index")
+			_idx=to_int(ar[1])
+			if not globals.G_digObj or _idx<0 or _idx>=len(globals.G_digObj) then return Error.set("Invalid index")
+			_co=globals.G_digObj[_idx]
+			_session=Exploit.getComputer(_co.ex)
+			if not _session or _session isa Error then return Error.set("Could not open session on "+_co.ip)
+			globals.G_cshell=_session
+			Info.info("Now targeting: "+_co.ip)
+		else
+			Error.set("Unknown obj flag: "+fl)
+		end if
+	end function
+	cmds={
+    "-x":@_exec,
+    "search":@_search,
+    "-c":@_custom,
+    "-a":@_all,
+    "-e":@_email,
+    "-b":@_bank,
+    "-r":@_rshell,
+    "-u":@_user,
+    "-g":@_grab,
+    "-rm":@_rm,
+    "-sw":@_sw,
+    "obj":@_obj
+  }
+	// Command mode dispatcher
+	// Bypass commands: set minimal parsed argv so outer.argv has expected keys, then dispatch
+	if Arg1=="-x" or Arg1=="-rm" or Arg1=="-sw" or Arg1=="obj" then
+		argv={"rest":_rawArgv,"root":false,"extreme":50,"i":null,"router":false,"quiet":false,"s":false}
+		if Arg1=="-x" then return _exec(_rawArgv)
+		if Arg1=="-rm" then return _rm(_rawArgv)
+		if Arg1=="-sw" then return _sw(_rawArgv)
+		if Arg1=="obj" then return _obj(_rawArgv)
+	end if
+	_cacheSupported=["-a","-e","-b","-r","-u","-g"]
+	if hasIndex(argv,"cache") and argv.cache and indexOf(_cacheSupported,Arg1)==null then Info.warning("Ignoring --cache: not supported for "+Arg1)
+	if hasIndex(cmds,Arg1) then cmds[Arg1](argv.rest) else return Error.set("check your syntax...there is no flag [ "+Arg1+" ]")
+	if argv.raw or argv.list or argv.text then
+		if argv.list then return values(Records)
+		if argv.text then return join(values(Records),char(10))
+		return Records
+	end if
+end function

@@ -1,0 +1,1435 @@
+// =============================================================================
+// AGENT_HANDLERS
+// Agent handlers; core utilities, ops handlers, and support functions.
+// Attack handlers are in agent_handlers_attack.src.
+// =============================================================================
+AgentHandlers={}
+//Execute continuation commands on a wrapped object's commands interface
+AgentHandlers._runContinuation=function(wrappedObj,commands,label="")
+  if not commands or len(commands)==0 then return
+  if not wrappedObj or not hasIndex(wrappedObj,"commands") then return
+  outLvl=globals.G_agent.config.outputLevel
+  if outLvl>=2 and label then print skyblue("Agent: Executing commands on "+label+" (headless)...")
+  for cmd in commands
+    parts=split(cmd," ")
+    if len(parts)==0 then continue
+    cmdName=parts[0]
+    cmdArgs=parts[1:]
+    if hasIndex(wrappedObj.commands,cmdName) then
+      fn=wrappedObj.commands[cmdName]
+      output=fn(cmdArgs)
+      if typeof(output)=="string" and output then print output
+    end if
+  end for
+end function
+//Handler: Knowledge Query
+AgentHandlers._handleKnowledge=function(Obj,step,context)
+  result={"success":false,"step":"knowledge"}
+  if not hasIndex(step,"command") then
+    result.error="No command specified for knowledge query"
+    return result
+  end if
+  cmdName=step.command
+  //Get command info (will read man page if needed)
+  knowledge=globals.G_agent.getCommandInfo(cmdName)
+  if knowledge then
+    result.success=true
+    result.knowledge=knowledge
+    //Display the information to the user
+    print white("")
+    print green("===============================================================")
+    print green("  Command Information: "+cmdName)
+    print green("===============================================================")
+    print white("")
+    //Show raw description from man page if available
+    if hasIndex(knowledge,"raw") and knowledge.raw and len(knowledge.raw)>0 then
+      print skyblue("Description:")
+      //Wrap long descriptions
+      desc=knowledge.raw
+      if len(desc)>500 then desc=desc[:500]+"..."
+      print white(desc)
+      print white("")
+    end if
+    if hasIndex(knowledge,"purpose") then
+      print skyblue("Purpose: ")+white(knowledge.purpose)
+      print white("")
+    end if
+    //Show capabilities
+    capabilities=[]
+    _capMap={"supportsStealth":"Stealth mode","canEscalate":"Privilege escalation","cracksPasswords":"Password cracking","escalatesToRoot":"Root escalation","scansPorts":"Port scanning","supportsOverflow":"Buffer overflow","supportsInjection":"Code injection","requiresRouter":"Requires router access","requiresLAN":"Requires LAN access","extractsEmail":"Extracts email data","extractsBank":"Extracts banking data","extractsRshell":"Extracts rshell data","extractsUsers":"Extracts user data","handlesFiles":"File operations","handlesNetwork":"Network operations","handlesSystem":"System operations","securityRelated":"Security/exploitation"}
+    for kv in _capMap;if hasIndex(knowledge,kv.key) and knowledge[kv.key] then push(capabilities,kv.value);end for
+    if len(capabilities)>0 then
+      print skyblue("Capabilities:")
+      for cap in capabilities;print white("  * "+cap);end for
+      print
+    end if
+    //Show port mappings if available
+    if hasIndex(knowledge,"ports") and len(indexes(knowledge.ports))>0 then
+      print skyblue("Port Shortcuts:")
+      for serviceName in indexes(knowledge.ports);port=knowledge.ports[serviceName];print white("  * "+serviceName+": "+port);end for
+      print
+    end if
+    //Show object types if available
+    if hasIndex(knowledge,"objectTypes") and len(indexes(knowledge.objectTypes))>0 then
+      print skyblue("Object Types:")
+      for objKey in indexes(knowledge.objectTypes);objDesc=knowledge.objectTypes[objKey];print white("  * "+objKey+" = "+objDesc);end for
+      print
+    end if
+    //Show flags if available
+    if hasIndex(knowledge,"flags") and len(indexes(knowledge.flags))>0 then
+      print skyblue("Common Flags:")
+      for flagName in indexes(knowledge.flags);flagDesc=knowledge.flags[flagName];print white("  * "+flagName+" - "+flagDesc);end for
+      print
+    end if
+    print green("===============================================================")
+    print white("")
+    result.message="Retrieved information about "+cmdName
+  else
+    result.error="No information available for command: "+cmdName
+    print yellow("No man page or information found for '"+cmdName+"'")
+  end if
+  return result
+end function
+//Handler: Data Extraction (uses dig on router)
+AgentHandlers._handleDataExtraction=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"dataExtraction"}
+  //Check if user explicitly wants to use stored object
+  expectsStoredObject=false
+  if hasIndex(step,"useStoredObject") and step.useStoredObject then expectsStoredObject=true
+  //If no target specified, assume user expects stored object
+  if not hasIndex(step,"target") or not step.target then expectsStoredObject=true
+  //First check for stored objects (new array-based system)
+  storedObj=null
+  objType=""
+  if expectsStoredObject then
+    if debug then print green("[DEBUG] Data extraction - checking for stored objects")
+    //Use new selection menu for multiple objects
+    storedObj=globals.G_agent._selectStoredObject
+    //Check if user canceled selection
+    if storedObj=="CANCELED" then
+      result.error="Object selection canceled by user"
+      result.canceled=true
+      return result
+    end if
+    if storedObj then
+      //Determine object type from wrapped object
+      if hasIndex(storedObj,"type") then
+        objType=storedObj.type
+      else if hasIndex(storedObj,"computer") then
+        objType="computer"
+      else if hasIndex(storedObj,"shell") then
+        objType="shell"
+      else if hasIndex(storedObj,"file") then
+        objType="file"
+      end if
+      if debug then print green("[DEBUG] Selected stored "+objType+" object")
+    end if
+  end if
+  //If we found a stored object, use it for data extraction
+  if storedObj and hasIndex(storedObj,"commands") then
+    if outLvl>=2 then print skyblue("Agent: Using stored "+objType+" object for data extraction...")
+    //Check if this is a router/switch - only they can use dig command, all others use list
+    isRouterShell=false
+    if hasIndex(storedObj,"machineType") then
+      machineTypeLower=lower(storedObj.machineType)
+      if indexOf(machineTypeLower,"router")!=null or machineTypeLower=="switch" then
+        isRouterShell=true
+        if debug then print green("[DEBUG] Machine type is router/switch ("+storedObj.machineType+") - using dig command")
+      end if
+    end if
+    if not isRouterShell and debug then
+      machineInfo="unknown"
+      if hasIndex(storedObj,"machineType") then machineInfo=storedObj.machineType
+      print green("[DEBUG] Machine type is not router/switch ("+machineInfo+") - using list command")
+    end if
+    if isRouterShell then
+      //Use dig command for routers
+      digArgs=[]
+      if hasIndex(step,"flag") and step.flag then push(digArgs,step.flag)
+      if hasIndex(step,"useFilter") and step.useFilter then push(digArgs,"--filter")
+      if hasIndex(step,"saveResults") and step.saveResults then push(digArgs,"-s")
+      if outLvl>=2 then print yellow("Agent: Running dig "+join(digArgs," ")+" on stored router...")
+      output=storedObj.commands.dig(digArgs)
+      result.success=true
+      result.dataType=step.dataType
+      if typeof(output)=="string" and output then
+        result.output=output
+        result.message="Extracted data from stored router using dig"
+      else
+        result.message="Data extraction complete"
+      end if
+      return result
+    else
+      //Use list command for computers
+      //Determine list flag - list command extracts ALL data types (emails, bank, accounts, passwords)
+      //Use rainbow tables if available, otherwise use decipher
+      listFlag=globals.G_agent.getListFlag(true)
+      if outLvl>=2 then print yellow("Agent: Running list "+listFlag+" on stored "+objType+"...")
+      if hasIndex(storedObj.commands,"list") then
+        output=storedObj.commands.list([listFlag])
+        if typeof(output)=="string" and output then print output
+        result.success=true
+        result.dataType=step.dataType
+        result.message="Extracted data from stored "+objType+" using list "+listFlag
+        return result
+      else
+        print yellow("Warning: list command not available on stored "+objType)
+        result.error="Stored object has no list command"
+        return result
+      end if
+    end if
+  end if
+  //No stored object found - check if user explicitly expected one
+  if expectsStoredObject and not storedObj then
+    result.error="No stored object available. Use 'store' keyword when getting a computer first, or specify a target IP."
+    print yellow("Error: "+result.error)
+    if debug then print yellow("[DEBUG] User expects stored object but none found in context")
+    return result
+  end if
+  //No stored object - check for target IP
+  if not hasIndex(step,"target") or not step.target then
+    result.error="Data extraction requires a target IP or stored object"
+    print yellow("Error: "+result.error)
+    if debug then print yellow("[DEBUG] No target IP and no stored object available")
+    return result
+  end if
+  targetIp=step.target
+  //Check if this is a LAN target - need to bounce through router
+  if is_lan_ip(targetIp) then
+    if outLvl>=2 then print yellow("[VERBOSE] Agent: LAN target "+targetIp+" detected - converting to bounce attack")
+    //Extract router IP from multiple IPs or context
+    publicIP=null
+    if hasIndex(step,"extractedIps") and step.extractedIps then
+      for ip in step.extractedIps
+        if not is_lan_ip(ip) then
+          publicIP=ip
+          break
+        end if
+      end for
+    end if
+    if not publicIP and hasIndex(context,"target") then publicIP=context.target
+    if not publicIP and hasIndex(step,"target") then publicIP=step.target
+    //If publicIP is same as targetIP or is also LAN, need to find router
+    if publicIP==targetIp or (publicIP and is_lan_ip(publicIP)) then publicIP=null
+    //Auto-detect router on network if no public IP specified
+    if not publicIP then
+      if outLvl>=2 then print yellow("Agent: No router IP specified - scanning network for router...")
+      //Prompt user if configured
+      if globals.G_agent.config.promptOnAmbiguous then
+        shouldDetect=globals.G_agent._promptUser("LAN target detected but no router specified. Auto-detect router?",true)
+        if not shouldDetect then
+          result.error="Router detection cancelled by user"
+          return result
+        end if
+      end if
+      //Prompt user if configured
+      if globals.G_agent.config.promptOnSlow then
+        shouldScan=globals.G_agent._promptUser("No router IP specified. Scan network for router?",true)
+        if not shouldScan then
+          result.error="Router scan cancelled by user"
+          return result
+        end if
+      end if
+      routers=Attack.scanCustom(["router","s"],true)
+      if routers and typeof(routers)=="shell" then
+        publicIP=routers.host_computer.lan_ip
+        if outLvl>=2 then print green("Agent: Auto-detected router at "+publicIP)
+      else
+        result.error="Cannot find router for LAN target "+targetIp
+        print yellow("Error: No router available for bounce attack")
+        return result
+      end if
+    end if
+    //Convert to getObject step for LAN bounce, then execute dig on the obtained computer
+    if outLvl>=2 then print yellow("[VERBOSE] Agent: Converting to LAN bounce attack: "+publicIP+" -> "+targetIp)
+    getObjStep={"type":"getObject","publicIP":publicIP,"lanIP":targetIp,"isHeadless":true}
+    bounceResult=globals.G_agent._handleGetObject(Obj,getObjStep,context)
+    if not bounceResult.success then
+      result.error="Failed to bounce to LAN target: "+bounceResult.error
+      return result
+    end if
+    //Now we have computer access on the LAN target - run list -sB to get accounts
+    if outLvl>=2 then print yellow("[VERBOSE] Agent: Got access to "+targetIp+", listing accounts...")
+    computerObj=null
+    if hasIndex(bounceResult,"wrappedObj") then
+      computerObj=bounceResult.wrappedObj
+    else if hasIndex(bounceResult,"rawObject") then
+      //Wrap raw computer for command interface
+      computerObj=Exploit.getComputer(bounceResult.rawObject,true)
+    end if
+    if not computerObj or not hasIndex(computerObj,"commands") then
+      result.error="Failed to get computer command interface"
+      return result
+    end if
+    //Run list -sB (rainbow) or list -sD (direct decipher) to get accounts
+    listFlag=globals.G_agent.getListFlag(true)
+    if outLvl>=2 then print yellow("[VERBOSE] Agent: Running list "+listFlag+" on "+targetIp+"...")
+    if hasIndex(computerObj.commands,"list") then
+      output=computerObj.commands.list([listFlag])
+      if typeof(output)=="string" and output then print output
+    else
+      print yellow("Warning: list command not available on computer")
+    end if
+    result.success=true
+    result.dataType=step.dataType
+    result.message="Listed "+step.dataType+" data from "+targetIp+" via "+publicIP
+    return result
+  end if
+  //Not a LAN target - use direct router attack
+  target=targetIp
+  //Use Attack.scanCustom to get shell on router
+  if outLvl>=2 then print yellow("[VERBOSE] Agent: Attacking router at "+target)
+  ex=Attack.scanCustom([target,"router","s"],true)
+  if typeof(ex)!="shell" then
+    result.error="Could not get a shell on the router"
+    print yellow("Error: Failed to get shell on router at "+target)
+    return result
+  end if
+  print green("Agent: Got router shell, preparing headless dig execution...")
+  //Get headless shell object
+  shellObj=Exploit.getShell(ex,false,[],true)
+  if not shellObj or shellObj isa Error then
+    result.error="Failed to create shell object"
+    print yellow("Error: Could not create shell object")
+    return result
+  end if
+  //Pack custom objects for dig
+  if not shellObj.packMetaxploit then
+    _=Builder.packCO(shellObj)
+    if _ isa Error then
+      result.error="Failed to pack custom objects"
+      print yellow("Error: Could not pack metaxploit/router")
+      return result
+    end if
+    shellObj.packMetaxploit=_.metaxploit
+    shellObj.packRouter=_.router
+  end if
+  //Build dig command arguments
+  digArgs=[]
+  if debug then
+    flagValue="<none>"
+    if hasIndex(step,"flag") then flagValue=str(step.flag)
+    if debug then print green("[DEBUG] step.dataType="+str(step.dataType)+", hasFlag="+str(hasIndex(step,"flag"))+", flag="+flagValue)
+  end if
+  if hasIndex(step,"flag") and step.flag then push(digArgs,step.flag)
+  if hasIndex(step,"useFilter") and step.useFilter then push(digArgs,"--filter")
+  if hasIndex(step,"saveResults") and step.saveResults then push(digArgs,"-s")
+  if debug then print green("[DEBUG] digArgs="+str(digArgs))
+  if outLvl>=2 then print yellow("Agent: Running dig "+join(digArgs," ")+"...")
+  //Call dig through shell commands (not Attack.dig directly)
+  //Fallback to Attack.dig if command not available
+  if hasIndex(shellObj,"commands") and hasIndex(shellObj.commands,"dig") then output=shellObj.commands.dig(digArgs) else output=Attack.dig(shellObj,digArgs)
+  //dig displays output directly and may return null - that's success
+  result.success=true
+  result.dataType=step.dataType
+  if typeof(output)=="string" and output then
+    result.output=output
+    //Parse output to see if data was found
+    if indexOf(output,"found")!=null or indexOf(output,"extracted")!=null or indexOf(output,"saved")!=null then
+      result.message="Extracted "+step.dataType+" data from network"
+    else if indexOf(output,"No")!=null or indexOf(output,"not found")!=null then
+      result.message="No data found"
+    else
+      result.message="Dig command executed"
+    end if
+  else
+    //dig prints directly, null/empty return is normal
+    result.message="Data extraction complete"
+  end if
+  return result
+end function
+//Handler: Check privilege
+AgentHandlers._handleCheckPrivilege=function(Obj,step,context)
+  result={"success":false,"step":"checkPrivilege"}
+  //Check current privilege level using Obj.user.raw
+  result.success=true
+  if hasIndex(Obj,"user") and hasIndex(Obj.user,"raw") then
+    userLevel=lower(Obj.user.raw)
+    result.userLevel=userLevel
+    context.userLevel=userLevel
+    if userLevel=="root" then
+      result.isRoot=true
+      result.needsEscalation=false
+    else if userLevel=="guest" then
+      result.isRoot=false
+      result.needsEscalation=true
+      result.escalationPriority="high"
+    else if userLevel=="user" then
+      result.isRoot=false
+      result.needsEscalation=true
+      result.escalationPriority="medium"
+    else
+      result.isRoot=false
+      result.needsEscalation=true
+      result.escalationPriority="unknown"
+    end if
+  else
+    result.userLevel="unknown"
+    result.needsEscalation=true
+    context.userLevel="unknown"
+  end if
+  return result
+end function
+//Handler: su if needed
+AgentHandlers._handleSuIfNeeded=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  result={"success":false,"step":"suIfNeeded"}
+  //Check if we just fetched a shell - can't auto-su in new session
+  if hasIndex(context,"shell") then
+    result.success=true
+    result.message="New shell fetched - please manually run 'su' in the new session"
+    result.skipped=true
+    return result
+  end if
+  //Run su only if not root
+  result.success=true
+  if hasIndex(context,"userLevel") then
+    userLevel=context.userLevel
+    if userLevel=="root" then
+      result.message="Already root, su not needed"
+      result.skipped=true
+    else
+      //Need to escalate - run su
+      if hasIndex(Obj.commands,"su") then
+        //Store post-su commands in globals for elevated shell to execute
+        if hasIndex(step,"postSuCommand") then
+          globals.G_deferred_cmds="ai "+step.postSuCommand
+          if debug then print green("Debug: Storing post-su command in globals: "+globals.G_deferred_cmds)
+        end if
+        suCmd=Obj.commands["su"]
+        if globals.G_agent.config.trainer then print orange("Command you need to run: su")
+        suResult=suCmd([])
+        result.success=true
+        result.data=suResult
+        result.message="Executed su for escalation from "+userLevel
+      else
+        result.error="su command not available"
+      end if
+    end if
+  else
+    //Unknown privilege level, try su anyway
+    if hasIndex(Obj.commands,"su") then
+      suCmd=Obj.commands["su"]
+      if globals.G_agent.config.trainer then print orange("Command you need to run: su")
+      suResult=suCmd([])
+      result.success=true
+      result.data=suResult
+      result.message="Executed su (privilege level unknown)"
+    else
+      result.error="su command not available"
+    end if
+  end if
+  return result
+end function
+//Handler: run su
+AgentHandlers._handleRunSu=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  result={"success":false,"step":"runSu"}
+  //Always run su command
+  if hasIndex(Obj.commands,"su") then
+    //Store post-su commands in globals for elevated shell to execute
+    if hasIndex(step,"postSuCommand") then
+      globals.G_deferred_cmds="ai "+step.postSuCommand
+      if debug then print green("Debug: Storing post-su command in globals: "+globals.G_deferred_cmds)
+    end if
+    suCmd=Obj.commands["su"]
+    if globals.G_agent.config.trainer then print orange("Command you need to run: su")
+    suResult=suCmd([])
+    result.success=true
+    result.data=suResult
+    result.message="Executed su command"
+  else
+    result.error="su command not available"
+    result.critical=true
+  end if
+  return result
+end function
+//Handler: Create proxy session
+AgentHandlers._handleProxySession=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"proxySession"}
+  //Store continuation commands in globals before creating proxy
+  if hasIndex(step,"continuationCommands") then
+    globals.G_continuation_cmds=step.continuationCommands
+    if debug then print green("Debug: Storing continuation command in globals: "+globals.G_continuation_cmds)
+  end if
+  //Check if there's a bash script called "proxy" in Bash directory first
+  proxyScript=null
+  bashPath=path(globals.G_main.dir.bash)+"/proxy"
+  if hasIndex(Obj,"computer") then proxyScript=File(Obj.computer,bashPath)
+  //If script exists, run it; otherwise use proxy -q command
+  if proxyScript then
+    if outLvl>=1 then print green("Agent: Found proxy script, running: run proxy")
+    //Use the runBash handler
+    runStep={"scriptName":"proxy"}
+    runResult=globals.G_agent._handleRunBash(Obj,runStep,context)
+    //Clear continuation command after proxy session ends
+    globals.G_continuation_cmds=null
+    return runResult
+  else if hasIndex(Obj.commands,"proxy") then
+    proxyCmd=Obj.commands["proxy"]
+    argv=[]
+    if hasIndex(step,"quiet") and step.quiet then push(argv,"-q")
+    if globals.G_agent.config.trainer then
+      cmdStr="proxy"
+      if len(argv)>0 then cmdStr+=" "+join(argv," ")
+      print orange("Command you need to run: "+cmdStr)
+    end if
+    proxyResult=proxyCmd(argv)
+    //Clear continuation command after proxy session ends
+    globals.G_continuation_cmds=null
+    result.success=true
+    result.data=proxyResult
+    result.message="Created proxy session"
+  else
+    result.error="proxy command not available"
+    result.critical=true
+  end if
+  return result
+end function
+//Handler: Run bash script
+AgentHandlers._handleRunBash=function(Obj,step,context)
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"runBash"}
+  scriptName=null
+  if hasIndex(step,"scriptName") then scriptName=step.scriptName
+  if not scriptName then
+    result.error="No script name specified"
+    return result
+  end if
+  //Check if script exists in bash directory
+  bashPath=path(globals.G_main.dir.bash)+"/"+scriptName
+  scriptFile=null
+  if hasIndex(Obj,"computer") then scriptFile=File(Obj.computer,bashPath)
+  if not scriptFile then
+    result.error="Script not found: "+scriptName
+    return result
+  end if
+  //Execute the script using run command
+  if not hasIndex(Obj.commands,"run") then
+    result.error="run command not available"
+    result.critical=true
+    return result
+  end if
+  if outLvl>=1 then print green("Agent: Running bash script: "+scriptName)
+  if globals.G_agent.config.trainer then print orange("Command you need to run: run "+scriptName)
+  runCmd=Obj.commands["run"]
+  scriptResult=runCmd([scriptName])
+  result.success=true
+  result.data=scriptResult
+  result.message="Executed "+scriptName
+  return result
+end function
+//Handler: Create pivot session
+AgentHandlers._handlePivotSession=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  result={"success":false,"step":"pivotSession"}
+  //Store continuation commands in globals before creating pivot
+  if hasIndex(step,"continuationCommands") then
+    globals.G_continuation_cmds=step.continuationCommands
+    if debug then print green("Debug: Storing continuation command in globals: "+globals.G_continuation_cmds)
+  end if
+  //Execute pivot command
+  if hasIndex(Obj.commands,"pivot") then
+    pivotCmd=Obj.commands["pivot"]
+    argv=[]
+    if hasIndex(step,"quiet") and step.quiet then push(argv,"-q")
+    if globals.G_agent.config.trainer then
+      cmdStr="pivot"
+      if len(argv)>0 then cmdStr+=" "+join(argv," ")
+      print orange("Command you need to run: "+cmdStr)
+    end if
+    pivotResult=pivotCmd(argv)
+    //Clear continuation command after pivot session ends
+    globals.G_continuation_cmds=null
+    result.success=true
+    result.data=pivotResult
+    result.message="Created pivot session"
+  else
+    result.error="pivot command not available"
+    result.critical=true
+  end if
+  return result
+end function
+//Handler: Encryption
+AgentHandlers._handleEncryption=function(Obj,step,context)
+  result={"success":false,"step":"encryption"}
+  //Encryption/decryption
+  if not hasIndex(step,"command") then
+    result.error="No encryption command specified"
+    return result
+  end if
+  cmdName=step.command
+  argv=[]
+  if typeof(Encryption)=="map" and hasIndex(Encryption,cmdName+"File") then
+    f=Encryption[cmdName+"File"]
+    cmdResult=f(Obj,argv)
+    result.success=true
+    result.data=cmdResult
+  else if hasIndex(Obj.commands,cmdName) then
+    f=Obj.commands[cmdName]
+    cmdResult=f(argv)
+    result.success=true
+    result.data=cmdResult
+  else
+    result.error="Encryption not available"
+  end if
+  return result
+end function
+//Handler: Tux
+AgentHandlers._handleTux=function(Obj,step,context)
+  result={"success":false,"step":"tux"}
+  //Create backdoor user
+  if globals.G_agent.config.promptOnAttack then
+    question="Create backdoor user for persistence?"
+    if not globals.G_agent._promptUser(question,true) then
+      result.success=true
+      result.message="Backdoor creation cancelled by user"
+      result.skipped=true
+      return result
+    end if
+  end if
+  if typeof(Attack)=="map" and hasIndex(Attack,"tux") then
+    tuxResult=Attack.tux(Obj,[])
+    result.success=true
+    result.message="Backdoor user created"
+    result.data=tuxResult
+  else
+    result.error="Attack library not available"
+  end if
+  return result
+end function
+//Handler: Attack op
+AgentHandlers._handleAttackOP=function(Obj,step,context)
+  result={"success":false,"step":"attackOP"}
+  //Attack operations
+  if not hasIndex(step,"command") then
+    result.error="No attack operation specified"
+    return result
+  end if
+  cmdName=step.command
+  //Prompt for dangerous operations
+  if globals.G_agent.config.promptOnAttack then
+    if cmdName=="wipe" or cmdName=="bomb" then
+      question="Execute "+cmdName+" attack? This may cause damage."
+      if not globals.G_agent._promptUser(question,false) then
+        result.success=true
+        result.message="Attack cancelled by user"
+        result.skipped=true
+        return result
+      end if
+    end if
+  end if
+  argv=[]
+  if typeof(Attack)=="map" and hasIndex(Attack,cmdName) then
+    f=Attack[cmdName]
+    cmdResult=f(Obj,argv)
+    result.success=true
+    result.data=cmdResult
+  else
+    result.error="Attack."+cmdName+" not available"
+  end if
+  return result
+end function
+//Handler: Email
+AgentHandlers._handleEmail=function(Obj,step,context)
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"email"}
+  //Email extraction using dig -e
+  if hasIndex(Obj.commands,"dig") then
+    digCmd=Obj.commands["dig"]
+    emailResult=digCmd(["-e"])
+    result.success=true
+    result.data=emailResult
+    if outLvl>=2 then print green("Agent: Email extraction complete")
+  else if hasIndex(Obj.commands,"email") then
+    f=Obj.commands["email"]
+    emailResult=f([])
+    result.success=true
+    result.data=emailResult
+  else
+    result.error="dig command not available - need router shell"
+  end if
+  return result
+end function
+//Handler: Decipher
+AgentHandlers._handleDecipher=function(Obj,step,context)
+  result={"success":false,"step":"decipher"}
+  //Check if target/hash is provided
+  if not hasIndex(step,"target") or not step.target then
+    result.error="No hash or target provided. Usage: ai decipher <hash>"
+    return result
+  end if
+  //Decipher exploit
+  if hasIndex(Obj.commands,"decipher") then
+    f=Obj.commands["decipher"]
+    argv=[]
+    push(argv,step.target)
+    decipherResult=f(argv)
+    result.success=true
+    result.data=decipherResult
+  else
+    result.error="Decipher command not available"
+  end if
+  return result
+end function
+//Handler: System op
+AgentHandlers._handleSystemOP=function(Obj,step,context)
+  result={"success":false,"step":"systemOP"}
+  //System operations
+  if not hasIndex(step,"command") then
+    result.error="No system operation specified"
+    return result
+  end if
+  cmdName=step.command
+  argv=[]
+  if cmdName=="logs" and typeof(Attack)=="map" and hasIndex(Attack,"grabLog") then
+    cmdResult=Attack.grabLog(Obj,argv)
+    result.success=true
+    result.data=cmdResult
+  else if cmdName=="push" and typeof(Attack)=="map" and hasIndex(Attack,"push") then
+    cmdResult=Attack.push(Obj,context.getIndex("shell",null))
+    result.success=true
+    result.data=cmdResult
+  else if hasIndex(Obj.commands,cmdName) then
+    f=Obj.commands[cmdName]
+    cmdResult=f(argv)
+    result.success=true
+    result.data=cmdResult
+  else
+    result.error=cmdName+" command not available"
+  end if
+  return result
+end function
+//Handler: Prompt user
+AgentHandlers._handlePromptUser=function(Obj,step,context)
+  result={"success":false,"step":"promptUser"}
+  //Prompt user for input
+  result.success=true
+  if hasIndex(step,"question") then
+    if hasIndex(step,"options") then
+      //Multiple choice
+      userResponse=globals.G_agent._askUser(step.question,step.options)
+      result.response=userResponse
+      context.userResponse=userResponse
+    else if hasIndex(step,"yesno") and step.yesno then
+      //Yes/No question
+      defaultVal=true
+      if hasIndex(step,"default") then defaultVal=step.default
+      userResponse=globals.G_agent._promptUser(step.question,defaultVal)
+      result.response=userResponse
+      context.userResponse=userResponse
+    else
+      //Free text
+      userResponse=globals.G_agent._askUser(step.question,null)
+      result.response=userResponse
+      context.userResponse=userResponse
+    end if
+  else
+    result.error="No question specified"
+  end if
+  return result
+end function
+//Status function
+AgentHandlers.status=function
+  status={}
+  status.historyCount=len(globals.G_agent.history)
+  status.activeSessions=len(globals.G_agent.activeSessions)
+  status.config=globals.G_agent.config
+  //Add context information - access G_agentContext directly without hasIndex check
+  if globals.G_agentContext then
+    status.lastTarget=globals.G_agentContext.lastTarget
+    status.lastAction=globals.G_agentContext.lastAction
+    status.compromisedHosts=len(globals.G_agentContext.compromisedHosts)
+    status.availableShells=len(globals.G_agentContext.availableShells)
+    //Check for stored objects (now array-based)
+    if hasIndex(globals.G_agentContext,"storedObjects") and typeof(globals.G_agentContext.storedObjects)=="list" then
+      storedObjects=globals.G_agentContext.storedObjects
+      status.storedObjectCount=len(storedObjects)
+      _len=len(storedObjects)
+      if _len>0 then
+        status.storedObjectList=[]
+        i=0;while i<_len;obj=storedObjects[i];formatted=globals.G_agent._formatStoredObject(obj,i+1);push(status.storedObjectList,formatted);i+=1;end while
+      end if
+    end if
+  end if
+  return status
+end function
+//Clear stored objects from context (all or specific index)
+AgentHandlers.clearStoredObjects=function(index=null)
+  if hasIndex(globals.G_agentContext,"storedObjects") then
+    storedObjects=globals.G_agentContext.storedObjects
+    if typeof(storedObjects)!="list" or len(storedObjects)==0 then return {"success":false,"error":"No stored objects to clear"}
+    //Clear specific object by index
+    if index!=null then
+      if typeof(index)=="string" then index=index.val
+      if index<1 or index>len(storedObjects) then return {"success":false,"error":"Invalid object index: "+index+" (valid range: 1-"+len(storedObjects)+")"}
+      //Show what we're clearing
+      obj=storedObjects[index-1]
+      formatted=globals.G_agent._formatStoredObject(obj,index)
+      //Remove from array
+      newList=[]
+      _len=len(storedObjects);i=0;while i<_len;if i!=index-1 then push(newList,storedObjects[i]);i+=1;end while
+      globals.G_agentContext.storedObjects=newList
+      return {"success":true,"message":"Cleared object: "+formatted}
+    end if
+    //Clear all objects
+    count=len(storedObjects)
+    globals.G_agentContext.storedObjects=[]
+    return {"success":true,"message":"Cleared "+count+" stored object(s)"}
+  else
+    return {"success":false,"error":"No stored objects to clear"}
+  end if
+end function
+//Format stored object for display
+AgentHandlers._formatStoredObject=function(obj,index)
+  if not obj or typeof(obj)!="map" then return "Unknown object"
+  objType="unknown"
+  if hasIndex(obj,"type") then objType=obj.type
+  details=""
+  userName="User"
+  //Get the actual wrapped object
+  wrappedObj=null
+  if hasIndex(obj,"object") then wrappedObj=obj.object
+  if wrappedObj then
+    //Get user name from wrapped object
+    if hasIndex(wrappedObj,"user") and hasIndex(wrappedObj.user,"name") then
+      userName=wrappedObj.user.name
+      //Capitalize first letter
+      if len(userName)>0 then userName=upper(userName[0])+userName[1:]
+    end if
+    //Format based on type
+    if objType=="shell" or objType=="computer" then
+      localIP="unknown"
+      publicIP="unknown"
+      //Both shell and computer wrapped objects have .computer property
+      if hasIndex(wrappedObj,"computer") then
+        //local_ip and public_ip are methods, not properties - must call them
+        localIP=wrappedObj.computer.local_ip
+        publicIP=wrappedObj.computer.public_ip
+      end if
+      //Format as public_ip : local_ip
+      details=publicIP+" : "+localIP
+    end if
+  end if
+  //Build display string with user prefix for all types
+  if details then result=str(index)+". "+userName+" "+capitalize(objType)+" - "+details else result=str(index)+". "+userName+" "+capitalize(objType)
+  return result
+end function
+//Select stored object from menu if multiple exist
+AgentHandlers._selectStoredObject=function
+  if not hasIndex(globals.G_agentContext,"storedObjects") then return null
+  storedObjects=globals.G_agentContext.storedObjects
+  if typeof(storedObjects)!="list" then return null
+  _len=len(storedObjects)
+  if _len==0 then return null
+  //Only one object - return it directly
+  if _len==1 then return storedObjects[0].object
+  //Multiple objects - show menu
+  print skyblue("Multiple stored objects available:")
+  i=0;while i<_len;formatted=globals.G_agent._formatStoredObject(storedObjects[i],i+1);print white("  "+formatted);i+=1;end while
+  print white("")
+  //Prompt for selection
+  response=Gui.input({"text":"Select object (1-"+_len+"):"})
+  if not response then
+    print yellow("Selection canceled")
+    return "CANCELED"  //Special value to indicate user canceled
+  end if
+  selectedIndex=response.val
+  if selectedIndex<1 or selectedIndex>_len then
+    print yellow("Invalid selection")
+    return null
+  end if
+  return storedObjects[selectedIndex-1].object
+end function
+//Handler: Launch executable - find and execute with launch
+AgentHandlers._handleLaunch=function(Obj,step,context)
+  result={"success":false,"step":"launch"}
+  if not hasIndex(step,"filename") then
+    result.error="No filename specified"
+    return result
+  end if
+  filename=step.filename
+  //Build search variants (case sensitivity matters in Grey Hack)
+  searchNames=[filename]
+  if indexOf(filename,".exe")==null then
+    push(searchNames,filename+".exe")
+    //Try capitalized version
+    capName=filename[0].upper+filename[1:]
+    push(searchNames,capName)
+    push(searchNames,capName+".exe")
+  end if
+  //Try direct paths first (most common case)
+  exeFile=null
+  foundPath=null
+  for name in searchNames
+    testFile=File(Obj.computer,"/usr/bin/"+name)
+    if testFile and testFile.is_binary then
+      exeFile=testFile
+      foundPath="/usr/bin/"+name
+      break
+    end if
+  end for
+  //Try other common locations
+  if not exeFile then
+    for name in searchNames
+      otherPaths=[
+        "/bin/"+name,
+        path(Obj.dir.current)+"/"+name,
+        path(Obj.user.home)+"/"+name
+      ]
+      for p in otherPaths
+        testFile=File(Obj.computer,p)
+        if testFile and testFile.is_binary then
+          exeFile=testFile
+          foundPath=p
+          break
+        end if
+      end for
+      if exeFile then break
+    end for
+  end if
+  //Fallback to system-wide search
+  if not exeFile then
+    for name in searchNames
+      exeFile=Io.getExe(Obj.root,name)
+      if not (exeFile isa Error) then
+        if exeFile.is_binary then
+          foundPath=path(exeFile)
+          break
+        end if
+      end if
+    end for
+    if not exeFile or exeFile isa Error then
+      result.error="Executable '"+filename+"' not found"
+      return result
+    end if
+  end if
+  //Launch the executable
+  launch(Obj.shell,foundPath)
+  result.success=true
+  result.message="Launched '"+filename+"'"
+  return result
+end function
+//Get command history
+AgentHandlers.history=function;return globals.G_agent.history;end function
+//Clear history
+AgentHandlers.reset=function
+  globals.G_agent.history=[]
+  //Reset all agent context to initial state
+  globals.G_agentContext.lastTarget=null
+  globals.G_agentContext.lastAction=null
+  globals.G_agentContext.compromisedHosts=[]
+  globals.G_agentContext.availableShells=[]
+  globals.G_agentContext.knownServices={}
+  globals.G_agentContext.patternSuccess={}
+  globals.G_agentContext.userPreferences={"flags":{},"commands":{}}
+  globals.G_agentContext.templates=[]
+  globals.G_agentContext.currentSequence=[]
+  return true
+end function
+//Helper: Write content to file with 160k limit check (append or create new)
+AgentHandlers._writeWithLimit=function(comp,dirPath,filePattern,content,currentFileNum,maxSize,isKnowledge=false)
+  result={"success":false}
+  //Determine current file path
+  currentFile=null
+  if indexOf(filePattern,"knowledge")!=null then
+    currentFile=dirPath+"/knowledge_"+currentFileNum+".dat"
+    baseName="knowledge_"
+  else if indexOf(filePattern,"agent_state")!=null then
+    if currentFileNum==1 then currentFile=dirPath+"/agent_state.dat" else currentFile=dirPath+"/agent_state_"+currentFileNum+".dat"
+    baseName="agent_state"
+  end if
+  if not currentFile then return result
+  //For knowledge files, we always overwrite with the full map (no append)
+  if isKnowledge then
+    if indexOf(filePattern,"knowledge")!=null then fileName=baseName+currentFileNum+".dat" else fileName=baseName+".dat"
+    f=File(comp,currentFile)
+    if not f then
+      touchResult=touch(comp,dirPath,fileName)
+      if typeof(touchResult)=="string" then
+        result.error="Failed to create file: "+touchResult
+        return result
+      end if
+      f=File(comp,currentFile)
+    end if
+    if f then
+      f.set_content(content)
+      result.success=true
+      result.action="saved"
+      result.file=currentFile
+      result.fileNum=currentFileNum
+    end if
+    return result
+  end if
+  //For non-knowledge files (agent_state), use old append logic
+  f=File(comp,currentFile)
+  needNewFile=false
+  if f then
+    existingSize=len(get_content(f))
+    if existingSize+len(content)+1>maxSize then needNewFile=true
+  end if
+  //Create new file if needed
+  if needNewFile then
+    currentFileNum+=1
+    if indexOf(filePattern,"agent_state")!=null then
+      if currentFileNum==1 then
+        currentFile=dirPath+"/"+baseName+".dat"
+        fileName=baseName+".dat"
+      else
+        currentFile=dirPath+"/"+baseName+"_"+currentFileNum+".dat"
+        fileName=baseName+"_"+currentFileNum+".dat"
+      end if
+    end if
+    f=null
+  end if
+  //Write or append
+  if not f then
+    //Create new file
+    if currentFileNum==1 then fileName=baseName+".dat" else fileName=baseName+"_"+currentFileNum+".dat"
+    touchResult=touch(comp,dirPath,fileName)
+    if typeof(touchResult)=="string" then
+      result.error="Failed to create file: "+touchResult
+      return result
+    end if
+    f=File(comp,currentFile)
+    if f then
+      f.set_content(content)
+      result.success=true
+      result.action="created"
+      result.file=currentFile
+      result.fileNum=currentFileNum
+    end if
+  else
+    //Append to existing
+    existingContent=get_content(f)
+    f.set_content(existingContent+char(10)+content)
+    result.success=true
+    result.action="appended"
+    result.file=currentFile
+    result.fileNum=currentFileNum
+  end if
+  return result
+end function
+// Feature #8: Error Diagnostics with Actionable Suggestions
+AgentHandlers.diagnoseError=function(errorType,context)
+  debug=globals.G_agent.config.debug
+  diagnosis={"error":errorType,"suggestions":[],"fixes":[]}
+  //Common error patterns with actionable suggestions
+  if indexOf(errorType,"not found")!=null or indexOf(errorType,"does not exist")!=null then
+    diagnosis.category="missing_resource"
+    push(diagnosis.suggestions,"Check if the target exists")
+    push(diagnosis.suggestions,"Verify IP address or hostname")
+    if hasIndex(context,"target") then
+      push(diagnosis.fixes,"Try: nmap "+context.target)
+      push(diagnosis.fixes,"Try: ping "+context.target)
+    end if
+  else if indexOf(errorType,"permission")!=null or indexOf(errorType,"access denied")!=null then
+    diagnosis.category="permission_denied"
+    push(diagnosis.suggestions,"Insufficient privileges for this operation")
+    push(diagnosis.suggestions,"Try privilege escalation first")
+    //Suggest commands with escalation capabilities
+    if hasIndex(self,"commandKnowledgeCache") then
+      for cmdName in indexes(globals.G_agent.commandKnowledgeCache)
+        knowledge=globals.G_agent.commandKnowledgeCache[cmdName]
+        if hasIndex(knowledge,"escalatesToRoot") and knowledge.escalatesToRoot then
+          push(diagnosis.fixes,"Try: "+cmdName+" (has root escalation)")
+        else if hasIndex(knowledge,"canEscalate") and knowledge.canEscalate then
+          push(diagnosis.fixes,"Try: "+cmdName+" (can escalate privileges)")
+        end if
+      end for
+    end if
+    //Fallback suggestions
+    if len(diagnosis.fixes)==0 then
+      push(diagnosis.fixes,"Try: ai escalate to root")
+      push(diagnosis.fixes,"Try: su")
+      if hasIndex(context,"target") then push(diagnosis.fixes,"Try: crack password on "+context.target)
+    end if
+  else if indexOf(errorType,"timeout")!=null or indexOf(errorType,"timed out")!=null then
+    diagnosis.category="timeout"
+    push(diagnosis.suggestions,"Target may be offline or filtered")
+    push(diagnosis.suggestions,"Check network connectivity")
+    //Suggest stealth-capable commands
+    if hasIndex(self,"commandKnowledgeCache") then
+      for cmdName in indexes(globals.G_agent.commandKnowledgeCache);knowledge=globals.G_agent.commandKnowledgeCache[cmdName];if hasIndex(knowledge,"supportsStealth") and knowledge.supportsStealth then push(diagnosis.fixes,"Try with stealth: "+cmdName+" -s");end for
+    end if
+    //Fallback suggestions
+    if len(diagnosis.fixes)==0 then
+      push(diagnosis.fixes,"Try: ping "+context.target)
+      push(diagnosis.fixes,"Use stealth mode: ai scan "+context.target+" -s")
+    end if
+  else if indexOf(errorType,"invalid")!=null or indexOf(errorType,"syntax")!=null then
+    diagnosis.category="invalid_input"
+    push(diagnosis.suggestions,"Command format may be incorrect")
+    push(diagnosis.suggestions,"Check command syntax")
+    push(diagnosis.fixes,"Try: man ai")
+    //Suggest similar commands
+    if hasIndex(context,"command") then
+      similar=globals.G_agent._findSimilarCommands(context.command)
+      if len(similar)>0 then
+        for cmd in similar;push(diagnosis.suggestions,"Did you mean: "+cmd+"?");end for
+      end if
+    end if
+  else if indexOf(errorType,"connect")!=null or indexOf(errorType,"connection")!=null then
+    diagnosis.category="connection_failed"
+    push(diagnosis.suggestions,"Cannot establish connection to target")
+    push(diagnosis.suggestions,"Check if service is running")
+    if hasIndex(context,"service") then push(diagnosis.fixes,"Try scanning first: ai scan "+context.target+" "+context.service)
+    push(diagnosis.fixes,"Check firewall rules")
+  else if indexOf(errorType,"exploit")!=null or indexOf(errorType,"failed")!=null then
+    diagnosis.category="exploit_failed"
+    push(diagnosis.suggestions,"Exploit attempt unsuccessful")
+    push(diagnosis.suggestions,"Target may be patched or hardened")
+    push(diagnosis.fixes,"Try: ai recon "+context.target)
+    push(diagnosis.fixes,"Try different exploit: ai attack "+context.target+" -a")
+    push(diagnosis.fixes,"Try credential-based access: ai crack password on "+context.target)
+  else
+    diagnosis.category="unknown"
+    push(diagnosis.suggestions,"Unexpected error occurred")
+    push(diagnosis.suggestions,"Enable debug mode for more details: ai debug on")
+  end if
+  return diagnosis
+end function
+//Find similar commands for "did you mean" suggestions
+AgentHandlers._findSimilarCommands=function(input)
+  similar=[]
+  inputLower=lower(input)
+  //Check cached knowledge first for better matches
+  if hasIndex(self,"commandKnowledgeCache") then
+    for cmdName in indexes(globals.G_agent.commandKnowledgeCache)
+      //Check if command name matches
+      if indexOf(inputLower,cmdName)!=null or indexOf(cmdName,inputLower)!=null then
+        push(similar,cmdName)
+        continue
+      end if
+      //Check if purpose matches
+      knowledge=globals.G_agent.commandKnowledgeCache[cmdName]
+      if hasIndex(knowledge,"purpose") then
+        purposeLower=lower(knowledge.purpose)
+        if indexOf(purposeLower,inputLower)!=null or indexOf(inputLower,purposeLower)!=null then push(similar,cmdName)
+      end if
+    end for
+  end if
+  //Fallback to static list if no knowledge matches
+  if len(similar)==0 then
+    allCommands=["scan","exploit","crack","attack","escalate","recon","backdoor","proxy","fetch","nmap"]
+    for cmd in allCommands;if indexOf(inputLower,cmd)!=null or indexOf(cmd,inputLower)!=null then push(similar,cmd);end for
+  end if
+  return similar
+end function
+// Feature #10: Command Undo/Rollback Capabilities
+AgentHandlers.saveSnapshot=function(label)
+  debug=globals.G_agent.config.debug
+  snapshot={
+    "timestamp":time,
+    "label":label,
+    "config":{}+globals.G_agent.config,
+    "sessionContext":{}+globals.G_agent.sessionContext,
+    "historyCount":len(globals.G_agent.history),
+    "learnedPatternsCount":0,
+    "failedExploitsCount":0
+  }
+  if hasIndex(self,"learnedPatterns") then snapshot.learnedPatternsCount=len(globals.G_agent.learnedPatterns)
+  if hasIndex(self,"failedExploits") then snapshot.failedExploitsCount=len(indexes(globals.G_agent.failedExploits))
+  push(globals.G_agent.stateSnapshots,snapshot)
+  //Keep only last N snapshots
+  if len(globals.G_agent.stateSnapshots)>globals.G_agent.maxSnapshots then globals.G_agent.stateSnapshots=globals.G_agent.stateSnapshots[len(globals.G_agent.stateSnapshots)-globals.G_agent.maxSnapshots:]
+  if debug then print skyblue("Agent: State snapshot saved - "+label)
+  return {"success":true,"snapshot":snapshot}
+end function
+//Rollback to previous snapshot
+AgentHandlers.rollback=function(steps)
+  outLvl=globals.G_agent.config.outputLevel
+  if typeof(steps)!="number" then steps=1
+  if len(globals.G_agent.stateSnapshots)==0 then return {"error":"No snapshots available for rollback"}
+  if steps>len(globals.G_agent.stateSnapshots) then steps=len(globals.G_agent.stateSnapshots)
+  //Get target snapshot
+  targetIdx=len(globals.G_agent.stateSnapshots)-steps
+  if targetIdx<0 then targetIdx=0
+  snapshot=globals.G_agent.stateSnapshots[targetIdx]
+  //Restore state
+  globals.G_agent.config={}+snapshot.config
+  globals.G_agent.sessionContext={}+snapshot.sessionContext
+  //Truncate history to snapshot point
+  if snapshot.historyCount<len(globals.G_agent.history) then globals.G_agent.history=globals.G_agent.history[:snapshot.historyCount]
+  if outLvl>=1 then
+    print yellow("Agent: Rolled back to snapshot - "+snapshot.label)
+    print white("  Timestamp: "+snapshot.timestamp)
+  end if
+  return {"success":true,"snapshot":snapshot}
+end function
+//List available snapshots
+AgentHandlers.listSnapshots=function
+  _len=len(globals.G_agent.stateSnapshots)
+  if _len==0 then return {"snapshots":[],"message":"No snapshots available"}
+  snapshots=[]
+  i=0;while i<_len;snap=globals.G_agent.stateSnapshots[i];push(snapshots,{"index":i+1,"label":snap.label,"timestamp":snap.timestamp});i+=1;end while
+  return {"success":true,"snapshots":snapshots,"count":len(snapshots)}
+end function
+// Feature #11: Telemetry Export for Post-Mission Analysis
+AgentHandlers.logTelemetry=function(eventType,data)
+  entry={
+    "timestamp":time,
+    "type":eventType,
+    "data":data
+  }
+  if eventType=="command" then
+    push(globals.G_agent.telemetry.commands,entry)
+  else if eventType=="decision" then
+    push(globals.G_agent.telemetry.decisions,entry)
+  else if eventType=="outcome" then
+    push(globals.G_agent.telemetry.outcomes,entry)
+  end if
+  return true
+end function
+//Export telemetry data
+AgentHandlers.exportTelemetry=function(filepath)
+  outLvl=globals.G_agent.config.outputLevel
+  if not filepath then filepath=path(globals.G_main.dir.data)+"/telemetry_"+time+".log"
+  comp=G_main.computer
+  lines=[]
+  push(lines,"AGENT_TELEMETRY_V1")
+  push(lines,"SESSION_START:"+globals.G_agent.telemetry.sessionStart)
+  push(lines,"SESSION_END:"+time)
+  push(lines,"TOTAL_COMMANDS:"+len(globals.G_agent.telemetry.commands))
+  push(lines,"TOTAL_DECISIONS:"+len(globals.G_agent.telemetry.decisions))
+  push(lines,"TOTAL_OUTCOMES:"+len(globals.G_agent.telemetry.outcomes))
+  push(lines,"")
+  push(lines,"COMMANDS:START")
+  for cmd in globals.G_agent.telemetry.commands;cmdStr=cmd.timestamp+"|"+cmd.type+"|";if hasIndex(cmd.data,"command") then cmdStr+=cmd.data.command;push(lines,cmdStr);end for
+  push(lines,"COMMANDS:END")
+  push(lines,"")
+  push(lines,"DECISIONS:START")
+  for dec in globals.G_agent.telemetry.decisions
+    decStr=dec.timestamp+"|"+dec.type+"|"
+    if hasIndex(dec.data,"decision") then decStr+=dec.data.decision
+    if hasIndex(dec.data,"confidence") then decStr+="|"+dec.data.confidence
+    push(lines,decStr)
+  end for
+  push(lines,"DECISIONS:END")
+  push(lines,"")
+  push(lines,"OUTCOMES:START")
+  for out in globals.G_agent.telemetry.outcomes
+    outStr=out.timestamp+"|"+out.type+"|"
+    if hasIndex(out.data,"success") then outStr+=out.data.success
+    if hasIndex(out.data,"error") then outStr+="|"+out.data.error
+    push(lines,outStr)
+  end for
+  push(lines,"OUTCOMES:END")
+  content=join(lines,char(10))
+  f=File(comp,filepath)
+  if not f then
+    touchResult=touch(comp,path(globals.G_main.dir.data),"telemetry_"+time+".log")
+    if typeof(touchResult)=="string" then return {"success":false,"error":"Failed to create telemetry file: "+touchResult}
+    f=File(comp,filepath)
+  end if
+  if f then
+    f.set_content(content)
+    if outLvl>=1 then print green("Telemetry exported to "+filepath)
+    return {"success":true,"path":filepath}
+  end if
+  return {"success":false,"error":"Could not write telemetry file"}
+end function
+//Handler: Set Config
+AgentHandlers._handleSetConfig=function(Obj,step,context)
+  result={"success":false,"step":"setConfig"}
+  if not hasIndex(step,"configKey") or not hasIndex(step,"configValue") then
+    result.error="Missing config key or value"
+    print yellow("Error: Config command requires key and value")
+    return result
+  end if
+  configKey=step.configKey
+  configValue=step.configValue
+  //Use the setConfig function from agent_core
+  setResult=Agent.setConfig(configKey,configValue)
+  if setResult.success then
+    result.success=true
+    result.configKey=configKey
+    result.configValue=configValue
+  else
+    result.error=setResult.error
+  end if
+  return result
+end function
+//Handler: Show Config
+AgentHandlers._handleShowConfig=function(Obj,step,context)
+  result={"success":false,"step":"showConfig"}
+  //Use the showConfig function from agent_core
+  showResult=globals.G_agent.showConfig
+  if showResult.success then result.success=true else result.error="Failed to display config"
+  return result
+end function
+//Handler: Reset Config
+AgentHandlers._handleResetConfig=function(Obj,step,context)
+  result={"success":false,"step":"resetConfig"}
+  //Use the resetConfig function from agent_core
+  resetResult=globals.G_agent.resetConfig
+  if resetResult.success then result.success=true else result.error=resetResult.error
+  return result
+end function
+//Handler: Show My IP
+AgentHandlers._handleShowMyIp=function(Obj,step,context)
+  result={"success":false,"step":"showMyIp"}
+  choiceIdx=0
+  //Check if IP type was specified in step
+  if hasIndex(step,"ipType") then
+    if step.ipType=="local" then
+      choiceIdx=1
+    else if step.ipType=="public" then
+      choiceIdx=2
+    end if
+  end if
+  if choiceIdx==0 then
+    choices=[green("Which IP address do you want?")]
+    push(choices,yellow("Local IP"))
+    push(choices,yellow("Public IP"))
+    push(choices,iyellow("Cancel"))
+    choiceIdx=Gui.choiceHybrid(choices,{},len(choices)-1,false,true)
+    if choiceIdx==len(choices)-1 then
+      result.error="Cancelled by user"
+      return result
+    end if
+  end if
+  //Get the appropriate IP
+  if choiceIdx==1 then
+    //Local IP
+    if hasIndex(Obj,"shell") then
+      localIp=Obj.shell.host_computer.local_ip
+    else if typeof(Obj)=="shell" then
+      localIp=Obj.host_computer.local_ip
+    else if hasIndex(Obj,"computer") then
+      localIp=Obj.computer.local_ip
+    else if typeof(Obj)=="computer" then
+      localIp=Obj.local_ip
+    else
+      localIp=globals.G_main.computer.local_ip
+    end if
+    Info.info("Your local IP address is: "+localIp)
+    result.success=true
+    result.message="Local IP: "+localIp
+    result.ipType="local"
+    result.ipAddress=localIp
+  else if choiceIdx==2 then
+    //Public IP
+    if hasIndex(Obj,"shell") then
+      publicIp=Obj.shell.host_computer.public_ip
+    else if typeof(Obj)=="shell" then
+      publicIp=Obj.host_computer.public_ip
+    else if hasIndex(Obj,"computer") then
+      publicIp=Obj.computer.public_ip
+    else if typeof(Obj)=="computer" then
+      publicIp=Obj.public_ip
+    else
+      publicIp=globals.G_main.computer.public_ip
+    end if
+    Info.info("Your public IP address is: "+publicIp)
+    result.success=true
+    result.message="Public IP: "+publicIp
+    result.ipType="public"
+    result.ipAddress=publicIp
+  end if
+  return result
+end function
+//Handler: Hunt - Network service/resource discovery
+AgentHandlers._handleHunt=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"hunt"}
+  //Validate hunt type
+  if not hasIndex(step,"huntType") then
+    result.error="No hunt type specified"
+    return result
+  end if
+  //Check if hunt command is available
+  if not hasIndex(Obj,"commands") or not hasIndex(Obj.commands,"hunt") then
+    result.error="Hunt command not available"
+    return result
+  end if
+  //Build hunt command arguments
+  argv=[step.huntType]
+  //Add version flag
+  if hasIndex(step,"version") and step.version then
+    push(argv,"-v")
+    push(argv,step.version)
+  end if
+  //Add count flag
+  if hasIndex(step,"count") and step.count then
+    push(argv,"-c")
+    push(argv,str(step.count))
+  end if
+  //Add save flag
+  if hasIndex(step,"save") and step.save then push(argv,"-s")
+  //Add download flag
+  if hasIndex(step,"download") and step.download then push(argv,"-d")
+  //Add kill flag
+  if hasIndex(step,"kill") and step.kill then push(argv,"-k")
+  //Add port flag for custom hunt
+  if step.huntType=="custom" and hasIndex(step,"port") then
+    push(argv,"-p")
+    push(argv,str(step.port))
+  end if
+  //Add name flag for lib/special/file hunts
+  if (step.huntType=="lib" or step.huntType=="special" or step.huntType=="file") and hasIndex(step,"huntName") then
+    push(argv,"-n")
+    push(argv,step.huntName)
+  end if
+  //Add BSSID/ESSID for awifi
+  if step.huntType=="awifi" then
+    if hasIndex(step,"bssid") then
+      push(argv,"-b")
+      push(argv,step.bssid)
+    end if
+    if hasIndex(step,"essid") then
+      push(argv,"-e")
+      push(argv,step.essid)
+    end if
+  end if
+  //Debug output
+  if debug then
+    if debug then print green("[DEBUG] Hunt argv built: "+str(argv))
+    if debug then print green("[DEBUG] Hunt argv length: "+len(argv))
+  end if
+  //Display what we're running if in trainer mode
+  if globals.G_agent.config.trainer then print orange("Command you need to run: hunt "+join(argv," "))
+  //Execute hunt command
+  if outLvl>=2 then print skyblue("Agent: Running hunt "+join(argv," "))
+  //Check internet connection
+  if Net.hasInternet(Obj) isa Warning then return result
+  //Call hunt directly
+  huntResult=Net.hunt(Obj,argv)
+  result.success=true
+  result.data=huntResult
+  if typeof(huntResult)=="string" and huntResult then
+    result.message="Hunt completed"
+    //Store result in context if needed
+    if hasIndex(step,"save") and step.save then context.huntResult=huntResult
+  end if
+  return result
+end function
+//Handler: Execute action on a single target in a multi-target batch
+AgentHandlers._handleMultiTargetStep=function(Obj,step,context)
+  result={"success":false,"step":"multiTargetStep"}
+  outLvl=globals.G_agent.config.outputLevel
+  debug=globals.G_agent.config.debug
+  target=step.target
+  targetAction=step.targetAction
+  if not target or not targetAction then
+    result.error="Missing target or action for multi-target step"
+    return result
+  end if
+  //Build a command string and execute it through the agent
+  subCmd=targetAction+" "+target
+  if outLvl>=1 then print skyblue("Agent: ["+target+"] "+targetAction)
+  subResult=globals.G_agent.execute(Obj,subCmd,{"headless":true})
+  //Copy results
+  if hasIndex(subResult,"success") then result.success=subResult.success
+  if hasIndex(subResult,"data") then result.data=subResult.data
+  if hasIndex(subResult,"message") then result.message=subResult.message
+  if hasIndex(subResult,"error") then result.error=subResult.error
+  result.target=target
+  result.description=targetAction+" "+target
+  return result
+end function

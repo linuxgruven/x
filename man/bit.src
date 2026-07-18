@@ -1,0 +1,46 @@
+// Man page for bit
+manBit="BIT(1)                           X Shell Manual                           BIT(1)
+
+<b>NAME</b>
+    bit - bitwise operations on two integers
+<b>SYNOPSIS</b>
+    <b>bit OPERATOR X Y</b>
+    <b>command | bit OPERATOR Y</b>
+<b>DESCRIPTION</b>
+    Perform a bitwise operation on two integers. The result and binary
+    representation are displayed. When reading from a pipe, each line is
+    used as X and the argument after the operator is Y.
+<b>OPTIONS</b>
+    <b>-and X Y</b>
+    Bitwise AND.
+    <b>-or X Y</b>
+    Bitwise OR.
+    <b>-xor X Y</b>
+    Bitwise XOR.
+    <b>-ls X Y</b>
+    Left shift X by Y bits.
+    <b>-rs X Y</b>
+    Right shift X by Y bits.
+<b>EXAMPLE:</b>
+    <b>bit -and 12 10</b>
+    1100 AND 1010 = 8
+
+    <b>bit -or 12 10</b>
+    1100 OR 1010 = 14
+
+    <b>bit -xor 12 10</b>
+    1100 XOR 1010 = 6
+
+    <b>bit -ls 1 4</b>
+    Shift 1 left 4 bits = 16
+
+    <b>bit -rs 16 4</b>
+    Shift 16 right 4 bits = 1
+
+    <b>seq 1 8 | bit -ls 1</b>
+    Double each number (shift left 1): 2 4 6 8 10 12 14 16
+
+    <b>echo 255 | bit -and 240</b>
+    255 AND 240 = 240
+<b>SEE ALSO</b>
+    <b>binary</b>  <b>decimal</b>  <b>radix</b>"

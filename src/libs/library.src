@@ -1,0 +1,231 @@
+// =============================================================================
+// LIBRARY
+// Library loader; centralized version management and loading for Grey Hack system libraries.
+// =============================================================================
+Library={
+  "librarys":[
+    "blockchain.so",
+    "libsmartappliance.so",
+    "libtrafficnet.so",
+    "librshell.so",
+    "libssh.so",
+    "libhttp.so",
+    "librepository.so",
+    "libftp.so",
+    "libchat.so",
+    "net.so",
+    "init.so",
+    "crypto.so",
+    "libsmtp.so",
+    "kernel_module.so",
+    "kernel_router.so",
+    "metaxploit.so",
+    "aptclient.so",
+    "libsql.so",
+    "libadb.so"
+  ],
+  "appliance":null,
+  "traffic":null,
+  "metaxploit":null,
+  "crypto":null,
+  "blockchain":null,
+  "aptclient":null
+}
+//getVersion - Get version of any library
+//Args: Obj (object), m (library instance), l (library filename)
+//Returns: version string or "0"/"?"
+Library.getVersion=function(Obj,m,l)
+  //Return 0 if no library instance
+  if not m then return "0"
+  //Find library file
+  z=Io.getFile(Obj,l,false)
+  //Return ? if file not found
+  if not z then return "?"
+  //Load library from file
+  r=load(m,path(z))
+  //Return version or ? if load failed
+  if r then return version(r) else return "?"
+end function
+//metaxploitVersion - Get metaxploit library version
+//Args: Obj (object with .dir.data)
+//Returns: version string or "0"
+Library.metaxploitVersion=function(Obj)
+  //Return 0 if metaxploit not loaded
+  if not self.metaxploit then return "0"
+  //Load metaxploit.so as a MetaLib using the MetaxploitLib object
+  r=load(self.metaxploit,path(Obj.dir.data)+"/"+"metaxploit.so")
+  //Return version or 0 if load failed
+  if r then return version(r) else return "0"
+end function
+//blockchainVersion - Get blockchain library version
+//Args: Obj (object)
+//Returns: version string or "?"
+Library.blockchainVersion=function(Obj)
+  //Find blockchain.so file
+  l=Io.getFile(Obj,"blockchain.so",false)
+  //Return ? if not found
+  if not l then return "?"
+  //Load blockchain library
+  r=load(self.metaxploit,path(l))
+  //Return version or ? if load failed
+  if r then return version(r) else return "?"
+end function
+//aptclientVersion - Get aptclient library version
+//Args: Obj (object)
+//Returns: version string or "?"
+Library.aptclientVersion=function(Obj)
+  //Find aptclient.so file
+  l=Io.getFile(Obj,"aptclient.so",false)
+  //Return ? if not found
+  if not l then return "?"
+  //Load aptclient library
+  r=load(self.metaxploit,path(l))
+  //Return version or ? if load failed
+  if r then return version(r) else return "?"
+end function
+//cryptoVersion - Get crypto library version
+//Args: Obj (object with .dir.data)
+//Returns: version string or "0"
+Library.cryptoVersion=function(Obj)
+  //Return 0 if metaxploit not loaded
+  if not self.metaxploit then return "0"
+  //Load crypto.so as a MetaLib using the MetaxploitLib object
+  r=load(self.metaxploit,path(Obj.dir.data)+"/"+"crypto.so")
+  //Return version or 0 if load failed
+  if r then return version(r) else return "0"
+end function
+//haveMetaxploit - Check if metaxploit library is available
+//Args: none
+//Returns: true if available, nothing otherwise
+Library.haveMetaxploit=function
+	//Check Library cache or global
+	if self.metaxploit or globals.G_metaxploit then return true
+	//Display warning if not available
+	Info.warning("MetaxploitLib library is not available|loaded")
+end function
+//haveCrypto - Check if crypto library is available
+//Args: none
+//Returns: true if available, nothing otherwise
+Library.haveCrypto=function
+	//Check Library cache or global
+	if self.crypto or globals.G_crypto then return true
+	//Display warning if not available
+	Info.warning("cryptoLib library is not available|loaded")
+end function
+//load - Load library from file path with type validation
+//Args: argv (arguments with flag and path)
+//Returns: nothing or Error
+Library.load=function(argv)
+	//Require metaxploit availability
+	if not self.haveMetaxploit then return
+	if not argv then return Man.help(["load"])
+  //Get library path
+  Arg1=argv[0]
+	//Store path for nested functions
+	C=Arg1
+	//Extract library name flag from path
+	Arg2=lower(split(Arg1,"/")[-1])
+	//Metaxploit loader function
+	metaxploit=function
+		//Load library from path
+		l=include_lib(C)
+		//Validate type is MetaxploitLib
+		if l and typeof(l)=="MetaxploitLib" then
+			//Store in Library cache
+			Library.metaxploit=l
+			//Display success message
+			Info.info("Metaxploit loaded")
+		else
+			//Display failure warning
+			Info.warning("Failed to load metaxploit.so")
+		end if
+	end function
+	//Crypto loader function
+	crypto=function
+		//Load library from path
+		l=include_lib(C)
+		//Validate type is cryptoLib
+		if l and typeof(l)=="cryptoLib" then
+			//Store in Library cache
+			Library.crypto=l
+			//Display success message
+			Info.info("Crypto loaded")
+		else
+			//Display failure warning
+			Info.warning("Failed to load crypto.so")
+		end if
+	end function
+	//Blockchain loader function
+	blockchain=function
+		//Load library from path
+		l=include_lib(C)
+		//Validate type is blockchainLib
+		if l and typeof(l)=="blockchainLib" then
+			//Store in Library cache
+			Library.blockchain=l
+			//Display success message
+			Info.info("Blockchain loaded")
+		else
+			//Display failure warning
+			Info.warning("Failed to load blockchain.so")
+		end if
+	end function
+	//Aptclient loader function
+	aptclient=function
+		//Load library from path
+		l=include_lib(C)
+		//Validate type is aptclientLib
+		if l and typeof(l)=="aptclientLib" then
+			//Store in Library cache
+			Library.aptclient=l
+			//Display success message
+			Info.info("Aptclient loaded")
+		else
+			//Display failure warning
+			Info.warning("Failed to load aptclient.so")
+		end if
+	end function
+	//Smart Appliance loader function
+	appliance=function
+		//Load library from path
+		l=include_lib(C)
+		//Validate type is SmartAppliance
+		if l and typeof(l)=="SmartAppliance" then
+			//Store in Library cache
+			Library.appliance=l
+			//Display success message
+			Info.info("Smart Appliance loaded")
+		else
+			//Display failure warning
+			Info.warning("Failed to load libsmartappliance.so")
+		end if
+	end function
+	//Traffic Net loader function
+	traffic=function
+		//Load library from path
+		l=include_lib(C)
+		//Validate type is TrafficNet
+		if l and typeof(l)=="TrafficNet" then
+			//Store in Library cache
+			Library.traffic=l
+			//Display success message
+			Info.info("Traffic Net loaded")
+		else
+			//Display failure warning
+			Info.warning("Failed to load libtrafficnet.so")
+		end if
+	end function
+	//Map library flags to loader functions
+	cmds={
+    "-t":@traffic,
+    "-s":@appliance,
+    "-m":@metaxploit,
+    "-c":@crypto,
+    "-b":@blockchain,
+    "-a":@aptclient
+  }
+	//Validate library flag
+	if not hasIndex(cmds,Arg2) then return Error.set("Check your syntax, there is no library [ "+Arg2+" ]")
+	//Execute loader function
+	cmds[Arg2]
+end function

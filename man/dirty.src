@@ -1,0 +1,83 @@
+// Man page for dirty
+manDirty="DIRTY(1)                         X Shell Manual                         DIRTY(1)
+
+<b>NAME</b>
+    dirty - Dirty router log management
+<b>SYNOPSIS</b>
+    <b>dirty -l</b>
+    <b>dirty -a</b>
+    <b>dirty -s</b>
+    <b>dirty -m</b>
+    <b>dirty -r</b>
+    <b>dirty -c</b>
+    <b>dirty -x</b>
+<b>DESCRIPTION</b>
+    Track and manage router IPs where logs have not been cleared.
+    The dirty buffer stores router IPs that you have visited but
+    have not yet scrubbed their log files. May need multiple runs
+    to completely clear all router logs.
+<b>OPTIONS</b>
+    <b>-l</b> - List Dirty Routers
+      Display all router IPs in dirty buffer.
+
+    <b>-a</b> - Add Router
+      Add router IP to dirty buffer.
+
+    <b>-s</b> - Scrub Logs
+      Clean logs for routers in dirty buffer.
+
+    <b>-m</b> - Manual Clean
+      Manually clean dirty buffer entries.
+
+    <b>-r</b> - Reload Buffer
+      Reload the dirty buffer from storage.
+
+    <b>-c</b> - Count
+      Display dirty buffer entry count.
+
+    <b>-x</b> - Clear Buffer
+      Remove all IPs from dirty buffer.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View Dirty Routers</color>
+    <b>dirty -l</b>
+    List all uncleared routers
+
+    <b>dirty -c</b>
+    Show count of dirty routers
+
+    <color=#e4ff34># Add Routers to Track</color>
+    <b>dirty -a</b>
+    Add current router to dirty list
+
+    <color=#e4ff34># Clean Router Logs</color>
+    <b>dirty -s</b>
+    Scrub logs on tracked routers
+
+    <b>dirty -s && dirty -c</b>
+    Scrub and check remaining count
+
+    <b>dirty -m</b>
+    Manual buffer cleaning
+
+    <color=#e4ff34># Buffer Management</color>
+    <b>dirty -r</b>
+    Reload dirty buffer
+
+    <b>dirty -x</b>
+    Clear all entries from buffer
+
+    <color=#e4ff34># Common Workflow</color>
+    <b>scan 192.168.1.1</b>
+    Exploit router
+
+    <b>dirty -a</b>
+    Add to tracking
+
+    <b>dirty -l</b>
+    View dirty list
+
+    <b>dirty -s</b>
+    Clean logs later
+<b>SEE ALSO</b>
+    <b>scan</b>"

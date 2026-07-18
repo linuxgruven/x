@@ -1,0 +1,24 @@
+binScanlib="if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""scanlib_usage""))
+metaxploit=include_lib(""/lib/metaxploit.so"")
+if not metaxploit then exit(""Error: Missing metaxploit library"")
+pathLib=get_abs_path(params[0])
+libFile=File(host_computer(get_shell),pathLib)
+if not libFile then exit(""can't find library: ""+pathLib)
+print(""Scanning memory address..."")
+metaLib=load(metaxploit,path(libFile))
+if not metaLib then exit(""Invalid library provided"")
+listMem=scan(metaxploit,metaLib)
+index=1
+for itemMem in listMem
+	print(index+"": [""+itemMem+""]"")
+	index=index+1
+end for
+if len(listMem)==0 then exit(""Scan completed: No issues detected."")
+print(""Scan completed: detected issues in ""+len(listMem)+"" memory zones."")
+inputOk=false
+while not inputOk
+	option=to_int(user_input(""Select memory index: ""))
+	if typeof(option)!=""number"" or (option<1 or option>len(listMem)) then print(""Invalid input. Type a valid number"") else inputOk=true
+end while
+print(""Scanning for vulnerabilities at memory zone: ""+listMem[option-1])
+print(scan_address(metaxploit,metaLib,listMem[option-1]))"

@@ -1,0 +1,78 @@
+if user_mail_address!="tux@anuruzaxej.org" then exit("get ya grubs off")
+CDD=get_shell.host_computer.File(current_path+"/.depend")
+mx=include_lib("/home/tux/payload/data/metaxploit.so")
+if not CDD then
+  print "creating dependent files"
+  get_shell.host_computer.touch(current_path,".depend.src")
+  f=get_shell.host_computer.File(current_path+"/.depend.src")
+  content="gco=get_custom_object;"+char(10)+
+    "gco.m=mail_login(gco.user,gco.pass);"+char(10)+
+    "file=get_shell.host_computer.File(""/home/tux/zdayfile"");"+char(10)+
+    "if gco.m.fetch==[] then;"+char(10)+
+    "get_custom_object.passback=gco.m.fetch;"+char(10)+
+    "exit;"+char(10)+
+    "end if;"+char(10)+
+    "ibx=gco.m.fetch;"+char(10)+
+    "dat=ibx[0].split(char(10))[2:];"+char(10)+
+    "mailmap={};"+char(10)+
+    "mailmap.mailID=dat[0].remove(""MailID: "");"+char(10)+
+    "mailmap.subj=dat[2].remove(""Subject: "");"+char(10)+
+    "creds=[];"+char(10)+
+    "creds.push(gco.m.read(mailmap.mailID));"+char(10)+
+    "if mailmap.subj==""It's under control"" then;"+char(10)+
+    "creds[0].matches(""User: "");"+char(10)+
+    "creds[0].len>=837;credsinfo=creds[0].split(char(10))[7:];if len(credsinfo)<2 then;get_custom_object.passback=[];exit;end if;"+char(10)+
+    "user=credsinfo[0].remove(""User: "");"+char(10)+
+    "passwd=credsinfo[1].remove(""Password: "");"+char(10)+
+    "else if mailmap.subj==""Not being taken seriously"" then;"+char(10)+
+    "creds[0].matches(""User: "");"+char(10)+
+    "creds[0].len>=721;"+char(10)+
+    "credsinfo=creds[0].split(char(10))[7:];if len(credsinfo)<2 then;get_custom_object.passback=[];exit;end if;"+char(10)+
+    "user=credsinfo[0].remove(""User: "");"+char(10)+
+    "passwd=credsinfo[1].remove(""Password: "");"+char(10)+
+    "else;"+char(10)+
+    "get_custom_object.passback=[];"+char(10)+
+    "exit;"+char(10)+
+    "end if;"+char(10)+
+    "file=get_shell.host_computer.File(""/home/tux/zdayfile"");"+char(10)+
+    "if not file then;"+char(10)+
+    "get_shell(""tux"",""xyzzy"").host_computer.touch(""/home/tux"",""zdayfile"");"+char(10)+
+    "file=get_shell.host_computer.File(""/home/tux/zdayfile"");"+char(10)+
+    "end if;"+char(10)+
+    "if file.get_content.matches(user) then;"+char(10)+
+    "get_custom_object.passback=[];"+char(10)+
+    "exit;"+char(10)+
+    "end if;"+char(10)+
+    "get_custom_object.passback=gco.m.fetch;"+char(10)+
+    "get_custom_object.zuser=user;"+char(10)+
+    "get_custom_object.zpass=passwd"
+  f.set_content(content)
+  get_shell.build(current_path+"/.depend.src",current_path)
+  get_shell.host_computer.File(current_path+"/.depend.src").delete
+end if
+if len(params)!=2 or params[0]=="-h" then exit("usage: email pass")
+out=0
+outtrys=0
+rsh=get_shell("root","xyzzy")
+get_custom_object.passback=[]
+while true
+  get_custom_object.user=params[0]
+  get_custom_object.pass=params[1]
+  get_custom_object.m=mail_login(get_custom_object.user,get_custom_object.pass)
+  if typeof(get_custom_object.m)!="MetaMail" then exit("invalid email or pass")
+  rsh.host_computer.create_user(str(out),"z")
+  get_shell(str(out),"z").launch("/home/tux/.depend")
+  rsh.host_computer.delete_user(str(out),true)
+  while get_custom_object.passback==[];outtrys=outtrys+1;rsh.host_computer.delete_user(str(outtrys),true);rsh.host_computer.create_user(str(outtrys),"z");get_shell(str(outtrys),"z").launch("/home/tux/.depend");rsh.host_computer.delete_user(str(outtrys),true);if get_custom_object.passback!=[] then break;end while
+  if len(get_custom_object.zpass)>0 then break
+  out=out+1
+end while
+print format_columns("ZUSER ZPASS"+char(10)+get_custom_object.zuser+" "+get_custom_object.zpass)+char(10)
+file=get_shell.host_computer.File("/home/tux/zdayfile")
+if not file then
+  get_shell.host_computer.touch("/home/tux","zdayfile")
+  file=get_shell.host_computer.File("/home/tux/zdayfile")
+end if
+if not file.get_content.matches(get_custom_object.zuser) then file.set_content(file.get_content+get_custom_object.zuser+" "+get_custom_object.zpass+char(10))
+steal=debug_tools(mx.load("/lib/init.so"),get_custom_object.zuser,get_custom_object.zpass)
+if len(get_custom_object.pass)>0 then get_shell.launch("/usr/bin/Terminal.exe","/home/tux/creds "+get_custom_object.user+" "+get_custom_object.pass)

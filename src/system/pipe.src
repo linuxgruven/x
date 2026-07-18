@@ -1,0 +1,712 @@
+// =============================================================================
+// PIPE
+// Pipe command library; Unix-style pipe chains and text processing for data filtering and transformation.
+// =============================================================================
+Pipe={}
+//Debug flag lives in globals.G_pipeDebug
+// Helper function to check if character is alphanumeric or underscore (valid variable name character)
+Pipe._isVarChar=function(char)
+	if not char or len(char)!=1 then return false
+	c=code(char)
+	// Check A-Z (65-90), a-z (97-122), 0-9 (48-57), _ (95)
+	return (c>=65 and c<=90) or (c>=97 and c<=122) or (c>=48 and c<=57) or c==95
+end function
+// Helper function to expand pipe variables ($VAR and ${VAR} syntax)
+Pipe._expandVars=function(text)
+	if not text or typeof(text)!="string" then return text
+	if indexOf(text,"$")==null then return text
+	if globals.G_pipeDebug then print yellow("[DEBUG] _expandVars input: '"+text+"'")
+	result=text
+	// First, protect numeric positional parameters ($1, $2, etc.) - these are AWK/grep field references
+	// Replace them temporarily to avoid expansion
+	protectedTokens={}
+	tokenIndex=0
+	i=0
+	while i<len(result)
+		if result[i]=="$" and i+1<len(result) then
+			nextChar=result[i+1]
+			// Check if next character is a digit (0-9) - protect $0, $1, $2, etc.
+			if code(nextChar)>=48 and code(nextChar)<=57 then
+				placeholder="�PROTECTED"+tokenIndex+"�"
+				protectedTokens[placeholder]="$"+nextChar
+				result=result[:i]+placeholder+result[i+2:]
+				tokenIndex+=1
+				i+=len(placeholder)
+				continue
+			end if
+			// Check for AWK special variables ($NF, $NR) - protect multi-char refs
+			if i+2<len(result) then
+				twoChar=result[i+1:i+3]
+				if twoChar=="NF" or twoChar=="NR" then
+					placeholder="�PROTECTED"+tokenIndex+"�"
+					protectedTokens[placeholder]="$"+twoChar
+					result=result[:i]+placeholder+result[i+3:]
+					tokenIndex+=1
+					i+=len(placeholder)
+					continue
+				end if
+			end if
+		end if
+		i+=1
+	end while
+	// Expand each stored variable
+	for varName in globals.G_pipe.VARS.indexes
+		varValue=str(globals.G_pipe.VARS[varName])
+		if globals.G_pipeDebug then print yellow("[DEBUG]   Checking var: "+varName+" = '"+varValue+"'")
+		// Replace ${VAR} syntax first (more specific)
+		result=result.replace("${"+varName+"}",varValue)
+		// Replace $VAR syntax (check word boundaries to avoid partial matches)
+		// Keep replacing until no more matches found
+		while true
+			pos=result.indexOf("$"+varName)
+			if pos==null then break
+			endPos=pos+len(varName)+1
+			// Check if this is a complete variable name (not part of larger word)
+			if endPos>=len(result) or not Pipe._isVarChar(result[endPos]) then
+				if globals.G_pipeDebug then print yellow("[DEBUG]   Expanding $"+varName+" to '"+varValue+"' at pos "+pos)
+				result=result[:pos]+varValue+result[endPos:]
+			else
+				// Not a word boundary - replace this occurrence with a placeholder to skip it
+				// Use a temp marker that won't appear in normal text
+				result=result[:pos]+"�SKIP�"+result[pos+1:]
+			end if
+		end while
+		// Restore any skipped markers
+		result=result.replace("�SKIP�","$")
+	end for
+	// Restore protected positional parameters ($0-$9, $NF, $NR)
+	// Use manual indexOf+slice instead of .replace because GreyScript's replace
+	// treats $0 as a regex back-reference (the full match), not literal "$0"
+	for placeholder in protectedTokens.indexes
+		pos=result.indexOf(placeholder)
+		while pos!=null
+			result=result[:pos]+protectedTokens[placeholder]+result[pos+len(placeholder):]
+			pos=result.indexOf(placeholder)
+		end while
+	end for
+	if globals.G_pipeDebug then print yellow("[DEBUG] _expandVars output: '"+result+"'")
+	return result
+end function
+// Helper function to parse command string respecting quotes
+Pipe._parseArgs=function(cmdString)
+	tokens=[]
+	current=""
+	inQuote=false
+	wasQuoted=false
+	quoteChar=null
+	i=0
+	while i<cmdString.len
+		char=cmdString[i]
+		charCode=code(char)
+		if not inQuote then
+			// Check for quotes: ASCII (" and ') or curly quotes (8220/8221 for ", 8216/8217 for ')
+			if char=="""" or char=="'" or charCode==8220 or charCode==8216 then
+				inQuote=true
+				quoteChar=char
+				if globals.G_pipeDebug then print yellow("[DEBUG] _parseArgs: Found opening quote at pos "+i+", code="+charCode)
+				// Don't include the opening quote in the token
+			else if char==" " then
+				if len(current)>0 or wasQuoted then
+					push(tokens,current)
+					current=""
+					wasQuoted=false
+				end if
+			else
+				current=current+char
+			end if
+		else
+			// Check if this closes the quote (handle both ASCII and curly quote pairs)
+			quoteCode=code(quoteChar)
+			isClosing=false
+			if char==quoteChar then
+				isClosing=true
+			else if quoteCode==8220 and charCode==8221 then
+				// Opening curly " (8220) closed by closing curly " (8221)
+				isClosing=true
+			else if quoteCode==8216 and charCode==8217 then
+				// Opening curly ' (8216) closed by closing curly ' (8217)
+				isClosing=true
+			end if
+			if isClosing then
+				inQuote=false
+				wasQuoted=true
+				quoteChar=null
+				if globals.G_pipeDebug then print yellow("[DEBUG] _parseArgs: Found closing quote at pos "+i+", code="+charCode)
+				// Don't include the closing quote in the token
+			else
+				current=current+char
+			end if
+		end if
+		i+=1
+	end while
+	if len(current)>0 or wasQuoted then push(tokens,current)
+	if globals.G_pipeDebug then print yellow("[DEBUG] _parseArgs: Parsed "+len(tokens)+" tokens: "+join(tokens," | "))
+	// Expand variables in each token
+	expandedTokens=[]
+	for token in tokens
+		expandedToken=Pipe._expandVars(token)
+		if globals.G_pipeDebug and expandedToken!=token then print yellow("[DEBUG] Token expanded: '"+token+"' -> '"+expandedToken+"'")
+		push(expandedTokens,expandedToken)
+	end for
+	return expandedTokens
+end function
+Pipe.run=function(Obj,argv)
+	// Validate input
+	if not argv or not argv isa list or len(argv)==0 then
+		globals.G_piping=false
+		return []
+	end if
+	// Parse pipe chain: split command string by pipe delimiter
+	// Re-quote tokens that contain spaces or embedded pipe characters so the pipe chain parser preserves them
+	// Do NOT re-quote standalone | tokens — those are the pipe separators
+	quotedArgv=[]
+	_alen=len(argv);_ai=0
+	while _ai<_alen
+		_tok=argv[_ai]
+		if _tok=="|" then
+			push(quotedArgv,_tok)
+		else if indexOf(_tok," ")!=null or indexOf(_tok,char(9))!=null or indexOf(_tok,"|")!=null then
+			if indexOf(_tok,"""")!=null then push(quotedArgv,"'"+_tok+"'") else push(quotedArgv,""""+_tok+"""")
+		else
+			push(quotedArgv,_tok)
+		end if
+		_ai+=1
+	end while
+	fullCommand=join(quotedArgv," ")
+	// Strip zero-width spaces (char 8203) used in man pages for display
+	fullCommand=fullCommand.replace(char(8203),"")
+	if globals.G_pipeDebug then print yellow("[DEBUG] Pipe.run entry: fullCommand='" +fullCommand+"'")
+	// Escape pipe character for split (split uses regex, | is special)
+	// Use quote-aware split so | inside quoted strings is not treated as a pipe
+	pipeChain=[]
+	_segment=""
+	_inQuote=false
+	_quoteChar=null
+	_len=len(fullCommand);_ci=0
+	while _ci<_len
+		_ch=fullCommand[_ci]
+		_cc=code(_ch)
+		if not _inQuote then
+			if _ch=="""" or _ch=="'" or _cc==8220 or _cc==8216 then
+				_inQuote=true
+				_quoteChar=_ch
+				_segment=_segment+_ch
+			else if _ch=="|" then
+				push(pipeChain,_segment)
+				_segment=""
+			else
+				_segment=_segment+_ch
+			end if
+		else
+			_qc=code(_quoteChar)
+			_closing=false
+			if _ch==_quoteChar then
+				_closing=true
+			else if _qc==8220 and _cc==8221 then
+				_closing=true
+			else if _qc==8216 and _cc==8217 then
+				_closing=true
+			end if
+			if _closing then _inQuote=false
+			_segment=_segment+_ch
+		end if
+	_ci+=1
+	end while
+	push(pipeChain,_segment)
+	if globals.G_pipeDebug then print yellow("[DEBUG] Pipe chain split into "+len(pipeChain)+" stages")
+	// Check for empty commands in pipe chain (incomplete syntax)
+	if len(pipeChain)>0 then
+		_len=len(pipeChain);pipeIdx=0
+		while pipeIdx<_len
+			stageCmd=trim(pipeChain[pipeIdx])
+			if len(stageCmd)==0 then
+				globals.G_piping=false
+				if pipeIdx==0 then
+					return Error.set("Syntax error: pipe chain starts with empty command")
+				else if pipeIdx==_len-1 then
+					return Error.set("Syntax error: incomplete pipe chain (trailing pipe)")
+				else
+					return Error.set("Syntax error: empty command in pipe chain (double pipe?)")
+				end if
+			end if
+		pipeIdx+=1
+		end while
+	end if
+	// Check for redirects in middle of pipe chain (not allowed)
+	redirectOp=null
+	redirectFile=null
+	if len(pipeChain)>1 then
+		_len2=len(pipeChain)-1;i=0
+		while i<_len2
+			cmdString=pipeChain[i]
+			if indexOf(cmdString,">")!=null then
+				if globals.G_pipeDebug then print yellow("[DEBUG] ERROR: Redirect found in middle of chain at stage "+i)
+				globals.G_piping=false
+				return Error.set("Redirect not allowed in middle of pipe chain")
+			end if
+		i+=1
+		end while
+	end if
+	// Check last command for redirect operators
+	lastCmdString=pipeChain[len(pipeChain)-1]
+	lastCmdTokens=Pipe._parseArgs(trim(lastCmdString))
+	_len=len(lastCmdTokens);i=0
+	while i<_len
+		if lastCmdTokens[i]==">" or lastCmdTokens[i]==">>" then
+			redirectOp=lastCmdTokens[i]
+			if globals.G_pipeDebug then print yellow("[DEBUG] Redirect detected: op='"+redirectOp+"' at token "+i)
+			// Check if filename follows
+			if i+1<_len then
+				redirectFile=lastCmdTokens[i+1]
+				// Remove redirect op and filename
+				newTokens=[]
+				j=0;while j<i;push(newTokens,lastCmdTokens[j]);j+=1;end while
+				// Skip redirect and filename, keep rest if any
+				if i+2<_len then
+					j=i+2;while j<_len;push(newTokens,lastCmdTokens[j]);j+=1;end while
+				end if
+				lastCmdTokens=newTokens
+			else
+				// No filename after redirect, use default
+				redirectFile="pipe_out.txt"
+				if globals.G_pipeDebug then print yellow("[DEBUG] Using default redirect file: pipe_out.txt")
+				// Remove just redirect op
+				newTokens=[]
+				j=0;while j<i;push(newTokens,lastCmdTokens[j]);j+=1;end while
+				lastCmdTokens=newTokens
+			end if
+			break
+		end if
+	i+=1
+	end while
+	// Rebuild last command string without redirect
+	if redirectOp then
+		if globals.G_pipeDebug then print yellow("[DEBUG] Redirect target: file='"+redirectFile+"' op='"+redirectOp+"'")
+		// Re-quote tokens that contain spaces before joining
+		quotedTokens=[]
+		for token in lastCmdTokens;if indexOf(token," ")!=null or indexOf(token,char(9))!=null then push(quotedTokens,"'"+token+"'") else push(quotedTokens,token);end for
+		lastCmdString=join(quotedTokens," ")
+		pipeChain[len(pipeChain)-1]=lastCmdString
+	end if
+	// Process pipe chain using PIPE_MODE mechanism (like bash does)
+	pipeOutput=null
+	_len=len(pipeChain);cmdIdx=0
+	while cmdIdx<_len
+		cmdString=trim(pipeChain[cmdIdx])
+		if not cmdString then
+			cmdIdx+=1
+			continue
+		end if
+		if globals.G_pipeDebug then print yellow("[DEBUG] Pipeline stage "+(cmdIdx+1)+": ")+white(cmdString)
+		// Parse command into tokens
+		tokens=Pipe._parseArgs(cmdString)
+		if len(tokens)==0 then
+			cmdIdx+=1
+			continue
+		end if
+		commandName=tokens[0]
+		args=tokens[1:]
+		// Set stdin variable with previous command's output
+		if pipeOutput!=null then
+			globals.G_pipe.stdin=pipeOutput
+			if globals.G_pipeDebug then
+				debugMsg="[DEBUG]   Piped input available as stdin ("+typeof(pipeOutput)
+				if typeof(pipeOutput)=="string" then debugMsg=debugMsg+", "+len(pipeOutput)+" chars"
+				debugMsg=debugMsg+")"
+				print yellow(debugMsg)
+			end if
+		else
+			// Clear stdin for first command
+			globals.G_pipe.stdin=null
+		end if
+		// Enable pipe mode for intermediate commands (and last command if redirecting)
+		isLastStage=(cmdIdx==_len-1)
+		if not isLastStage or redirectOp then
+			globals.G_pipe.PIPE_MODE=true
+			globals.G_pipe.stdout=[]
+			if globals.G_pipeDebug then print yellow("[DEBUG]   PIPE_MODE enabled - command will return output")
+		end if
+		// Execute command - check pipe-specific commands first, then object's command table
+		result=null
+		// Handle pipe-specific commands (env, unset, debug, set)
+		if commandName=="env" then
+			if globals.G_pipeDebug then print yellow("[DEBUG]   Executing pipe command: ")+white(commandName)
+			result=Pipe.env(Obj,args)
+		else if commandName=="unset" then
+			if globals.G_pipeDebug then print yellow("[DEBUG]   Executing pipe command: ")+white(commandName)
+			result=Pipe.unset(Obj,args)
+		else if commandName=="debug" then
+			if globals.G_pipeDebug then print yellow("[DEBUG]   Executing pipe command: ")+white(commandName)
+			result=Pipe.debug(Obj,args)
+		else if commandName=="set" then
+			if globals.G_pipeDebug then print yellow("[DEBUG]   Executing pipe command: ")+white(commandName)
+			result=Pipe.set(Obj,args)
+		else if commandName=="xargs" then
+			if globals.G_pipeDebug then print yellow("[DEBUG]   Executing pipe command: ")+white(commandName)
+			result=Pipe.xargs(Obj,args)
+		else if hasIndex(Obj.commands,commandName) then
+			if globals.G_pipeDebug then print yellow("[DEBUG]   Executing: ")+white(commandName)
+			fn=Obj.commands[commandName]
+			result=fn(args)
+		else
+			globals.G_pipe.PIPE_MODE=false
+			globals.G_piping=false
+			return Error.set("Command not found: "+commandName)
+		end if
+		// Capture output for next stage OR for redirect
+		if not isLastStage or redirectOp then
+			// Get piped output from global buffer
+			if hasIndex(globals.G_pipe,"stdout") and len(globals.G_pipe.stdout)>0 then
+				pipeOutput=join(globals.G_pipe.stdout,char(10))
+				if globals.G_pipeDebug then print yellow("[DEBUG]   Captured "+len(globals.G_pipe.stdout)+" lines for next stage")
+			else if result!=null and typeof(result)!="number" and typeof(result)!="Error" then
+				if typeof(result)=="string" then
+					pipeOutput=result
+				else if result isa list then
+					pipeOutput=join(result,char(10))
+				else
+					pipeOutput=str(result)
+				end if
+				if globals.G_pipeDebug then print yellow("[DEBUG]   Captured return value ("+typeof(result)+")")
+			else
+				// No output - use empty string to continue pipe chain
+				pipeOutput=""
+				if globals.G_pipeDebug then print yellow("[DEBUG]   No output captured - using empty string")
+			end if
+			// Clear stdout buffer after capturing
+			globals.G_pipe.stdout=[]
+		end if
+		// Clear PIPE_MODE after capturing if not last stage
+		if not isLastStage then globals.G_pipe.PIPE_MODE=false
+	cmdIdx+=1
+	end while
+	// Clear stdin after pipeline completes
+	globals.G_pipe.stdin=null
+	globals.G_pipe.PIPE_MODE=false
+	globals.G_piping=false
+	globals.G_auto_yes=false
+	if globals.G_pipeDebug then print yellow("[DEBUG] Pipe chain complete")
+	// Handle redirect if one was found
+	if redirectOp then
+		if globals.G_pipeDebug then print yellow("[DEBUG] Writing output to file: "+redirectFile)
+		// Parse path and filename
+		redirectPath=null
+		redirectName=null
+		if redirectFile[0]=="~" then redirectFile=path(Obj.user.home)+redirectFile[1:]
+		if indexOf(redirectFile,"/")!=null then
+			redirectPath=parent_path(redirectFile)
+			redirectName=redirectFile[redirectFile.lastIndexOf("/")+1:]
+		else
+			redirectPath=path(Obj.dir.current)
+			redirectName=redirectFile
+		end if
+		// Convert pipeOutput to output string
+		output=""
+		if pipeOutput isa list then
+			output=trim(join(pipeOutput,char(10)))
+		else if pipeOutput isa string then
+			output=pipeOutput
+		else if pipeOutput!=null then
+			output=str(pipeOutput)
+		end if
+		// Get or create file
+		fullPath=redirectPath+"/"+redirectName
+		if globals.G_pipeDebug then print yellow("[DEBUG] Redirect fullPath: "+fullPath)
+		f=Io._getFile(Obj,fullPath)
+		if not(f isa Error) then
+			// File exists
+			if redirectOp==">" then
+				if globals.G_pipeDebug then print yellow("[DEBUG] Overwriting existing file")
+				set_content(f,output)
+			else
+				if globals.G_pipeDebug then print yellow("[DEBUG] Appending to existing file")
+				existingContent=get_content(f)
+				if len(existingContent) then set_content(f,existingContent+char(10)+output) else set_content(f,output)
+			end if
+		else
+			// Create parent directories if needed, then create file
+			if globals.G_pipeDebug then print yellow("[DEBUG] Creating new file: "+fullPath)
+			parentDir=File(Obj.computer,redirectPath)
+			if not parentDir then
+				parts=split(redirectPath,"/")
+				cur=""
+				for part in parts
+					if part=="" then continue
+					cur=cur+"/"+part
+					if not File(Obj.computer,cur) then
+						parentParts=split(cur,"/")
+						parentName=parentParts[-1]
+						parentBase=cur[:len(cur)-len(parentName)-1]
+						if parentBase=="" then parentBase="/"
+						create_folder(Obj.computer,parentBase,parentName)
+					end if
+				end for
+			end if
+			newFile=Command.touch(Obj,[fullPath],true)
+			if not(newFile isa Error) then set_content(newFile,output)
+		end if
+		return []
+	end if
+	// For pipes without redirect, don't return output - final command handles its own display
+	return []
+end function
+//Display or export pipe variables
+//Usage: env            - List all variables
+//       env VAR        - Show specific variable
+//       env VAR=value  - Set variable (alternative syntax)
+//       env -c         - Clear all variables
+Pipe.env=function(Obj,argv)
+  //Check for clear flag
+  if argv and len(argv)>0 and argv[0]=="-c" then
+    count=globals.G_pipe.VARS.indexes.len
+    globals.G_pipe.VARS={}
+    Info.info("Cleared "+count+" variable(s)")
+    return []
+  end if
+  //No arguments - list all variables
+  if not argv or len(argv)==0 then
+    result=[]
+    if globals.G_pipe.VARS.indexes.len==0 then
+      Info.info("No pipe variables set")
+      return []
+    end if
+    for varName in globals.G_pipe.VARS.indexes;push(result,yellow(varName+"="+str(globals.G_pipe.VARS[varName])));end for
+    return result
+  end if
+  //Check for VAR=value syntax
+  firstArg=argv[0]
+  if indexOf(firstArg,"=")!=null then
+    parts=split(firstArg,"=")
+    if len(parts)==2 then
+      varName=trim(parts[0])
+      varValue=trim(parts[1])
+      globals.G_pipe.VARS[varName]=varValue
+      return [varName+"="+varValue]
+    end if
+  end if
+  //Show specific variable
+  varName=argv[0]
+  if hasIndex(globals.G_pipe.VARS,varName) then return [globals.G_pipe.VARS[varName]] else return Error.set("Variable not set: "+varName)
+end function
+//Store pipe value in variable
+//Usage: echo value | set VAR
+//       cmd | set VAR
+Pipe.set=function(Obj,argv)
+  //Validate that variable name was provided
+  if not argv or len(argv)==0 then return Error.set("Usage: set VAR")
+  //Get variable name (first argument)
+  varName=argv[0]
+  varValue=globals.G_pipe.stdin
+  //Store in pipe variables
+  globals.G_pipe.VARS[varName]=varValue
+  if globals.G_pipeDebug then print yellow("[DEBUG] Set variable: "+varName+"="+varValue)
+  //Pass through the value to next command in pipe chain
+  if globals.G_pipe.PIPE_MODE then
+    push(globals.G_pipe.stdout,varValue)
+    return
+  end if
+  return []
+end function
+//Remove pipe variable
+//Usage: unset VAR
+Pipe.unset=function(Obj,argv)
+  if not argv or len(argv)==0 then return Error.set("Usage: unset VAR")
+  varName=argv[0]
+  if hasIndex(globals.G_pipe.VARS,varName) then
+    remove(globals.G_pipe.VARS,varName)
+    Info.info("Removed: "+varName)
+    return []
+  else
+    return Error.set("Variable not set: "+varName)
+  end if
+end function
+//Toggle pipe variable debugging
+Pipe.debug=function(Obj,argv)
+  if not argv or len(argv)==0 then
+    //Show current status
+    status="off"
+    if globals.G_pipeDebug then status="on"
+    Info.info("Pipe debug is currently: "+status)
+    return []
+  end if
+  cmd=lower(argv[0])
+  if cmd=="on" or cmd=="true" or cmd=="1" then
+    globals.G_pipeDebug=true
+    Info.info("Pipe debug enabled")
+    return []
+  else if cmd=="off" or cmd=="false" or cmd=="0" then
+    globals.G_pipeDebug=false
+    Info.info("Pipe debug disabled")
+    return []
+  else if cmd=="status" then
+    status="off"
+    if globals.G_pipeDebug then status="on"
+    Info.info("Pipe debug is currently: "+status)
+    return []
+  else
+    return Error.set("Usage: debug [on|off|status]")
+  end if
+end function
+//Build and execute command lines from stdin
+//Usage: ... | xargs [-n N] [-I PLACEHOLDER] [-d DELIM] [-t] CMD [INITIAL-ARGS...]
+Pipe.xargs=function(Obj,argv)
+  if globals.G_pipe.stdin==null then return Error.set("xargs: no stdin")
+  if not argv or len(argv)==0 then return Error.set("Usage: xargs [-n N] [-I PH] [-d D] [-t] CMD [ARGS...]")
+  nPer=null
+  placeholder=null
+  delim=char(10)
+  trace=false
+  i=0;_len=len(argv)
+  while i<_len
+    a=argv[i]
+    if a=="-n" and i+1<_len then
+      nPer=argv[i+1].to_int
+      if nPer==null or nPer<1 then return Error.set("xargs: invalid -n value")
+      i+=2
+    else if len(a)>2 and a[:2]=="-n" then
+      nPer=a[2:].to_int
+      if nPer==null or nPer<1 then return Error.set("xargs: invalid -n value")
+      i+=1
+    else if a=="-I" and i+1<_len then
+      placeholder=argv[i+1]
+      nPer=1
+      i+=2
+    else if len(a)>2 and a[:2]=="-I" then
+      placeholder=a[2:]
+      nPer=1
+      i+=1
+    else if a=="-d" and i+1<_len then
+      d=argv[i+1]
+      if len(d)==0 then return Error.set("xargs: -d requires a delimiter")
+      delim=d[0]
+      i+=2
+    else if len(a)>2 and a[:2]=="-d" then
+      delim=a[2]
+      i+=1
+    else if a=="-t" then
+      trace=true
+      i+=1
+    else
+      break
+    end if
+  end while
+  if i>=_len then return Error.set("xargs: missing command")
+  cmdName=argv[i];i+=1
+  baseArgs=argv[i:]
+  if cmdName=="xargs" then return Error.set("xargs: refusing to recurse")
+  //Resolve target command from object's command table
+  if not hasIndex(Obj.commands,cmdName) then return Error.set("xargs: unknown command: "+cmdName)
+  fn=Obj.commands[cmdName]
+  //Split stdin into items
+  rawItems=split(globals.G_pipe.stdin,delim)
+  items=[]
+  _len2=len(rawItems);j=0
+  while j<_len2
+    s=trim(rawItems[j])
+    if len(s)>0 then push(items,s)
+    j+=1
+  end while
+  if len(items)==0 then
+    if globals.G_pipe.PIPE_MODE then return
+    return []
+  end if
+  //Cap to avoid runaway recursion
+  if len(items)>5000 then return Error.set("xargs: too many items ("+len(items)+"), max 5000")
+  //Group into chunks
+  chunks=[]
+  if nPer==null then
+    push(chunks,items)
+  else
+    _itemLen=len(items);j=0
+    while j<_itemLen
+      push(chunks,items[j:j+nPer])
+      j+=nPer
+    end while
+  end if
+  //Save state for child invocations
+  savedStdin=globals.G_pipe.stdin
+  savedPipeMode=globals.G_pipe.PIPE_MODE
+  savedStdout=globals.G_pipe.stdout
+  collected=[]
+  _chunkLen=len(chunks);j=0
+  while j<_chunkLen
+    chunk=chunks[j]
+    //Build args for this invocation
+    callArgs=[]
+    if placeholder!=null then
+      sub=chunk[0]
+      _baseLen=len(baseArgs);k=0
+      while k<_baseLen
+        //Literal (non-regex) substitution: replace() treats arg 1 as regex
+        s=baseArgs[k]
+        out=""
+        pos=indexOf(s,placeholder)
+        while pos!=null
+          out=out+s[:pos]+sub
+          s=s[pos+len(placeholder):]
+          pos=indexOf(s,placeholder)
+        end while
+        out=out+s
+        push(callArgs,out)
+        k+=1
+      end while
+    else
+      _baseLen=len(baseArgs);k=0
+      while k<_baseLen;push(callArgs,baseArgs[k]);k+=1;end while
+      _chunkItemLen=len(chunk);k=0
+      while k<_chunkItemLen;push(callArgs,chunk[k]);k+=1;end while
+    end if
+    if trace then
+      //Quote args containing whitespace for readable trace output
+      traceParts=[]
+      _caLen=len(callArgs);k=0
+      while k<_caLen
+        ta=callArgs[k]
+        if indexOf(ta," ")!=null or indexOf(ta,char(9))!=null or len(ta)==0 then push(traceParts,"'"+ta+"'") else push(traceParts,ta)
+        k+=1
+      end while
+      print yellow("+ "+cmdName+" "+join(traceParts," "))
+    end if
+    //Children always run in PIPE_MODE so we can collect their output
+    //Feed chunk as stdin too so pipe-aware commands that prefer stdin
+    //(e.g. rev/cat/grep/etc) don't fall through to argv path-resolution
+    globals.G_pipe.stdin=join(chunk,char(10))
+    globals.G_pipe.PIPE_MODE=true
+    globals.G_pipe.stdout=[]
+    globals.G_pipe.XARGS_MODE=true
+    r=fn(callArgs)
+    globals.G_pipe.XARGS_MODE=false
+    if len(globals.G_pipe.stdout)>0 then
+      _outLen=len(globals.G_pipe.stdout);k=0
+      while k<_outLen;push(collected,globals.G_pipe.stdout[k]);k+=1;end while
+    else if r!=null and typeof(r)!="number" and typeof(r)!="Error" then
+      if typeof(r)=="string" then
+        if len(r)>0 then push(collected,r)
+      else if r isa list then
+        _rLen=len(r);k=0
+        while k<_rLen;push(collected,str(r[k]));k+=1;end while
+      end if
+    end if
+    //Allow user to abort with q
+    key=poll_input
+    if key=="q" then
+      Info.info("xargs: aborted")
+      break
+    end if
+  j+=1
+  end while
+  //Restore state
+  globals.G_pipe.stdin=savedStdin
+  globals.G_pipe.PIPE_MODE=savedPipeMode
+  globals.G_pipe.stdout=savedStdout
+  //Emit collected output
+  if globals.G_pipe.PIPE_MODE then
+    _cLen=len(collected);k=0
+    while k<_cLen;push(globals.G_pipe.stdout,collected[k]);k+=1;end while
+    return
+  end if
+  //Last stage: print collected output directly
+  _cLen=len(collected);k=0
+  while k<_cLen;print collected[k];k+=1;end while
+  return []
+end function

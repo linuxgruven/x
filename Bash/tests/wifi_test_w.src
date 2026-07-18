@@ -1,0 +1,99 @@
+testWifiTest="_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  WIFI TEST</color>
+_print <color=#eb0cc6>========================================</color>
+_print
+
+// --- Test 1: Print mode (formatted output) ---
+_print <color=#00bfff>[1/3]</color> Print mode
+_wifi
+_print
+
+// --- Test 2: Data mode — inspect raw list ---
+_print <color=#00bfff>[2/3]</color> Data mode
+_setvar(nets, _wifi)
+_print Raw: _getvar(nets)
+_print Count: len(_getvar(nets))
+_print
+
+// --- Test 3: Iterate and show each field ---
+_print <color=#00bfff>[3/3]</color> Field iteration
+_setvar(i, 0)
+for net in _getvar(nets)
+  _setvar(bssid,   _getvar(net).bssid)
+  _setvar(signal,   _getvar(net).signal)
+  _setvar(essid,   _getvar(net).essid)
+  _print <color=#ffff00>  [_getvar(i)]</color> BSSID=<color=#00ff00>_getvar(bssid)</color>  signal=<color=#00bfff>_getvar(signal)%</color>  ESSID=<color=#ff8800>_getvar(essid)</color>
+  _setvar(i, _getvar(i) + 1)
+end for
+_print
+
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>  TEST COMPLETE</color>
+_print <color=#00ff00>========================================</color>
+_print
+
+// --- Menu: Attack a network ---
+_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  WIFI ATTACK</color>
+_print <color=#eb0cc6>========================================</color>
+_print
+
+if len(_getvar(nets)) == 0
+  _print <color=#ff0000>[X] No WiFi networks found — cannot attack</color>
+  _exit
+end if
+
+// Build menu items from network list
+_setvar(menu_items, [])
+for net in _getvar(nets)
+  _setvar(_e, _getvar(net).essid)
+  _setvar(_b, _getvar(net).bssid)
+  _setvar(_s, _getvar(net).signal)
+  _push menu_items <color=#ff8800>_getvar(_e)</color>  <color=#00ff00>_getvar(_b)</color>  <color=#00bfff>_getvar(_s)%</color>
+end for
+
+_setvar(choice, menu(_getvar(menu_items), numbers, cyan))
+_print
+
+// Retrieve selected network by index
+_setvar(target_net, """")
+_setvar(j, 0)
+for net in _getvar(nets)
+  if _getvar(j) == _getvar(choice)
+    _setvar(target_net, net)
+  end if
+  _setvar(j, _getvar(j) + 1)
+end for
+
+_setvar(t_bssid, _getvar(target_net).bssid)
+_setvar(t_essid, _getvar(target_net).essid)
+_print
+_print <color=#00bfff>Target  ESSID:</color> <color=#ff8800>_getvar(t_essid)</color>
+_print <color=#00bfff>Target  BSSID:</color> <color=#00ff00>_getvar(t_bssid)</color>
+_print
+
+// Step 1: Enable monitor mode
+_print <color=#ffff00>[1/4]</color> Enabling monitor mode...
+airmon start wlan0
+_print
+
+// Step 2: Capture handshake (saves as file.cap in home dir)
+_print <color=#ffff00>[2/4]</color> Capturing handshake...
+_setvar(capfile, ""file.cap"")
+aireplay _getvar(t_bssid) _getvar(t_essid)
+_print
+
+// Step 3: Crack password (output printed by aircrack — read it then enter below)
+_print <color=#ffff00>[3/4]</color> Cracking handshake...
+aircrack _getvar(capfile)
+_setvar(pw, get_string(Enter cracked password:))
+_print
+
+// Step 4: Connect
+_print <color=#ffff00>[4/4]</color> Connecting to <color=#ff8800>_getvar(t_essid)</color>...
+iwconfig wlan0 _getvar(t_bssid) _getvar(t_essid) _getvar(pw)
+_print
+
+_print <color=#00ff00>========================================</color>
+_print <color=#00ff00>  ATTACK COMPLETE</color>
+_print <color=#00ff00>========================================</color>"

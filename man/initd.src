@@ -1,0 +1,38 @@
+// Man page for initd
+manInitd="INITD(8)                         X Shell Manual                         INITD(8)
+
+<b>NAME</b>
+    initd - manage /etc/init.d startup compiled scripts
+<b>SYNOPSIS</b>
+    <b>initd -l</b>
+    <b>initd -a</b> PATH
+    <b>initd -r</b> NAME
+<b>DESCRIPTION</b>
+    Manage compiled scripts in /etc/init.d. Any compiled script placed
+    in this directory is executed automatically when the system boots.
+    Use initd to list current entries, add a compiled script, or remove
+    an existing entry.
+<b>OPTIONS</b>
+    <b>-l</b> - List entries
+      Show all compiled scripts currently registered in /etc/init.d.
+
+    <b>-a</b> PATH - Add entry
+      Copy the compiled script at PATH into /etc/init.d so it runs on next boot.
+      PATH can be absolute or relative to the current directory.
+
+    <b>-r</b> NAME - Remove entry
+      Delete the entry named NAME from /etc/init.d.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># List startup entries</color>
+    <b>initd -l</b>
+    Show all files registered to run on boot
+
+    <color=#e4ff34># Add a compiled script to startup</color>
+    <b>initd -a</b> /home/tux/hacktoolkit
+    Register compiled script to run automatically on boot
+
+    <color=#e4ff34># Remove a startup entry</color>
+    <b>initd -r</b> hacktoolkit
+    Remove hacktoolkit from /etc/init.d
+<b>SEE ALSO</b>
+    <b>build</b>, <b>chmod</b>, <b>cp</b>"

@@ -1,0 +1,14 @@
+// Man page for rnet
+manRnet="RNET(1)                          X Shell Manual                          RNET(1)
+
+<b>NAME</b>
+    rnet - Refresh network interface
+<b>SYNOPSIS</b>
+    <b>rnet</b>
+<b>DESCRIPTION</b>
+    Refresh and reinitialize the network interface.
+<b>EXAMPLE:</b>
+    <b>rnet</b>
+    Refresh network interface
+<b>SEE ALSO</b>
+    <b>active</b>, <b>ifconfig</b>, <b>iwconfig</b>"

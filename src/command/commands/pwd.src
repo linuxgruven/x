@@ -1,0 +1,11 @@
+// =============================================================================
+// PWD
+// Print current working directory path.
+// =============================================================================
+Command.pwd=function(Obj)
+  if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+    push(globals.G_pipe.stdout,path(Obj.dir.current))
+    return
+  end if
+  print white(path(Obj.dir.current))
+end function

@@ -1,0 +1,133 @@
+// Man page for disk
+manDisk="DISK(1)                          X Shell Manual                          DISK(1)
+
+<b>NAME</b>
+    disk - All-purpose disk management utility
+<b>SYNOPSIS</b>
+    <b>disk</b>
+    <b>disk -s</b>
+    <b>disk -n</b>
+    <b>disk -r</b>
+    <b>disk -d</b>
+    <b>disk -f</b>
+    <b>disk -x</b>
+    <b>disk -z</b>
+    <b>disk -i</b>
+    <b>disk -e</b>
+    <b>disk --find</b><b> ITEM</b>
+    <b>disk --limit</b><b> DISPLAY_COUNT</b>
+    <b>disk --min</b><b> MINIMUM_SIZE</b>
+    <b>disk --max</b><b> MAXIMUM_SIZE</b>
+    <b>disk --top</b><b> TOP_COUNT</b>
+    <b>disk --free</b>
+    <b>disk --used</b>
+<b>DESCRIPTION</b>
+    The disk utility provides comprehensive disk usage analysis and
+    management capabilities. It enables file searching, size filtering,
+    sorting operations, and disk capacity monitoring with flexible
+    display options.
+<b>OPTIONS</b>
+    <b>-s</b> - Sort by Size
+      Sort results by file/directory size (largest first).
+
+    <b>-n</b> - Sort by Name
+      Sort results alphabetically by name.
+
+    <b>-r</b> - Reverse Sort
+      Reverse the current sort order (ascending/descending).
+
+    <b>-d</b> - Directories Only
+      Show only directories in results.
+
+    <b>-f</b> - Files Only
+      Show only files in results.
+
+    <b>-x</b> - Delete Results
+      Delete all found items (use with caution).
+
+    <b>-z</b> - Omit Zero-Size
+      Exclude zero-byte files from results.
+
+    <b>-i</b> - Case-Insensitive
+      Perform case-insensitive search matching.
+
+    <b>-e</b> - Exact Match
+      Match exact name only (no wildcards, no partial matches).
+
+    <b>--find ITEM</b> - Find by Pattern
+      Search for files matching ITEM pattern.
+
+    <b>--limit DISPLAY_COUNT</b> - Limit Results
+      Restrict output to DISPLAY_COUNT results.
+
+    <b>--min MINIMUM_SIZE</b> - Minimum Size Filter
+      Show only files >= MINIMUM_SIZE. Supports kb, mb, gb suffixes.
+
+    <b>--max MAXIMUM_SIZE</b> - Maximum Size Filter
+      Show only files <= MAXIMUM_SIZE. Supports kb, mb, gb suffixes.
+
+    <b>--top TOP_COUNT</b> - Top Results
+      Display top TOP_COUNT largest items.
+
+    <b>--free</b> - Free Space
+      Show remaining disk capacity.
+
+    <b>--used</b> - Disk Usage Statistics
+      Display disk usage information.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Usage</color>
+    <b>disk</b>
+    Display disk usage of current directory
+
+    <b>disk /home</b>
+    Show disk usage for /home directory
+
+    <color=#e4ff34># Sorting</color>
+    <b>disk -s</b>
+    Sort by size (largest first)
+
+    <b>disk -s -r</b>
+    Sort by size reversed (smallest first)
+
+    <b>disk -n</b>
+    Sort alphabetically by name
+
+    <color=#e4ff34># Filtering</color>
+    <b>disk -sd</b>
+    Sort directories by size
+
+    <b>disk -sf</b>
+    Sort files by size
+
+    <b>disk -s --min 1mb --max 2mb</b>
+    Show files between 1MB and 2MB sorted by size
+
+    <b>disk -sd --min 1mb --max 2mb</b>
+    Show directories between 1MB and 2MB
+
+    <b>disk -sz</b>
+    Sort by size, omit zero-byte files
+
+    <color=#e4ff34># Search</color>
+    disk --find *.txt
+    Find all .txt files
+
+    disk -i --find README
+    Case-insensitive search for README
+
+    disk -e --find config.txt
+    Exact match only for config.txt
+
+    <color=#e4ff34># Disk Statistics</color>
+    <b>disk --free</b>
+    Show free disk space
+
+    <b>disk --used</b>
+    Show disk usage statistics
+
+    <color=#e4ff34># Advanced</color>
+    <b>disk --top 10 /home</b>
+    Show top 10 largest items in /home
+
+    <b>disk --limit 20 -s</b>
+    Show 20 results sorted by size"

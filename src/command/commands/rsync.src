@@ -1,0 +1,232 @@
+// =============================================================================
+// RSYNC
+// Sync files between local and remote systems bidirectionally.
+// =============================================================================
+Command.rsync=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  if not argv and not hasPipeInput then return Man.help(["rsync"])
+  if hasPipeInput then
+    if not argv then argv=[]
+    _pipeFiles=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(_pipeFiles,line);end for
+    if len(_pipeFiles)>0 then
+      _savedStdin=globals.G_pipe.stdin
+      globals.G_pipe.stdin=null
+      for _pipeFile in _pipeFiles;Command.rsync(Obj,[_pipeFile]+argv);end for
+      globals.G_pipe.stdin=_savedStdin
+      return
+    end if
+  end if
+  _p=ArgumentParser.init
+  _p.addArgument("r",false,"flag") // Recursive mode
+  _p.addArgument("a",false,"flag") // Archive mode (recursive + preserve permissions)
+  _p.addArgument("v",false,"flag") // Verbose output
+  _p.addArgument("u",false,"flag") // Update mode (skip newer files)
+  _p.addArgument("delete",true,"flag") // Delete source after transfer
+  _p.addArgument("n",false,"flag") // Dry-run mode
+  _p.addArgument("p",false,"store") // SSH password
+  argv=_p.parse("rsync",argv,Obj)
+  if argv isa Error then return
+  if len(argv.rest)<2 then return Error.set("rsync requires source and destination arguments")
+  src=argv.rest[0]
+  dst=argv.rest[1]
+  // Detect remote operations by checking for colon separator (remote/session indicator)
+  srcIsRemote=indexOf(src,":")!=null
+  dstIsRemote=indexOf(dst,":")!=null
+  parseRemote=function(remoteStr)
+    parts=split(remoteStr,":")
+    // Check for session format: sess:id:path (3 parts)
+    isSessionFormat=len(parts)==3 and parts[0]=="sess"
+    if isSessionFormat then
+      sessionId=val(parts[1])
+      sessionPath=parts[2]
+      if not hasIndex(globals.G_sessions.values,sessionId) then return Error.set("Session "+sessionId+" not found")
+      return {"type":"session","id":sessionId,"path":sessionPath}
+    else if len(parts)==2 then
+      // Regular SSH remote format: [user@]host:path (2 parts)
+      return {"type":"remote","host":parts[0],"path":parts[1]}
+    else
+      return Error.set("Invalid remote path format: "+remoteStr)
+    end if
+  end function
+  getSessionShell=function(sessionId);if not hasIndex(globals.G_sessions.values,sessionId) then return Error.set("Session "+sessionId+" not found");return globals.G_sessions.values[sessionId].shell;end function
+  // Connect to SSH host and return authenticated shell with password caching
+  getSSHShell=function(hostStr,providedPassword=null)
+    parts=split(hostStr,"@")
+    hasUserSpecified=len(parts)==2
+    if hasUserSpecified then
+      user=parts[0]
+      host=parts[1]
+    else
+      user="root"
+      host=hostStr
+    end if
+    // Determine password source: provided, cached, or prompt user
+    password=null
+    if providedPassword then
+      password=providedPassword
+    else if hasIndex(globals.G_cachePasswords,host) then
+      password=globals.G_cachePasswords[host]
+    else
+      password=Gui.inputPass("Enter password for "+user+"@"+host)
+      if not password then return Error.set("Password required for SSH connection")
+    end if
+    ip=Net.lookup(host)
+    if not ip then return Error.set("Cannot resolve host: "+host)
+    Info.info("Connecting to "+user+"@"+ip+"...")
+    // CONTEXT ROUTING: Establish SSH connection through proxy chain if available
+    // Using G_proxy.shell routes the connection through the entire proxy chain,
+    // maintaining anonymity. Direct Obj.shell would expose the current system.
+    if G_proxy then shell=connect_service(G_proxy.shell,ip,22,user,password,"ssh") else shell=connect_service(Obj.shell,ip,22,user,password,"ssh")
+    if shell isa string then return Error.set(shell)
+    if not shell then return Error.set("Failed to connect to "+host)
+    if globals.G_cachePasswords then
+      if not hasIndex(globals.G_cachePasswords,ip) then globals.G_cachePasswords[ip]=password
+    end if
+    return shell
+  end function
+  // Local-to-local sync: direct file copy without remote connections
+  isBothLocal=not srcIsRemote and not dstIsRemote
+  if isBothLocal then
+    srcFile=Io._getFile(Obj,src,true)
+    if srcFile isa Error then return srcFile
+    dstPath=Io._getPath(Obj,dst)
+    dstFile=Io.getFileObj(Obj,dstPath)
+    if not dstFile then
+      parent=parent_path(dstPath)
+      if not Io.getFileObj(Obj,parent) then return Error.set("Destination parent directory does not exist: "+parent)
+      dstFile=Io.getFileObj(Obj,parent)
+    end if
+    if argv.n then return Info.info("[DRY RUN] Would sync "+path(srcFile)+" to "+dstPath)
+    if argv.v then Info.info("Syncing "+path(srcFile)+" to "+dstPath)
+    isDirectory=is_folder(srcFile)
+    if isDirectory then
+      needsRecursive=not argv.r and not argv.a
+      if needsRecursive then return Error.set("Cannot sync directory without -r or -a flag")
+      result=Disk.rsyncDir(Obj,srcFile,dstPath,argv)
+      if result isa Error then return result
+    else
+      result=copy(srcFile,parent_path(dstPath),name(srcFile))
+      if result!=1 then return Error.set(result)
+    end if
+    if argv.delete then
+      if argv.v then Info.info("Deleting source files...")
+      srcFile.delete
+      if argv.v then Info.info("Source files deleted")
+    end if
+    if argv.v then Info.info("Sync complete")
+    return
+  end if
+  // Remote sync operations: handle all remote transfer scenarios
+  isBothRemote=srcIsRemote and dstIsRemote
+  if isBothRemote then
+    // Transfer between two remote locations (session-to-session or SSH-to-SSH)
+    srcRemote=parseRemote(src)
+    if srcRemote isa Error then return srcRemote
+    dstRemote=parseRemote(dst)
+    if dstRemote isa Error then return dstRemote
+    if argv.n then return Info.info("[DRY RUN] Would transfer "+srcRemote.path+" to "+dstRemote.path)
+    if argv.v then Info.info("Transferring between remote locations...")
+    isSourceSession=srcRemote.type=="session"
+    if isSourceSession then
+      srcShell=getSessionShell(srcRemote.id)
+      if srcShell isa Error then return srcShell
+    else
+      srcShell=getSSHShell(srcRemote.host,argv.p)
+      if srcShell isa Error then return srcShell
+    end if
+    isDestSession=dstRemote.type=="session"
+    if isDestSession then
+      dstShell=getSessionShell(dstRemote.id)
+      if dstShell isa Error then return dstShell
+    else
+      dstShell=getSSHShell(dstRemote.host,argv.p)
+      if dstShell isa Error then return dstShell
+    end if
+    result=scp(srcShell,srcRemote.path,dstRemote.path,dstShell)
+    if result isa string then return Error.set(result)
+    if argv.delete then
+      if argv.v then Info.info("Deleting source files...")
+      srcFile=srcShell.host_computer.File(srcRemote.path)
+      if srcFile then srcFile.delete
+      if argv.v then Info.info("Source files deleted")
+    end if
+    if argv.v then Info.info("Transfer complete")
+  else if srcIsRemote then
+    // Download from remote source to local destination
+    remote=parseRemote(src)
+    if remote isa Error then return remote
+    srcPath=remote.path
+    dstPath=Io._getPath(Obj,dst)
+    if argv.n then return Info.info("[DRY RUN] Would download "+srcPath+" from remote to "+dstPath)
+    if argv.v then Info.info("Downloading "+srcPath+" from remote")
+    isSession=remote.type=="session"
+    if isSession then
+      remoteShell=getSessionShell(remote.id)
+      if remoteShell isa Error then return remoteShell
+    else
+      remoteShell=getSSHShell(remote.host,argv.p)
+      if remoteShell isa Error then return remoteShell
+    end if
+    // Check if running as root and prompt for file ownership
+    ownerName=null
+    if Obj.user.name=="root" then
+      ownerName=Gui.input("Enter owner name for downloaded files (leave empty for root)")
+      if ownerName=="" then ownerName=null
+    else
+      ownerName=Obj.user.name
+    end if
+    result=scp(remoteShell,srcPath,dstPath,Obj.shell)
+    if result isa string then return Error.set(result)
+    if ownerName then
+      dstFile=Io.getFileObj(Obj,dstPath)
+      if dstFile then
+        if argv.v then Info.info("Setting owner to "+ownerName+"...")
+        chownResult=set_owner(dstFile,ownerName,true) // true for recursive
+        if chownResult isa string then
+          Info.info("Warning: Could not set owner: "+chownResult)
+        else if argv.v then
+          Info.info("Owner set to "+ownerName)
+        end if
+        if argv.v then Info.info("Setting group to "+ownerName+"...")
+        chgrpResult=set_group(dstFile,ownerName,true) // true for recursive
+        if chgrpResult isa string then
+          Info.info("Warning: Could not set group: "+chgrpResult)
+        else if argv.v then
+          Info.info("Group set to "+ownerName)
+        end if
+      end if
+    end if
+    if argv.delete then
+      if argv.v then Info.info("Deleting source files...")
+      srcFile=remoteShell.host_computer.File(srcPath)
+      if srcFile then srcFile.delete
+      if argv.v then Info.info("Source files deleted")
+    end if
+    if argv.v then Info.info("Download complete")
+  else
+    // Upload from local source to remote destination
+    remote=parseRemote(dst)
+    if remote isa Error then return remote
+    srcFile=Io._getFile(Obj,src,true)
+    if srcFile isa Error then return srcFile
+    if argv.n then return Info.info("[DRY RUN] Would upload "+path(srcFile)+" to remote at "+remote.path)
+    if argv.v then Info.info("Uploading "+path(srcFile)+" to remote")
+    isSession=remote.type=="session"
+    if isSession then
+      remoteShell=getSessionShell(remote.id)
+      if remoteShell isa Error then return remoteShell
+    else
+      remoteShell=getSSHShell(remote.host,argv.p)
+      if remoteShell isa Error then return remoteShell
+    end if
+    result=scp(Obj.shell,path(srcFile),remote.path,remoteShell)
+    if result isa string then return Error.set(result)
+    if argv.delete then
+      if argv.v then Info.info("Deleting source files...")
+      srcFile.delete
+      if argv.v then Info.info("Source files deleted")
+    end if
+    if argv.v then Info.info("Upload complete")
+  end if
+end function

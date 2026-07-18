@@ -1,0 +1,24 @@
+// =============================================================================
+// MAP
+// Utility extensions for the map type: inversion, iteration, and conversion.
+// =============================================================================
+invert=function(self);for kv in self;self[@kv.value]=@kv.key;end for;return self;end function
+map.invert=@invert
+// Call func(key, value) for each entry
+map.each=function(func)
+	l=self.toList(true)
+	r=l[0:]
+	for i in indexes(l);func(r[i][0],r[i][1]);end for
+end function
+// Convert to list of [key, value] pairs; pass s=true for shallow (no recursion)
+map.toList=function(s=null)
+	l=[]
+	for i in indexes(self)
+		if self[i] isa map then
+			if s then push(l,[i,self[i]]) else push(l,[i,self[i].toList])
+		else
+			push(l,[i,self[i]])
+		end if
+	end for
+	return l
+end function

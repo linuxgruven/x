@@ -1,0 +1,931 @@
+// Bash Return Value Accuracy Test Script
+// Tests every builtin function and command for correct return values.
+// Verifies types, edge cases, and that results are accurate.
+
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>[PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>[FAIL]</color> _getvar(label) <color=#ffff00> expected:</color>_getvar(expected) <color=#ffff00> got:</color>_getvar(actual)
+  endif
+endfunc
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     BASH RETURN VALUE ACCURACY TESTS</color>
+_print <color=#eb0cc6>============================================</color>
+_print
+
+// ===================================================================
+// SECTION 1 - STRING BUILTINS
+// ===================================================================
+_print <color=#00bfff>--- Section 1: String Builtins ---</color>
+
+// len - string
+_setvar(r, len(hello))
+assert(len of hello is 5, _getvar(r), 5)
+
+// len - empty string
+_setvar(s, )
+_setvar(r, len(_getvar(s)))
+assert(len of empty string is 0, _getvar(r), 0)
+
+// len - single char
+_setvar(r, len(x))
+assert(len of single char is 1, _getvar(r), 1)
+
+// len - list
+_setvar(arr, [a, b, c])
+_setvar(r, len(_getvar(arr)))
+assert(len of 3 item list is 3, _getvar(r), 3)
+
+// len - empty list
+_setvar(arr, [])
+_setvar(r, len(_getvar(arr)))
+assert(len of empty list is 0, _getvar(r), 0)
+
+// upper
+_setvar(r, upper(hello))
+assert(upper hello is HELLO, _getvar(r), HELLO)
+
+// upper - already uppercase
+_setvar(r, upper(HELLO))
+assert(upper HELLO stays HELLO, _getvar(r), HELLO)
+
+// upper - mixed case
+_setvar(r, upper(HeLLo))
+assert(upper mixed is HELLO, _getvar(r), HELLO)
+
+// lower
+_setvar(r, lower(HELLO))
+assert(lower HELLO is hello, _getvar(r), hello)
+
+// lower - already lowercase
+_setvar(r, lower(hello))
+assert(lower hello stays hello, _getvar(r), hello)
+
+// lower - mixed case
+_setvar(r, lower(HeLLo))
+assert(lower mixed is hello, _getvar(r), hello)
+
+// substr - two arg (start to end)
+_setvar(r, substr(hello, 1))
+assert(substr hello from 1 is ello, _getvar(r), ello)
+
+// substr - three arg (start to end)
+_setvar(r, substr(hello, 1, 3))
+assert(substr hello 1 to 3 is el, _getvar(r), el)
+
+// substr - from 0
+_setvar(r, substr(hello, 0, 5))
+assert(substr hello 0 to 5 is hello, _getvar(r), hello)
+
+// substr - single char
+_setvar(r, substr(hello, 0, 1))
+assert(substr hello 0 to 1 is h, _getvar(r), h)
+
+// substr - last char
+_setvar(r, substr(hello, 4, 5))
+assert(substr hello 4 to 5 is o, _getvar(r), o)
+
+// contains - found
+_setvar(r, contains(hello world, world))
+assert(contains hello world and world is 1, _getvar(r), 1)
+
+// contains - not found
+_setvar(r, contains(hello, xyz))
+assert(contains hello and xyz is 0, _getvar(r), 0)
+
+// contains - empty needle
+_setvar(r, contains(hello, ))
+assert(contains empty needle is 1, _getvar(r), 1)
+
+// contains - substring at start
+_setvar(r, contains(hello, hel))
+assert(contains at start is 1, _getvar(r), 1)
+
+// contains - substring at end
+_setvar(r, contains(hello, llo))
+assert(contains at end is 1, _getvar(r), 1)
+
+// replace - basic
+_setvar(r, replace(hello, l, x))
+assert(replace l with x in hello, _getvar(r), hexxo)
+
+// replace - no match leaves unchanged
+_setvar(r, replace(hello, z, x))
+assert(replace no match unchanged, _getvar(r), hello)
+
+// split_str - basic
+_setvar(arr, split_str(a-b-c, -))
+_setvar(r, len(_getvar(arr)))
+assert(split_str a-b-c by dash len 3, _getvar(r), 3)
+
+// trim_str - leading and trailing spaces
+_setvar(r, trim_str(  hello  ))
+assert(trim spaces from hello, _getvar(r), hello)
+
+// trim_str - no spaces
+_setvar(r, trim_str(hello))
+assert(trim no-space string unchanged, _getvar(r), hello)
+
+// concat - two strings
+_setvar(r, concat(foo, bar))
+assert(concat foo bar is foobar, _getvar(r), foobar)
+
+// concat - three strings
+_setvar(r, concat(a, b, c))
+assert(concat a b c is abc, _getvar(r), abc)
+
+// concat - with empty
+_setvar(r, concat(hello, ))
+assert(concat with empty is hello, _getvar(r), hello)
+
+// join - basic
+_setvar(arr, [a, b, c])
+_setvar(r, join(_getvar(arr), -))
+assert(join list with dash is a-b-c, _getvar(r), a-b-c)
+
+// join - single element
+_setvar(arr, [only])
+_setvar(r, join(_getvar(arr), ,))
+assert(join single element with comma delim, _getvar(r), only)
+
+_print
+
+// ===================================================================
+// SECTION 2 - MATH BUILTINS
+// ===================================================================
+_print <color=#00bfff>--- Section 2: Math Builtins ---</color>
+
+// floor - positive decimal
+_setvar(r, floor(3.7))
+assert(floor 3.7 is 3, _getvar(r), 3)
+
+// floor - exact integer
+_setvar(r, floor(5))
+assert(floor 5 is 5, _getvar(r), 5)
+
+// floor - negative decimal
+_setvar(r, floor(-2.3))
+assert(floor -2.3 is -3, _getvar(r), -3)
+
+// ceil - positive decimal
+_setvar(r, ceil(3.2))
+assert(ceil 3.2 is 4, _getvar(r), 4)
+
+// ceil - exact integer
+_setvar(r, ceil(5))
+assert(ceil 5 is 5, _getvar(r), 5)
+
+// ceil - negative decimal
+_setvar(r, ceil(-2.7))
+assert(ceil -2.7 is -2, _getvar(r), -2)
+
+// abs - positive
+_setvar(r, abs(5))
+assert(abs 5 is 5, _getvar(r), 5)
+
+// abs - negative
+_setvar(r, abs(-5))
+assert(abs -5 is 5, _getvar(r), 5)
+
+// abs - zero
+_setvar(r, abs(0))
+assert(abs 0 is 0, _getvar(r), 0)
+
+// round - up
+_setvar(r, round(3.6))
+assert(round 3.6 is 4, _getvar(r), 4)
+
+// round - down
+_setvar(r, round(3.2))
+assert(round 3.2 is 3, _getvar(r), 3)
+
+// round - halfway
+_setvar(r, round(3.5))
+assert(round 3.5 is 4, _getvar(r), 4)
+
+// min - basic
+_setvar(r, min(3, 7))
+assert(min 3 7 is 3, _getvar(r), 3)
+
+// min - equal
+_setvar(r, min(5, 5))
+assert(min 5 5 is 5, _getvar(r), 5)
+
+// min - negative
+_setvar(r, min(-3, 3))
+assert(min -3 3 is -3, _getvar(r), -3)
+
+// max - basic
+_setvar(r, max(3, 7))
+assert(max 3 7 is 7, _getvar(r), 7)
+
+// max - equal
+_setvar(r, max(5, 5))
+assert(max 5 5 is 5, _getvar(r), 5)
+
+// max - negative
+_setvar(r, max(-3, 3))
+assert(max -3 3 is 3, _getvar(r), 3)
+
+// random - within range (test 5 times)
+_setvar(pass, 1)
+for i in range(1, 5)
+  _setvar(val, random(1, 10))
+  if _getvar(val) < 1
+    _setvar(pass, 0)
+  endif
+  if _getvar(val) > 10
+    _setvar(pass, 0)
+  endif
+endfor
+assert(random 1-10 always in range over 5 trials, _getvar(pass), 1)
+
+_print
+
+// ===================================================================
+// SECTION 3 - TYPE CASTING
+// ===================================================================
+_print <color=#00bfff>--- Section 3: Type Casting ---</color>
+
+// to_string - number to string
+_setvar(r, to_string(42))
+assert(to_string 42 is 42, _getvar(r), 42)
+
+// to_string - string stays string
+_setvar(r, to_string(hello))
+assert(to_string hello is hello, _getvar(r), hello)
+
+// to_int - string to int
+_setvar(r, to_int(42))
+assert(to_int 42 string is 42, _getvar(r), 42)
+
+// to_int - negative
+_setvar(r, to_int(-7))
+assert(to_int -7 is -7, _getvar(r), -7)
+
+// to_int - zero
+_setvar(r, to_int(0))
+assert(to_int 0 is 0, _getvar(r), 0)
+
+// to_float - string to float
+_setvar(r, to_float(3.14))
+assert(to_float 3.14 is 3.14, _getvar(r), 3.14)
+
+// to_float - integer input
+_setvar(r, to_float(5))
+assert(to_float 5 is 5, _getvar(r), 5)
+
+// to_yesno - truthy
+_setvar(r, to_yesno(1))
+assert(to_yesno 1 is yes, _getvar(r), yes)
+
+// to_yesno - falsy
+_setvar(r, to_yesno(0))
+assert(to_yesno 0 is no, _getvar(r), no)
+
+// to_truefalse - truthy
+_setvar(r, to_truefalse(1))
+assert(to_truefalse 1 is true, _getvar(r), true)
+
+// to_truefalse - falsy
+_setvar(r, to_truefalse(0))
+assert(to_truefalse 0 is false, _getvar(r), false)
+
+_print
+
+// ===================================================================
+// SECTION 4 - TYPE INTROSPECTION
+// ===================================================================
+_print <color=#00bfff>--- Section 4: Type Introspection ---</color>
+
+// typeof - string
+_setvar(s, hello)
+_setvar(r, typeof(s))
+assert(typeof string is string, _getvar(r), string)
+
+// typeof - list
+_setvar(arr, [1, 2])
+_setvar(r, typeof(arr))
+assert(typeof list is list, _getvar(r), list)
+
+// typeof_val - string
+_setvar(r, typeof_val(hello))
+assert(typeof_val string is string, _getvar(r), string)
+
+// typeof_val - list
+_setvar(arr, [a, b])
+_setvar(r, typeof_val(_getvar(arr)))
+assert(typeof_val list is list, _getvar(r), list)
+
+_print
+
+// ===================================================================
+// SECTION 5 - VARIABLE OPERATIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 5: Variable Operations ---</color>
+
+// _setvar and _getvar round-trip: string
+_setvar(test_str, hello)
+_setvar(r, _getvar(test_str))
+assert(set then get string is hello, _getvar(r), hello)
+
+// _setvar and _getvar round-trip: number
+_setvar(test_num, 42)
+_setvar(r, _getvar(test_num))
+assert(set then get number is 42, _getvar(r), 42)
+
+// _setvar expression evaluation
+_setvar(r, 10 + 5)
+assert(var eval addition is 15, _getvar(r), 15)
+
+// _setvar complex expression
+_setvar(r, 3 * 4 + 2)
+assert(var eval mixed ops is 14, _getvar(r), 14)
+
+// _push and len
+_setvar(arr, [])
+_push arr one
+_push arr two
+_push arr three
+_setvar(r, len(_getvar(arr)))
+assert(push 3 items len is 3, _getvar(r), 3)
+
+// _pop removes last
+_setvar(arr, [a, b, c])
+_pop arr
+_setvar(r, len(_getvar(arr)))
+assert(pop from 3 item list len is 2, _getvar(r), 2)
+
+// _pull removes first
+_setvar(arr, [a, b, c])
+_pull arr
+_setvar(r, len(_getvar(arr)))
+assert(pull from 3 item list len is 2, _getvar(r), 2)
+
+// _in - found
+_setvar(arr, [apple, banana, cherry])
+_setvar(r, _in(_getvar(arr), banana))
+assert(_in banana in list is 1, _getvar(r), 1)
+
+// _in - not found
+_setvar(arr, [apple, banana, cherry])
+_setvar(r, _in(_getvar(arr), grape))
+assert(_in grape not in list is 0, _getvar(r), 0)
+
+_print
+
+// ===================================================================
+// SECTION 6 - ARITHMETIC EXPRESSIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 6: Arithmetic Expressions ---</color>
+
+// Addition
+_setvar(r, 7 + 3)
+assert(7 + 3 is 10, _getvar(r), 10)
+
+// Subtraction
+_setvar(r, 10 - 4)
+assert(10 - 4 is 6, _getvar(r), 6)
+
+// Multiplication
+_setvar(r, 6 * 7)
+assert(6 * 7 is 42, _getvar(r), 42)
+
+// Division
+_setvar(r, 20 / 4)
+assert(20 / 4 is 5, _getvar(r), 5)
+
+// Modulo
+_setvar(r, 17 % 5)
+assert(17 mod 5 is 2, _getvar(r), 2)
+
+// Power
+_setvar(r, 2 ** 8)
+assert(2 ** 8 is 256, _getvar(r), 256)
+
+// Negative result
+_setvar(r, 3 - 10)
+assert(3 - 10 is -7, _getvar(r), -7)
+
+// Zero
+_setvar(r, 5 - 5)
+assert(5 - 5 is 0, _getvar(r), 0)
+
+// Compound expression
+_setvar(a, 10)
+_setvar(b, 3)
+_setvar(r, _getvar(a) + _getvar(b) * 2)
+assert(10 + 3*2 is 16, _getvar(r), 16)
+
+// Nested function in arithmetic
+_setvar(r, len(hello) + len(world))
+assert(len hello + len world is 10, _getvar(r), 10)
+
+// len in arithmetic subtraction
+_setvar(r, len(hello) - 2)
+assert(len hello minus 2 is 3, _getvar(r), 3)
+
+_print
+
+// ===================================================================
+// SECTION 7 - COMPARISON OPERATORS
+// ===================================================================
+_print <color=#00bfff>--- Section 7: Comparison Operators ---</color>
+
+// Equal - true
+_setvar(r, 0)
+if 5 == 5
+  _setvar(r, 1)
+endif
+assert(5 == 5 is true, _getvar(r), 1)
+
+// Equal - false
+_setvar(r, 0)
+if 5 == 6
+  _setvar(r, 1)
+endif
+assert(5 == 6 is false, _getvar(r), 0)
+
+// Not equal - true
+_setvar(r, 0)
+if 5 != 6
+  _setvar(r, 1)
+endif
+assert(5 != 6 is true, _getvar(r), 1)
+
+// Not equal - false
+_setvar(r, 0)
+if 5 != 5
+  _setvar(r, 1)
+endif
+assert(5 != 5 is false, _getvar(r), 0)
+
+// Greater than
+_setvar(r, 0)
+if 10 > 5
+  _setvar(r, 1)
+endif
+assert(10 > 5 is true, _getvar(r), 1)
+
+// Less than
+_setvar(r, 0)
+if 3 < 7
+  _setvar(r, 1)
+endif
+assert(3 < 7 is true, _getvar(r), 1)
+
+// Greater or equal - equal
+_setvar(r, 0)
+if 5 >= 5
+  _setvar(r, 1)
+endif
+assert(5 >= 5 is true, _getvar(r), 1)
+
+// Greater or equal - greater
+_setvar(r, 0)
+if 6 >= 5
+  _setvar(r, 1)
+endif
+assert(6 >= 5 is true, _getvar(r), 1)
+
+// Less or equal - equal
+_setvar(r, 0)
+if 5 <= 5
+  _setvar(r, 1)
+endif
+assert(5 <= 5 is true, _getvar(r), 1)
+
+// Less or equal - less
+_setvar(r, 0)
+if 4 <= 5
+  _setvar(r, 1)
+endif
+assert(4 <= 5 is true, _getvar(r), 1)
+
+// String equality
+_setvar(r, 0)
+if hello == hello
+  _setvar(r, 1)
+endif
+assert(string hello == hello is true, _getvar(r), 1)
+
+// String inequality
+_setvar(r, 0)
+if hello != world
+  _setvar(r, 1)
+endif
+assert(string hello != world is true, _getvar(r), 1)
+
+_print
+
+// ===================================================================
+// SECTION 8 - FUNCTION RETURN VALUES
+// ===================================================================
+_print <color=#00bfff>--- Section 8: Function Return Values ---</color>
+
+// Return number
+func retNum()
+  _return 42
+endfunc
+_setvar(r, retNum())
+assert(func returns number 42, _getvar(r), 42)
+
+// Return string
+func retStr()
+  _return hello
+endfunc
+_setvar(r, retStr())
+assert(func returns string hello, _getvar(r), hello)
+
+// Return computed value
+func compute(a, b)
+  _return _getvar(a) * _getvar(b) + 1
+endfunc
+_setvar(r, compute(3, 4))
+assert(func 3*4+1 returns 13, _getvar(r), 13)
+
+// Return from conditional
+func ternary(cond)
+  if _getvar(cond) == 1
+    _return yes
+  else
+    _return no
+  endif
+endfunc
+_setvar(r, ternary(1))
+assert(ternary 1 returns yes, _getvar(r), yes)
+_setvar(r, ternary(0))
+assert(ternary 0 returns no, _getvar(r), no)
+
+// Return from loop
+func firstPositive(list)
+  for item in _getvar(list)
+    if _getvar(item) > 0
+      _return _getvar(item)
+    endif
+  endfor
+  _return -1
+endfunc
+_setvar(r, firstPositive([-3, -1, 5, 2]))
+assert(firstPositive finds 5, _getvar(r), 5)
+_setvar(r, firstPositive([-3, -1, -2]))
+assert(firstPositive all neg returns -1, _getvar(r), -1)
+
+// Nested function calls as return
+func addOne(n)
+  _return _getvar(n) + 1
+endfunc
+func addTwo(n)
+  _return addOne(addOne(_getvar(n)))
+endfunc
+_setvar(r, addTwo(5))
+assert(nested addTwo 5 returns 7, _getvar(r), 7)
+
+// Recursive function return
+func factorial(n)
+  if _getvar(n) <= 1
+    _return 1
+  else
+    _setvar(sub, factorial(_getvar(n) - 1))
+    _return _getvar(n) * _getvar(sub)
+  endif
+endfunc
+_setvar(r, factorial(5))
+assert(factorial 5 is 120, _getvar(r), 120)
+
+_print
+
+// ===================================================================
+// SECTION 9 - LOOP CONSTRUCTS RETURN/ACCUMULATE
+// ===================================================================
+_print <color=#00bfff>--- Section 9: Loop Accumulation ---</color>
+
+// for loop accumulation
+_setvar(sum, 0)
+for i in range(1, 5)
+  _setvar(sum, _getvar(sum) + _getvar(i))
+endfor
+assert(for 1 to 5 sums to 15, _getvar(sum), 15)
+
+// for loop over list
+_setvar(result, )
+for item in [xx, yy, zz]
+  _setvar(result, concat(_getvar(result), _getvar(item)))
+endfor
+assert(for over list concats xxyyzz, _getvar(result), xxyyzz)
+
+// while loop countdown
+_setvar(n, 5)
+_setvar(count, 0)
+while _getvar(n) > 0
+  _setvar(count, _getvar(count) + 1)
+  _setvar(n, _getvar(n) - 1)
+endwhile
+assert(while counts down 5 iterations, _getvar(count), 5)
+
+// while with break
+_setvar(i, 0)
+while _getvar(i) < 100
+  if _getvar(i) == 3
+    break
+  endif
+  _setvar(i, _getvar(i) + 1)
+endwhile
+assert(while breaks at 3, _getvar(i), 3)
+
+// for with continue
+_setvar(sum, 0)
+for i in range(1, 5)
+  if _getvar(i) == 3
+    continue
+  endif
+  _setvar(sum, _getvar(sum) + _getvar(i))
+endfor
+assert(for skips 3 sums 1+2+4+5=12, _getvar(sum), 12)
+
+// until loop
+_setvar(n, 0)
+until _getvar(n) == 3
+  _setvar(n, _getvar(n) + 1)
+enduntil
+assert(until counts to 3, _getvar(n), 3)
+
+_print
+
+// ===================================================================
+// SECTION 10 - CONDITIONAL RETURNS
+// ===================================================================
+_print <color=#00bfff>--- Section 10: Conditional Returns ---</color>
+
+// if true branch
+_setvar(r, miss)
+if 1 == 1
+  _setvar(r, true_branch)
+else
+  _setvar(r, false_branch)
+endif
+assert(if true takes true branch, _getvar(r), true_branch)
+
+// if false branch
+_setvar(r, miss)
+if 1 == 2
+  _setvar(r, true_branch)
+else
+  _setvar(r, false_branch)
+endif
+assert(if false takes false branch, _getvar(r), false_branch)
+
+// elif chain
+_setvar(val, 2)
+_setvar(r, miss)
+if _getvar(val) == 1
+  _setvar(r, one)
+elif _getvar(val) == 2
+  _setvar(r, two)
+elif _getvar(val) == 3
+  _setvar(r, three)
+else
+  _setvar(r, other)
+endif
+assert(elif chain picks two, _getvar(r), two)
+
+// elif falls through to else
+_setvar(val, 99)
+_setvar(r, miss)
+if _getvar(val) == 1
+  _setvar(r, one)
+elif _getvar(val) == 2
+  _setvar(r, two)
+else
+  _setvar(r, other)
+endif
+assert(elif fallthrough to else, _getvar(r), other)
+
+_print
+
+// ===================================================================
+// SECTION 11 - CONTEXT BUILTINS
+// ===================================================================
+_print <color=#00bfff>--- Section 11: Context Builtins ---</color>
+
+// get_user returns a non-empty string
+_setvar(r, get_user())
+_setvar(check, len(_getvar(r)))
+if _getvar(check) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(get_user returns non-empty string, _getvar(pass), 1)
+
+// get_home returns a non-empty path
+_setvar(r, get_home())
+_setvar(check, len(_getvar(r)))
+if _getvar(check) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(get_home returns non-empty path, _getvar(pass), 1)
+
+// get_shell_type returns a string
+_setvar(r, get_shell_type())
+_setvar(check, len(_getvar(r)))
+if _getvar(check) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(get_shell_type returns non-empty, _getvar(pass), 1)
+
+// _fs_pwd returns a path
+_setvar(r, _fs_pwd)
+_setvar(check, contains(_getvar(r), /))
+assert(_fs_pwd contains slash, _getvar(check), 1)
+
+// _sys_whoami returns a string
+_setvar(r, _sys_whoami)
+_setvar(check, len(_getvar(r)))
+if _getvar(check) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(_sys_whoami returns non-empty, _getvar(pass), 1)
+
+// timestamp returns a number
+_setvar(r, timestamp())
+if _getvar(r) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(timestamp returns positive number, _getvar(pass), 1)
+
+// date returns a non-empty string
+_setvar(r, date())
+_setvar(check, len(_getvar(r)))
+if _getvar(check) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(date returns non-empty string, _getvar(pass), 1)
+
+_print
+
+// ===================================================================
+// SECTION 12 - BUILTIN CHAINING IN EXPRESSIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 12: Builtin Chaining ---</color>
+
+// len inside arithmetic
+_setvar(r, len(hello) + 1)
+assert(len hello + 1 is 6, _getvar(r), 6)
+
+// nested builtins: upper of substr
+_setvar(r, upper(substr(hello, 0, 3)))
+assert(upper of substr hel is HEL, _getvar(r), HEL)
+
+// lower of upper roundtrip
+_setvar(r, lower(upper(hello)))
+assert(lower of upper hello is hello, _getvar(r), hello)
+
+// concat with to_string
+_setvar(r, concat(val:, to_string(42)))
+assert(concat with to_string, _getvar(r), val:42)
+
+// len of concat
+_setvar(r, len(concat(abc, def)))
+assert(len of concat abcdef is 6, _getvar(r), 6)
+
+// floor of random (type check - should be whole number)
+_setvar(val, random(1, 100))
+_setvar(floored, floor(_getvar(val)))
+if _getvar(floored) == _getvar(val)
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(random returns integer so floor is same, _getvar(pass), 1)
+
+// min and max together
+_setvar(r, max(min(10, 5), 3))
+assert(max of min 10 5 and 3 is 5, _getvar(r), 5)
+
+// abs in expression
+_setvar(r, abs(-7) + abs(3))
+assert(abs -7 + abs 3 is 10, _getvar(r), 10)
+
+_print
+
+// ===================================================================
+// SECTION 13 - SWITCH RETURN PATTERNS
+// ===================================================================
+_print <color=#00bfff>--- Section 13: Switch Return Patterns ---</color>
+
+// Switch sets variable based on match
+func classify(n)
+  _setvar(r, unknown)
+  switch _getvar(n)
+    case 1
+      _setvar(r, one)
+    case 2
+      _setvar(r, two)
+    case 3
+      _setvar(r, three)
+    default
+      _setvar(r, other)
+  endswitch
+  _return _getvar(r)
+endfunc
+_setvar(r, classify(1))
+assert(switch classify 1 is one, _getvar(r), one)
+_setvar(r, classify(2))
+assert(switch classify 2 is two, _getvar(r), two)
+_setvar(r, classify(99))
+assert(switch classify 99 is other, _getvar(r), other)
+
+// Switch with expression in case body
+func mathOp(op, a, b)
+  _setvar(r, 0)
+  switch _getvar(op)
+    case add
+      _setvar(r, _getvar(a) + _getvar(b))
+    case sub
+      _setvar(r, _getvar(a) - _getvar(b))
+    case mul
+      _setvar(r, _getvar(a) * _getvar(b))
+    default
+      _setvar(r, -1)
+  endswitch
+  _return _getvar(r)
+endfunc
+_setvar(r, mathOp(add, 3, 4))
+assert(switch add 3 4 is 7, _getvar(r), 7)
+_setvar(r, mathOp(sub, 10, 3))
+assert(switch sub 10 3 is 7, _getvar(r), 7)
+_setvar(r, mathOp(mul, 5, 6))
+assert(switch mul 5 6 is 30, _getvar(r), 30)
+_setvar(r, mathOp(div, 1, 1))
+assert(switch unknown op is -1, _getvar(r), -1)
+
+_print
+
+// ===================================================================
+// SECTION 14 - EDGE CASES
+// ===================================================================
+_print <color=#00bfff>--- Section 14: Edge Cases ---</color>
+
+// Zero in expressions
+_setvar(r, 0 + 0)
+assert(0 + 0 is 0, _getvar(r), 0)
+
+// Negative in expressions
+_setvar(r, -3 + -2)
+assert(-3 + -2 is -5, _getvar(r), -5)
+
+// Large number
+_setvar(r, 999999 + 1)
+assert(999999 + 1 is 1000000, _getvar(r), 1000000)
+
+// String with numbers treated as string in contains
+_setvar(r, contains(test123, 123))
+assert(contains test123 has 123, _getvar(r), 1)
+
+// len of number converted to string
+_setvar(r, len(to_string(12345)))
+assert(len of 12345 as string is 5, _getvar(r), 5)
+
+// Multiple operations chain
+_setvar(r, floor(abs(-7) + ceil(2.1)))
+assert(floor abs-7 + ceil 2.1 is 10, _getvar(r), 10)
+
+// Variable overwrite
+_setvar(x, first)
+_setvar(x, second)
+assert(overwrite first with second, _getvar(x), second)
+
+// Empty list operations
+_setvar(arr, [])
+_setvar(r, len(_getvar(arr)))
+assert(empty list has len 0, _getvar(r), 0)
+
+// Single item list
+_setvar(arr, [solo])
+_setvar(r, len(_getvar(arr)))
+assert(single item list len is 1, _getvar(r), 1)
+
+// Deeply nested math
+_setvar(r, max(min(abs(-10), 7), floor(3.9)))
+assert(max min abs-10 7 floor3.9 is 7, _getvar(r), 7)
+
+_print
+
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     RETURN VALUE TESTS COMPLETE</color>
+_print <color=#eb0cc6>============================================</color>
+_print

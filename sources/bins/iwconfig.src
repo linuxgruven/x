@@ -1,0 +1,6 @@
+binIwconfig="if len(params)!=4 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""iwconfig_usage""))
+computer=host_computer(get_shell)
+devices=network_devices(computer)
+if not devices or indexOf(devices,params[0])==null then exit(""iwconfig: Network device not found"")
+status=connect_wifi(computer,params[0],params[1],params[2],params[3])
+if typeof(status)==""string"" then print(status)"

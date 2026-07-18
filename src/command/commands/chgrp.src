@@ -1,0 +1,57 @@
+// =============================================================================
+// CHGRP
+// Change group ownership of files or directories; -R recurses.
+// =============================================================================
+Command.chgrp=function(Obj,argv)
+  if not argv or len(argv)==0 then return Man.help(["chgrp"])
+	_p=ArgumentParser.init
+	_p.addArgument("R",false,"flag")  // Recursive mode
+	_p.addArgument("r",false,"flag")  // Recursive mode alias
+	argv=_p.parse("chgrp",argv,Obj)
+	if argv isa Error then return
+	if argv.r then argv.R=true
+	if hasIndex(argv,"useAI") then
+		target=null
+		recursive=false
+		if Gui.yesNo("Are we changing group ownership of a file?") then
+			target=Io.file(Obj,Obj.dir.current,"Select a file to change the group ownership of:")
+			if target isa Warning then return target
+		else
+			target=Io.folder(Obj,Obj.dir.current,"Select a directory to change the group ownership of:")
+			if target isa Warning then return target
+			recursive=Gui.yesNo("Recursive?")
+		end if
+		group=Gui.input({"text":"Group we are giving ownership of "+name(target)+" to"})
+		if group==null then return
+		if recursive then
+			Io.walkApply(target,"group",group,false)
+		else
+			result=set_group(target,group,0)
+			if result then Info.error(result)
+		end if
+		return
+	end if
+	hasFiles=(hasIndex(argv,"files") and argv.files and len(argv.files)>0)
+	if len(argv.rest)<1 and not hasFiles then return Man.help(["chgrp"])
+	group=argv.rest[0]
+	group=clean(group)
+	targets=[]
+	if hasFiles then
+		targets=argv.files
+	else if len(argv.rest)>=2 then
+		target=Io._getFile(Obj,argv.rest[-1])
+		if target isa Error then return target
+		targets=[target]
+	else
+		return Man.help(["chgrp"])
+	end if
+	for target in targets
+		if not target or target isa Error then continue
+		if argv.R then
+			Io.walkApply(target,"group",group,false)
+		else
+			result=set_group(target,group,0)
+			if result then Info.error(result)
+		end if
+	end for
+end function

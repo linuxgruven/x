@@ -1,0 +1,25 @@
+// Man page for heist
+manHeist="HEIST(1)                         X Shell Manual                         HEIST(1)
+
+<b>NAME</b>
+    heist - Interactive bank heist loop
+<b>SYNOPSIS</b>
+    <b>heist</b>
+<b>DESCRIPTION</b>
+    Interactive heist helper. Acquires a root shell on your bank once,
+    then repeatedly prompts for target banks. After each successful
+    target, wait for your manual transfer and corrupt both
+    /server/transactions.log files. Enter <b>!</b> to cancel/quit.
+<b>FLOW</b>
+    1. Prompt for your bank (ip|domain) and port (default 141)
+    2. Exploit and require root; re-prompt on failure
+    3. Prompt for target bank and port
+    4. Exploit and require root; re-prompt on failure
+    5. Press enter after the transfer; corrupt both logs
+    6. Prompt for the next target (your bank is kept)
+    7. Repeat until <b>!</b>
+<b>EXAMPLE:</b>
+    <b>heist</b>
+    Start the interactive heist loop
+
+    At prompts, enter <b>!</b> to cancel (same as other Gui inputs)"

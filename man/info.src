@@ -1,0 +1,30 @@
+// Man page for info
+manInfo="INFO(5)                          X Shell Manual                          INFO(5)
+
+<b>NAME</b>
+    info - Print cached root password
+<b>SYNOPSIS</b>
+    <b>info</b>
+<b>DESCRIPTION</b>
+    Displays the root password of the current system or network if
+    available in the password cache. The password must have been
+    previously cached through exploitation or authentication.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Display Cached Password</color>
+    <b>info</b>
+    Print root password if cached
+
+    <b>info && echo root:$(info) > creds.txt</b>
+    Save root password to file
+
+    <color=#e4ff34># Common Workflow</color>
+    <b>scan -l</b>
+    Exploit local system first
+
+    <b>info</b>
+    Then retrieve cached password
+
+    <b>show</b>
+    View password and public IP together
+<b>SEE ALSO</b>
+    <b>show</b>, <b>shadow</b>, <b>addpass</b>"

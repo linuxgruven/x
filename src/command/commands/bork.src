@@ -1,0 +1,12 @@
+// =============================================================================
+// BORK
+// Rename all files in a directory by reversing their filenames.
+// =============================================================================
+Command.bork=function(Obj,argv)
+  if not argv then targetDir=Obj.dir.current else targetDir=Io._getFile(Obj,argv[0])
+	if targetDir isa Error then return
+  allItems=Io.getAll(targetDir)
+	if allItems isa Error then return
+  allItems.reverse
+	for item in allItems;rename(item,name(item).reverse);end for
+end function

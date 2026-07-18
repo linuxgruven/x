@@ -1,0 +1,209 @@
+// =============================================================================
+// SHADOW
+// Shadow password cache; encrypted storage and retrieval of compromised IP passwords.
+// =============================================================================
+Shadow={}
+//Get count of cached passwords as string
+Shadow.count=function
+  //Load cache if not initialized
+  if not globals.G_shadow then self.load
+  //Cache still empty, return zero
+  if not globals.G_shadow then return "0"
+  //Return count as string
+  return str(len(globals.G_shadow))
+//End count
+end function
+//Load encrypted shadow.dat into G_shadow cache
+Shadow.load=function
+  //Get system object
+  o=System.getSystem
+  //Get shadow.dat file
+  s=File(o.computer,path(o.dir.data)+"/shadow.dat")
+  //File doesn't exist
+  if not s then return
+  //File is empty
+  if not get_content(s) then return
+  //Iterate through lines
+  for l in split(get_content(s),char(10))
+  //Skip empty lines
+  if not len(l) then continue
+  //Decrypt and split by colon
+  r=split(Encryption.encrypt(l,Kernel.key,false),":")
+  //Invalid format, skip
+  if not r isa list then continue
+  //Not password:ip format, skip
+  if len(r)!=2 then continue
+  //Store in cache: ip -> password
+  globals.G_shadow[r[1]]=r[0]
+	end for
+//End load
+end function
+//Check if IP has cached password
+Shadow.hasPassword=function(i)
+  //Load cache if not initialized
+  if not globals.G_shadow then self.load
+  //Return true if IP exists in cache
+  return hasIndex(globals.G_shadow,i)
+  //End hasPassword
+end function
+//Retrieve password for IP
+Shadow.returnPassword=function(i)
+  //Return password if IP exists
+  if hasIndex(globals.G_shadow,i) then return globals.G_shadow[i]
+  //End returnPassword
+end function
+//Save G_shadow cache to encrypted shadow.dat
+Shadow.save=function
+  //Load cache if not initialized
+  if not globals.G_shadow then self.load
+  //Get system object
+  o=System.getSystem
+  //Get shadow.dat file
+  s=File(o.computer,path(o.dir.data)+"/shadow.dat")
+  //Create file if missing
+  if not s then s=Command.touch(o.obj,[path(o.dir.data)+"/shadow.dat"])
+  //Failed to create file
+  if s isa Error then return
+  //Empty cache, write empty file
+  if not len(globals.G_shadow) then return set_content(s,"")
+  //Initialize output array
+  w=[]
+  //Iterate through cache entries
+  for r in globals.G_shadow;if not len(r) then continue;push(w,Encryption.encrypt(r.value+":"+r.key,Kernel.key));end for
+  //Write encrypted lines to file
+  set_content(s,trim(join(w,char(10))))
+  //End save
+end function
+//Display all cached IP/password pairs
+Shadow.view=function
+  //Load cache if not initialized
+  if not globals.G_shadow then self.load
+  //Cache is empty
+  if not len(globals.G_shadow) then return Info.info("No shadow passwords to view")
+  //Iterate through cache entries
+  for r in globals.G_shadow;print yellow(r.key)+(" "*(15-len(r.key)))+green(" - ")+yellow(r.value);end for
+//End view
+end function
+//Clear shadow.dat file (internal operation)
+Shadow.internalClear=function
+  //Get system object
+  o=System.getSystem
+  //Get shadow.dat file
+  s=File(o.computer,path(o.dir.data)+"/shadow.dat")
+  //File exists, clear content
+  if s then return set_content(s,"")
+  //Failed to create file
+  if not touch(o.computer,path(o.dir.data),"shadow.dat")==1 then return Error.set("Unable to save shadow data")
+//End internalClear
+end function
+//Import passwords from shadow file
+Shadow.readFile=function(Obj,argv)
+  _p=ArgumentParser.init
+  argv=_p.parseArgs("shadow",argv)
+  //Argument parsing failed
+  if argv isa Error then return
+  argv=_p.parsePath(Obj,argv)
+  //Path parsing failed
+  if argv isa Error then return
+  //Get file path argument
+  if argv.rest then Arg1=argv.rest[0] else Arg1=null
+  //Get file interactively or from path
+  if not Arg1 then f=Io.file(Obj,Obj.dir.current,"Select a shadow password file to load:") else f=Io._getFile(Obj,Arg1)
+  //File error, show help
+  if f isa Error then return Man.help(["shadow"])
+  //File warning, return
+  if f isa Warning then return f
+  //Binary files not supported
+  if is_binary(f) then return Error.set("Can't use binary files")
+  //No read access
+  if not has_permission(f,"r") then return Error.set("Read permissions denied")
+  //File is empty
+  _ct=get_content(f);if not _ct then return Info.info("File: "+Arg1+" is empty")
+  //Iterate through file lines
+  for l in split(_ct,char(10))
+    //Skip empty lines
+    if not len(l) then continue
+    //Detect format: plaintext or encrypted
+    if indexOf(l,":")!=null then roll=split(l,":") else roll=split(Encryption.encrypt(l,Kernel.key,false),":")
+    //Invalid format, skip
+    if not roll isa list then continue
+    //Add to cache: ip -> password
+    globals.G_shadow[roll[1]]=roll[0]
+	end for
+  //Save cache to shadow.dat
+  self.save
+  //Display success message
+  Info.info(name(f)+" loaded")
+//End readFile
+end function
+//Export cache to shadow file
+Shadow.writeFile=function(Obj,argv)
+  _p=ArgumentParser.init
+  //Add -d flag for plaintext export
+  _p.addArgument("d",false,"flag")
+  argv=_p.parseArgs("shadow",argv)
+  //Argument parsing failed
+  if argv isa Error then return
+  //File objects not supported
+  if Obj.type=="file" then return Info.info("Unable to write a shadow file out using a file object")
+  //Cache is empty
+  if not len(globals.G_shadow) then return Info.info("Shadow cache is empty")
+  //Check for existing shadow file
+  f=File(Obj.computer,path(Obj.dir.current)+"/shadow")
+  //Delete existing file
+  if f then Command.qrm(Obj,[f])
+  //Create new shadow file
+  f=Command.touch(Obj,[path(Obj.dir.current)+"/shadow"])
+  //Failed to create file
+  if f isa Error then return
+  //Cache is empty, write empty file
+  if not len(globals.G_shadow) then return set_content(f,"")
+  //Initialize output array
+  t=[]
+  //Iterate through cache entries
+  for p in globals.G_shadow;if not len(p) then continue;if argv.d then push(t,p.value+":"+p.key) else push(t,Encryption.encrypt(p.value+":"+p.key,Kernel.key));end for
+  //Write lines to file
+  set_content(f,trim(join(t,char(10))))
+  //Display success message
+  Info.info("Shadow cache writen out to "+path(Obj.dir.current)+"/shadow")
+  //End writeFile
+end function
+//Add password using object's public IP
+Shadow.addByObject=function(Obj,p)
+  //IP already exists in cache
+  if hasIndex(globals.G_shadow,Obj.meta.public_ip) then return
+  //Add to cache: public_ip -> password
+  globals.G_shadow[Obj.meta.public_ip]=p
+  //Save cache to shadow.dat
+  self.save
+//End addByObject
+end function
+//Add IP/password pair manually
+Shadow.add=function(argv)
+  //Requires exactly 2 arguments
+  if len(argv)!=2 then return Error.set("Invalid arguments!")
+  //IP already exists in cache
+  if hasIndex(globals.G_shadow,argv[0]) then return
+  //Add to cache: ip -> password
+  globals.G_shadow[argv[0]]=argv[1]
+  //Save cache to shadow.dat
+  self.save
+//End add
+end function
+//Clear entire shadow cache
+Shadow.clear=function(argv)
+  //Check for quiet mode flag
+  if argv and argv[0]=="-q" then r=true else r=false
+  //Cache not initialized
+  if not globals.G_shadow then
+    //Display message unless quiet
+    if not r then return Info.info("No ip/password history found") else return
+	end if
+  //Clear in-memory cache
+  globals.G_shadow={}
+  //Clear shadow.dat file
+  self.internalClear
+  //Display message unless quiet
+  if not r then return Info.info("Shadow passwords cleared") else return
+//End clear
+end function

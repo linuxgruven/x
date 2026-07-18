@@ -1,0 +1,938 @@
+// =============================================================================
+// PROXY
+// Proxy chain library; advanced proxy chain management for anonymous network operations.
+// =============================================================================
+Proxy={
+  "chain":{},
+  "useShells":false
+}
+//prioritizeRootExploits - Sort exploit queue to favor root access
+//Args: q (exploit array with .u property for user level)
+//Returns: sorted array with root exploits first, then guest exploits
+//Note: Router exploits only have "r" (root) or "g" (guest), never "u" (user)
+Proxy.prioritizeRootExploits=function(q)
+  qRoot=[]
+  qGuest=[]
+  for e in q
+    if not len(e) then continue
+    if e.u=="r" then
+      push(qRoot,e)
+    else if e.u=="g" then
+      push(qGuest,e)
+    else
+      push(qGuest,e)
+    end if
+  end for
+  return qRoot+qGuest
+end function
+//farm - Automatically discover and exploit routers for proxy IPs
+//Returns: nothing (builds Proxy.chain.ips array)
+Proxy.farm=function
+  //Require metaxploit library
+  if not Library.haveMetaxploit then return
+  //Require exploit database
+  if not Exploit.have then return
+  //Track tested IPs to avoid reprocessing duplicates from Net.rip
+  seen={}
+	//add - Extract root password from /etc/passwd and add to chain
+	add=function(f,i)
+    //Fast path: reuse cached root password if already known
+    if Shadow.hasPassword(i) then
+      p=Shadow.returnPassword(i)
+      if p then
+        push(Proxy.chain.ips,{
+          "ip":i,
+          "port":22,
+          "user":"root",
+          "password":p
+        })
+        Proxy.chain.count=Proxy.chain.count+1
+        return
+      end if
+    end if
+		for l in split(get_content(f),char(10))
+			//Initialize password variable
+			p=null
+			//Split on colon
+			l=split(trim(l),":")
+			//Check for valid hash format (user:32-char-hash)
+			if len(l)==2 and len(l[1])==32 then
+				//Skip non-root users
+				if not l[0]=="root" then continue
+				//Crack hash using rainbow table
+				p=Crack.hash(l[1])
+				//Skip if crack failed
+				if not p then continue
+				//Add to shadow cache
+				Shadow.add([i,p])
+				//Add to proxy chain
+				push(Proxy.chain.ips,{
+          "ip":i,
+          "port":22,
+          "user":"root",
+          "password":p
+        })
+				//Increment chain count
+				Proxy.chain.count=Proxy.chain.count+1
+				//Exit function on success
+				return
+			end if
+		end for
+	end function
+  //checkPort - Check if SSH port (22) is open (short-circuit on first match)
+  checkPort=function(z);for p in z;if port_number(p)==22 then return not is_closed(p);end for;end function
+	//getPasswd - Extract /etc/passwd file from exploited object
+	getPasswd=function(ex,i,e)
+		//Handle file object
+		if e=="file" then
+			//Navigate to root of filesystem
+			ex=FileHelper.toRootEx(ex)
+			//Exit if navigation failed
+			if ex==null then return
+			//Find /etc folder
+			for d in get_folders(ex)
+				//Skip non-etc folders
+				if name(d)!="etc" then continue
+				//Find passwd file
+				for f in get_files(d);if name(f)!="passwd" then continue;if has_permission(f,"r") then add(f,i) else return;end for
+			end for
+		//Handle computer object
+		else if e=="computer" then
+			//Get /etc/passwd file
+			f=File(ex,"/etc/passwd")
+			//Exit if not found
+			if not f then return
+			//Add if readable
+			if has_permission(f,"r") then add(f,i) else return
+		//Handle shell object
+    else if indexOf(e,"shell")!=null then
+			//Get /etc/passwd from shell's computer
+			f=File(host_computer(ex),"/etc/passwd")
+			//Exit if not found
+			if not f then return
+			//Add if readable
+			if has_permission(f,"r") then add(f,i) else return
+		end if
+		//Return success
+    return 1
+	end function
+	//Main farming loop
+	while true
+		//Check if target count reached
+		if self.chain.count>=self.chain.countTo then break
+		i=Net.rip
+    //Skip IPs already tested in this run
+    if hasIndex(seen,i) then continue else seen[i]=1
+		//Get router for IP
+		r=get_router(i)
+		//Skip if no router
+		if not r then continue
+		//Get router ports
+		z=used_ports(r)
+		//Skip if no ports
+		if not z isa list then continue
+    //Skip if SSH not open
+    if not checkPort(z) then continue
+		//Add to dirty IP list if monitoring enabled
+		if globals.G_settings.monitorDirtyips then Dirty.add(i)
+		//Break flag for success
+		b=null
+		//Display target IP
+    Info.info("Trying "+i+"...")
+    //Exploit cache per lib/version for this host
+    exploitCache={}
+    //Extract exploitable services
+    for m in Exploit.extract(r,i)
+			//Break on error
+      if m isa Error then break
+			//Break if already found password
+			if b then break
+			//Skip router service (port 0)
+			if m.port_number==0 then continue
+			//Build exploit cache key
+      E=lib_name(m.metaLib)+"_"+version(m.metaLib)
+			//Get exploits from local per-host cache or global cache
+      if hasIndex(exploitCache,E) then
+        q=exploitCache[E]
+      else
+        if hasIndex(globals.G_exploitCache,E) then
+          q=Exploit._ex(E)
+          exploitCache[E]=q
+        else
+          break
+        end if
+      end if
+			//Skip if no exploits
+			if not q isa list then continue
+			//Try each exploit
+			for e in q
+				//Skip empty exploits
+				if not len(e) then continue
+				//Check for shell/computer/file exploits
+				if e.e=="s" or e.e=="c" or e.e=="f" then
+					//Skip shells if useShells disabled
+					if e.e=="s" and not self.useShells then continue
+					//Execute exploit
+					ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"proxy")
+					//Skip invalid results
+          if ex==null or ex isa number or ex isa string then continue
+					//Get object type
+					obj=typeof(ex)
+					//Check if exploitable type
+					if obj=="computer" or indexOf(obj,"shell")!=null or obj=="file" then
+						//Try to get /etc/passwd
+						if getPasswd(ex,i,obj) then
+							//Mark success
+							b=1
+							//Break exploit loop
+							break
+						end if
+					end if
+				end if
+			end for
+		end for
+	end while
+end function
+//_getCachedExploits - Get exploits from cache or load them
+//Args: exploitCache (local cache map), E (cache key), m (metaLib object)
+//Returns: exploits list or null
+Proxy._getCachedExploits=function(exploitCache,E,m)
+  if hasIndex(exploitCache,E) then
+    return exploitCache[E]
+  else if hasIndex(globals.G_exploitCache,E) then
+    q=Exploit._ex(E)
+    exploitCache[E]=q
+    return q
+  else
+    Info.info("Adding "+lib_name(m.metaLib)+":"+version(m.metaLib))
+    Exploit.headless(m.metaLib)
+    q=Exploit._ex(E)
+    exploitCache[E]=q
+    return q
+  end if
+end function
+//getMapConf - Load Map.conf configuration file
+//Args: Obj (main object)
+//Returns: config object {accounts, historyConnections} or Error
+Proxy.getMapConf=function(Obj)
+  //Common Map.conf path
+  mapPath=path(Obj.user.home)+"/Config/Map.conf"
+	//Get Map.conf file
+  f=File(Obj.computer,mapPath)
+	//Return empty config if file doesn't exist
+	if not f then return {
+    "accounts":[],
+    "historyConnections":[]
+  }
+	//Check read permission
+	if not has_permission(f,"r") then return Error.set("Don't have read permision for "+name(f))
+	//Get file content
+  r=get_content(f)
+	//Return empty config if no content, else parse JSON
+  if not r then return {
+    "accounts":[],
+    "historyConnections":[]
+  } else return System.parse(r)
+end function
+//saveMapConf - Save Map.conf configuration
+//Args: Obj (main object), m (config map)
+//Returns: nothing
+Proxy.saveMapConf=function(Obj,m)
+	//Common Map.conf path
+	mapPath=path(Obj.user.home)+"/Config/Map.conf"
+	//Get Map.conf file
+  f=File(Obj.computer,mapPath)
+	//Create if doesn't exist
+  if not f then
+    self.createMapConf(Obj)
+    f=File(Obj.computer,mapPath)
+  end if
+	//Write JSON content
+  set_content(f,System.toJSON(m))
+end function
+//createNewMap - Delete old Map.conf and create fresh one
+//Args: Obj (main object)
+//Returns: nothing
+Proxy.createNewMap=function(Obj)
+	mapPath=path(Obj.user.home)+"/Config/Map.conf"
+	//Get existing file
+  f=File(Obj.computer,mapPath)
+	//Delete if exists
+  if f then delete(f)
+	//Create new file
+  self.createMapConf(Obj)
+  Info.info("New Map.conf created")
+end function
+//createMapConf - Initialize empty Map.conf file
+//Args: Obj (main object)
+//Returns: nothing or Error
+Proxy.createMapConf=function(Obj)
+  mapPath=path(Obj.user.home)+"/Config/Map.conf"
+	//Create file
+  f=Command.touch(Obj,[mapPath])
+	//Exit on error
+	if f isa Error then return
+	//Write empty config structure
+  set_content(f,System.toJSON({
+    "accounts":[],
+    "historyConnections":[]
+  }))
+end function
+//makeConnection - Build proxy chain through multiple SSH hops
+//Args: Obj (main object), l (list of connection objects: {ip, port, user, password}), Z (cache endpoint flag)
+//Returns: nothing
+Proxy.makeConnection=function(Obj,l,Z=null)
+	//Add to cache flag
+	A=null
+	//Connection counter
+	c=1
+	//Current hop number
+	n=0
+	//First shell
+	s1=0
+	//Second shell
+	s2=0
+	//Final password for cache
+	j=null
+	//Check if endpoint not specified
+  if not Z then
+		//Prompt to set endpoint
+    if Gui.yesNo("Would you like to set an end point?",false) then
+      if Gui.yesNo("Select an end point from the root cache?") then
+        Cache.view
+        if not len(globals.G_cachePasswords) then
+          Info.response("Answer the following questions to set an end point:")
+          i=Gui.inputIP({"text":"End point ip"})
+          if i==null then return Info.info("User Aborted","i",false)
+          p=Gui.inputInt({"text":"End point port"})
+          if not p isa number then return Info.info("User Aborted","i",false)
+          u=Gui.input({"text":"End point user"})
+          if u==null then return Info.info("User Aborted","i",false)
+          k=Gui.inputPass("End point password")
+          if not k then return Info.info("User Aborted","i",false)
+          push(l,{
+            "ip":i,
+            "port":p,
+            "user":u,
+            "password":k
+          })
+        else
+          r=Gui.inputInt({"text":"Select a host to set as an end point"})
+          if not r isa number then return
+          k=Cache.select(r)
+          push(l,{
+            "ip":k.public_ip,
+            "port":22,
+            "user":"root",
+            "password":k.password
+          })
+        end if
+      else
+        Info.response("Answer the following questions to set an end point:")
+        i=Gui.inputIP({"text":"End point ip"})
+        if i==null then return Info.info("User Aborted","i",false)
+        p=Gui.inputInt({"text":"End point port"})
+        if not p isa number then return Info.info("User Aborted","i",false)
+        u=Gui.input({"text":"End point user"})
+        if u==null then return Info.info("User Aborted","i",false)
+        k=Gui.inputPass("End point password")
+        if not k then return Info.info("User Aborted","i",false)
+        push(l,{
+          "ip":i,
+          "port":p,
+          "user":u,
+          "password":k
+        })
+      end if
+    else
+      if Gui.yesNo("Would you like to add this proxy to the cache list?",false) then A=1
+    end if
+  end if
+  Info.info("Generating proxy's now...")
+	//Build connection chain
+	for i in l
+		//Validate connection has all 4 fields
+		if not len(i)==4 then continue
+		//Save password if this is final hop
+		if c==len(l) then j=i.password
+		//First connection (from local shell)
+		if c==1 then
+			//Connect to first hop
+			s1=connect_service(get_shell,i.ip,i.port,i.user,i.password)
+			//Set hop number
+			n=1
+			c=2
+			//Continue to next hop
+			continue
+		end if
+		//Connect through previous hop
+		s2=connect_service(s1,i.ip,i.port,i.user,i.password)
+		//Log shell
+    Log.shellLog(s2)
+		//Update hop number
+		n=c
+		c+=1
+		//Move s2 to s1 for next iteration
+		s1=s2
+	end for
+	//Log final shell
+	Log.shellLog(s1)
+	//Add to cache if requested
+	if A then Cache.addEx(s1,j)
+	//Launch exploit shell interface
+  Exploit.getShell(s1)
+end function
+//mapCount - Count entries in Map.conf
+//Args: Obj (main object)
+//Returns: number of accounts
+Proxy.mapCount=function(Obj);return len(self.getMapConf(Obj).accounts);end function
+//proxy - Main proxy command dispatcher
+//Args: Obj (main object), argv (command arguments)
+//Returns: command result or Error
+Proxy.proxy=function(Obj,argv)
+	//Require arguments
+  if not argv then return Man.help(["proxy"])
+	//Get command flag (lowercase)
+	Arg1=lower(argv[0])
+	//useMap - Use Map.conf proxy chain
+	useMap=function(arg)
+		//Get optional cache flag
+    if arg then Z=arg[0] else Z=null
+		//Convert "y" to 1
+    if Z and Z=="y" then Z=1
+		//Load accounts from Map.conf
+		l=Proxy.getMapConf(Obj).accounts.values
+		//Check if accounts exist
+		if not l then return Info.info("No systems in Map.conf. Run [ get -m (count) ] to add systems to Map.conf")
+		//Build connection list
+		z=[]
+		for a in l
+			//Add account as connection
+      push(z,{
+        "ip":a.ip,
+        "port":22,
+        "user":a.user,
+        "password":a.password
+      })
+		end for
+		//Build connection chain
+		Proxy.makeConnection(Obj,z,Z)
+	end function
+	//usePDat - Use proxy.dat proxy chain
+	usePDat=function(l,arg)
+		//Get optional cache flag
+    if arg then Z=arg[0] else Z=null
+		//Convert "y" to 1
+    if Z and Z=="y" then Z=1
+		//Get proxy.dat file
+		f=File(Obj.computer,path(Obj.dir.data)+"/proxy.dat")
+		//Check if file exists
+		if not f then return Error.set("No proxy chain file found")
+		//Parse lines
+		l=split(get_content(f),char(10))
+		//Check if has content
+		if not len(l) then return Error.set("No proxy chain file found")
+		//Build connection list
+		z=[]
+		for p in l
+			//Decrypt connection string
+			j=split(Encryption.encrypt(p,Kernel.key,false),":")
+			//Validate has 4 fields
+      if not len(j)==4 then continue
+			//Add to connection list
+      push(z,{
+        "password":j[3],
+        "user":j[2],
+        "port":to_int(j[1]),
+        "ip":j[0],
+      })
+		end for
+		//Build connection chain
+		Proxy.makeConnection(Obj,z,Z)
+	end function
+	//newMapConf - Create new Map.conf file
+  newMapConf=function(arg);Proxy.createNewMap(Obj);end function
+	count=function(arg)
+    c=Proxy.mapCount(Obj)
+		d=0
+		f=File(Obj.computer,path(Obj.dir.data)+"/proxy.dat")
+		if f then d=len(split(get_content(f),char(10)))
+		if not d then d=0
+		i="ips"
+		if c>0 then
+			if c==1 then i="ip"
+			print yellow("="*45)
+			print green("You have "+yellow(str(c))+" "+i+" in the Map.conf proxy chain")
+			print yellow("="*45)
+		end if
+		i="ips"
+		if d>0 then
+			if d==1 then i="ip"
+			print yellow("="*45)
+			print green("You have "+yellow(str(d))+" "+i+" in the proxy.dat proxy chain")
+			print yellow("="*45)
+		end if
+		if c==0 and d==0 then return Warning.set("No proxy chain in Map.conf or proxy.dat yet. Run [ get -m (count) ] to create a new proxy chain")
+	end function
+	combine=function(arg)
+    if arg then Z=arg[0] else Z=null
+    if Z and Z=="y" then Z=1
+		l=[]
+    j=null
+		f=File(Obj.computer,path(Obj.dir.data)+"/proxy.dat")
+    if f then
+      for p in split(get_content(f),char(10))
+        a=split(Encryption.encrypt(p,Kernel.key,false),":")
+        if not len(a)==4 then continue
+        push(l,{
+          "ip":a[0],
+          "port":to_int(a[1]),
+          "user":a[2],
+          "password":a[3]
+        })
+      end for
+    end if
+    j=Proxy.getMapConf(Obj).accounts.values
+    if not j then return Proxy.makeConnection(Obj,l,Z)
+		for a in j
+      push(l,{
+        "ip":a.ip,
+        "port":22,
+        "user":a.user,
+        "password":a.password
+      })
+		end for
+		Proxy.makeConnection(Obj,l,Z)
+	end function
+	random=function(arg)
+		if not arg then return Error.set("Invalid ip count")
+		Proxy.chain={}
+    a=0
+		if arg then Z=to_int(arg[0]) else Z=1
+		if not Z isa number then Z=1
+    arg=join(arg,"")
+    if indexOf(arg,"-s")!=null then Proxy.useShells=1
+    if indexOf(arg,"y")!=null then a=1
+		if not globals.G_rainbow then Crack.loading
+		Info.info("Running...")
+		Proxy.chain={
+      "countTo":Z,
+      "count":0,
+      "ips":[]
+		}
+		Proxy.farm
+		if len(Proxy.chain.ips) then Proxy.makeConnection(Obj,Proxy.chain.ips,a)
+	end function
+	useBoth=function(arg)
+		f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/proxy.dat")
+    _ct=get_content(f);if _ct then
+      l=split(_ct,char(10))
+      return usePDat(l,arg)
+    end if
+    if Proxy.mapCount(Obj) then return useMap(arg)
+		Info.error("No proxy chain found")
+	end function
+  readIn=function(arg)
+    if arg then Arg1=arg[0] else Arg1=null
+    if Arg1 then f=Io._getFile(Obj,Arg1) else f=Io.file(Obj,Obj.user.home,"Select your saved map file:")
+		if f isa Warning then return f
+    if f isa Error then return f
+    m=Proxy.getMapConf(Obj)
+    for a in System.parse(get_content(f)).accounts
+      push(m.accounts,{
+        "user":"root",
+        "ip":a.ip,
+        "password":a.password
+      })
+    end for
+    Proxy.saveMapConf(Obj,m)
+    Info.info("Finished")
+  end function
+  writeOut=function(arg)
+    if arg then n=arg[0] else n="map_ips.dat"
+    p=Proxy.getMapConf(Obj)
+    if len(p.accounts)==0 then return Info.info("No systems in Map.conf. Run [ get -m (count) ] to add systems to Map.conf")
+    f=File(Obj.computer,path(Obj.dir.current)+"/"+n)
+    if not f then
+      f=Command.touch(Obj,[path(Obj.dir.current)+"/"+n])
+			if f isa Error then return
+      m=p
+    else
+      m=System.parse(get_content(f))
+      for a in p.accounts
+        push(m.accounts,{
+          "user":"root",
+          "ip":a.ip,
+          "password":a.password
+        })
+      end for
+    end if
+    set_content(f,System.toJSON(m))
+    Info.info("Finished")
+  end function
+  quick=function(arg);Proxy.router(Obj);end function
+	hop=function(arg);if not arg then return Error.set("Invalid hop count");Proxy.hop(Obj,arg);end function
+	decoy=function(arg);Proxy.decoy(Obj,arg);end function
+	cmds={
+    "-n":@newMapConf,
+    "-m":@useMap,
+    "-p":@usePDat,
+    "-c":@count,
+    "-a":@useBoth,
+    "-x":@combine,
+    "-r":@random,
+    "-ri":@readIn,
+    "-wo":@writeOut,
+    "-q":@quick,
+    "-h":@hop,
+    "-d":@decoy
+  }
+	if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+	_prevIgnore=globals.G_bash.IGNORE
+	cmds[Arg1](argv[1:])
+	globals.G_bash.IGNORE=_prevIgnore
+end function
+//router - Find and exploit random router for proxy shell
+//Args: Obj (main object)
+//Returns: launches X shell on router or Error
+Proxy.router=function(Obj)
+  //rmFile - Prompt to remove saved proxy and retry
+  rmFile=function
+    Info.warning("Failed to connect to save proxy server")
+		//Prompt to remove saved proxy
+    if Gui.yesNo("Would you like to remove the saved proxy?") then
+			//Delete proxy save file
+      f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/proxy")
+      if f then delete(f)
+    end if
+		//Prompt to find new proxy
+    if Gui.yesNo("Find a new proxy?") then return true else return Info.info("User Aborted","i",false)
+  end function
+	//Suppress bash execution
+  globals.G_bash.IGNORE=true
+  //Track tested router IPs to avoid retrying duplicates from Net.rip
+  seen={}
+  //Cache exploits per lib/version within this router run
+  exploitCache={}
+	//Check if proxy log enabled (skip re-connect when already on a proxy)
+	if globals.G_settings.useProxyLog and Obj.layer!="proxy" then
+		f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/proxy")
+    if not len(get_content(f)) then
+      delete(f)
+      f=null
+    end if
+		if f then
+			c=System.parse(get_content(f))
+			if c then
+        Info.info("Re-Connecting to proxy server at: "+c.ip)
+				r=get_router(c.ip)
+				if not r then
+          if rmFile then return self.router else return
+        end if
+        t=Exploit.extractRouter(r)
+				if t isa Error then
+          if rmFile then return self.router else return
+        end if
+				//Skip empty extracts to avoid nil indexing
+				if not t or not len(t) then
+          Info.warning("Empty router extract from "+c.ip+", "+Obj.computer.public_ip+" will be in the router log")
+          if rmFile then return self.router else return
+        end if
+        m=t[0]
+				ex=overflow(m.metaLib,c.memory,c.unsec)
+				if Builder.packEXSu(ex,c.ip,c.password) isa Error then
+          if rmFile then return self.router else return
+        end if
+				S=get_custom_object.packRootShell
+				if not S then
+          if rmFile then return self.router else return
+        end if
+        Info.info("Refreshing metaxploit and crypto libraries...")
+        H=File(host_computer(S),"/root")
+        M=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/metaxploit.so")
+        x=scp(globals.G_main.shell,path(M),path(H)+"/payload/data",S)
+        if x isa string then Info.error(x)
+        C=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/crypto.so")
+        x=scp(globals.G_main.shell,path(C),path(H)+"/payload/data",S)
+        if x isa string then Info.error(x)
+        Boot.pivotCOLoad
+				return launch(S,path(H)+"/x",Kernel.key+" proxy")
+			end if
+		end if
+	end if
+  while true
+		i=Net.rip
+    //Skip routers already attempted in this run
+    if hasIndex(seen,i) then continue else seen[i]=1
+		r=get_router(i)
+		if not r then continue
+    t=Exploit.extractRouter(r)
+    if t isa Error then
+      Info.warning("Failed to extract router from "+i+", "+Obj.computer.public_ip+" will be in the router log")
+      continue
+    end if
+    //Skip empty extracts to avoid nil indexing
+    if not t or not len(t) then
+      Info.warning("Empty router extract from "+i+", "+Obj.computer.public_ip+" will be in the router log")
+      continue
+    end if
+    m=t[0]
+    E=lib_name(m.metaLib)+"_"+version(m.metaLib)
+    q=Proxy._getCachedExploits(exploitCache,E,m)
+		if not len(q) then
+      Info.warning("Failed to get exploits from "+i+", "+Obj.computer.public_ip+" will be in the router log")
+      continue
+    end if
+		//Sort exploits by priority (root=3, guest=1) to favor root access
+		q=Proxy.prioritizeRootExploits(q)
+		for e in q
+			if not len(e) then continue
+			if e.e=="s" then
+				ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"proxy")
+        if typeof(ex)!="shell" then continue
+        s=Exploit.tryShellEX(ex,true)
+        if not s or s isa Error then continue
+        c=host_computer(s)
+        H=File(c,"/root")
+        X=File(globals.G_main.computer,globals.G_attributes.program_path)
+        x=scp(globals.G_main.shell,path(X),path(H),s)
+        if not x isa number then continue
+        if not create_folder(c,path(H),"payload") isa number then continue
+        if not create_folder(c,path(H)+"/payload/","data") isa number then continue
+				if globals.G_settings.useProxyLog then
+          Info.info("Saving proxy server just incase we need to re-log...")
+					f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/proxy")
+					if not f then f=Command.touch(globals.G_main,[path(globals.G_main.dir.data)+"/proxy"])
+					if f then set_content(f,System.toJSON({"ip":i,"memory":Exploit.getmtree(e.m),"unsec":Exploit.getstree(e.s),"password":Crack.returnRootPass(ex)}))
+				end if
+        Boot.pivotCOLoad
+        return launch(s,path(H)+"/x",Kernel.key+" proxy")
+      end if
+    end for
+    Info.warning("Failed to find a router shell from "+i+", "+Obj.computer.public_ip+" will be in the router log")
+    continue
+  end while
+  self.router
+end function
+//hop - Create multi-hop proxy chain with specified depth
+//Args: Obj (main object), argv (arguments with -c flag for hop count)
+//Returns: launches X shell on final hop or Error
+Proxy.hop=function(Obj,argv)
+	_p=ArgumentParser.init
+	//Add hop count argument
+  _p.addArgument("c",false,"storeNumber")
+  argv=_p.parseArgs("proxy",argv)
+	//Exit on parse error
+  if argv isa Error then return
+  //Allow positional count: `proxy -h 5` arrives as argv=["5"] with no -c flag
+  if not argv.c and argv.rest and len(argv.rest)>0 then
+    n=val(argv.rest[0])
+    if n>0 then argv.c=n
+  end if
+	//Use simple router if no count
+  if not argv.c then return self.router(Obj)
+	//Use simple router if count is 1
+  if argv.c==1 then return self.router(Obj)
+	//Initialize hops array
+  globals.G_hops=[]
+	//Shell variable
+  s=null
+  //Track tested router IPs to avoid duplicate attempts during hop building
+  seen={}
+  //Cache exploits per lib/version within this hop run
+  exploitCache={}
+	//Find initial proxy
+  while true
+    Info.info("Finding initial proxy...")
+		i=Net.rip
+    //Skip routers already attempted
+    if hasIndex(seen,i) then continue else seen[i]=1
+		r=get_router(i)
+		if not r then continue
+    t=Exploit.extractRouter(r)
+    //Skip empty extracts to avoid nil indexing
+    if not t or not len(t) then
+      Info.warning("Empty router extract from "+i+" "+Obj.computer.public_ip+" will be in the router log")
+      continue
+    end if
+    if t isa Error then
+      Info.warning("Failed to extract router from "+i+" "+Obj.computer.public_ip+" will be in the router log")
+      continue
+    end if
+    m=t[0]
+    E=lib_name(m.metaLib)+"_"+version(m.metaLib)
+    q=Proxy._getCachedExploits(exploitCache,E,m)
+		if not len(q) then
+      Info.warning("Failed to get exploits from "+i+" "+Obj.computer.public_ip+" will be in the router log")
+      continue
+    end if
+		//Sort exploits by priority (root=3, guest=1) to favor root access
+		q=Proxy.prioritizeRootExploits(q)
+		for e in q
+			if not len(e) then continue
+			if e.e=="s" then
+				ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"proxy")
+        if typeof(ex)!="shell" then continue
+        s=Exploit.tryShellEX(ex,true)
+        if not s or s isa Error then continue else break
+      end if
+    end for
+    if not s then Info.warning("Failed to get a router shell from "+i+" "+Obj.computer.public_ip+" will be in the router log") else break
+  end while
+  Info.info("Generating proxy's now...")
+  push(globals.G_hops,s)
+  argv.c-=1
+  Z=null
+  Y=null
+  while argv.c!=0
+    Info.info("Proxy's left to fetch: "+str(argv.c))
+    i=Net.rip
+		//Skip routers already attempted
+		if hasIndex(seen,i) then continue else seen[i]=1
+    // CRITICAL: Use Builder.packCOEX because we're multiple launch calls deep
+    // Direct get_router(i) would fail - wrong execution context
+    // packCOEX routes through shell 's' to get router in correct context
+    z=Builder.packCOEX(s,i)
+    if z isa Error then continue
+		r=z.router
+    t=Exploit.extractRouter(r,z.metaxploit)
+    //Skip empty extracts to avoid nil indexing
+    if not t or not len(t) then
+      Info.info("Empty router extract from "+i+" nothing to worry about")
+      continue
+    end if
+    if t isa Error then
+      Info.info("Failed to extract router from "+i+" nothing to worry about")
+      continue
+    end if
+    m=t[0]
+    E=lib_name(m.metaLib)+"_"+version(m.metaLib)
+    q=Proxy._getCachedExploits(exploitCache,E,m)
+		if not len(q) then
+      Info.info("Failed to get exploits on "+i+" nothing to worry about")
+      continue
+    end if
+		//Sort exploits by priority (root=3, guest=1) to favor root access
+		q=Proxy.prioritizeRootExploits(q)
+    exploitCache[E]=q
+    found=null
+		for e in q
+			if not len(e) then continue
+			if e.e=="s" then
+				ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"proxy")
+        if typeof(ex)!="shell" then continue
+        s=Exploit.tryShellEX(ex,true)
+        if not s or s isa Error then continue
+        push(globals.G_hops,s)
+        argv.c-=1
+        if argv.c==0 then
+          Z=Exploit.getmtree(e.m)
+          Y=Exploit.getstree(e.s)
+        end if
+        found=1
+        break
+      end if
+    end for
+    if not found then Info.info("Failed to get a shell on "+i+" nothing to worry about")
+  end while
+  c=host_computer(s)
+  H=File(c,"/root")
+  X=File(globals.G_main.computer,globals.G_attributes.program_path)
+  x=scp(globals.G_main.shell,path(X),path(H),s)
+  if x isa string then return Error.set(x)
+  if not create_folder(c,path(H),"payload") isa number then Error.set("Failed to create payload folder")
+  if not create_folder(c,path(H)+"/payload/","data") isa number then Error.set("Failed to create data folder")
+	if globals.G_settings.useProxyLog then
+    Info.info("Saving proxy server just incase we need to re-log...")
+		f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/proxy")
+		if not f then f=Command.touch(globals.G_main,[path(globals.G_main.dir.data)+"/proxy"])
+		if f then set_content(f,System.toJSON({"ip":i,"memory":Z,"unsec":Y,"password":Crack.returnRootPass(ex)}))
+	end if
+  for _ in globals.G_hops;Log.shellLog(_);end for
+  globals.G_attributes.hops=true
+  Info.info("Proxy chain established with "+str(len(globals.G_hops))+" hops")
+  Info.info("You can view the proxy hops by using the hops command")
+  Boot.pivotCOLoad
+  return launch(s,path(H)+"/x",Kernel.key+" proxy")
+end function
+//decoy - Launch decoy shell through proxy router
+//Args: Obj (main object), argv (arguments with -i/-n/-r flags)
+//Returns: launches X shell in decoy mode or Error
+Proxy.decoy=function(Obj,argv)
+	_p=ArgumentParser.init
+	//Add session ID argument
+  _p.addArgument("i",false,"storeNumber")
+	//Add nickname argument
+  _p.addArgument("n",false,"store")
+	//Add remove flag
+  _p.addArgument("r",false,"flag")
+  argv=_p.parseArgs("proxy",argv)
+	//Default nickname to current nick
+  if not argv.n then argv.n=Obj.nick
+	//Suppress bash execution
+  globals.G_bash.IGNORE=true
+	//Remove previous decoys if requested
+  if argv.r then Session.removeByNick(Obj,"decoy",false,true)
+  //Track tested router IPs to avoid retrying duplicates during decoy search
+  seen={}
+	//Cache exploits per lib/version within this decoy run
+	exploitCache={}
+	//Main decoy search loop
+  while true
+		i=Net.rip
+    //Skip routers already attempted in this run
+    if hasIndex(seen,i) then continue else seen[i]=1
+		r=get_router(i)
+		if not r then continue
+    t=Exploit.extractRouter(r)
+    //Skip empty extracts to avoid nil indexing
+    if not t or not len(t) then
+      Info.warning("Empty router extract from "+i+", "+Obj.computer.public_ip+" will be in the router log")
+      continue
+    end if
+    if t isa Error then
+      Info.warning("Failed to extract router from "+i+", "+Obj.computer.public_ip+" will be in the router log")
+      continue
+    end if
+    m=t[0]
+    E=lib_name(m.metaLib)+"_"+version(m.metaLib)
+    q=Proxy._getCachedExploits(exploitCache,E,m)
+		if not len(q) then
+      Info.warning("Failed to get exploits from "+i+", "+Obj.computer.public_ip+" will be in the router log")
+      continue
+    end if
+		//Sort exploits by priority (root=3, guest=1) to favor root access
+		q=Proxy.prioritizeRootExploits(q)
+		for e in q
+			if not len(e) then continue
+			if e.e=="s" then
+				ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"proxy")
+        if typeof(ex)!="shell" then continue
+        s=Exploit.tryShellEX(ex,true)
+        if not s or s isa Error then continue
+        c=host_computer(s)
+        H=File(c,"/root")
+        X=File(globals.G_main.computer,globals.G_attributes.program_path)
+        x=scp(globals.G_main.shell,path(X),path(H),s)
+        if not x isa number then continue
+        if not create_folder(c,path(H),"payload") isa number then continue
+        if not create_folder(c,path(H)+"/payload/","data") isa number then continue
+        _savedBash=globals.G_bash
+        globals.G_bash={}
+        Bash.start
+        Boot.pivotCOLoad
+        globals.G_bash=_savedBash
+        if argv.i then
+          return launch(s,path(H)+"/x",Kernel.key+" decoy "+argv.i)
+        else if argv.n then
+          return launch(s,path(H)+"/x",Kernel.key+" decoy "+argv.n)
+        else
+          return launch(s,path(H)+"/x",Kernel.key+" decoy")
+        end if
+      end if
+    end for
+    Info.warning("Failed to find a router shell from "+i+", "+Obj.computer.public_ip+" will be in the router log")
+    continue
+  end while
+  self.router
+end function

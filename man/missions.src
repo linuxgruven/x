@@ -1,0 +1,248 @@
+// Man page for missions
+manMissions="MISSIONS(1)                      X Shell Manual                      MISSIONS(1)
+
+<b>NAME</b>
+    missions - Mission contract automation and management
+<b>SYNOPSIS</b>
+    <b>missions</b>
+    <b>missions</b> <b>--bypass-rshell</b>
+<b>DESCRIPTION</b>
+    Automated mission contract handler for mail inbox. Processes mission
+    contracts with subject 'Mission Contract' and automates task completion.
+    Intelligently acquires exploits, prioritizes shells (root>user>guest),
+    and executes mission objectives with minimal user intervention.
+
+    <color=#e4ff34>*** Requires logged-in mail account ***</color>
+    <color=#e4ff34>*** Uses exploit framework ***</color>
+<b>OPTIONS</b>
+    <b>--bypass-rshell</b>
+    Bypass rshell server requirement
+    Allows missions without registered rshell servers
+    Use when target has no available rshell connectivity
+<b>MISSION TYPES</b>
+    <color=#e4ff34>The following mission types are supported:</color>
+
+    <b>ACADEMIC</b> - Grade manipulation contracts
+    Required Fields:
+    • Public IP - Target network address
+    • Target LAN - Local IP with academic system
+    • Student Name - Student to modify
+    • Subject - Course subject name
+    • Action - Either 'add 1' or 'change to 8'
+    Operation:
+    Opens admin and student GUI applications
+    User manually modifies grade in interface
+    Confirms completion via yes/no prompt
+    Requirements:
+     Shell access to target LAN (non-router)
+     No rshell required
+
+    <b>POLICE</b> - Police record modification contracts
+    Required Fields:
+    • Public IP - Target network address
+    • Target LAN - Local IP with police system
+    • Convict Name - Record subject
+    • Operation Type - One of: deleteComplete, delete, add, modify
+    • Charge - Crime description (delete/add/modify types)
+    • Year - Crime year (add type only)
+    • Change - New date description (modify type only)
+    Operation:
+    Opens admin and police GUI applications
+    User manually modifies record as specified
+    Confirms completion via yes/no prompt
+    Requirements:
+     Shell access to target LAN (non-router)
+     No rshell required
+
+    <b>CORRUPTION</b> - Boot process corruption contracts
+    Required Fields:
+    • Public IP - Target network address
+    • Target LAN - Local IP to corrupt
+    Operation:
+    Renames /boot to /boots on target system
+    Prevents system from booting properly
+    Uses direct shell or router bounce attack
+    Requirements:
+     Root shell access OR router vulnerability
+     No rshell required
+
+    <b>GETFILE</b> - Remote file retrieval contracts
+    Required Fields:
+    • Public IP - Target network address
+    • Target LAN - Local IP with file
+    • File Path - Full path to target file
+    Operation:
+    Downloads file to local system
+    First attempts direct shell download
+    Falls back to rshellrouter bounce if needed
+    Requirements:
+     Shell access to target LAN OR
+     Registered rshell server  router exploit
+    NOTE: Rshell required if direct shell fails
+    NOTE: Use --bypass-rshell to skip rshell check
+
+    <b>DELETEFILE</b> - File deletion contracts
+    Required Fields:
+    • Public IP - Target network address
+    • Target LAN - Local IP with file
+    • File Path - Extracted from email (usually .bin)
+    Operation:
+    Deletes specified file from target
+    Attempts direct shell deletion first
+    Falls back to router bounce if needed
+    Uses rshell to list files if not found
+    Special files require manual intervention
+    Requirements:
+     Shell access to target LAN OR
+     Router exploit for bounce attack OR
+     Registered rshell server (for file listing)
+    NOTE: Rshell required if file not found
+    NOTE: Use --bypass-rshell to skip rshell check
+
+    <b>CREDENTIALS</b> - Password retrieval contracts
+    Required Fields:
+    • Public IP - Target network address
+    • Target LAN - Local IP with user account
+    • Username - Target user OR 'Any User'
+    Operation:
+    Retrieves password from /etc/passwd
+    Supports 'Any User' for any valid account
+    Uses direct shell or router bounce attack
+    Requirements:
+     Shell access to target LAN OR
+     Router exploit for bounce attack
+     No rshell required
+<b>AUTOMATION</b>
+    <color=#e4ff34>Mission Automation Workflow:</color>
+
+    1. Email Parsing
+    Extracts mission details from email content
+    Identifies mission type and required fields
+
+    2. Exploit Acquisition
+    Queries exploit database for suitable exploits
+    Prioritizes shells: root > user > guest
+    Filters by user level requirements
+    Excludes router shells for GUI missions
+
+    3. Target Access
+    Overflows vulnerable libraries
+    Establishes shell or computer access
+    Uses router bounce for advanced attacks
+
+    4. Mission Execution
+    Academic/Police: Opens GUIs, prompts user
+    Corruption: Renames boot directory
+    GetFile: Downloads file to home
+    DeleteFile: Removes file or lists directory
+    Credentials: Extracts from /etc/passwd
+
+    5. Result Reporting
+    Displays mission statistics
+    Shows detailed results per mission
+    Indicates success or failure
+<b>RSHELL SERVERS</b>
+    <color=#e4ff34>RShell Server Requirements:</color>
+
+    Some missions require registered rshell servers:
+    • GetFile - When direct shell download fails
+    • DeleteFile - When file cannot be found/deleted
+
+    RShell servers managed via: <b>rshell list</b> command
+
+    Register via: <b>rshell list</b> and setup wizard
+
+    <color=#e4ff34>Bypass Flag Usage:</color>
+    Use <b>--bypass-rshell</b> when:
+    • No rshell server is available
+    • Target network lacks rshell connectivity
+    • Mission can complete without rshell
+
+    Note: Bypass may cause some missions to fail
+<b>CONFIGURATION</b>
+    <color=#e4ff34>Required Configuration Settings:</color>
+
+    Many missions require advanced router attacks when direct access fails.
+    Configure these settings in <b>~/.xrc</b> or via <b>config -v</b>:
+
+    <b>Router Attack Library</b> - Library to use for advanced attacks
+    Example: kernel_router.so, libssh.so
+    Used when direct access is not available
+    Should have exploits that give root access
+
+    <b>Router Attack Method</b> - Which attack to use from library
+    Example: 0, 1, 2 (number from exploit list)
+    The specific attack method to execute
+    Set via: <b>config -x</b> INDEX
+    Find via: <b>exp -p</b> LIBRARY_INDEX
+
+    <color=#e4ff34>Missions requiring these settings:</color>
+    • Corruption - When direct shell unavailable
+    • DeleteFile - When file not found via shell
+    • Credentials - When direct shell unavailable
+    • GetFile - When rshellrouter bounce needed
+
+    <color=#e4ff34>Configuration via config command:</color>
+    <b>config -v</b> [NAME]
+    Set vulnerable library for auto missions
+    Example: config -v ssh (sets libssh.so)
+
+    <b>config -x</b> [INDEX]
+    Set exploit index from vulnerable library
+    Specify which exploit to use for missions
+
+    <color=#e4ff34>View current configuration:</color>
+    <b>config</b>
+    Display all current settings
+    Check router attack configuration
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Usage</color>
+    <b>email -l missions@mail.com</b>
+    Login to mission account
+
+    <b>missions</b>
+    Process all pending mission contracts
+
+    <color=#e4ff34># With RShell Bypass</color>
+    <b>missions --bypass-rshell</b>
+    Process missions without rshell requirement
+
+    <color=#e4ff34># Typical Workflow</color>
+    <b>email -c</b> or
+    <b>email -c tux@meta.com secret123</b>
+    1. Login to email account
+
+    <b>apt update -e -c 5</b>
+    2. Update exploit database (5 passes)
+
+    <b>missions</b>
+    3. Run mission automation
+
+    <color=#e4ff34># Output Example</color>
+    <color=#ffffff>Mission Statistics:</color>
+    <color=#ffffff>  Academic: 2</color>
+    <color=#ffffff>  Police: 1</color>
+    <color=#ffffff>  GetFile: 3</color>
+
+    <color=#ffffff>Academic Mission #1:</color>
+    <color=#ffffff>  IP: 192.168.1.100</color>
+    <color=#ffffff>  Target: 192.168.1.50</color>
+    <color=#ffffff>  Student: John Doe</color>
+    <color=#ffffff>  Subject: Mathematics</color>
+    <color=#ffffff>  Action: change to 8</color>
+    <color=#20ff98>  [SUCCESS] Successfully modified grade</color>
+<b>NOTES</b>
+    • Missions are email-based with subject 'Mission Contract'
+    • Requires active mail session (email -l)
+    • Uses exploit framework (exp command)
+    • Shell prioritization: root > user > guest
+    • 'Any User' missions exclude guest accounts
+    • Academic/Police missions open GUIs for manual completion
+    • Router attacks used when direct access unavailable
+    • <b>CRITICAL</b>: Configure router attack settings via <b>config -v</b>
+      Many missions REQUIRE router attack library configuration
+      Run <b>config status</b> to check current settings
+    • Log clearing attempted after operations
+    • Failed missions marked with yellow/red text
+<b>SEE ALSO</b>
+    <b>email</b>, <b>exp</b>, <b>open</b>, <b>rshell</b>, <b>config</b>"

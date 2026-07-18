@@ -1,0 +1,517 @@
+// =============================================================================
+// AGENT_EXECUTE
+// AI agent execute; main execution loop, command dispatch, and result handling.
+// =============================================================================
+AgentExecute={}
+AgentExecute._COMPROMISE_ACTIONS=["exploit","crack","backdoor","attack","fetch"]
+AgentExecute.execute=function(Obj, command, options=null)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  //Ensure Agent is initialized
+  if not hasIndex(self,"config") or typeof(globals.G_agent.config)!="map" then globals.G_agent.init
+  //Debug: Check what Obj we received
+  if debug then
+    if hasIndex(Obj,"computer") then
+      print green("[DEBUG] execute received Obj with computer.local_ip: "+Obj.computer.local_ip)
+    else if typeof(Obj)=="computer" then
+      print green("[DEBUG] execute received raw computer with local_ip: "+Obj.local_ip)
+    else
+      print green("[DEBUG] execute received Obj type: "+typeof(Obj))
+    end if
+  end if
+  //Check if we have a stored object to use instead
+  if hasIndex(globals.G_agentContext,"storedObjects") and len(globals.G_agentContext.storedObjects)>0 then
+    //Use the most recently stored object
+    storedWrapper=globals.G_agentContext.storedObjects[-1]
+    if storedWrapper and hasIndex(storedWrapper,"object") then
+      //Wrap raw computer/shell in session object if needed
+      if typeof(storedWrapper.object)=="computer" then
+        if debug then print green("[DEBUG] Using stored computer object ("+storedWrapper.label+") instead of passed Obj")
+        Obj=ComputerObject.run(@Obj,storedWrapper.object,true)
+      else if typeof(storedWrapper.object)=="shell" then
+        if debug then print green("[DEBUG] Using stored shell object ("+storedWrapper.label+") instead of passed Obj")
+        Obj=ShellObject.run(@Obj,storedWrapper.object,true)
+      else
+        //Already wrapped, use directly
+        if debug then print green("[DEBUG] Using stored "+storedWrapper.type+" object ("+storedWrapper.label+")")
+        Obj=storedWrapper.object
+      end if
+    end if
+  end if
+  //FIRST: Check for shell control commands before anything else
+  if command=="home" or command=="HOME" or command=="Home" then return {"error":"Invalid"}
+  if command=="exit" or command=="EXIT" or command=="Exit" then return {"error":"Invalid"}
+  if command=="close" or command=="CLOSE" or command=="Close" then return {"error":"Invalid"}
+  if command=="x" or command=="X" or command=="c" or command=="C" then return {"error":"Invalid"}
+  if options==null then options={}
+  //Apply options
+  if hasIndex(options,"outputLevel") then outLvl=options.outputLevel
+  //Legacy support for old options
+  if hasIndex(options,"verbose") and options.verbose then outLvl=2
+  if hasIndex(options,"quiet") and options.quiet then outLvl=0
+  if hasIndex(options,"dryRun") then globals.G_agent.config.dryRun=options.dryRun
+  if hasIndex(options,"aggressive") then globals.G_agent.config.aggressive=options.aggressive
+  if hasIndex(options,"stealth") then globals.G_agent.config.stealth=options.stealth
+  if hasIndex(options,"trainer") then globals.G_agent.config.trainer=options.trainer
+  if hasIndex(options,"debug") then debug=options.debug
+  //Store headless option for passing to steps
+  headlessMode=false
+  if hasIndex(options,"headless") then headlessMode=options.headless
+  //Guard against invalid/empty commands
+  if not command or typeof(command)!="string" then return {"error":"Invalid command"}
+  cmdCheck=command
+  if len(cmdCheck)==0 then return {"error":"Empty command"}
+  //Remove whitespace manually
+  while len(cmdCheck)>0 and (cmdCheck[0]==" " or cmdCheck[0]==char(9) or cmdCheck[0]==char(10) or cmdCheck[0]==char(13));cmdCheck=cmdCheck[1:];end while
+  while len(cmdCheck)>0 and (cmdCheck[-1]==" " or cmdCheck[-1]==char(9) or cmdCheck[-1]==char(10) or cmdCheck[-1]==char(13));cmdCheck=cmdCheck[:-1];end while
+  if len(cmdCheck)==0 then return {"error":"Empty command"}
+  cmdLower=lower(cmdCheck)
+  //Check if command explicitly requests interactive shell - if so, override headless mode
+  //Be specific to avoid false positives like "i need to use mc"
+  if indexOf(cmdLower,"drop me into")!=null or indexOf(cmdLower,"active shell")!=null or indexOf(cmdLower,"use this shell")!=null or indexOf(cmdLower,"use the shell")!=null or indexOf(cmdLower,"open shell")!=null or indexOf(cmdLower,"launch shell")!=null or indexOf(cmdLower,"i need a shell")!=null or indexOf(cmdLower,"give me a shell")!=null or indexOf(cmdLower,"give me shell")!=null then
+    headlessMode=false
+    if debug then print green("[DEBUG] Command requests interactive shell, disabling headless mode")
+  end if
+  //Reject shell control commands that shouldn't go through agent
+  if cmdLower=="home" or cmdLower=="exit" or cmdLower=="close" or cmdLower=="x" or cmdLower=="c" then return {"error":"Shell control command not supported by agent"}
+  //Check for configuration commands (verbose, stealth, etc)
+  configResult=globals.G_agent._parseConfig(cmdLower)
+  if configResult and hasIndex(configResult,"isConfig") and configResult.isConfig then return configResult
+  //Check for multi-step commands separated by " then "
+  if indexOf(cmdLower," then ")!=null then
+    if outLvl>=2 then print yellow("[AI] Multi-step command detected, analyzing chain...")
+    if debug then print green("[DEBUG] Multi-step command detected, splitting on 'then'")
+    steps=split(command,"then")
+    _len=len(steps)
+    if outLvl>=2 then print yellow("  * Found "+str(_len)+" steps to execute sequentially")
+    if debug then
+      print green("[DEBUG] Found "+str(_len)+" steps to execute sequentially")
+      i=0;while i<_len;print green("[DEBUG]   Step "+(i+1)+": "+steps[i]);i+=1;end while
+    end if
+    //Extract IPs from full command to use as context for steps that don't specify IPs
+    fullCommandIps=globals.G_agent._extractIps(command)
+    if outLvl>=2 and fullCommandIps and len(fullCommandIps)>0 then print yellow("  * Extracted context IPs: "+join(fullCommandIps,", "))
+    if debug and fullCommandIps and len(fullCommandIps)>0 then print green("[DEBUG] Extracted IPs from full command: "+join(fullCommandIps,", "))
+    //Check if last step explicitly requests interactive shell
+    lastStepInteractive=false
+    lastStepCmd=lower(trim(steps[len(steps)-1]))
+    if indexOf(lastStepCmd,"drop me into")!=null or indexOf(lastStepCmd,"open")!=null or indexOf(lastStepCmd,"use the shell")!=null or indexOf(lastStepCmd,"interactive")!=null or indexOf(lastStepCmd,"launch shell")!=null then
+      lastStepInteractive=true
+      if debug then print green("Debug: Last step requests interactive shell, first step will run non-headless")
+    end if
+    aggregateResult={"success":true,"steps":[]}
+    currentObj=Obj  //Track the current working object across steps
+    _len=len(steps);i=0;while i<_len
+    stepCmd=trim(steps[i])
+    stepCmdLower=lower(stepCmd)
+    //If step doesn't contain an IP but we have IPs from full command, append them
+    stepIps=globals.G_agent._extractIps(stepCmd)
+    if (not stepIps or len(stepIps)==0) and fullCommandIps and len(fullCommandIps)>0 then
+      //Step is missing IPs - append the first IP from full command
+      stepCmd=stepCmd+" "+fullCommandIps[0]
+      if debug then print green("Debug: Step "+(i+1)+" missing IP, appending: "+fullCommandIps[0])
+    end if
+    if debug then print green("Debug: Executing step "+(i+1)+"/"+len(steps)+": "+stepCmd)
+    //For multi-step commands, always go through agent's parser for proper headless handling
+    //The agent knows how to execute commands without interactive prompts
+    //Check if step explicitly requests interactive shell
+    needsInteractive=false
+    if indexOf(stepCmdLower,"i need to use")!=null or indexOf(stepCmdLower,"drop me into")!=null or indexOf(stepCmdLower,"active shell")!=null or indexOf(stepCmdLower,"interactive")!=null or indexOf(stepCmdLower,"use this shell")!=null or indexOf(stepCmdLower,"use the shell")!=null or indexOf(stepCmdLower,"open shell")!=null or indexOf(stepCmdLower,"launch shell")!=null then needsInteractive=true
+    //For all steps except the last, force headless mode (unless explicitly requesting interactive)
+    stepOptions={}
+    for key in options.indexes;stepOptions[key]=options[key];end for
+    //Special case: if this is the first (and only) step and last step requests interactive, don't use headless
+    if len(steps)==2 and i==0 and lastStepInteractive then
+      if outLvl>=2 then print yellow("  * Step "+(i+1)+" mode: Interactive (last step needs shell)")
+      if debug then print green("Debug: First step of 2-step command where last requests interactive - skipping headless for step 1")
+    else if i<len(steps)-1 and not needsInteractive then
+      stepOptions.headless=true
+      if outLvl>=2 then print yellow("  * Step "+(i+1)+" mode: Headless (intermediate step)")
+      if debug then print green("Debug: Step "+(i+1)+" will run in headless mode (intermediate step)")
+    else if needsInteractive then
+      if outLvl>=2 then print yellow("  * Step "+(i+1)+" mode: Interactive (explicitly requested)")
+      if debug then print green("Debug: Step "+(i+1)+" requests interactive shell, will not use headless mode")
+    end if
+    stepResult=globals.G_agent.execute(currentObj,stepCmd,stepOptions)
+    push(aggregateResult.steps,stepResult)
+    //Update currentObj if step returned a new object (prefer wrapped)
+    if hasIndex(stepResult,"context") then
+      if hasIndex(stepResult.context,"computer") then
+        currentObj=stepResult.context.computer
+        if debug then print green("Debug: Updated currentObj to computer from step "+(i+1))
+      else if hasIndex(stepResult.context,"shell") then
+        currentObj=stepResult.context.shell
+        if debug then print green("Debug: Updated currentObj to shell from step "+(i+1))
+      end if
+    end if
+    if hasIndex(stepResult,"error") then
+      aggregateResult.success=false
+      aggregateResult.error="Step "+(i+1)+" failed: "+stepResult.error
+      if debug then print red("Debug: Step "+(i+1)+" failed, stopping multi-step execution")
+      break
+    end if
+    if not hasIndex(stepResult,"success") or not stepResult.success then
+      aggregateResult.success=false
+      aggregateResult.error="Step "+(i+1)+" did not succeed"
+      if debug then print red("Debug: Step "+(i+1)+" did not succeed, stopping multi-step execution")
+      break
+    end if
+    i+=1;end while
+    return aggregateResult
+  end if
+  parsed=globals.G_agent._parseCommand(Obj,command,headlessMode)
+  if hasIndex(parsed,"error") then return {"error":parsed.error}
+  //Handle compound commands: execute each sub-command sequentially
+  if hasIndex(parsed,"compound") and parsed.compound then
+    if debug then print green("[DEBUG] Execute: Processing compound command with "+len(parsed.subCommands)+" parts")
+    compoundResult={"success":true,"results":[]}
+    for subCmd in parsed.subCommands
+      if outLvl>=1 then print skyblue("Agent: Step - "+subCmd)
+      subResult=globals.G_agent.execute(Obj,subCmd,options)
+      push(compoundResult.results,subResult)
+      if hasIndex(subResult,"error") or (hasIndex(subResult,"success") and not subResult.success) then
+        compoundResult.success=false
+        if outLvl>=1 then print yellow("Agent: Compound step failed, stopping sequence")
+        break
+      end if
+    end for
+    return compoundResult
+  end if
+  if debug then
+    print green("[DEBUG] Parsed command:")
+    if hasIndex(parsed,"action") then print green("[DEBUG]   Action: "+parsed.action)
+    if hasIndex(parsed,"summary") then print green("[DEBUG]   Summary: "+parsed.summary)
+    if hasIndex(parsed,"target") then print green("[DEBUG]   Target: "+parsed.target)
+    if hasIndex(parsed,"publicIP") then print green("[DEBUG]   Public IP: "+parsed.publicIP)
+    if hasIndex(parsed,"lanIP") then print green("[DEBUG]   LAN IP: "+parsed.lanIP)
+    if hasIndex(parsed,"libsToInstall") then print green("[DEBUG]   Libs to install: "+join(parsed.libsToInstall,", "))
+  end if
+  summaryText="executing command"
+  if hasIndex(parsed,"summary") then summaryText=parsed.summary
+  if outLvl>=1 then print skyblue("Agent: Understood - "+summaryText)
+  //Risk assessment
+  riskContext={}
+  if hasIndex(parsed,"target") then riskContext.target=parsed.target
+  if hasIndex(parsed,"action") then riskContext.action=parsed.action
+  risk=globals.G_agent.assessRisk(command,riskContext)
+  if risk.level=="critical" or risk.level=="high" then
+    if outLvl>=1 then
+      print yellow("[!] Risk Assessment: "+risk.level+" ("+risk.score+" points)")
+      for factor in risk.factors;print yellow("  * "+factor);end for
+    end if
+    if globals.G_agent.config.promptOnCritical and risk.level=="critical" then
+      print white("Proceed with this operation?")
+      choices=[green("Yes, continue"),red("No, cancel")]
+      choiceIdx=Gui.choiceHybrid(choices,{},1,false,true)
+      if choiceIdx==1 then return {"error":"Operation cancelled by user"}
+    end if
+  end if
+  //Create execution plan
+  plan=globals.G_agent._createPlan(Obj,parsed,headlessMode)
+  if hasIndex(plan,"error") then return {"error":plan.error}
+  //Check if plan requires user prompt
+  if hasIndex(plan,"needsPrompt") and plan.needsPrompt then
+    print white(plan.promptMessage)
+    choices=[green("Choose an action:")]
+    _len=len(plan.options);i=0;while i<_len;push(choices,yellow(plan.options[i]));i+=1;end while
+    push(choices,iyellow("Cancel"))
+    choiceIdx=Gui.choiceHybrid(choices,{},len(choices)-1,false,true)
+    if choiceIdx==len(choices)-1 then return {"error":"Cancelled"}
+    selectedAction=plan.options[choiceIdx-1]
+    //Recreate command with selected action
+    newCommand=selectedAction+" "+parsed.target
+    return globals.G_agent.execute(Obj,newCommand,options)
+  end if
+  if outLvl>=2 or globals.G_agent.config.dryRun then
+    print yellow("[VERBOSE] Agent: Plan created with "+str(len(plan.steps))+" steps:")
+    _len=len(plan.steps);i=0;while i<_len;print white("  "+str(i+1)+". "+plan.steps[i].description);i+=1;end while
+  end if
+  if globals.G_agent.config.dryRun then return {"plan":plan,"message":"Dry run - plan only"}
+  //AI: Analyze plan before execution
+  if len(plan.steps)>0 then
+    //Build context from plan (or use existing context with originalCommand)
+    if hasIndex(plan,"context") then
+      context=plan.context
+      if debug then print green("Debug: Using stored context from plan with originalCommand")
+    else
+      context={}
+      if debug then print green("Debug: Creating new context for analysis")
+    end if
+    if hasIndex(plan,"target") and not hasIndex(context,"target") then context.target=plan.target
+    if hasIndex(plan,"goal") and not hasIndex(context,"goal") then context.goal=plan.goal
+    //Restore stored objects from session context (for "store" workflow)
+    //Note: Stored objects are now in array format in G_agentContext, not in context directly
+    if debug then
+      if hasIndex(globals.G_agentContext,"storedObjects") then
+        storedCount=len(globals.G_agentContext.storedObjects)
+        if storedCount>0 and debug then print green("[DEBUG] "+storedCount+" stored object(s) available")
+      end if
+    end if
+    //Predict overall success
+    prediction=globals.G_agent._predictSuccess(plan.action,context)
+    //Assess overall risk
+    overallRisk=globals.G_agent._assessRisk(plan.action,context)
+    if outLvl>=2 then
+      print yellow("[VERBOSE] AI Analysis: Success probability "+round(prediction.confidence*100)+"%, Risk level: "+overallRisk.level)
+      if len(overallRisk.factors)>0 then print skyblue("  Risk factors: "+join(overallRisk.factors,", "))
+    end if
+    //Warn on low confidence
+    if prediction.confidence<0.3 then
+      if outLvl>=1 then print yellow("AI Warning: Low success probability - consider alternative approach")
+    end if
+    //Check if strategy adaptation is needed
+    adaptation=globals.G_agent._adaptStrategy(context)
+    //Log decision telemetry
+    telemetryData={}
+    telemetryData.action=plan.action
+    telemetryData.confidence=prediction.confidence
+    telemetryData.risk=overallRisk.level
+    globals.G_agent.logTelemetry("decision",telemetryData)
+  else
+    //No steps - still check for context from plan
+    if hasIndex(plan,"context") then
+      context=plan.context
+      if debug then print green("Debug: No-step plan, retrieved context from plan")
+    else
+      context={}
+      if debug then print green("Debug: No-step plan, created empty context")
+    end if
+  end if
+  //Save state snapshot before execution
+  globals.G_agent.saveSnapshot("before_"+command[:20])
+  cmdData={}
+  cmdData.command=command
+  cmdData.timestamp=time
+  globals.G_agent.logTelemetry("command",cmdData)
+  //Handle conditional logic if present
+  if hasIndex(parsed,"hasConditional") and parsed.hasConditional and hasIndex(parsed,"conditional") then
+    conditional=parsed.conditional
+    if debug then print skyblue("Conditional logic detected: "+conditional.summary)
+    //Execute primary action
+    if hasIndex(conditional,"primary") then
+      primaryCmd=conditional.primary
+      if outLvl>=1 then print skyblue("Agent: Primary: "+primaryCmd)
+      primaryResult=globals.G_agent.execute(Obj,primaryCmd,options)
+      //Check if fallback needed
+      needsFallback=false
+      if hasIndex(conditional,"onFailure") then
+        //Check if primary failed
+        if not hasIndex(primaryResult,"success") or not primaryResult.success then needsFallback=true
+      else if hasIndex(conditional,"onCondition") then
+        //Check if condition is met
+        conditionMet=false
+        if hasIndex(conditional,"condition") then
+          cond=lower(conditional.condition)
+          if indexOf(cond,"vulnerable")!=null then
+            //Check vulnerabilities in result
+            if hasIndex(primaryResult,"vulnerabilities") then
+              conditionMet=len(primaryResult.vulnerabilities)>0
+            else if hasIndex(primaryResult,"details") then
+              //Check step results for vulnerabilities
+              for detail in primaryResult.details
+                if hasIndex(detail,"vulnerabilities") and len(detail.vulnerabilities)>0 then
+                  conditionMet=true
+                  break
+                end if
+              end for
+            end if
+          else if indexOf(cond,"success")!=null then
+            conditionMet=hasIndex(primaryResult,"success") and primaryResult.success
+          else if indexOf(cond,"has ")!=null then
+            //Check for specific content in results (e.g. "has ssh", "has http")
+            lookFor=cond[4:]
+            //Search through result data for the keyword
+            resultStr=""
+            if hasIndex(primaryResult,"data") then resultStr=lower(str(primaryResult.data))
+            if hasIndex(primaryResult,"message") then resultStr=resultStr+lower(str(primaryResult.message))
+            if hasIndex(primaryResult,"details") then
+              for detail in primaryResult.details;if hasIndex(detail,"data") then resultStr=resultStr+lower(str(detail.data));if hasIndex(detail,"message") then resultStr=resultStr+lower(str(detail.message));end for
+            end if
+            if indexOf(resultStr,lookFor)!=null then conditionMet=true
+          end if
+        end if
+        if conditionMet then needsFallback=true
+      end if
+      //Execute fallback/conditional action if needed
+      if needsFallback then
+        if hasIndex(conditional,"onFailure") then
+          fallbackCmd=conditional.onFailure
+          if outLvl>=1 then print skyblue("Agent: Primary failed, fallback: "+fallbackCmd)
+          result=globals.G_agent.execute(Obj,fallbackCmd,options)
+        else if hasIndex(conditional,"onCondition") then
+          condCmd=conditional.onCondition
+          if outLvl>=1 then print skyblue("Agent: Condition met, executing: "+condCmd)
+          result=globals.G_agent.execute(Obj,condCmd,options)
+        end if
+      else
+        result=primaryResult
+        if hasIndex(conditional,"onCondition") and outLvl>=1 then print skyblue("Agent: Condition not met, skipping followup")
+      end if
+    end if
+  else
+    //Normal execution without conditionals
+    result=globals.G_agent._executePlan(Obj,plan,context)
+  end if
+  //Persist stored objects back to session context (for "store" workflow)
+  if debug then print green("[DEBUG] Post-execution: checking if we should store objects...")
+  //G_agentContext is now defined in globals.src, ensure storedObjects array exists
+  if not hasIndex(globals.G_agentContext,"storedObjects") then globals.G_agentContext.storedObjects=[]
+  if context then
+    //Check if "store" flag was set during execution
+    if debug then
+      print green("[DEBUG] Checking shouldStore flag...")
+      print green("[DEBUG] context.shouldStore = "+str(hasIndex(context,"shouldStore") and context.shouldStore))
+      if hasIndex(context,"rootComputer") then print green("[DEBUG] context.rootComputer exists")
+      if hasIndex(context,"computer") then print green("[DEBUG] context.computer exists")
+    end if
+    if hasIndex(context,"shouldStore") and context.shouldStore then
+      //Determine which object to store based on what was created
+      storedWrapper=null
+      if hasIndex(context,"rootComputer") then
+        storedWrapper={"type":"computer","object":context.rootComputer,"label":"root","timestamp":time}
+      else if hasIndex(context,"computer") then
+        storedWrapper={"type":"computer","object":context.computer,"label":"user","timestamp":time}
+      else if hasIndex(context,"rootShell") then
+        storedWrapper={"type":"shell","object":context.rootShell,"label":"root","timestamp":time}
+      else if hasIndex(context,"shell") then
+        storedWrapper={"type":"shell","object":context.shell,"label":"user","timestamp":time}
+      else if hasIndex(context,"rootFile") then
+        storedWrapper={"type":"file","object":context.rootFile,"label":"root","timestamp":time}
+      else if hasIndex(context,"file") then
+        storedWrapper={"type":"file","object":context.file,"label":"user","timestamp":time}
+      end if
+      if storedWrapper then
+        push(globals.G_agentContext.storedObjects,storedWrapper)
+        if debug then print green("[DEBUG] Stored "+storedWrapper.type+" object ("+storedWrapper.label+")")
+      else
+        if debug then print yellow("[DEBUG] shouldStore=true but no object found in context")
+      end if
+    end if
+  else
+    if debug then print yellow("[DEBUG] Cannot store: context is null")
+  end if
+  outcomeData={}
+  outcomeData.success=result.success
+  outcomeData.action=plan.action
+  globals.G_agent.logTelemetry("outcome",outcomeData)
+  historyEntry={}
+  historyEntry.command=command
+  historyEntry.timestamp=time
+  historyEntry.result=result
+  push(globals.G_agent.history,historyEntry)
+  if hasIndex(plan,"target") and plan.target then
+    globals.G_agentContext.lastTarget=plan.target
+    globals.G_agent.sessionContext.lastTarget=plan.target
+    if hasIndex(result,"success") and result.success then
+      //Track compromised hosts only for actual compromise operations
+      if hasIndex(plan,"action") then
+        for compAction in self._COMPROMISE_ACTIONS
+          if indexOf(lower(plan.action),compAction)!=null then
+            //This was an actual compromise, not just reconnaissance
+            if indexOf(globals.G_agent.sessionContext.compromisedHosts,plan.target)==null then
+              push(globals.G_agent.sessionContext.compromisedHosts,plan.target)
+              if debug then print skyblue("Agent: Marked "+plan.target+" as compromised")
+            end if
+            break
+          end if
+        end for
+      end if
+    end if
+  end if
+  if hasIndex(plan,"action") then globals.G_agent.sessionContext.lastAction=plan.action
+  //AI: Learn from this execution
+  if hasIndex(result,"success") then
+    globals.G_agent._learnFromResult(command,result,context)
+    //Pattern reinforcement
+    globals.G_agent._reinforcePattern(command,result.success,context)
+    //User preference tracking
+    globals.G_agent._trackUserPreferences(command,result)
+    //Add to current sequence for template learning
+    push(globals.G_agent.sessionContext.currentSequence,command)
+    //If sequence is successful and substantial, learn it as template
+    if len(globals.G_agent.sessionContext.currentSequence)>=3 and result.success then
+      globals.G_agent._learnTemplate(globals.G_agent.sessionContext.currentSequence)
+      //Reset sequence after learning
+      globals.G_agent.sessionContext.currentSequence=[]
+    end if
+    //Persist learning data to disk
+    globals.G_agent.saveLearning
+    //Generate predictive suggestions
+    suggestions=globals.G_agent._generateSuggestions(result,context)
+    if len(suggestions)>0 and outLvl>=1 then
+      print skyblue("[Suggestions]:")
+      for suggestion in suggestions;print white("   * "+suggestion);end for
+    end if
+  else
+    //Operation failed - reset sequence
+    globals.G_agent.sessionContext.currentSequence=[]
+  end if
+  //Enhanced error handling with diagnostics
+  if hasIndex(result,"error") then
+    diagnosis=globals.G_agent.diagnoseError(result.error,context)
+    result.diagnosis=diagnosis
+    if outLvl>=1 then
+      print red("Error: "+result.error)
+      if len(diagnosis.suggestions)>0 then
+        print yellow("Suggestions:")
+        for suggestion in diagnosis.suggestions;print white("  * "+suggestion);end for
+      end if
+      if len(diagnosis.fixes)>0 then
+        print yellow("Recommended actions:")
+        for fix in diagnosis.fixes;print white("  > "+fix);end for
+      end if
+    end if
+  end if
+  //Add context to result for multi-step forwarding
+  result.context=context
+  return result
+end function
+//AI learning system - improve future decisions based on outcomes
+AgentExecute._learnFromResult=function(command,result,context)
+  outLvl=globals.G_agent.config.outputLevel
+  if not result then return false
+  //Extract lessons from this operation
+  lesson={
+    "command":command,
+    "success":result.success,
+    "timestamp":time,
+    "contextSummary":{}
+  }
+  //Record what worked or didn't work
+  if hasIndex(result,"exploitUsed") then
+    lesson.exploitUsed=result.exploitUsed
+    lesson.exploitSuccess=result.success
+  end if
+  if hasIndex(context,"target") then
+    if globals.G_agent._isPrivateIp(context.target) then lesson.targetType="private" else lesson.targetType="public"
+  end if
+  if hasIndex(context,"goal") then lesson.goal=context.goal
+  //Store patterns for future reference
+  if not hasIndex(self,"learnedPatterns") then globals.G_agent.learnedPatterns=[]
+  push(globals.G_agent.learnedPatterns,lesson)
+  //Keep only last 100 lessons to avoid memory bloat
+  if len(globals.G_agent.learnedPatterns)>100 then globals.G_agent.learnedPatterns=globals.G_agent.learnedPatterns[len(globals.G_agent.learnedPatterns)-100:]
+  //Adjust strategy weights based on outcomes
+  if result.success then
+    //Reinforce successful strategies
+    if globals.G_agent.config.aggressive and hasIndex(lesson,"exploitUsed") then
+      //Aggressive worked - remember this
+      if not hasIndex(self,"strategyScores") then globals.G_agent.strategyScores={}
+      if not hasIndex(globals.G_agent.strategyScores,"aggressive") then globals.G_agent.strategyScores.aggressive=0
+      globals.G_agent.strategyScores.aggressive=globals.G_agent.strategyScores.aggressive+1
+    end if
+  else
+    //Learn from failures
+    if hasIndex(lesson,"exploitUsed") then
+      //Track failed exploits to avoid them
+      if not hasIndex(self,"failedExploits") then globals.G_agent.failedExploits={}
+      exploitName=lesson.exploitUsed
+      if not hasIndex(globals.G_agent.failedExploits,exploitName) then globals.G_agent.failedExploits[exploitName]=0
+      globals.G_agent.failedExploits[exploitName]+=1
+    end if
+  end if
+  if outLvl>=2 then
+    if result.success then print white("AI Learning: Recorded successful pattern") else print white("AI Learning: Analyzing failure for future avoidance")
+  end if
+  return true
+end function

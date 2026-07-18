@@ -1,0 +1,173 @@
+// Man page for lms
+manLms="LMS(1)                           X Shell Manual                           LMS(1)
+
+<b>NAME</b>
+    lms - Library Management System framework
+<b>SYNOPSIS</b>
+    <b>lms stats</b>
+    <b>lms -c</b><b> NAME VERSION</b>|<b>NAME:VERSION</b>
+    <b>lms -p</b> [-c NUMBER_OF_PASSES]
+    <b>lms -a</b><b> PATH</b>
+    <b>lms add</b><b> PATH</b>
+    <b>lms -r</b><b> NAME VERSION</b>|<b>NAME:VERSION</b>
+    <b>lms -ra</b><b> NAME</b>
+    <b>lms -l</b>
+    <b>lms -lc</b>
+    <b>lms -u</b> [last]
+    <b>lms -g</b><b> NAME VERSION</b>|<b>NAME:VERSION</b> [PATH]
+    <b>lms -e</b> [last]
+    <b>lms -rfc</b>
+    <b>lms refresh</b>
+    <b>lms dups</b>
+    <b>lms watch</b> [-w SECONDS] [-d DIRECTORY]
+    <b>lms target</b><b> NAME VERSION</b>|<b>NAME:VERSION</b>
+    <b>lms -o</b><b> OPEN_FLAG</b> [PARAMS]
+<b>DESCRIPTION</b>
+    The Library Management System (LMS) provides comprehensive tools for
+    collecting, storing, and managing library (.so) files. It maintains a
+    centralized database of libraries, tracks versions, automates exploit
+    database updates, and provides intelligent deduplication and organization.
+
+    LMS requires a dedicated server to host the database. To configure your
+    LMS server, run: <b>sys -ld</b>
+
+    <color=#e4ff34>*** Requires LMS server setup before use ***</color>
+<b>OPTIONS</b>
+    <b>stats</b> - Database Statistics
+      Display server file storage, database statistics, and capacity information.
+
+    <b>-c NAME VERSION</b> - Check Library Existence
+      Check if specified library exists in database. Accepts NAME VERSION or NAME:VERSION format.
+
+    <b>-p</b> [-c NUMBER_OF_PASSES] - Pack Database
+      Populate library database from random IPs and update exploit database.
+      Default passes: 10 if -c omitted. Automatically updates exploit database.
+
+    <b>-a PATH</b> - Add Single Library
+      Add library file at PATH to database. Validates and stores library.
+
+    <b>add PATH</b> - Add Multiple Libraries
+      Add all libraries found in directory PATH to database. Recursive scan.
+
+    <b>-r NAME VERSION</b> - Remove Library
+      Remove specific library version from database. Accepts NAME VERSION or NAME:VERSION.
+
+    <b>-ra NAME</b> - Remove All Library Versions
+      Remove all versions of specified library NAME from database.
+
+    <b>-l</b> - List All Libraries
+      Display complete list of all libraries in database with versions.
+
+    <b>-lc</b> - Library Count
+      Display total count of libraries stored in database.
+
+    <b>-u</b> [last] - Update Exploit Database
+      Scan all libraries in database and import new PObject results.
+      <b>last</b>    Only test against most recent directory
+
+    <b>-g NAME VERSION</b> [PATH] - Get Library
+      Retrieve library from database. Accepts NAME VERSION or NAME:VERSION format.
+      PATH: Save location (defaults to current directory)
+
+    <b>-e</b> [last] - Exploit Database Update Only
+      Update exploit database by scanning all libraries.
+      <b>last</b>    Only test against most recent directory
+
+    <b>-rfc</b> - Recover /lib Directory
+      Recover and clean /lib directory after system crash or corruption.
+
+    <b>refresh</b> - Refresh Database
+      Rebuild and refresh library database indices and metadata.
+
+    <b>dups</b> - Deduplicate and Organize
+      Check for duplicates and remove them. Reorganizes files across folders
+      to ensure all folders are full (240 files each).
+
+    <b>watch</b> [-w SECONDS] [-d DIRECTORY] - Watch Directory
+      Monitor directory for new libraries and auto-add to database.
+      <b>-d DIRECTORY</b>    Directory to watch (default: /lib)
+      <b>-w SECONDS</b>    Check interval: 0.01 to 300 seconds (default: 300)
+
+    <b>target NAME VERSION</b> - Target Specific Library
+      Target specific library and version for operations. Accepts NAME VERSION or NAME:VERSION.
+
+    <b>-o OPEN_FLAG</b> [PARAMS] - Open Operation
+      Execute open command with OPEN_FLAG and optional PARAMS on library.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Database Management</color>
+    <b>lms stats</b>
+    View database storage and statistics
+
+    <b>lms refresh</b>
+    Refresh database indices
+
+    <b>lms -rfc</b>
+    Recover /lib directory after crash
+
+    <color=#e4ff34># Library Operations</color>
+    <b>lms -c net.so 1.0.3</b>
+    Check if net.so version 1.0.3 exists
+
+    <b>lms -c libssh.so:2.1.5</b>
+    Check library using colon notation
+
+    <b>lms -a /lib/net.so</b>
+    Add single library to database
+
+    <b>lms add /lib</b>
+    Add all libraries from /lib directory
+
+    <b>lms -g net.so 1.0.3</b>
+    Get net.so 1.0.3 to current directory
+
+    <b>lms -g libhttp.so:1.2.0 /home/user</b>
+    Get library and save to /home/user
+
+    <color=#e4ff34># Library Removal</color>
+    <b>lms -r net.so 1.0.3</b>
+    Remove specific version of net.so
+
+    <b>lms -ra net.so</b>
+    Remove all versions of net.so
+
+    <color=#e4ff34># Database Queries</color>
+    <b>lms -l</b>
+    List all libraries in database
+
+    <b>lms -lc</b>
+    Show total library count
+
+    <color=#e4ff34># Exploit Database</color>
+    <b>lms -p</b>
+    Pack database with 10 passes (default)
+
+    <b>lms -p -c 25</b>
+    Pack database with 25 passes
+
+    <b>lms -u</b>
+    Update exploit database from all libraries
+
+    <b>lms -u last</b>
+    Update exploit database from last directory only
+
+    <b>lms -e</b>
+    Update only exploit database
+
+    <color=#e4ff34># Maintenance</color>
+    <b>lms dups</b>
+    Remove duplicates and reorganize folders
+
+    <b>lms watch</b>
+    Watch /lib with 300 second interval (defaults)
+
+    <b>lms watch -d /usr/lib -w 60</b>
+    Watch /usr/lib with 60 second interval
+
+    <color=#e4ff34># Advanced</color>
+    <b>lms target net.so:1.0.3</b>
+    Target specific library for operations
+
+    <b>lms -o r /lib/crypto.so</b>
+    Open operation with read flag
+<b>SEE ALSO</b>
+    <b>0day</b>, <b>sys</b>"

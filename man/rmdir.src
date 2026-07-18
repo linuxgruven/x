@@ -1,0 +1,23 @@
+// Man page for rmdir
+manRmdir="RMDIR(1)                         X Shell Manual                         RMDIR(1)
+
+<b>NAME</b>
+    rmdir - Remove empty directory
+<b>SYNOPSIS</b>
+    <b>rmdir</b> DIRECTORY [DIRECTORY...]
+<b>DESCRIPTION</b>
+    Remove an empty directory. The directory must contain no files or
+    subdirectories. Use rm -r for non-empty directories.
+    Supports glob patterns: <b>rmdir temp_*</b>, <b>rmdir backup/*/cache</b>
+
+    <color=#e4ff34>*** WILL LOG YOUR HOME IP EVEN WHEN USING A PROXY ***</color>
+    <color=#e4ff34>*** USE ONLY WHEN LOG ENTRIES ARE NOT A CONCERN ***</color>
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Remove Directory</color>
+    <b>rmdir /home/tux/olddir</b>
+    Remove directory and all contents
+
+    <b>rmdir temp</b>
+    Remove temp directory in current location
+<b>SEE ALSO</b>
+    <b>rm</b>, <b>qrm</b>"

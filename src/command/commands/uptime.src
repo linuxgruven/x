@@ -1,0 +1,5 @@
+// =============================================================================
+// UPTIME
+// Display elapsed time since X shell was initialized.
+// =============================================================================
+Command.uptime=function;if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,"uptime: "+Io.getTime) else print yellow("X uptime: ")+white(Io.getTime);end function

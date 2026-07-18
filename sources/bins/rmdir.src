@@ -1,0 +1,8 @@
+binRmdir="if len(params)<1 or len(params)>2 or params[0]==""help"" then exit(command_info(""rmdir_usage""))
+dirPath=get_abs_path(params[0])
+file=File(host_computer(get_shell),dirPath)
+if typeof(file)!=""file"" then exit(""rmdir: failed to remove '""+dirPath+""': no such file or directory"")
+if is_folder(file)==0 then exit(""Error: ""+name(file)+"" is not a directory."")
+result=delete(file)
+if len(trim(result))==0 then exit
+exit(""rmdir: failed to remove '""+dirPath+""': ""+trim(result))"

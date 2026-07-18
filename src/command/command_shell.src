@@ -1,0 +1,416 @@
+// =============================================================================
+// COMMAND_SHELL
+// Shell session callbacks: remote shell operations, network tools.
+// =============================================================================
+//ShellSessionCallbacks
+Command.shellCallbacks=function(Obj)
+	Command=@self
+	__exec=function(argv);Command.exec(Obj,argv);end function
+	__ping=function(argv);if Net.hasInternet(Obj) isa Warning then return;Command.ping(Obj,argv);end function
+	__build=function(argv);Command.build(Obj,argv);end function
+	__make=function(argv);Command.make(Obj,argv);end function
+	__net=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+    if not argv then return Man.help(["net"])
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		connect=function(arg);Net.connect(arg);end function
+		backSessions=function(arg);Net.backSessions;end function
+		useSession=function(arg);if not arg then return Man.help(["net"]);Net.useSession(to_int(arg[0]));end function
+		netConfig=function(arg);Net.netConfig;end function
+		closeSession=function(arg);if not arg then return Man.help(["net"]);Net.closeSession(to_int(arg[0]));end function
+		clearSessions=function(arg);Net.clearSessions;end function
+		installService=function(arg);Net.installService(Obj,arg);end function
+		bounce=function(arg)
+      if not arg then return Man.help(["net"])
+			c=arg[0]
+			if c=="-l" then return Net.lanBouncer(Obj,arg)
+			if c=="-w" then return Net.wifiBouncer(Obj,arg)
+			if c=="-f" then return Net.bounceLanFile(Obj,arg)
+			Man.help(["net"])
+		end function
+		cmds={
+      "-b":@bounce,
+      "-c":@connect,
+      "-l":@backSessions,
+      "-u":@useSession,
+      "-g":@netConfig,
+      "-x":@closeSession,
+      "-z":@clearSessions,
+      "-i":@installService
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+  //if Net.hasInternet(Obj) isa Warning then return
+	__scp=function(argv);Command.scp(Obj,argv);end function
+	__rsync=function(argv);Command.rsync(Obj,argv);end function
+  __netscan=function(argv);if Net.hasInternet(Obj) isa Warning then return;Net.netcat(Obj,argv);end function
+	__logs=function(argv)
+		if Net.hasInternet(Obj) isa Warning then return
+		Obj=outer.Obj
+		if not argv then
+			if globals.G_server then
+				f=File(Obj.computer,"/var/system.log")
+				if not f then return Error.set("No log file found")
+				if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+				if not has_permission(f,"w") then return Error.set(Info.message.NOW)
+				x=scp(Obj.shell,path(f),path(globals.G_server.dir.temp),globals.G_server.shell)
+				if x isa string then return Error.set(x)
+				l=File(globals.G_server.computer,path(globals.G_server.dir.temp)+"/system.log")
+				if not l then return Error.set("No server log file found")
+				x=scp(globals.G_server.shell,path(l),path(globals.G_main.dir.current),globals.G_main.shell)
+				if x isa string then return Error.set("There was an error in retrieving the log file: "+x)
+				user_input(yellow("Press Enter when finished editing the log file"))
+				f=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/system.log")
+				if not f then return Error.set("No local log file found")
+				x=scp(globals.G_main.shell,path(f),path(globals.G_server.dir.temp),globals.G_server.shell)
+				if x isa string then return Error.set("There was an error in returning the log file: "+x)
+				l=File(globals.G_server.computer,path(globals.G_server.dir.temp)+"/system.log")
+				if not l then return Error.set("No server log file found")
+				x=scp(globals.G_server.shell,path(l),"/var",Obj.shell)
+				if x isa string then Error.set(x) else Info.info("System log replaced successfully")
+				if f then delete(f)
+			else
+				f=File(Obj.computer,"/var/system.log")
+				if not f then return Error.set("No log file found")
+				if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+				if not has_permission(f,"w") then return Error.set(Info.message.NOW)
+				x=scp(Obj.shell,path(f),path(globals.G_main.dir.current),globals.G_main.shell)
+				if x isa string then return Error.set(x)
+				user_input(yellow("Press Enter when finished editing the log file"))
+				f=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/system.log")
+				if not f then return Error.set("No local log file found")
+				x=scp(globals.G_main.shell,path(f),"/var",Obj.shell)
+				if x isa string then Error.set(x) else Info.info("System log replaced successfully")
+				if f then delete(f)
+			end if
+			return
+		end if
+    Arg1=lower(argv[0])
+    //Optional name argument: main -d <name> saves log as <name> instead of system.log
+    _logName=null
+    if len(argv)>1 then _logName=argv[1]
+		upload=function
+			f=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/system.log")
+			if not f then return Error.set("No local log file found")
+			x=scp(globals.G_main.shell,path(f),path(globals.G_server.dir.temp),globals.G_server.shell)
+			if x isa string then return Error.set("There was an error in returning the log file: "+x) else Info.info("System log successfully sent and is in server:/root/payload/temp")
+			if f then delete(f)
+		end function
+		downLoad=function
+			l=File(globals.G_server.computer,path(globals.G_server.dir.temp)+"/system.log")
+			if not l then return Error.set("No server log file found")
+			x=scp(globals.G_server.shell,path(l),path(globals.G_main.dir.current),globals.G_main.shell)
+			if x isa string then return Error.set("There was an error in retrieving the log file: "+x)
+			if _logName then
+				f=File(globals.G_main.computer,path(globals.G_main.dir.current)+"/system.log")
+				if f then move(f,path(globals.G_main.dir.current),_logName)
+				Info.info("Log saved as '"+_logName+"' in: "+path(globals.G_main.dir.current))
+			else
+				Info.info("System log successfully sent and is in : "+path(globals.G_main.dir.current))
+			end if
+		end function
+		toServer=function
+			f=File(Obj.computer,"/var/system.log")
+			if not f then return Error.set("No log file found")
+			if not has_permission(f,"r") then return Error.set(Info.message.NOR)
+			if not has_permission(f,"w") then return Error.set(Info.message.NOW)
+			x=scp(Obj.shell,path(f),path(globals.G_server.dir.temp),globals.G_server.shell)
+			if x isa string then return Error.set(x) else return Info.info("System log successfully sent and is in server:/root/payload/temp")
+		end function
+		fromServer=function
+			l=File(globals.G_server.computer,path(globals.G_server.dir.temp)+"/system.log")
+			if not l then return Error.set("No server log file found")
+			x=scp(globals.G_server.shell,path(l),"/var",Obj.shell)
+			if x isa string then Error.set(x) else Info.info("System log replaced successfully")
+		end function
+		if not globals.G_server then return Error.set("These switches require you to have a x database server running")
+		cmds={
+      "-u":@upload,
+      "-d":@downLoad,
+      "-s":@toServer,
+      "-r":@fromServer
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1]
+	end function
+	__dig=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+    if not argv then return Man.help(["dig"])
+    if globals.G_pipe.stdin and trim(globals.G_pipe.stdin)!="" and indexOf(argv,"--ip")==null then return Info.error("An IP was piped in but --ip was not specified. Did you mean: dig --ip "+argv.join(" ")+"?")
+    _digObj=Obj
+    _remoteShell=null
+    // Handle --ip: build and set up a shell on the specified remote router
+    _ipIdx=indexOf(argv,"--ip")
+    if _ipIdx!=null then
+      remove(argv,_ipIdx)
+      _remoteIP=null
+      if _ipIdx<len(argv) and indexOf(argv[_ipIdx],"-")!=0 then
+        _remoteIP=argv[_ipIdx]
+        remove(argv,_ipIdx)
+      else
+        _remoteIP=globals.G_pipe.stdin
+        if _remoteIP then _remoteIP=trim(_remoteIP)
+      end if
+      if not _remoteIP then return Error.set("--ip requires an IP address")
+      _ex=Attack.scanCustom([_remoteIP,"router","s"],true)
+      if typeof(_ex)!="shell" then return Warning.set("Could not get a shell on the router")
+      _shell=Exploit.getShell(_ex,false,[],true)
+      if not _shell or _shell isa Error then return Warning.set("Could not get a shell on the router")
+      if indexOf(argv,"--root")!=null then
+        if _shell.user.raw!="root" then
+          _r=ShellObject.headlessSu(_shell)
+          if _r isa Error or _r.user.raw!="root" then return Warning.set("Could not get root on the router")
+          _shell=_r
+        end if
+        Log.shellLog(_shell.shell)
+        if globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex then
+          SavedLibs.getFile(_shell,["-p","/lib",globals.G_settings.vulnerableLib])
+        end if
+      end if
+      _co=Builder.packCO(_shell)
+      if _co isa Error then return Warning.set("Could not load metaxploit on the router")
+      _shell.packMetaxploit=_co.metaxploit
+      _shell.packRouter=_co.router
+      _digObj=_shell
+      _remoteShell=_shell
+    end if
+    if not _remoteShell then
+      if Obj.layer!="shell" and globals.G_cshell then _digObj=globals.G_cshell
+      if _digObj.layer=="shell" then
+        if not _digObj.packMetaxploit then
+          _=Builder.packCO(_digObj)
+          if _ isa Error then return
+          _digObj.packMetaxploit=_.metaxploit
+          _digObj.packRouter=_.router
+        end if
+      end if
+    end if
+    _digResult=Attack.dig(_digObj,argv)
+    if _remoteShell then
+      if hasIndex(_remoteShell.commands,"close") then _remoteShell.commands["close"]([])
+    else if _digObj!=Obj then
+      if hasIndex(_digObj.commands,"close") then _digObj.commands["close"]([])
+    end if
+    if globals.G_settings.digRshell then
+      if globals.G_settings.rshell then Rshell.list else RshellLite.list
+    end if
+    return _digResult
+	end function
+  __grab=function(argv);if Net.hasInternet(Obj) isa Warning then return;Attack.grabLog(Obj,argv);end function
+	__pzip=function(argv)
+    if not Obj.layer=="shell" then return Encryption.pzip(Obj,argv)
+    if not Obj.packCrypto then
+      _=Builder.packCrypto(Obj)
+      if _ isa Error then return
+      Obj.packCrypto=_
+    end if
+		Encryption.pzip(Obj,argv)
+	end function
+	__app=function(argv)
+		if not argv then return Man.help(["app"])
+    L=null
+    if hasIndex(Obj,"packRouter") then
+      if not Obj.packAppliance then
+        r=Builder.packAppliance(Obj)
+        if r isa Error then return Error.set("Unable to pack the appliance library")
+        Obj.packAppliance=r
+        L=r
+      else
+        L=Obj.packAppliance
+      end if
+    else
+      if not Obj.appliance.library then return Error.set("libsmartappliance.so library not loaded")
+      L=Obj.appliance.library
+    end if
+    Arg1=lower(argv[0])
+		overrideSettings=function(ar)
+      if len(ar)==2 then
+        p=to_int(ar[0])
+        t=to_int(ar[1])
+      else
+        p=50
+        t=500
+      end if
+			o=override_settings(L,p,t)
+			if o==1 then
+				Info.info("Override was successful!")
+			else if o isa string then
+				Info.warning("Override failed due to: "+o)
+			else
+				Info.error("Failed to override")
+			end if
+		end function
+		getModel=function(ar);m=model(L);Info.info("Model is: "+m);end function
+		setAlarm=function(ar)
+      s=false
+      if ar then
+        if indexOf("ontrue1",lower(ar[0]))!=null then s=true
+      end if
+			r=set_alarm(L,s)
+			if r==1 then
+				if s then Info.info("Alarm was enabled successfully!") else Info.info("Alarm was disabled successfully!")
+			else if r isa string then
+				Info.warning(r)
+			else
+				if s then Info.error("Enabling alarm failed") else Info.error("Disabling alarm failed")
+			end if
+		end function
+		cmds={
+      "-o":@overrideSettings,
+      "-m":@getModel,
+      "-a":@setAlarm
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__cam=function(argv)
+		if not argv then return Man.help(["cam"])
+    L=null
+    if hasIndex(Obj,"packRouter") then
+      if not Obj.packTraffic then
+        r=Builder.packTraffic(Obj)
+        if r isa Error then return Error.set("Unable to pack the traffic library")
+        Obj.packTraffic=r
+        L=r
+      else
+        L=Obj.packTraffic
+      end if
+    else
+      if not Obj.traffic.library then return Error.set("libtrafficnet.so library not loaded")
+      L=Obj.traffic.library
+    end if
+    Arg1=lower(argv[0])
+		link=function(argv);l=camera_link_system(L);if l==1 then Info.info("Initiated camera broadcast!") else return Error.set("Failed to initiate camera link system");end function
+		locateVehicle=function(ar)
+      if not len(ar)>=2 then return Error.set("Missing password|plate")
+			p=ar[0]
+			t=ar[1]
+			v=locate_vehicle(L,t,p)
+			if v==1 then
+				Info.info("Found vehicle!")
+			else if v isa string then
+				Info.warning(v)
+			else
+				Info.warning("Vehicle not found")
+			end if
+		end function
+		creds=function(ar);Info.info(get_credentials_info(L));end function
+		cmds={
+      "-v":@locateVehicle,
+      "-c":@creds,
+      "-a":@link
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__sniffer=function(argv)
+    if not Library.haveMetaxploit then return
+    _p=ArgumentParser.init
+    _p.addArgument("save",true,"flag")  // Long flag: --save (save captured packets)
+    _p.addArgument("deploy",true,"flag")  // Long flag: --deploy (deploy sniffer to target)
+    argv=_p.parseArgs("sniffer",argv)
+    if argv isa Error then return
+    if not Obj.layer=="shell" then return Net.sniff(Obj,argv)
+    if not Obj.packMetaxploit or argv.deploy then
+      _=Builder.packMetaxploit(Obj,argv.deploy)
+      if _ isa Error then return
+      Obj.packMetaxploit=_
+    end if
+		Net.sniff(Obj,argv)
+	end function
+  __gmon=function(argv)
+    _p=ArgumentParser.init
+    _p.addArgument("p",false,"store")  // Monitor path (default: /home/guest)
+    _p.addArgument("deploy",true,"flag")  // Long flag: --deploy (deploy gmon to target)
+    argv=_p.parseArgs("gmon",argv)
+    if argv isa Error then return
+    if argv.deploy then
+      if argv.p then push(argv.rest,argv.p)
+      return Builder.deploy(Obj,argv,"gmon")
+    end if
+    if Obj.user.name!="root" then return Error.set("gmon needs to be ran as root, try su first")
+    if not argv.p then argv.p="/home/guest"
+    getAll=function(s)
+      l={}
+      _=function(f);for z in get_files(f);l[path(z)]=z;end for;for d in get_folders(f);l[path(d)]=d;_(d);end for;end function
+      _(s)
+      return l
+    end function
+    w=argv.p
+    c=Obj.computer
+    f=File(c,w)
+    if not f then return Error.set(w+" not found")
+    q=File(c,"/root/quarantine")
+    if not q then
+      Info.info("Quarantine folder not found, creating it now")
+      create_folder(c,"/root","quarantine")
+      q=File(c,"/root/quarantine")
+      if not q then return Error.set("Failed to create quarantine folder")
+    end if
+    r=getAll(f)
+    Info.info("Monitoring for new files in "+name(f)+"...")
+    while poll_input!="q"
+      j=getAll(f)
+      if len(j)==len(r) then continue
+      if len(j)>len(r) then
+        Info.info("New File Added","+")
+        for a in j
+          if hasIndex(r,a.key) then continue
+          Info.info("New File Found :"+name(a.value))
+          chmod(a.value,"o-wrx")
+          chmod(a.value,"g-wrx")
+          chmod(a.value,"u-wrx")
+          Info.info("Moved to quarantine","=")
+          F=is_folder(a.value)
+          move(a.value,path(q),name(a.value))
+          if F then break
+        end for
+        Info.info("Monitoring for new files in "+name(f)+"...")
+      else
+        Info.warning("File Removed","-")
+        for a in r;if hasIndex(j,a.key) then continue;Info.warning("File Removed :"+split(a.key,"/")[-1],"-");remove(r,a.key);end for
+        Info.info("Monitoring for new files in "+name(f)+"...")
+      end if
+    end while
+  end function
+  __es=function(argv);Command.es(Obj,argv);end function
+  __loop=function(argv);if Net.hasInternet(Obj) isa Warning then return;Net.loop(Obj,argv);end function
+  __iploop=function(argv);if Net.hasInternet(Obj) isa Warning then return;Net.ipLoop(argv);end function
+  __recon=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+    _stdin=""
+    if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+      _stdin=globals.G_pipe.stdin
+      globals.G_pipe.stdin=null
+    end if
+    Net.recon(Obj,argv,_stdin)
+    if globals.G_settings.digRshell then
+      if globals.G_settings.rshell then Rshell.list else RshellLite.list
+    end if
+  end function
+  return {
+    "sniffer":@__sniffer,
+    "gmon":@__gmon,
+    "cam":@__cam,
+    "app":@__app,
+    "pzip":@__pzip,
+    "grab":@__grab,
+    "dig":@__dig,
+    "_dig":@__dig,
+    "logs":@__logs,
+    "netcat":@__netscan,
+    "scp":@__scp,
+    "rsync":@__rsync,
+    "net":@__net,
+    "make":@__make,
+    "build":@__build,
+    "ping":@__ping,
+    "exec":@__exec,
+    "es":@__es,
+    "loop":@__loop,
+    "iploop":@__iploop,
+    "recon":@__recon
+  }
+end function

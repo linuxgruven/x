@@ -1,0 +1,16 @@
+// Man page for ports
+manPorts="PORTS(1)                         X Shell Manual                         PORTS(1)
+
+<b>NAME</b>
+    ports - List open ports on system
+<b>SYNOPSIS</b>
+    <b>ports</b>
+<b>DESCRIPTION</b>
+    Display all open network ports on the current system.
+    Shows port numbers and associated services.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View Open Ports</color>
+    <b>ports</b>
+    List all open ports
+<b>SEE ALSO</b>
+    <b>scan</b>, <b>nmap</b>, <b>pp</b>"

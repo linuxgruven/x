@@ -1,0 +1,544 @@
+// Man page for ai
+manAi="AI(1)                            X Shell Manual                            AI(1)
+
+<b>NAME</b>
+    ai - AI Agent Natural Language Command Interface
+<b>SYNOPSIS</b>
+    <b>ai</b> STRING
+    <b>ai</b> STRING <b>-d</b>|<b>-a</b>|<b>-s</b>|<b>-t</b>|<b>-D</b>
+    <b>ai</b> <b>status</b>
+    <b>ai</b> <b>history</b>
+    <b>ai</b> <b>clear</b>
+    <b>ai</b> <b>clear stored</b>
+    <b>ai</b> <b>clear</b> N
+    <b>ai</b> <b>debug</b>|<b>verbose</b>|<b>quiet</b>|...(toggle)
+    <b>ai</b> <b>set</b> KEY VALUE
+    <b>ai</b> <b>show config</b>
+    <b>ai</b> <b>reset config</b>
+    <b>ai</b> <b>learn</b> COMMAND
+    <b>ai</b> <b>learn all</b>
+    <b>ai</b> <b>save</b>
+    <b>ai</b> <b>load</b>
+    <b>ai</b> <b>undo</b> [STEPS]
+    <b>ai</b> <b>rollback</b> [STEPS]
+    <b>ai</b> <b>snapshots</b>
+    <b>ai</b> <b>export</b> [FILE]
+    <b>ai</b> <b>telemetry</b> [FILE]
+<b>DESCRIPTION</b>
+    Natural language interface to the AI Agent system. Execute complex
+    multi-step hacking operations using plain English commands. The agent
+    parses your intent, creates an execution plan, and autonomously carries
+    out the operation using available tools and commands.
+    Integration with scan, exploit, crack, and attack systems.
+
+    AUTONOMOUS MODE: Request agent to make all decisions automatically.
+    Agent evaluates targets, selects best exploits from database, scores
+    by privilege and type, executes only best until success. Supports
+    requirement filtering: privilege (root/user/guest), object type
+    (shell/computer/file), library type (router/http/ssh/ftp/sql), and
+    target IP including LAN bounce attacks via router compromise.
+<b>OPTIONS</b>
+    <b>ai STRING</b>
+    Execute natural language command
+    Agent parses and executes request
+
+    <b>ai STRING -v</b>
+    Verbose mode
+    Show detailed execution steps
+
+    <b>ai STRING -q</b>
+    Quiet mode
+    Minimal output (silent)
+
+    <b>ai STRING -d</b>
+    Dry run mode
+    Show plan without executing
+
+    <b>ai STRING -a</b>
+    Aggressive mode
+    Try all available methods
+
+    <b>ai STRING -s</b>
+    Stealth mode
+    Minimize traces
+
+    <b>ai STRING -t</b>
+    Trainer mode
+    Show commands without executing
+
+    <b>ai STRING -D</b>
+    Debug mode
+    Show internal decision making
+
+    <b>ai status</b>
+    Show agent status
+    Display active sessions and config
+
+    <b>ai history</b>
+    Show command history
+    Display previous commands
+
+    <b>ai clear</b>
+    Complete agent reset
+    Clears history, stored objects, and all agent context
+    Resets: targets, actions and compromised hosts
+
+    <b>ai clear stored</b>
+    Clear all stored objects only
+    Remove all stored objects from context
+    Aliases: 'ai clear object', 'ai clear objects'
+
+    <b>ai clear N</b>
+    Clear specific stored object by index
+    Example: 'ai clear 1' removes first object
+    Remaining objects keep their positions
+
+    <b>ai debug</b>|trainer|...
+    Toggle config setting (temporary)
+    Changes not saved to disk
+
+    <b>ai set KEY VALUE</b>
+    Set config and save to disk
+    Permanent configuration change
+
+    <b>ai show config</b>
+    Display current configuration
+    Shows all settings organized by category
+
+    <b>ai reset config</b>
+    Reset configuration to defaults
+    Restores all settings and saves
+
+    <b>ai save</b>
+    Save learned knowledge
+    Persist AI learning to disk
+
+    <b>ai load</b>
+    Load saved knowledge
+    Restore AI learning from disk
+
+    <b>ai learn</b> COMMAND
+    Learn about specific command
+    Extract and cache man page knowledge
+
+    <b>ai learn all</b>
+    Learn about all commands
+    Build comprehensive knowledge base
+
+    <b>ai undo [STEPS]</b>
+    Rollback previous operations
+    Default: undo last 1 step
+
+    <b>ai rollback [STEPS]</b>
+    Alias for undo
+    Rollback to previous state
+
+    <b>ai snapshots</b>
+    List state snapshots
+    View available rollback points
+
+    <b>ai export [FILE]</b>
+    Export telemetry logs
+    Post-mission analysis data
+
+    <b>ai telemetry [FILE]</b>
+    Alias for export
+    Export mission telemetry logs
+    Post-mission analysis data
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Autonomous Decision Making</color>
+    <b>ai you decide how to attack 29.91.110.203</b>
+    Agent autonomously scans and exploits
+    Scores all exploits, executes best first
+
+    <b>ai use your judgment to scan 192.168.1.1</b>
+    Agent makes all exploitation decisions
+
+    <b>ai figure out how to attack 10.0.0.1</b>
+    Autonomous scan and exploitation
+
+    <color=#e4ff34># Autonomous with Requirements</color>
+    <b>ai you decide...I need a root computer on 192.168.0.3</b>
+    Filters exploits by privilege and LAN IP
+    Executes LAN bounce via router
+
+    <b>ai decide...I need a router shell</b>
+    Filters to router libraries only
+
+    <b>ai attack 29.91.110.203 need user computer on 192.168.0.5</b>
+    Any user-level computer via LAN bounce
+
+    <b>ai decide...get me an http shell</b>
+    Filters to HTTP library exploits
+
+    <color=#e4ff34># Exclusion Filters (Not From)</color>
+    <b>ai get a shell from 131.102.202.66 but not from a router</b>
+    Auto-switches to autonomous mode
+    Excludes router exploits, tries all others
+
+    <b>ai attack [IP] except ssh and http</b>
+    Excludes SSH and HTTP libraries
+
+    <b>ai compromise [IP] without ftp or sql</b>
+    Excludes FTP and SQL services
+
+    <b>ai get root shell from [IP] not from router</b>
+    Root shell excluding router exploits
+
+    <color=#e4ff34># Supported Exclusion Keywords</color>
+    not from, but not, except, exclude, not a, without
+
+    <color=#e4ff34># Basic Commands</color>
+    <b>ai scan 1.2.3.4 and get root shell</b>
+    Scan target and obtain root
+
+    <b>ai attack 192.168.1.5 for admin access</b>
+    Full attack chain for admin
+
+    <b>ai crack password on 10.0.0.5</b>
+    Crack target password
+
+    <b>ai exploit 172.16.0.1 and install backdoor</b>
+    Exploit and establish persistence
+
+    <color=#e4ff34># Object Access</color>
+    <b>ai need root computer from 94.90.194.186 on 172.16.9.5</b>
+    Get root access to LAN computer
+
+    <b>ai need the best computer from [IP] on [LAN_IP]</b>
+    Get highest privilege computer
+
+    <b>ai need a computer from [IP] on [LAN_IP]</b>
+    Get any-user access computer
+
+    <color=#e4ff34># Data Extraction</color>
+    <b>ai i need all the emails from 94.90.194.186</b>
+    Extract email data from router
+
+    <b>ai get all bank data from [IP]</b>
+    Extract banking information
+
+    <b>ai i need all users from [IP]</b>
+    Extract user credentials
+
+    <b>ai extract rshells from [IP] and save</b>
+    Extract rshells and save results
+
+    <color=#e4ff34># Shorthand Commands (use last target)</color>
+    <b>ai emails</b>
+    Extract emails from last target
+
+    <b>ai bank</b>
+    Extract bank data from last target
+
+    <b>ai users</b>
+    Extract users from last target
+
+    <b>ai rshell</b>
+    Extract rshells from last target
+
+    <b>ai scan</b>
+    Scan last target
+
+    <color=#e4ff34># Navigation Commands</color>
+    <b>ai goto /etc</b>
+    Change to /etc directory
+    Works on local workstation or stored object
+
+    <b>ai go to home</b>
+    Change to home directory
+    Resolves common locations: home, root, tmp, etc, var, usr, bin, opt, lib
+
+    <b>ai navigate to /lib</b>
+    Change to /lib directory
+    Natural language navigation
+
+    Note: Navigation executes on stored objects if present,
+    otherwise on local workstation. Directory changes persist
+    within that session but won't affect your main terminal prompt.
+
+    <color=#e4ff34># Stored Objects Workflow</color>
+    <b>ai get root router shell from 115.193.122.151 and store it</b>
+    Obtains router shell in headless mode and stores for later use
+    No interactive terminal opens - returned to prompt immediately
+
+    <b>ai get root computer on 192.168.0.5 and store it</b>
+    Obtains root computer and stores for later use
+    Can be used for subsequent data extraction
+
+    <b>ai get all emails</b>
+    Uses stored object from previous command
+    Automatically detects machine type and selects appropriate commands:
+    - Routers/Switches: Uses router-specific data extraction
+    - Workstations/Cameras: Uses standard data extraction
+    - Corrupted systems: Returns error without attempting
+
+    <b>ai list accounts</b>
+    Context-aware command execution
+    Automatically detects if target is router or workstation
+    Selects optimal command based on machine type
+
+    <b>ai get all bank</b>
+    Uses stored object to extract bank data
+    Automatically selects correct command for device type
+
+    <b>ai users</b>
+    Uses stored object to extract users
+    Shorthand commands work with stored objects
+
+    <b>ai status</b>
+    Shows stored objects count and types
+    Format: Index. User Type - public_ip : local_ip
+    Example: 1. Root Shell - 115.193.122.151 : 192.168.1.1
+             2. Root Computer - 94.90.194.186 : 192.168.0.5
+             3. Guest Shell - 94.90.194.186 : 172.16.0.10
+             4. Guest File
+
+    Multiple stored objects: Agent prompts for selection
+    Single stored object: Used automatically
+
+    <b>ai clear stored</b>
+    Removes all stored objects from context
+    Aliases: 'ai clear object', 'ai clear objects'
+
+    <b>ai clear 1</b>
+    Removes object #1 from stored objects
+    Shows which object was cleared
+
+    <b>ai clear 2</b>
+    Removes object #2 from stored objects
+    Remaining objects keep their positions
+
+    Note: The 'store' keyword saves objects across commands.
+    Once stored, subsequent commands automatically execute on the stored
+    object instead of your local workstation. Navigation commands like
+    'ai goto /lib' change the directory on the stored remote session.
+
+    <color=#e4ff34># Chaining Operations</color>
+    <b>ai get root on [IP] then extract emails</b>
+    Multi-step: get root, then extract
+
+    <b>ai need shell on [IP] to crack passwords</b>
+    Get shell for password cracking
+
+    <b>ai get computer also backdoor it</b>
+    Access and backdoor in one command
+
+    <color=#e4ff34># Conditional/Fallback</color>
+    <b>ai get emails if easy or just get users</b>
+    Try emails, fallback to users
+
+    <b>ai extract bank or get users</b>
+    Try bank, fallback to users
+
+    <b>ai get emails otherwise get users</b>
+    Primary with fallback alternative
+
+    <color=#e4ff34># Reconnaissance</color>
+    <b>ai recon 8.8.8.8</b>
+    Perform reconnaissance
+
+    <b>ai scan network 192.168.1.0/24</b>
+    Network reconnaissance
+
+    <color=#e4ff34># Hunt Command Integration</color>
+    
+    SERVICE HUNTS (scan only, no download):
+    <b>ai find ssh version 1.0.0</b>
+    Scan for SSH service v1.0.0
+    Uses: hunt ssh -v 1.0.0
+
+    <b>ai find ssh library version 1.1.1</b>
+    Scan for SSH service (word 'library' ignored)
+    Uses: hunt ssh -v 1.1.1
+
+    <b>ai hunt for http version 1.0.3</b>
+    Find HTTP service v1.0.3
+
+    <b>ai search for 5 ftp services and save them</b>
+    Hunt for 5 FTP services, save results
+    Uses hunt with -c 5 -s flags
+
+    <b>ai find repo version 1.0.0 and download it</b>
+    Hunt for repository with download
+    Uses: hunt repo -v 1.0.0 -d
+
+    Service types (scan only by default):
+    ssh, ftp, http, repo, rshell, smtp, router,
+    wifi, awifi, sql, cam, bank, chat, neuro,
+    employee, student, criminal
+
+    LIBRARY HUNTS (scans and auto-downloads):
+    <b>ai find library named ssh version 1.1.1</b>
+    Hunt for SSH library and download
+    Uses: hunt lib -n ssh -v 1.1.1 -d
+
+    <b>ai find lib crypto and download</b>
+    Hunt for crypto library
+    Uses: hunt lib -n crypto -d
+
+    <b>ai find a crypto library</b>
+    Hunt for crypto library (non-service name)
+    Uses: hunt lib -n crypto
+
+    <b>ai hunt library called net version 1.5</b>
+    Hunt for net library v1.5
+    Uses: hunt lib -n net -v 1.5
+
+    Trigger library hunt with:
+    - library named X
+    - library called X
+    - lib X or lib named X
+    - Non-service names (crypto, net, init, etc.)
+
+    Note: ssh library means SSH service, not library
+    Use library named ssh for library hunt
+
+    OTHER HUNT TYPES:
+    <b>ai search wifi networks</b>
+    Hunt for WiFi networks
+    Uses: hunt wifi
+
+    <b>ai find 10 bank services version 1.0.1</b>
+    Hunt for 10 bank services v1.0.1
+    Uses: hunt bank -v 1.0.1 -c 10
+
+    <b>ai find special file named passwd</b>
+    Hunt for special files
+    Uses: hunt special -n passwd
+
+    <b>ai find file named config.txt</b>
+    Hunt for specific file
+    Uses: hunt file -n config.txt
+
+    Hunt flags supported:
+    version → -v, count → -c, save → -s,
+    download → -d, kill → -k, port → -p,
+    name → -n, bssid → -b, essid → -e
+
+    <color=#e4ff34># With Options</color>
+    <b>ai scan 10.0.0.1 -v</b>
+    Verbose mode - detailed steps
+
+    <b>ai scan 10.0.0.1 -q</b>
+    Quiet mode - minimal output
+
+    <b>ai scan 10.0.0.1 -d</b>
+    Dry run - plan only
+
+    <b>ai exploit 192.168.1.100 -s</b>
+    Stealth mode operation
+
+    <b>ai scan 10.0.0.1 -t</b>
+    Trainer mode - show commands
+
+    <b>ai attack 172.16.0.5 -D</b>
+    Debug mode - show decisions
+
+    <color=#e4ff34># Status and History</color>
+    <b>ai status</b>
+    View agent status
+    Shows: commands executed, active sessions,
+           last target, compromised hosts, shells,
+           stored objects (count and types),
+           configuration settings
+
+    <b>ai history</b>
+    Show command history
+
+    <b>ai clear</b>
+    Complete agent reset
+    Clears history, stored objects, and all context
+
+    <b>ai clear stored</b>
+    Clear all stored objects only
+    Aliases: 'ai clear object', 'ai clear objects'
+
+    <b>ai clear 1</b>
+    Clear first stored object
+
+    <b>ai clear 2</b>
+    Clear second stored object
+
+    <color=#e4ff34># Configuration Management</color>
+    <b>ai debug</b>
+    Toggle debug mode (temporary)
+    Changes not saved
+
+    <b>ai set debug on</b>
+    Enable debug permanently
+    Saves to agent_config.json
+
+    <b>ai set outputLevel 2</b>
+    Set verbose output (0=silent, 1=normal, 2=verbose)
+    Legacy aliases: 'ai verbose' (toggle 1/2), 'ai quiet' (toggle 0/1)
+
+    <b>ai set maxRetries 5</b>
+    Set max retries to 5
+
+    <b>ai set promptOnAttack true</b>
+    Enable attack prompts
+
+    <b>ai show config</b>
+    Display all settings
+    Organized by category
+
+    <b>ai reset config</b>
+    Restore default settings
+
+    <color=#e4ff34># Available Config Keys</color>
+    Behavior: outputLevel, debug, dryRun
+    Operation: aggressive, stealth, trainer
+    Limits: maxRetries, timeout, maxTargets, maxDepth
+    Prompts: promptOnAttack, promptOnCritical, promptOnAmbiguous,
+             promptOnSlowOperation, promptOnMissingInfo,
+             promptOnDestructive
+
+    <color=#e4ff34># Knowledge Management</color>
+    <b>ai learn scan</b>
+    Learn about scan command
+    Extract capabilities from man page
+
+    <b>ai learn all</b>
+    Learn all available commands
+    Build complete knowledge base
+
+    <color=#e4ff34># Intelligent Flag Selection</color>
+    <b>ai scan 1.2.3.4 show all files with sizes</b>
+    Agent builds: list -a -s
+    Automatically selects appropriate flags
+
+    <b>ai scan [IP] list hidden files recursively</b>
+    Agent builds: list -a -R
+    Maps natural language to command flags
+
+    <b>ai decide how to list all detailed</b>
+    Agent chooses command and adds flags
+    Uses learned knowledge from man pages
+
+    <color=#e4ff34># Persistence and State</color>
+    <b>ai save</b>
+    Save learned knowledge
+
+    <b>ai load</b>
+    Load saved knowledge
+
+    <b>ai undo</b>
+    Undo last operation
+
+    <b>ai undo 3</b>
+    Rollback 3 steps
+
+    <b>ai rollback 2</b>
+    Rollback 2 steps (alias)
+
+    <b>ai snapshots</b>
+    List state snapshots
+
+    <b>ai export</b>
+    Export mission telemetry
+
+    <b>ai telemetry /home/tux/mission.log</b>
+    Export to specific file
+<b>SEE ALSO</b>
+    <b>scan</b>, <b>exploit</b>"

@@ -1,0 +1,13 @@
+binIwlist="if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""iwlist_usage""))
+computer=host_computer(get_shell)
+devices=network_devices(computer)
+if not devices or indexOf(devices,params[0])==null then exit(""iwlist: Network device not found"")
+if indexOf(params[0],""eth"")!=null then exit(""iwlist: ethernet cards not supported for this command"")
+networks=wifi_networks(computer,params[0])
+if not networks then exit(command_info(""iwlist_usage""))
+if typeof(networks)==""string"" then exit(networks)
+info=""BSSID PWR ESSID""
+for network in networks
+	info=info+char(10)+network
+end for
+print(format_columns(info))"

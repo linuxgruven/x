@@ -1,0 +1,11 @@
+// Argument substitution test
+// Usage: run arg_test hello world foo bar
+// Pipe test: echo hello | run arg_test
+
+_print bold(=== ARG TEST ===)
+_print ARG1: $1
+_print ARG2: $2
+_print ARG3: $3
+_print ARG4: $4
+_print STDIN: $STDIN
+_print bold(=== DONE ===)

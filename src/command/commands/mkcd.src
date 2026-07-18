@@ -1,0 +1,10 @@
+// =============================================================================
+// MKCD
+// Create a directory and immediately change into it.
+// =============================================================================
+Command.mkcd=function(Obj,argv)
+  if not argv then return Man.help(["mkcd"])
+  result=self.mkdir(Obj,argv,true)
+  if result isa Error then return
+  if result isa string then self.cd(Obj,[result])
+end function

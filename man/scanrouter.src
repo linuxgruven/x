@@ -1,0 +1,18 @@
+// Man page for scanrouter
+manScanrouter="SCANROUTER(1)                    X Shell Manual                    SCANROUTER(1)
+
+<b>NAME</b>
+    scanrouter - Get router information
+<b>SYNOPSIS</b>
+    <b>scanrouter</b> IP|DOMAIN
+<b>DESCRIPTION</b>
+    Scan router for extended information including firewall configuration
+    and kernel version. Works with local or public IP addresses.
+<b>EXAMPLE:</b>
+    <b>scanrouter</b> router.lan.ip
+    Scan local router
+
+    <b>scanrouter</b> remote.ip.addr
+    Scan remote router
+<b>SEE ALSO</b>
+    <b>nmap</b>, <b>whois</b>"

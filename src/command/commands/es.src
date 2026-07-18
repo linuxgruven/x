@@ -1,0 +1,172 @@
+// =============================================================================
+// ES
+// Exploit scanner and object manager. Use to scan for vulnerable libraries, obtain shells, and manage captured objects.
+// =============================================================================
+Command.es=function(Obj,argv)
+  if Net.hasInternet(Obj) isa Warning then return
+	use=function(arg)
+    index=to_int(arg[-1])
+    if not index isa number then return Error.set("Expected an index got: "+index)
+    if not hasIndex(globals.G_es.objects,index) then return Error.set("Index out of range")
+    capturedObject=globals.G_es.objects[index]
+    if indexOf(capturedObject.type,"shell")!=null then
+      Exploit.getShell(capturedObject.object)
+    else if capturedObject.type=="computer" then
+      Exploit.getComputer(capturedObject.object)
+    else if capturedObject.type=="file" then
+      Exploit.getFile(capturedObject.object,capturedObject.meta)
+    else
+      return Warning.set("Object not found")
+    end if
+	end function
+	listFound=function(arg)
+    if not len(globals.G_es.display) then return Warning.set("No objects obtained")
+    Info.info("You have the following captured objects:")
+    listNHZ(globals.G_es.display)
+	end function
+	clear=function(arg)
+    if not len(globals.G_es.display) and not len(globals.G_es.objects) then return
+    if not arg then
+      globals.G_es.display=[]
+      globals.G_es.objects=[]
+      Info.info("EScan cache cleared")
+    else
+      indices=[]
+      for a in arg
+        i=to_int(a)
+        if i isa number then push(indices,i)
+      end for
+      indices.sort
+      indices.reverse
+      for i in indices
+        if hasIndex(globals.G_es.display,i) then remove(globals.G_es.display,i)
+        if hasIndex(globals.G_es.objects,i) then remove(globals.G_es.objects,i)
+      end for
+      Info.info("Object(s) removed from es cache")
+    end if
+	end function
+  attack=function(arg)
+    getUser=function(ex)
+      username=Utility.getUserEX(ex).user
+      if username=="root" then return green(username)
+      if username=="guest" then return red(username)
+      return yellow(username)
+    end function
+    if not Library.haveMetaxploit then return
+    if globals.G_metaxploit then metaxploit=globals.G_metaxploit else metaxploit=Library.metaxploit
+    ipOrLibName=null
+    portNumber=null
+    overflowBuffer=""
+    localIp=null
+    if len(arg)==3 then
+      overflowBuffer=arg[2]
+      portNumber=to_int(arg[1])
+      if not portNumber isa number then return Error.set("Invalid port number")
+      ipOrLibName=Net.lookup(arg[0])
+      if not ipOrLibName then return Error.set("Could not resolve: "+arg[0])
+    else if len(arg)==2 then
+      ipOrLibName=Net.lookup(arg[0])
+      if not ipOrLibName then return Error.set("Could not resolve: "+arg[0])
+      if is_valid_ip(ipOrLibName) then
+        portNumber=to_int(arg[1])
+        if not portNumber isa number then return Error.set("Invalid port number")
+      else
+        overflowBuffer=arg[1]
+      end if
+    else
+      ipOrLibName=arg[-1]
+      if is_valid_ip(ipOrLibName) then return Error.set("Invalid arguments")
+    end if
+    if globals.G_settings.clearES then
+      if len(globals.G_es.display) and len(globals.G_es.objects) and (is_lan_ip(ipOrLibName) or is_valid_ip(ipOrLibName)) then
+        globals.G_es.display=[]
+        globals.G_es.objects=[]
+      end if
+    end if
+    if is_valid_ip(ipOrLibName) then
+      library=net_use(metaxploit,ipOrLibName,portNumber)
+      if not library then return Warning.set("Could not connect to port: "+portNumber)
+      library=dump_lib(library)
+      router=get_router(ipOrLibName)
+      if portNumber==0 or portNumber==8080 then
+        localIp=local_ip(router)
+      else
+        for port in used_ports(router)
+          if port_number(port)==portNumber then
+            localIp=get_lan_ip(port)
+            break
+          end if
+        end for
+      end if
+    else
+      localIp=Obj.meta.local_ip
+      libFiles=get_files(File(Obj.computer,"/lib"))
+      if not libFiles then return Error.set("No libraries found in [ /lib ]")
+      library=null
+      if Obj.type=="shell" then
+        if not ShellObject.packMeta(Obj) then return
+        loader=Obj.packMetaxploit
+      else
+        loader=metaxploit
+      end if
+      for libFile in libFiles
+        if indexOf(name(libFile),ipOrLibName)!=null then
+          library=load(loader,path(libFile))
+          ipOrLibName=name(libFile)
+          break
+        end if
+      end for
+      if not library then return Warning.set("Could not load library: "+ipOrLibName)
+    end if
+    registerObject=function(exploitObj,objType,coloredType,displayIp)
+      displayStr=getUser(exploitObj)+" "+coloredType+" object @"+ipOrLibName+":"+displayIp
+      push(globals.G_es.display,displayStr)
+      push(globals.G_es.objects,{
+        "object":exploitObj,
+        "type":objType,
+        "meta":metadata
+      })
+    end function
+    updateLocalIp=function(detectedIp);if detectedIp!=localIp then metadata.local_ip=detectedIp;return green(detectedIp);end function
+    memoryAddresses=scan(metaxploit,library)
+    for address in memoryAddresses
+      scanResult=scan_address(metaxploit,library,address)
+      for line in split(scanResult,char(10))
+        if indexOf(line,"Unsafe")==null then continue
+        if indexOf(line,"<b>")==null then continue
+        exploitResult=overflow(library,address,slice(line,indexOf(line,">")+1,indexOf(line,"/")-1),overflowBuffer)
+        if not exploitResult or exploitResult isa number or exploitResult isa string then continue
+        if is_valid_ip(ipOrLibName) then metadata={
+          "public_ip":ipOrLibName,
+          "local_ip":localIp,
+          "port_number":portNumber
+        } else metadata={
+          "public_ip":Obj.meta.public_ip,
+          "local_ip":localIp,
+          "port_number":null
+        }
+        objectType=typeof(exploitResult)
+        if indexOf(objectType,"shell")!=null then
+          displayIp=updateLocalIp(host_computer(exploitResult).local_ip)
+          registerObject(exploitResult,"shell",green("shell"),displayIp)
+        else if objectType=="computer" then
+          displayIp=updateLocalIp(exploitResult.local_ip)
+          registerObject(exploitResult,"computer",yellow("computer"),displayIp)
+        else if objectType=="file" then
+          registerObject(exploitResult,"file",red("file"),localIp)
+        end if
+      end for
+    end for
+    listFound([])
+  end function
+	if not argv then return listFound
+	if indexOf(argv[0],"-")==null then return attack(argv)
+	Arg1=lower(argv[0])
+	cmds={
+    "-u":@use,
+    "-l":@listFound,
+    "-x":@clear
+	}
+	if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+	cmds[Arg1](argv[1:])
+end function

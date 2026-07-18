@@ -1,0 +1,76 @@
+// Man page for tail
+manTail="TAIL(1)                          X Shell Manual                          TAIL(1)
+
+<b>NAME</b>
+    tail - Display last lines of file
+<b>SYNOPSIS</b>
+    <b>tail -s</b>
+    <b>tail -n</b> [LINES] [PAUSE] [FILE]
+    <b>tail -n NUM</b> [FILE]
+    <b>tail -c</b> [BYTES] [FILE]
+    <b>tail -c NUM</b> [FILE]
+    <b>tail -f</b> [FILE]
+<b>DESCRIPTION</b>
+    Display the last part of a file. By default, shows the last 10 lines.
+    Can specify number of lines to display, watch files for changes in
+    real-time, or monitor system log file size changes.
+<b>OPTIONS</b>
+    <b>-s</b> - Watch System Log
+      Monitor system log file for size changes.
+      (LIMITED FUNCTIONING AT THE MOMENT - GAME LIMITATIONS)
+
+    <b>-n [LINES] [FILE]</b> - Display Last N Lines
+      Display last LINES of file.
+
+    <b>-n NUM [FILE]</b> - Display From Line NUM
+      Display from line NUM to end of file.
+      Example: -n 50 shows line 50 onwards
+
+    <b>-c [BYTES] [FILE]</b> - Display Last N Bytes
+      Display last BYTES of file instead of lines.
+
+    <b>-c NUM [FILE]</b> - Display From Byte NUM
+      Display from byte NUM to end of file.
+
+    <b>-f [FILE]</b> - Follow File
+      Watch file for changes and display new lines in real-time.
+
+    <b>-q</b> - Quiet Mode
+      Suppress header information when displaying content.
+
+    <b>-v</b> - Verbose Mode
+      Always show header information.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View Last Lines</color>
+    <b>tail -n 20 system.log</b>
+    Show last 20 lines of system.log
+
+    <color=#e4ff34># Skip Header Lines</color>
+    <b>tail -n 2 data.csv</b>
+    Show from line 2 onwards (skip header)
+
+    <b>tail -n 50 log.txt</b>
+    Show from line 50 to end
+
+    <color=#e4ff34># Byte Mode</color>
+    <b>tail -c 500 file.bin</b>
+    Show last 500 bytes
+
+    <b>tail -c 100 file.txt</b>
+    Show from byte 100 to end
+
+    <color=#e4ff34># Follow File</color>
+    <b>tail -f system.log</b>
+    Watch system.log for new entries
+
+    <b>tail -s</b>
+    Monitor system log file size
+
+    <color=#e4ff34># Pipe Usage</color>
+    <b>cat log.txt | tail -n 5</b>
+    Show last 5 lines from pipe
+
+    <b>ps | tail -n 2</b>
+    Show process list without header
+<b>SEE ALSO</b>
+    <b>head</b>, <b>cat</b>, <b>more</b>"

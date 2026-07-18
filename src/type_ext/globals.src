@@ -1,0 +1,256 @@
+// =============================================================================
+// GLOBALS
+// All G_ global state variables and session utility functions.
+// =============================================================================
+rmSession=function(Obj)
+  if Obj.id==0 then return
+  if not hasIndex(G_sessions,Obj.id) then return
+  remove(G_sessions,Obj.id)
+  if hasIndex(G_IPCSafe,Obj.id) then remove(G_IPCSafe,Obj.id)
+  if hasIndex(G_IPC,Obj.id) then remove(G_IPC,Obj.id)
+  if hasIndex(G_savedStates,Obj.id) then remove(G_savedStates,Obj.id)
+end function
+//Remove session by key
+rmByKey=function(k)
+  if k==0 then return
+  if not hasIndex(G_sessions,k) then return
+  if hasIndex(G_IPCSafe,k) then remove(G_IPCSafe,k)
+  if hasIndex(G_IPC,k) then remove(G_IPC,k)
+  if hasIndex(G_savedStates,k) then remove(G_savedStates,k)
+  remove(G_sessions,k)
+end function
+//Remove IPC entry without affecting session
+rmIPCKey=function(k)
+  if k==0 then return
+  if not hasIndex(G_IPC,k) then return
+  remove(G_IPC,k)
+end function
+//Terminate all sessions except main (ID 0); skipId exempts one additional session
+killallSessions=function(skipId=null)
+  targetCount=1
+  if skipId!=null and skipId!=0 then targetCount=2
+  while len(G_sessions)>targetCount
+    // Two-pass pattern is intentional: collect IDs first, then remove.
+    // Avoids mutating G_sessions while iterating over its values.
+    idsToRemove=[]
+    for obj in G_sessions.values;if obj.id==0 then continue;if skipId!=null and obj.id==skipId then continue;idsToRemove.push(obj.id);end for
+    for sessionId in idsToRemove;if hasIndex(G_sessions,sessionId) then G_sessions[sessionId].commands["x"](["-y"]);end for
+  end while
+  if G_IPC then G_IPC={}
+end function
+//Main shell object (primary X shell session)
+G_main=null
+//Flag indicating if shell has pivoted to another machine
+G_hasPivoted=false
+//Last connected IP address for tracking
+G_lastIP=null
+//Current proxy configuration object
+G_proxy=null
+//Piping state flag
+G_piping=false
+//Flag indicating a session requested program exit (checked by main loop)
+G_pendingExit=false
+//Flag indicating main should clear all sessions (checked by main loop)
+G_clearAllSessions=false
+//Error tracking map
+G_errors={
+  //Portable object error flag
+  "pobject":false
+}
+//Additional settings storage map
+G_settings={}
+//Configuration from .xrc file (loaded by Config module)
+G_CF=null
+//Map of active session objects {id: obj}
+G_sessions={}
+//Array of network session data
+G_netSessions=[]
+//Rainbow table data for password cracking {hash: password}
+G_rainbow={}
+//Rainbow table hash prefix index for fast lookups
+G_rainbowIndex=null
+//Random name database for NPC generation
+G_names={}
+//Virtual file system array
+G_virtualFiles=[]
+//Array of cached passwords
+G_cachePasswords=[]
+//Password cache for crack library {hash: password}
+G_passwordCache=null
+//Shadow password cache {ip: password}
+G_shadow={}
+//Database server object
+G_server=null
+//Library database server object
+G_libServer=null
+//AI Agent system (lazy-loaded on first ai command)
+G_agent=null
+//AI Agent context for persistent state across commands
+G_agentContext={
+  "lastTarget":null,
+  "lastAction":null,
+  "compromisedHosts":[],
+  "availableShells":[],
+  "knownServices":{},
+  "patternSuccess":{},
+  "userPreferences":{"flags":{},"commands":{}},
+  "templates":[],
+  "currentSequence":[],
+  "storedObjects":[]
+}
+//Clipboard data array
+G_xclip=[]
+//TAR archive reference
+G_tar=null
+//GUI state reference
+G_gui=null
+//Zero-day exploit availability flags
+G_Zday={
+  //Zero-day exploit available flag
+  "0day":false,
+  //Remote shell exploit available flag
+  "rshell":false
+}
+//System attributes and runtime state
+G_attributes={
+  //Background operation flag
+  "back":false,
+  //Home navigation flag (return to proxy/pivot, not main)
+  "home":false,
+  "program_path":program_path,
+  "current_path":current_path,
+  //Start timestamp
+  "start":0,
+  //Stop timestamp
+  "stop":0,
+  //Anonymous mode flag
+  "anon":false,
+  //Proxy hopping enabled flag
+  "hops":false,
+}
+//Debug mode flag (controlled by config setting)
+G_debug=false
+//Partial object interpreter debug mode (toggle with 'debug on/off' command)
+G_poDebug=false
+//Pipe debug mode flag (toggle with 'debug on/off' pipe command)
+G_pipeDebug=false
+//Pipe variable storage for command substitution
+G_pipe={
+  // Buffer for input from previous command in a pipe sequence
+  "stdin":null,
+  // Buffer for output to be piped to next command
+  "stdout":[],
+  // Flag indicating if currently in pipe mode
+  "PIPE_MODE":false,
+  // Flag indicating if currently called from xargs (suppresses stdin→argv injection)
+  "XARGS_MODE":false,
+  // User-defined variable storage for command substitution (e.g., $(command))
+  "VARS":{}
+}
+//Cached exploit objects {ip: exploits}
+G_exploitCache={}
+//Cached dig results {name: lines[]}
+G_digCache={}
+//Auto-yes flag: when true, Gui.yesNo returns true without prompting
+G_auto_yes=false
+//Binary tree for exploit lookup
+G_exploitBtree={}
+//Router tree for network mapping
+G_rtree={}
+//File router tree reference
+G_frtree=null
+//Server tree for service tracking
+G_stree={}
+//File server tree reference
+G_fstree=null
+//Machine tree for host mapping
+G_mtree={}
+//File machine tree reference
+G_fmtree=null
+//Cached library objects {name: lib}
+G_libraryCache={}
+//Metaxploit library reference
+G_metaxploit=null
+//Metaxploit initialization function reference
+G_initMetaxploit=null
+//Crypto library reference
+G_crypto=null
+//Crypto initialization function reference
+G_initCrypto=null
+//APT client initialization function reference
+G_initAptClient=null
+//Blockchain initialization function reference
+G_initBlockchain=null
+//Watched targets map for monitoring
+G_watchList={}
+//Exit status tracking
+G_es={
+  //Exit status objects array
+  "objects":[],
+  //Exit status display array
+  "display":[]
+}
+//Bash interpreter state
+G_bash={
+  "VARS":{},
+  "RUN":[],
+  "command":"",
+  "IGNORE":false,
+  "SIGSTOP":false,
+  "SIGBREAK":false,
+  "CANBREAK":false,
+  "CANCONT":false,
+  "SIGCONT":false,
+  "ACTIVE":false,
+  "DEBUG":false,
+  //Error handler command string
+  "ONERROR":"",
+  //Last error message for try/catch
+  "LAST_ERROR":"",
+  //Try/catch nesting depth
+  "IN_TRY":0,
+  //User-defined functions map {name: body}
+  "FUNCS":{},
+  "CALLSTACK":[],
+  "RECURSION":0,
+  //Maximum recursion depth limit
+  "RECURSION_MAX":100,
+  //Allow absolute paths flag
+  "ALLOWABS":false,
+  "SESSION_STACK":{},
+  //Command result flags (readable as $flag in bash scripts)
+  "FLAGS":{"scan_ok":false,"hold":null,"OBJ":{}}
+}
+//Map of dirty router IPs needing log cleanup {ip: ip}
+G_dirty={}
+//Remote shell management
+G_rshell={
+  //Active remote shell connections
+  "rshells":{},
+  //Remote shell server instances
+  "servers":{},
+  //Remote shell command history
+  "history":{}
+}
+//Portable object credentials array
+G_pobjcreds=[]
+//Inter-process communication map {id: data}
+G_IPC={}
+//Safe IPC storage with persistence {id: data}
+G_IPCSafe={}
+//Current shell object reference
+G_cshell=null
+//Array of proxy hop information for chaining
+G_hops=[]
+//Continuation commands for deferred execution
+G_continuation_cmds=null
+//Deferred commands for later execution
+G_deferred_cmds=null
+//Bloom filter state for exploit tracking
+G_bloom={
+  "filter":[],
+  "file":null,
+  "loaded":0
+}
+//Saved session states for reinstantiation {sessionId: stateMap}
+G_savedStates={}

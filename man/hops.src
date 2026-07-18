@@ -1,0 +1,38 @@
+// Man page for hops
+manHops="HOPS(1)                          X Shell Manual                          HOPS(1)
+
+<b>NAME</b>
+    hops - View, wipe, or interact with proxy chain
+<b>SYNOPSIS</b>
+    <b>hops -v</b>
+    <b>hops -w</b>
+    <b>hops -s</b> INDEX
+<b>DESCRIPTION</b>
+    Manage proxy chain hops. View the chain of proxies, wipe logs
+    from all hops, or take shell control from any hop in the chain.
+<b>OPTIONS</b>
+    <b>-v</b> - View Chain
+      Display all proxy chain hops.
+
+    <b>-w</b> - Wipe Logs
+      Remove all logs from the proxy chain.
+
+    <b>-s INDEX</b> - Take Shell
+      Take shell from specific hop in chain by index.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View Chain</color>
+    <b>hops -v</b>
+    List all hops in proxy chain
+
+    <color=#e4ff34># Wipe Logs</color>
+    <b>hops -w</b>
+    Clean logs from all proxies
+
+    <color=#e4ff34># Take Shell</color>
+    <b>hops -s 3</b>
+    Take control of 3rd hop
+
+    <b>hops -s 1</b>
+    Take control of first hop
+<b>SEE ALSO</b>
+    <b>proxy</b>, <b>pivot</b>"

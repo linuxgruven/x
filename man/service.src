@@ -1,0 +1,78 @@
+// Man page for service
+manService="SERVICE(8)                       X Shell Manual                       SERVICE(8)
+
+<b>NAME</b>
+    service - Service and server manager
+<b>SYNOPSIS</b>
+    <b>service -v</b>
+    <b>service -l</b>
+    <b>service -r</b>
+    <b>service SERVICE -i</b>
+    <b>service SERVICE START|STOP</b>
+<b>DESCRIPTION</b>
+    Manage system services and servers. Control installation, starting,
+    stopping, and monitoring of network services.
+
+    <b>Supported Services:</b>
+    <color=#e4ff34>rshell</color> - Remote shell service
+    <color=#e4ff34>ssh</color> - SSH service
+    <color=#e4ff34>ftp</color> - FTP file transfer service
+    <color=#e4ff34>http</color> - HTTP web service
+    <color=#e4ff34>chat</color> - Chat service
+    <color=#e4ff34>repo</color> - Repository service
+
+    <color=#ff4b4b>INSTALLATION REQUIREMENTS:</color>
+    Before using 'service [server] -i', you need a repository setup.
+    Set up with 'apt addrepo [ip]' or 'apt addrepo -r'. After setup,
+    use 'service [server] -i' to install. Forward ports if needed and
+    start with 'service [server] start'.
+
+    <color=#e4ff34>*** IF YOU GET APT FAILED ERRORS, ENSURE aptclient.so IS IN SHARELIBS ***</color>
+    <color=#e4ff34>*** ROOT PRIVILEGES REQUIRED FOR INSTALL COMMAND ***</color>
+<b>OPTIONS</b>
+    <b>-v</b> - View Info
+      List default service information.
+
+    <b>-l</b> - List Services
+      List all found services on system.
+
+    <b>-r</b> - Reload List
+      Reload local service list from system.
+
+    <b>SERVICE -i</b> - Install Service
+      Install specified service (requires root and repository).
+
+    <b>SERVICE START|STOP</b> - Control Service
+      Start or stop the specified service.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># List and View</color>
+    <b>service -v</b>
+    View default service info
+
+    <b>service -l</b>
+    List all services
+
+    <b>service -r</b>
+    Reload service list
+
+    <color=#e4ff34># Install Services</color>
+    <b>service ssh -i</b>
+    Install SSH service
+
+    <b>service http -i</b>
+    Install HTTP service
+
+    <b>service ftp -i</b>
+    Install FTP service
+
+    <color=#e4ff34># Control Services</color>
+    <b>service ssh start</b>
+    Start SSH service
+
+    <b>service http stop</b>
+    Stop HTTP service
+
+    <b>service rshell start</b>
+    Start remote shell service
+<b>SEE ALSO</b>
+    <b>pacman</b>, <b>lms</b>"

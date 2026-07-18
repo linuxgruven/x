@@ -1,0 +1,4 @@
+binGroups="if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""groups_usage""))
+output=groups(host_computer(get_shell),params[0])
+if not output then exit(command_info(""groups_usage""))
+print(output)"

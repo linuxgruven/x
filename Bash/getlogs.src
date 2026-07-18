@@ -1,0 +1,52 @@
+// @getlogs <file>
+// Reads a file of public IPs (one per line), exploits the best available
+// service on each, escalates to root if needed, and downloads the system
+// log named after the public IP.
+// Example targets file line:  186.217.201.168
+
+if $1 == ""
+  _print <color=#ff0000>[X] Usage: @getlogs <targets_file></color>
+  _home
+endif
+
+if not _File($1)
+  _print <color=#ff0000>[X] File not found: $1</color>
+  _home
+endif
+
+_setvar(lines, split_str(file_read($1), char(10)))
+_setvar(total, len(_getvar(lines)))
+_setvar(ok, 0)
+_setvar(fail, 0)
+
+_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  LOG HARVESTER</color>
+_print <color=#eb0cc6>========================================</color>
+_print <color=#ffffff>Targets: <color=#ffff00>_getvar(total)</color>
+_print
+
+for line in _getvar(lines)
+  if trim_str(line) == ""
+    continue
+  endif
+  _setvar(pub, trim_str(line))
+  _print <color=#00bfff>[>]</color> _getvar(pub)
+
+  scan --s _getvar(pub) find s
+  if $scan_ok
+    _setvar(shell, _hold)
+    _setvar(cur_user, get_user())
+    if _getvar(cur_user) != root
+      OBJ(shell) su
+    endif
+    OBJ(shell) main -d _getvar(pub).log
+    _setvar(ok, _getvar(ok) + 1)
+    _print <color=#00ff00>  [+] saved as _getvar(pub).log</color>
+  else
+    _setvar(fail, _getvar(fail) + 1)
+    _print <color=#ff0000>  [-] no shell</color>
+  endif
+endfor
+
+_print
+_print <color=#00ff00>Done — saved: _getvar(ok)  failed: _getvar(fail)</color>

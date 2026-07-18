@@ -1,0 +1,260 @@
+binFtp="p=function(msg);print(msg);end function
+CommandLine=function
+	output=user_input(""ftp> "",false,false,true)
+	if len(output)==0 then return
+	listCmd=trim(output).split("" "")
+	command=listCmd[0]
+	shellArgs=""""
+	if len(listCmd)>1 then
+		listCmd.remove(0)
+		shellArgs=join(listCmd)
+	end if
+	if command==""quit"" then
+		globals.connected=false
+		return
+	end if
+	if command==""clear"" then
+		clear_screen
+	else
+		output=Launch(command,shellArgs)
+		if output and output!=1 then print(output)
+	end if
+end function
+ParseParams=function(rawParams)
+	tokens=rawParams.split("" "")
+	params=[]
+	for t in tokens
+		if t!="""" then params.push(t)
+	end for
+	return params
+end function
+Launch=function(command,shellArgs)
+	params=ParseParams(shellArgs)
+	if command==""ls"" then
+		LsCommand(params)
+	else if command==""cd"" then
+		CdCommand(params)
+	else if command==""get"" then
+		GetCommand(params)
+	else if command==""put"" then
+		PutCommand(params)
+	else if command==""mkdir"" then
+		MkdirCommand(params)
+	else if command==""rm"" then
+		RmCommand(params)
+	else if command==""pwd"" then
+		PwdCommand
+	else if command==""cp"" then
+		CpCommand(params)
+	else if command==""mv"" then
+		MvCommand(params)
+	else if command==""help"" then
+		ShowHelp
+	else
+		print(""command not found in ftp.""+char(10)+""Type <b>help</b> to access the available ftp commands."")
+	end if
+end function
+CdCommand=function(params)
+	if len(params)>0 and (params[0]==""-h"" or params[0]==""--help"") then return p(command_info(""cd_usage""))
+	pathFile=ftp_home_dir
+	if len(params)>0 then pathFile=get_abs_path(params[0],ftp_current_path)
+	output=File(host_computer(ftp_shell),pathFile)
+	if not output then return p(""Error: Path not found: ""+pathFile)
+	if not is_folder(output) then return p(""Error: Not a folder"")
+	globals.ftp_current_path=pathFile
+	print(""Directory successfully changed."")
+end function
+PwdCommand=function;print(ftp_current_path);end function
+CpCommand=function(params)
+	if len(params)!=2 or params[0]==""-h"" or params[0]==""--help"" then return p(command_info(""cp_usage""))
+	origFile=get_abs_path(params[0],ftp_current_path)
+	destFolder=get_abs_path(params[1],ftp_current_path)
+	computer=host_computer(ftp_shell)
+	file=File(computer,origFile)
+	if not file then return p(""cp: can't find ""+origFile)
+	newName=""""
+	folder=File(computer,destFolder)
+	if not folder then
+		pathParent=parent_path(destFolder)
+		if pathParent==destFolder then
+			newName=destFolder
+			destFolder=path(parent(file))
+			output=copy(file,destFolder,newName)
+			if output and output!=1 then print(output)
+			return
+		end if
+		folder=File(computer,pathParent)
+		newName=destFolder[len(destFolder)-(len(destFolder)-len(pathParent)):]
+		if newName[0]==""/"" then newName=newName[1:]
+		if not folder then return p(""cp: can't copy file. ""+destFolder+"" doesn't exist."")
+	end if
+	if folder then
+		if path(parent(file))!=path(parent(folder)) or name(file)!=name(folder) then
+			finalDest=path(folder)
+			if len(newName)==0 then newName=name(file)
+			if not is_folder(folder) then
+				finalDest=path(parent(file))
+				newName=name(folder)
+			end if
+			output=copy(file,finalDest,newName)
+			if output and output!=1 then print(output)
+		end if
+	end if
+end function
+MvCommand=function(params)
+	if len(params)!=2 then return p(command_info(""mv_usage""))
+	origFile=get_abs_path(params[0],ftp_current_path)
+	destFolder=get_abs_path(params[1],ftp_current_path)
+	computer=host_computer(ftp_shell)
+	file=File(computer,origFile)
+	if not file then return p(""mv: can't find ""+origFile)
+	newName=""""
+	folder=File(computer,destFolder)
+	if not folder then
+		pathParent=parent_path(destFolder)
+		if pathParent==destFolder then
+			newName=destFolder
+			destFolder=path(parent(file))
+			move(file,destFolder,newName)
+			return
+		end if
+		folder=File(computer,pathParent)
+		newName=destFolder[len(destFolder)-(len(destFolder)-len(pathParent)):]
+		if newName[0]==""/"" then newName=newName[1:]
+		if not folder then return p(""mv: can't copy file. ""+destFolder+"" doesn't exist."")
+	end if
+	if folder then
+		if path(parent(file))!=path(parent(folder)) or name(file)!=name(folder) then
+			finalDest=path(folder)
+			if len(newName)==0 then newName=name(file)
+			if not is_folder(folder) then
+				finalDest=path(parent(file))
+				newName=name(folder)
+			end if
+			if path(parent(file))==path(parent(folder)) and newName!=name(file) then rename(file,newName) else move(file,finalDest,newName)
+		end if
+	end if
+end function
+MkdirCommand=function(params)
+	if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then return p(command_info(""mkdir_usage""))
+	computer=host_computer(ftp_shell)
+	pathFile=params[0]
+	pathParent=parent_path(pathFile)
+	existFile=File(computer,pathFile)
+	if pathParent==pathFile then pathParent=ftp_current_path
+	parentDir=File(computer,get_abs_path(pathParent,ftp_current_path))
+	if not parentDir then
+		print(""mkdir: ""+pathParent+"" not found"")
+	else if existFile!=null then
+		print(""mkdir: ""+path(existFile)+"" file exists"")
+	else if not has_permission(parentDir,""w"") then
+		print(""mkdir: permission denied"")
+	else
+		arrayPath=pathFile.split(""/"")
+		output=create_folder(computer,path(parentDir),arrayPath[len(arrayPath)-1])
+		if output!=null and output!=1 then print(output)
+	end if
+end function
+RmCommand=function(params)
+	if len(params)<1 or len(params)>2 or params[0]==""-h"" or params[0]==""--help"" then return p(command_info(""rm_usage""))
+	pathFile=params[0]
+	isRecursive=0
+	if params[0]==""-r"" then
+		if len(params)==1 then return p(command_info(""rm_usage""))
+		isRecursive=1
+		pathFile=params[1]
+	end if
+	file=File(host_computer(ftp_shell),get_abs_path(pathFile,ftp_current_path))
+	if not file then return p(""rm: file not found: ""+pathFile)
+	if not has_permission(file,""w"") then return p(""rm: permission denied"")
+	if is_folder(file)==1 and isRecursive==0 and is_symlink(file)==0 then
+		print(""rm: ""+name(file)+"" is a directory"")
+	else
+		output=delete(file)
+		if len(output)>0 then print(output)
+	end if
+end function
+ValidateLsInput=function(input);return (input==""-la"" or input==""-l"" or input==""-a"");end function
+LsParamsValid=function(prms)
+	if len(prms)>3 then return false
+	for p in prms
+		if indexOf(p,""-"")!=null and not ValidateLsInput(p) then return false
+	end for
+	return true
+end function
+LsCommand=function(params)
+	if not LsParamsValid(params) then return p(command_info(""ls_usage""))
+	computer=host_computer(ftp_shell)
+	folderPath=ftp_current_path
+	if params and indexOf(params[len(params)-1],""-"")==null then folderPath=params[len(params)-1]
+	folderPath=get_abs_path(folderPath,ftp_current_path)
+	folder=File(computer,folderPath)
+	if not folder then return p(""ls: No such file or directory ""+folderPath)
+	if not has_permission(folder,""r"") then return p(""ls: permission denied"")
+	showHide=0
+	if params and indexOf(params[0],""a"")!=null then showHide=1
+	showDetails=0
+	if params and indexOf(params[0],""l"")!=null then showDetails=1
+	subFiles=get_folders(folder)+get_files(folder)
+	output=""""
+	for subFile in subFiles
+		nameFile=name(subFile)
+		permission=permissions(subFile)
+		fileOwner=owner(subFile)
+		fileSize=size(subFile)
+		fileGroup=group(subFile)
+		if showHide or indexOf(nameFile,""."")!=0 then
+			if len(output)>0 then output=output+char(10)
+			if showDetails then
+				output=output+permission+"" ""+fileOwner+"" ""+fileGroup+"" ""+fileSize+"" 00:00 ""+nameFile
+				if is_symlink(subFile) then output=output+""-->""+path(subFile,true)
+			else
+				output=output+nameFile
+			end if
+		end if
+	end for
+	print(format_columns(output))
+end function
+PutCommand=function(params)
+	if len(params)!=2 then return p(command_info(""put_usage""))
+	source=get_abs_path(params[0],current_path)
+	dest=get_abs_path(params[1],ftp_current_path)
+	output=scp(ftp_shell,source,dest,null,true)
+	if output==null then
+		print(""put: there is no active remote connections"")
+	else if output!=1 then
+		print(output)
+	end if
+end function
+GetCommand=function(params)
+	if len(params)!=2 then return p(command_info(""get_usage""))
+	source=get_abs_path(params[0],ftp_current_path)
+	dest=get_abs_path(params[1],current_path)
+	output=scp(ftp_shell,source,dest,null,false)
+	if output==null then
+		print(""get: there is no active remote connections"")
+	else if output!=1 then
+		print(output)
+	end if
+end function
+ShowHelp=function;help=""Available commands:""+char(10)+""    ls <path>        - List files and directories.""+char(10)+""    cd <path>        - Change current directory.""+char(10)+""    pwd              - Show current directory.""+char(10)+""    get <file>       - Download a file from the server.""+char(10)+""    put <file>       - Upload a file to the server.""+char(10)+""    mkdir <dirname>  - Create a new directory.""+char(10)+""    rm <file>        - Delete a file.""+char(10)+""    cp <file>        - Copy a file.""+char(10)+""    mv <file>        - Move a file.""+char(10)+""    quit             - Close the FTP connection.""+char(10)+char(10)+""Type the command followed by any required arguments."";print(help);end function
+if len(params)<2 or len(params)>3 then exit(command_info(""ftp_usage""))
+credentials=params[0].split(""@"")
+user=credentials[0]
+password=credentials[1]
+connected=true
+port=21
+if len(params)==3 then port=to_int(params[2])
+if typeof(port)!=""number"" then exit(""Invalid port: ""+port)
+print(""Connecting..."")
+ftp_current_path=""""
+ftp_home_dir=""""
+ftp_shell=connect_service(get_shell,params[1],port,user,password,""ftp"")
+if typeof(ftp_shell)==""string"" then exit(ftp_shell)
+if not ftp_shell then exit(""connection failed"")
+ftp_current_path=""/root""
+if user!=""root"" then ftp_current_path=""/home/""+user
+ftp_home_dir=ftp_current_path
+while connected
+	CommandLine
+end while"

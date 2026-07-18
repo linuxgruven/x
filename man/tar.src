@@ -1,0 +1,71 @@
+// Man page for tar
+manTar="TAR(1)                           X Shell Manual                           TAR(1)
+
+<b>NAME</b>
+    tar - File and folder archiver
+<b>SYNOPSIS</b>
+    <b>tar -c</b> (<b>-r</b>) (<b>-n</b><b> NAME</b>) (<b>-s</b> [<b>SAVEPATH</b>]) <b>FILE</b>
+    <b>tar -x</b> (<b>-r</b>) (<b>-n</b> [<b>NAME</b>]) (<b>-e</b> [<b>EXTRACT_TO</b>]) <b>TARFILE</b>
+    <b>tar -v</b> <b>--memory</b>|<b>TARFILE</b>
+    <b>tar -m</b> (<b>-r</b>) <b>FILE</b>
+    <b>tar -u</b> (<b>-r</b>) (<b>-n</b> [<b>NAME</b>]) (<b>-e</b> [<b>EXTRACT_TO</b>])
+<b>DESCRIPTION</b>
+    Archive folders into single text files (tarballs). Tarballs contain
+    file and folder structure plus contents of all files. Supports creating,
+    extracting, listing, and memory storage of archives. Can process multiple
+    tarball files for extraction. The -r flag removes source files after
+    creation or extraction.
+
+    <color=#e4ff34>*** NOT TO BE USED WITH BINARY FILES ***</color>
+    <color=#e4ff34>*** FILE OBJECTS CAN ONLY USE THE -m FLAG ***</color>
+    <color=#e4ff34>*** USE ON SMALL FILES - LARGE FILES CAUSE RAM ISSUES ***</color>
+<b>OPTIONS</b>
+    <b>-c FILE</b> - Create Archive
+      Create tarball from folder. Use -n for custom name, -s for save path.
+      Optional -r removes source folder after creation.
+
+    <b>-x TARFILE</b> - Extract Archive
+      Extract tarball to folder. Can point to directory to extract all.
+      Use -e to specify extraction path. Optional -r removes tarball.
+
+    <b>-v --memory|TARFILE</b> - View Contents
+      List all files in tarball (from memory or file).
+
+    <b>-m FILE</b> - Store in Memory
+      Store tarball in memory from folder. Optional -r removes source.
+
+    <b>-u</b> - Retrieve from Memory
+      Extract tarball from memory to current directory as tarball folder.
+      Use -r to clear tarball from memory after extraction.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Create Archives</color>
+    <b>tar -c /home/user/folder</b>
+    Create tarball from folder
+
+    <b>tar -c -r -n backup /home/user/data</b>
+    Create named tarball and remove source
+
+    <b>tar -c -s /home/tux/Documents myproject</b>
+    Create tarball in specific location
+
+    <color=#e4ff34># Extract Archives</color>
+    <b>tar -x backup.tar</b>
+    Extract tarball to current directory
+
+    <b>tar -x -e /home/tux/Documents/restore backup.tar</b>
+    Extract to specific path
+
+    <b>tar -x -r data.tar</b>
+    Extract and remove tarball file
+
+    <color=#e4ff34># View and Memory</color>
+    <b>tar -v backup.tar</b>
+    List files in tarball
+
+    <b>tar -m /home/user/folder</b>
+    Store tarball in memory
+
+    <b>tar -u</b>
+    Retrieve tarball from memory
+<b>SEE ALSO</b>
+    <b>zip</b>, <b>gzip</b>, <b>pack</b>"

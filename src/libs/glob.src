@@ -1,0 +1,181 @@
+// ============================================================================
+// Library: Glob
+// Description: Glob Pattern Expansion and Matching
+// ============================================================================
+//
+// Description:
+//   The Glob library provides clean and reliable glob pattern expansion and
+//   matching functionality. It handles wildcard patterns (*) in file paths,
+//   expanding them to match actual files and directories in the filesystem.
+//   This library uses manual character-by-character string processing to avoid
+//   GreyScript's regex interpretation issues with special characters.
+//
+Glob={}
+// Expand glob pattern to list of matching file paths
+// Returns array of paths that match the glob pattern
+Glob.expand=function(Obj,pattern)
+	// Handle empty pattern
+	if not pattern or len(pattern)==0 then return [""]
+	// Validate pattern is a string
+	if typeof(pattern)!="string" then return [pattern]
+	// Check if pattern contains glob characters
+	if indexOf(pattern,"*")==null then return [pattern]
+	// Try to expand the glob pattern
+	expanded=[]
+	// Check if pattern starts with / (absolute path)
+	isAbsolute=(len(pattern)>0 and pattern[0]=="/")
+	// Manually split path by / to avoid regex issues
+	parts=[]
+	current=""
+	_len=len(pattern)
+	i=0;while i<_len
+		if pattern[i]=="/" then
+			if len(current)>0 then push(parts,current)
+			current=""
+		else
+			current=current+pattern[i]
+		end if
+	i+=1;end while
+	if len(current)>0 then push(parts,current)
+	basePath=""
+	globStart=-1
+	// Find first part with glob, and build basePath from everything before it
+	_len=len(parts)
+	i=0;while i<_len
+		part=parts[i]
+		if not part or typeof(part)!="string" then;i+=1;continue;end if
+		starIdx=indexOf(part,"*")
+		if starIdx!=null and starIdx!=-1 then
+			globStart=i
+			break
+		end if
+		// This part has no glob, add it to basePath
+		if len(basePath)>0 then basePath=basePath+"/"
+		basePath=basePath+part
+	i+=1;end while
+	if globStart==-1 then return [pattern]
+	// Restore leading / for absolute paths
+	if isAbsolute then
+		if len(basePath)==0 then
+			basePath="/"
+		else if basePath[0]!="/" then
+			basePath="/"+basePath
+		end if
+	end if
+	// Get base directory
+	if basePath=="" or basePath=="." then
+		baseDir=Obj.dir.current
+	else if basePath=="/" then
+		baseDir=Obj.root
+	else
+		baseDir=Io._getFile(Obj,basePath)
+	end if
+	if not baseDir or baseDir isa Error or not is_folder(baseDir) then return [pattern]
+	// Recursive expansion function
+	expandLevel=function(dir,levelIdx,pathParts,prefix)
+		if levelIdx>=len(pathParts) then return [prefix]
+		pattern=pathParts[levelIdx]
+		results=[]
+		// Get all items in directory
+		folders=get_folders(dir)
+		files=get_files(dir)
+		items=[]
+		if folders then items=items+folders
+		if files then items=items+files
+		for item in items
+			itemName=name(item)
+			// Simple glob matching (* matches any characters)
+			if pattern=="*" then
+				match=true
+			else if pattern=="**" then
+				match=true
+			else
+				// Pattern matching with *
+				match=Glob.match(itemName,pattern)
+			end if
+			if match then
+				newPrefix=prefix
+				if len(newPrefix)>0 then newPrefix=newPrefix+"/"
+				newPrefix=newPrefix+itemName
+				if levelIdx==len(pathParts)-1 then
+					push(results,newPrefix)
+				else
+					// Recurse into subdirectory
+					if is_folder(item) then
+						subResults=outer.expandLevel(item,levelIdx+1,pathParts,newPrefix)
+						results=results+subResults
+					end if
+				end if
+			end if
+		end for
+		return results
+	end function
+	// Start expansion from glob start point
+	remainingParts=[]
+	_len=len(parts);i=globStart;while i<_len;push(remainingParts,parts[i]);i+=1;end while
+	expanded=expandLevel(baseDir,0,remainingParts,basePath)
+	if len(expanded)==0 then return [pattern]
+	return expanded
+end function
+// Test if text matches glob pattern (* wildcard)
+// Returns true if text matches pattern, false otherwise
+Glob.match=function(text,pattern)
+	// Handle empty or null pattern
+	if not pattern or len(pattern)==0 then return text==""
+	// Validate inputs are strings
+	if typeof(pattern)!="string" or typeof(text)!="string" then return false
+	// If no wildcard, do exact match
+	if indexOf(pattern,"*")==null then return text==pattern
+	// Manually split pattern by * to avoid regex issues
+	segments=[]
+	current=""
+	_len=len(pattern)
+	i=0;while i<_len
+		if pattern[i]=="*" then
+			if len(current)>0 or len(segments)==0 then
+				push(segments,current)
+				current=""
+			end if
+		else
+			current=current+pattern[i]
+		end if
+	i+=1;end while
+	if len(current)>0 or (len(pattern)>0 and pattern[-1]=="*") then push(segments,current)
+	// Pattern starts with *
+	startsWithWildcard=(len(pattern)>0 and pattern[0]=="*")
+	// Pattern ends with *
+	endsWithWildcard=(len(pattern)>0 and pattern[-1]=="*")
+	// Check each segment in order
+	pos=0
+	_len=len(segments)
+	i=0;while i<_len
+		segment=segments[i]
+		if len(segment)==0 then;i+=1;continue;end if
+		// If segment is longer than remaining text, can't match
+		if pos+len(segment)>len(text) then return false
+		// Find segment in remaining text
+		idx=null
+		maxPos=len(text)-len(segment)
+		if maxPos<pos then return false
+		j=pos;while j<=maxPos
+			match=true
+			_len2=len(segment);k=0;while k<_len2
+				if text[j+k]!=segment[k] then
+					match=false
+					break
+				end if
+			k+=1;end while
+			if match then
+				idx=j
+				break
+			end if
+		j+=1;end while
+		if idx==null then return false
+		// First segment must match at start (unless pattern starts with *)
+		if i==0 and not startsWithWildcard and idx!=0 then return false
+		// Last segment must match at end (unless pattern ends with *)
+		if i==len(segments)-1 and not endsWithWildcard and idx+len(segment)!=len(text) then return false
+		pos=idx+len(segment)
+	i+=1;end while
+	return true
+end function

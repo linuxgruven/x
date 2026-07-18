@@ -1,0 +1,66 @@
+// =============================================================================
+// QRM
+// Securely remove a file by burying it in a hidden directory structure.
+// =============================================================================
+Command.qrm=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+  if not argv and not hasPipeInput then return Man.help(["qrm"])
+  if hasPipeInput then
+    if not argv then argv=[]
+    for _line in globals.G_pipe.stdin.split(char(10))
+      _line=trim(_line)
+      if _line!="" then push(argv,_line)
+    end for
+  end if
+  // Resolve all arguments to file objects
+  targets=[]
+  folderTarget=null
+  for arg in argv
+    f=null
+    if typeof(arg)=="file" then f=arg else f=Io._getFile(Obj,arg)
+    if f isa Error then return f
+    if is_folder(f) then folderTarget=f else push(targets,f)
+  end for
+  // If a folder arg was given, move all other files into it then qrm the folder
+  if folderTarget then
+    destPath=path(folderTarget)
+    for f in targets
+      r=f.move(destPath,name(f))
+      if r isa string and r.len then return Error.set(r)
+    end for
+    targets=[folderTarget]
+  end if
+  // qrm each target
+  for fileObj in targets
+    currentPath=path(Obj.dir.current)
+    if not has_permission(Obj.dir.current,"w") then
+      h=path(Obj.user.home)
+      hf=File(Obj.computer,h+"/"+name(fileObj))
+      if hf then
+        currentPath=h
+        fileObj=hf
+      else
+        return Error.set("You do not have write permissions in the current directory")
+      end if
+    end if
+    if Obj.type=="file" then
+      folder1=FileHelper.useFolder(Obj)
+      if folder1 isa Error then return folder1
+      copy(folder1,currentPath,".111111111")
+      folder2=FileHelper.useFolder(Obj)
+      if folder2 isa Error then return folder2
+      copy(folder2,currentPath+"/.111111111",".111000111")
+      move(fileObj,currentPath+"/.111111111/.111000111","z")
+      parentFolder=Io.getFileObj(Obj,currentPath+"/.111111111")
+      if parentFolder isa Error then return parentFolder
+      move(parentFolder,currentPath+"/.111111111/.111000111/","bye")
+    else
+      hiddenDir1=File(Obj.computer,currentPath+"/.111111111")
+      if not hiddenDir1 then hiddenDir1=create_folder(Obj.computer,currentPath,".111111111")
+      if hiddenDir1 isa string then return Error.set(hiddenDir1)
+      create_folder(Obj.computer,currentPath+"/.111111111",".111000111")
+      move(fileObj,currentPath+"/.111111111/.111000111","z")
+      move(File(Obj.computer,currentPath+"/.111111111"),currentPath+"/.111111111/.111000111/","bye")
+    end if
+  end for
+end function

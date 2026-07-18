@@ -1,0 +1,314 @@
+// Man page for scan
+manScan="SCAN(1)                          X Shell Manual                          SCAN(1)
+
+<b>NAME</b>
+    scan - Vulnerability scanner and exploit framework
+<b>SYNOPSIS</b>
+    <b>scan</b><b> -l</b>
+    <b>scan</b><b> -lp</b>
+    <b>scan</b><b> -n</b>
+    <b>scan</b><b> -r</b>
+    <b>scan</b><b> -d</b>
+    <b>scan</b><b> -nf</b>
+    <b>scan</b><b> -nd</b>
+    <b>scan</b><b> -nfd</b>
+    <b>scan</b><b> -a</b> [<b>-w</b> CRITERIA] [<b>-s</b> START_IP] [<b>-e</b> END_IP]
+    <b>scan</b><b> -p</b> IP PORT|LIBRARY
+    <b>scan</b><b> -pd</b> PATH
+    <b>scan</b> IP|DOMAIN
+    <b>scan</b> LAN_IP
+    <b>scan</b><b> --n</b> [<b>-r</b> ROUTER_IP] LIBRARY OBJECT [EXTRA]
+    <b>scan</b><b> --l</b> LIBRARY INDEX [EXTRA]
+    <b>scan</b><b> --e</b> TYPE [<b>-u</b> USER] [EXTRA]
+    <b>scan</b><b> --c</b> IP LIBRARY OBJECT [EXTRA]
+    <b>scan</b><b> -b</b> <b>-p</b> PUBLIC_IP <b>-l</b> LAN_IP
+    <b>scan</b><b> --b</b> <b>-p</b> PUBLIC_IP <b>-l</b> LAN_IP [CMD [then CMD ...]]
+    <b>scan</b><b> --s</b> LAN_IP [<b>-S</b>] [CMD [then CMD ...]]
+    <b>scan</b><b> --s</b> IP LIBRARY OBJECT [<b>--router</b>] [<b>-S</b>] [CMD [then CMD ...]]
+<b>DESCRIPTION</b>
+    Comprehensive vulnerability scanner and exploit framework. Scans local
+    host, local networks, and remote targets for security weaknesses.
+    Provides automated exploitation and post-exploitation capabilities.
+    Supports custom library scanning with smart flag syntax.
+
+    Port shortcuts: router:0, ssh:22, ftp:21, http:80, chat:6667,
+    rshell:1222, repo:1542, cam:37777, sql:3306, smtp:25
+
+    Object types and exploits:
+    s=shell access
+    c=computer object
+    f=file object
+    l=lan bounce
+    i=internal lan bounce
+    d=disable firewall
+    p=change root password
+    w=change user password
+<b>OPTIONS</b>
+    <b>-l</b>
+    Scan and attack localhost
+
+    <b>-lp</b>
+    Scan localhost including 0day exploits
+
+    <b>-n</b>
+    Scan local network for targets interactively
+
+    IP|DOMAIN
+    Scan and exploit a remote public IP or domain
+
+    <b>LAN_IP</b>
+    Directly scan a LAN IP address (e.g. 192.168.1.5)
+    Automatically finds the correct parent router, lists open ports,
+    shows firewall rules if present, and launches the exploit menu
+    Pipe: echo 192.168.1.5 | scan  (pipe LAN IP)
+
+    <b>-r</b>
+    Find random network to exploit
+
+    <b>-d</b>
+    Disable all network firewalls
+
+    <b>-nf</b>
+    Show local network firewalls
+
+    <b>-nd</b>
+    Attempt to disable network firewalls
+
+    <b>-nfd</b>
+    Show and disable network firewalls
+
+    <b>-a</b> [<b>-w</b> CRITERIA] [<b>-s</b> START_IP] [<b>-e</b> END_IP]
+    Mass IP scan with optional filtering
+    Without params scans 1.0.0.0 to 255.255.255.255
+    Results saved to text files in current directory
+
+    <b>-p</b> IP PORT|LIBRARY
+    Attack partial object by IP and port or library
+    Use port shortcuts or library path
+    Pipe: echo IP PORT | scan -p  (pipe IP and port)
+
+    <b>-pd</b> PATH
+    Scan library folder for partial objects
+    Insert found objects into database
+    Recommended path is /lib
+    Pipe: echo /lib | scan -pd  (pipe directory path)
+
+    <b>--n</b> LIBRARY OBJECT [EXTRA]
+    Smart scan local network by library
+    LIBRARY: partial name supported (apt for aptclient.so)
+    OBJECT: target type (s|c|f|l|i|d|p|w)
+    EXTRA: optional parameters to pass
+
+    <b>--l</b> LIBRARY INDEX [EXTRA]
+    Custom local scan with specific exploit index
+    Requires library name and exploit number
+    Pass extra parameters if needed
+
+    <b>--e</b> TYPE [<b>-u</b> USER] [EXTRA]
+    Search all libraries for exploit by target type
+    Scans local network for matching exploits
+    Automatically prioritizes root -> user -> guest
+    TYPE: target object (shell|computer|file|lan|bounce...)
+    <b>-u</b> USER: filter by privilege (root|user|guest)
+    EXTRA: additional params (LAN address for bounce exploits)
+
+    <b>--c</b> IP LIBRARY OBJECT [EXTRA]
+    Custom public IP scan and exploit
+    Use <b>-r</b> for random IP or specify target
+    Requires library, object type, optional params
+    LIBRARY supports partial names and <b>find</b> for auto-selection
+    OBJECT supports short codes (s|c|f|l|i|d|p|w) and friendly names
+    (shell|computer|file|lan|bounce|rootpass|userpass)
+    For shell auto-selection, non-router shells are preferred over router shells
+    Use <b>--router</b> to require router-shell-only selection
+    <b>--router</b> may be placed anywhere after <b>--c</b>
+
+    <b>-b -p</b> PUBLIC_IP <b>-l</b> LAN_IP
+    Automated bounce attack to obtain root computer
+    Connects to router via public IP, pivots to LAN
+    Escalates privileges and returns root computer object
+    Wipes logs for stealth operation
+    Requires: config -v (vulnerable lib) and -x (lib index) must be set
+
+    <b>--b -p</b> PUBLIC_IP <b>-l</b> LAN_IP [CMD [then CMD ...]]
+    Same as -b but optionally runs commands then exits
+    With trailing commands: headless computer that auto-exits after each cmd
+    Without trailing commands: drops into interactive computer session
+    Use <b>then</b> to chain multiple commands (not && or ; — those are split by the shell)
+    Requires: config -v (vulnerable lib) and -x (lib index) must be set
+
+    <b>--s</b> LAN_IP [<b>-S</b>] [CMD [then CMD ...]]
+    <b>--s</b> IP LIBRARY OBJECT [<b>--router</b>] [<b>-S</b>] [CMD [then CMD ...]]
+    Like --c but gets a shell and optionally runs commands then exits
+    If LAN_IP is given (detected via is_lan_ip), LIBRARY and OBJECT are
+    not required — scans all ports on the device and selects the best
+    available shell (root -> user -> guest)
+    LIBRARY supports partial names and <b>find</b> for auto-selection
+    OBJECT: target type (s = shell)
+    <b>--router</b>: require router-shell-only selection
+    <b>-S</b>: escalate to root via su after getting shell
+    With trailing commands: headless shell that auto-exits after each cmd
+    Without trailing commands: drops into interactive shell session
+    Use <b>then</b> to chain multiple commands (not && or ; — split by the shell)
+<b>SCRIPTING FLAGS</b>
+    All <b>--</b> flags are bash-aware scripting flags. They work from the CLI as well
+    as inside <b>run</b> scripts. Each <b>--</b> flag resets <b>$scan_ok</b> and <b>$hold</b> before
+    running, then sets them based on the result.
+
+    <b>$scan_ok</b>
+    Set to <b>true</b> if the operation succeeded, <b>false</b> if it failed.
+    Always check <b>$scan_ok</b> after a <b>--</b> flag call before using the result.
+    Errors are printed but do not stop the script — the script continues
+    and <b>$scan_ok</b> tells you whether to proceed.
+
+    <b>$hold</b>
+    Set to the resulting computer (<b>--b</b>) or shell (<b>--s</b>) object when no
+    trailing commands are given and the operation succeeds.
+    Null when trailing commands are given, the scan failed, or the flag
+    does not produce a session object (<b>--n</b>, <b>--l</b>, <b>--c</b>, <b>--e</b>).
+    Use <b>_hold CMD [ARGS...]</b> to dispatch commands to the held session.
+    Use <b>_hold home</b> or <b>_hold exit</b> to close the session and clear <b>$hold</b>.
+    Use <b>_setvar(name, _hold)</b> to name the object for later use with <b>OBJ(name)</b>.
+
+    Flags and what they return:
+      <b>--b</b>  Bounce attack via LAN      — sets $hold to computer object
+      <b>--s</b>  Remote shell exploit       — sets $hold to shell object
+      <b>--c</b>  Custom remote exploit      — sets $scan_ok (no $hold)
+      <b>--l</b>  Custom local exploit       — sets $scan_ok (no $hold)
+      <b>--n</b>  LAN custom exploit         — sets $scan_ok (no $hold)
+      <b>--e</b>  Exploit-file scan          — sets $scan_ok (no $hold)
+
+    Example (bash script):
+      scan --b -p $1 -l $2
+      if $scan_ok then
+        _hold ls
+        _hold cat /etc/passwd
+        _hold home
+      else
+        _print red(Bounce failed)
+      endif
+
+    Example (CLI — same flags work interactively):
+      <b>scan --s 31.198.119.192 find shell --router</b>
+      Drops into an interactive shell session
+
+    See <b>run</b> for full scripting reference including <b>_hold</b>, <b>_setvar</b>, and <b>OBJ()</b>.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Scanning</color>
+    <b>scan -l</b>
+    Scan and attack localhost
+
+    <b>scan -lp</b>
+    Localhost with 0day exploits
+
+    <b>scan -n</b>
+    Scan local network
+
+    <color=#e4ff34># Remote Targeting</color>
+    <b>scan target.com</b>
+    Attack remote host
+
+    <b>scan -r</b>
+    Find random target
+
+    <color=#e4ff34># LAN Targeting</color>
+    <b>scan 192.168.1.5</b>
+    Directly attack a LAN device by IP
+    Scans all open ports, shows firewall rules, launches exploit menu
+
+    <b>scan 192.168.4.1</b>
+    Directly attack a LAN sub-router
+    Automatically includes kernel port (port 0) alongside HTTP port
+
+    <color=#e4ff34># Partial Object Attacks</color>
+    <b>scan -p target.host 0</b>
+    Attack router port
+
+    <b>scan -p target.host 22</b>
+    Attack SSH service
+
+    <b>scan -p /lib/init.so</b>
+    Attack with specific library
+
+    <color=#e4ff34># Smart Scanning</color>
+    <b>scan --n http s</b>
+    Find shell via HTTP on LAN
+
+    <b>scan --l apt 6 router.local</b>
+    Custom local exploit with router param
+
+    <b>scan --c target.host router l gateway.local</b>
+    Remote LAN bounce via router
+
+    <b>scan --c target.host find s</b>
+    Auto-find and execute best shell exploit on target
+
+    <b>scan --c target.host find shell</b>
+    Same as above using friendly object name
+
+    <b>scan --c target.host find shell --router</b>
+    Require router shell selection only (port 0)
+
+    <b>scan --c --router target.host find shell</b>
+    Same as above with flag-first ordering
+
+    <color=#e4ff34># Firewall Management</color>
+    <b>scan -nf</b>
+    Show network firewalls
+
+    <b>scan -nd</b>
+    Disable network firewalls
+
+    <b>scan -d</b>
+    Disable all firewalls
+
+    <color=#e4ff34># Mass Scanning</color>
+    <b>scan -a -w Neurobox -s 1.196.1.169 -e 1.196.255.169</b>
+    Scan IP range for Neurobox machines
+
+    <b>scan -pd /lib</b>
+    Index all library exploits
+
+    <b>scan -pd /home/user/libs</b>
+    Index custom library folder
+
+    <color=#e4ff34># Pipe Input</color>
+    <b>echo 192.168.1.5 | scan</b>
+    Pipe a LAN IP directly into scan
+
+    <b>echo 10.0.0.1 22 | scan -p</b>
+    Pipe IP and port to partial object scanner
+
+    <b>echo /lib | scan -pd</b>
+    Pipe a directory path to partial object scanner
+
+    <color=#e4ff34># Bounce Attack</color>
+    <b>scan -b -p 104.203.108.34 -l 192.168.11.11</b>
+    Automated bounce via router to LAN computer
+
+    <b>scan --b -p 104.203.108.34 -l 192.168.11.11 list -sB</b>
+    Execute list on target then auto-exit
+
+    <b>scan --b -p 104.203.108.34 -l 192.168.11.11 list -sB then ls</b>
+    Chain multiple commands then auto-exit (use <b>then</b>, not && or ;)
+
+    <b>echo 104.203.108.34 192.168.11.11 | scan --b list -sB</b>
+    Same via pipe
+
+    <color=#e4ff34># Shell Bounce (--s)</color>
+    <b>scan --s 31.198.119.192 find shell --router</b>
+    Get interactive shell on target via best router exploit
+
+    <b>scan --s 31.198.119.192 find shell --router -S</b>
+    Same but escalate to root
+
+    <b>scan --s 31.198.119.192 find shell --router ls</b>
+    Run ls on target then return (no interactive shell)
+
+    <b>scan --s 31.198.119.192 http s -S list -sB then ps</b>
+    Root shell, run two commands then return
+
+    <b>echo 31.198.119.192 http s | scan --s -S ls</b>
+    Pipe IP, lib, type — escalate and run ls
+<b>SEE ALSO</b>
+    <b>open</b>, <b>exp</b>, <b>sys</b>"

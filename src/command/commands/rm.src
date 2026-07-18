@@ -1,0 +1,66 @@
+// =============================================================================
+// RM
+// Remove files, directories, or symlinks; -r recurses, GUI on no args.
+// =============================================================================
+Command.rm=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+  if not argv and not hasPipeInput then return Man.help(["rm"])
+  _p=ArgumentParser.init
+  _p.addArgument("r",false,"flag")  // Recursive removal
+  _p.addArgument("R",false,"flag")  // Recursive removal (alias for -r)
+  _p.addArgument("l",false,"flag")  // List/pattern removal mode
+  _p.addArgument("n",false,"store")  // Named pattern for batch removal
+  _p.addArgument("z",false,"flag")  // Special removal mode
+  _p.addArgument("i",false,"flag")  // Interactive removal with prompts
+  _p.addArgument("v",false,"flag")  // Verbose output
+  argv=_p.parse("rm",argv,Obj)
+  if argv isa Error then return
+  if argv.R then argv.r=true
+  // Route special removal modes to Io.rm handler (pattern matching, list processing, special flags)
+  hasSpecialMode=hasIndex(argv,"special") or argv.z or argv.l or argv.n
+  if hasSpecialMode then return Io.rm(Obj,argv)
+  if hasIndex(argv,"useAI") then
+    target=null
+    recursive=null
+    if Gui.yesNo("Are we removing a file?") then
+      target=Io.file(Obj,Obj.dir.current,"Select a file to remove:")
+      if target isa Warning then return target
+    else
+      target=Io.folder(Obj,Obj.dir.current,"Select a directory to remove:")
+      if target isa Warning then return target
+      recursive=Gui.yesNo("Recursive?")
+    end if
+    result=delete(target)
+    if result then return Info.error(result)
+  end if
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin and not globals.G_pipe.XARGS_MODE then
+    if not argv.rest then argv.rest=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(argv.rest,line);end for
+  end if
+  targets=[]
+  if argv.hasIndex("files") and argv.files and len(argv.files)>0 then
+    targets=argv.files
+  else if argv.rest and len(argv.rest)>0 then
+    for targetPath in argv.rest
+      target=Io._getFile(Obj,targetPath,false,true)
+      if target isa Error then continue
+      push(targets,target)
+    end for
+  else
+    return Man.help(["rm"])
+  end if
+  for target in targets
+    if not target or target isa Error then continue
+    if argv.i then
+      if not Gui.yesNo("Are you sure you want to delete "+name(target)+"?") then continue
+    end if
+    isDirectory=is_folder(target) and not is_symlink(target)
+    if isDirectory and not argv.r then
+      Warning.set(name(target)+": is a directory, use :rm -r|-R "+path(target))
+      continue
+    end if
+    result=delete(target)
+    if result then Info.error(result)
+    if argv.v then Info.info("removed '"+path(target)+"'")
+  end for
+end function

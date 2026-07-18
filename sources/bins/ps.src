@@ -1,0 +1,2 @@
+binPs="if len(params)>0 then exit(command_info(""ps_usage""))
+print(format_columns(show_procs(host_computer(get_shell))))"

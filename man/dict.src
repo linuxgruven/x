@@ -1,0 +1,83 @@
+// Man page for dict
+manDict="DICT(1)                          X Shell Manual                          DICT(1)
+
+<b>NAME</b>
+    dict - Dictionary attack password cracking
+<b>SYNOPSIS</b>
+    <b>dict -l</b> (-u [[USER]])
+    <b>dict -lp</b>
+    <b>dict -i</b>
+    <b>dict -e</b> (--start [INDEX]) (--stop [INDEX]) [DOMAIN]
+    <b>dict -e</b> (--start [INDEX]) (--stop [INDEX]) [DOMAIN] --file [PATH]
+    <b>dict -c</b> (--start [INDEX]) (--stop [INDEX]) COIN [USER]
+    <b>dict -s</b> (--start [INDEX]) (--stop [INDEX]) (-u [USER]) IP [PORT]
+    <b>dict -f</b> (--start [INDEX]) (--stop [INDEX]) (-u [USER]) IP [PORT]
+<b>DESCRIPTION</b>
+    Dictionary attack tool using rainbow tables to crack passwords. Faster than
+    brute force but limited to dictionary words. Supports partial dictionary
+    ranges with --start and --stop indices. Targets local accounts, email,
+    cryptocurrency, SSH, and FTP services.
+<b>OPTIONS</b>
+    <b>-l</b>
+    Local dictionary attack
+    Optional -u for specific user
+
+    <b>-lp</b>
+    Print cracked root password
+    Display result directly
+
+    <b>-i</b>
+    Insert root password to cache
+    Save for later use
+
+    <b>-e [DOMAIN]</b>
+    Email account attack
+    Use --start/--stop for partial dictionary
+
+    <b>-e [DOMAIN] --file [PATH]</b>
+    Email attack from wordlist file
+    Use custom wordlist for email domain
+
+    <b>-c COIN [USER]</b>
+    Cryptocurrency wallet attack
+    Dictionary crack coin account
+
+    <b>-s IP [PORT]</b>
+    SSH dictionary attack
+    Remote service cracking
+
+    <b>-f IP [PORT]</b>
+    FTP dictionary attack
+    Remote FTP cracking
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Local Attacks</color>
+    <b>dict -l</b>
+    Dictionary attack all users
+
+    <b>dict -l -u admin</b>
+    Target specific user
+
+    <b>dict -lp</b>
+    Print root password
+
+    <b>dict -i</b>
+    Cache root password
+
+    <color=#e4ff34># Partial Dictionary</color>
+    <b>dict -e --start 0 --stop 1000 gmail.com</b>
+    First 1000 passwords for gmail domain
+
+    <b>dict -c --start 5000 --stop 10000 btc admin</b>
+    Passwords 5000-10000
+
+    <color=#e4ff34># Remote Attacks</color>
+    <b>dict -s 203.0.113.50 22</b>
+    SSH dictionary attack
+
+    <b>dict -s -u root 198.51.100.10 22</b>
+    SSH with specific user
+
+    <b>dict -f 203.0.113.75 21</b>
+    FTP dictionary attack
+<b>SEE ALSO</b>
+    <b>brute</b>, <b>hc</b>, <b>rainbow</b>"

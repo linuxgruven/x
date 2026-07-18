@@ -1,0 +1,252 @@
+// Man page for hunt
+manHunt="HUNT(1)                          X Shell Manual                          HUNT(1)
+
+<b>NAME</b>
+    hunt - Network search tool for finding services and computers
+<b>SYNOPSIS</b>
+    <b>hunt custom</b> [-k] -p PORT [-s] [-c COUNT]
+    <b>hunt lib</b> [-k] [-n NAME] [-s] [-d] [-c COUNT] [-v VERSION]
+    <b>hunt repo|rshell|ssh|ftp</b> [-k] [-s] [-d] [-c COUNT] [-v VERSION]
+    <b>hunt special</b> [-k] [-s] [-d] [-n NAME]
+    <b>hunt employee</b> [-k] [-s] [-d] [-c COUNT] [-v VERSION]
+    <b>hunt student|criminal</b> [-k] [-s] [-d] [-c COUNT] [-v VERSION]
+    <b>hunt http|smtp|chat|bank|cam|router|sql</b> [-k] [-s] [-d] [-c COUNT] [-v VERSION]
+    <b>hunt neuro|wifi</b> [-k] [-s] [-c COUNT]
+    <b>hunt awifi</b> [-k] <b>-b</b> BSSID <b>-e</b> ESSID
+    <b>hunt file</b> [-k] [-n NAME] [-s] [-d] [-c COUNT]
+    <b>hunt player</b> [-s] [-m] [-r] [-x PREFIX] [-t MAXDEV] [-c MAXROUTER] [-I PATTERN] [-l START] [-L LANIP] [-R] [-S] [-q RANK] [-F COUNT] [-Q]
+<b>DESCRIPTION</b>
+    Network search tool for discovering computers, services, and resources.
+    Searches the network for specific ports, services, or resources based on
+    hunt type. Supports 21 different hunt types including custom port searches,
+    library finding, service discovery, and WiFi network scanning.
+
+    Default count is 1 if not specified. Press 'q' during a hunt to stop
+    early.
+<b>OPTIONS</b>
+    <b>-k</b> - Stop early
+      Stop the hunt loop when complete.
+
+    <b>-p PORT</b> - Custom Port
+      Specify custom port number for hunt custom searches.
+
+    <b>-n NAME</b> - Name Filter
+      Search by partial name (for lib, special, file hunt types).
+
+    <b>-s</b> - Save Results
+      Save found dataset to current directory.
+
+    <b>-d</b> - Download Library
+      Attempt to download library to current directory.
+
+    <b>-c COUNT</b> - Result Count
+      Number of results to return. Default: 1
+
+    <b>-v VERSION</b> - Version Filter
+      Hunt by specific service version.
+
+    <b>-b BSSID</b> - WiFi BSSID
+      Search by WiFi BSSID (for awifi).
+
+    <b>-e ESSID</b> - WiFi ESSID
+      Search by WiFi ESSID network name (for awifi).
+
+    <b>-x PREFIX</b> - Extra valid LAN prefix
+      Additional subnet prefix to accept as a player network (e.g. 10.0.).
+      Defaults to 192.168. only. (player only)
+
+    <b>-m</b> - Show hashes
+      Display raw password hashes from /etc/passwd and text files. (player only)
+
+    <b>-r</b> - Crack hashes
+      Attempt to decipher hashes using loaded crypto library. (player only)
+
+    <b>-t MAXDEV</b> - Max device threshold
+      Skip networks with more than MAXDEV LAN devices. Default: 6. (player only)
+
+    <b>-c MAXROUTER</b> - Max sub-router count
+      Skip networks with more than MAXROUTER sub-routers on port 8080.
+      Default: 3. (player only)
+
+    <b>-S</b> - Require SSH or RShell
+      Only attempt networks where SSH or RShell is detected on the router.
+      Reduces wasted exploit attempts. (player only)
+
+    <b>-q RANK</b> - Minimum rank
+      Skip networks with rank below RANK. Rank: SSH=1, RShell=2, both=3.
+      (player only)
+
+    <b>-F COUNT</b> - Stop after N found
+      Automatically stop after finding COUNT confirmed players. (player only)
+
+    <b>-Q</b> - Quiet mode
+      Suppress per-network scan noise. Only shows skip reasons and confirmed
+      players. (player only)
+
+    <b>-I PATTERN</b> - IP pattern
+      Scan a specific IP or sweep a range using XXX/YYY wildcards instead of
+      random routers. Examples: 173.15.237.5 (single), 173.15.XXX.5 (sweep
+      last free octet), 173.15.XXX.YYY (sweep two octets). (player only)
+
+    <b>-l START</b> - Starting octet
+      Starting value (1-255) for the first wildcard octet in -I patterns.
+      Default: 1. (player only)
+
+    <b>-L LANIP</b> - Target LAN IP
+      Attack a specific LAN device instead of scanning all devices. Use with
+      -I to target a known workstation directly. Bypasses rank filter.
+      (player only)
+
+    <b>-R</b> - Root bounce mode
+      Use getRootBounce to access the LAN device instead of shell exploit.
+      Requires vulnerableLib configured in settings. (player only)
+
+    <b>HUNT TYPES:</b>
+
+    <b>custom</b> - Find custom services by port number
+    <b>lib</b> - Library finder
+    <b>repo</b> - Repository services
+    <b>rshell</b> - Remote shell services
+    <b>ssh</b> - SSH services
+    <b>ftp</b> - FTP services
+    <b>special</b> - Special files
+    <b>employee</b> - Employee services
+    <b>student</b> - Student services
+    <b>criminal</b> - Criminal services
+    <b>http</b> - HTTP web services
+    <b>smtp</b> - SMTP mail services
+    <b>neuro</b> - Neurobox networks
+    <b>chat</b> - Chat services
+    <b>bank</b> - Bank services
+    <b>cam</b> - Camera services
+    <b>router</b> - Router devices
+    <b>wifi</b> - WiFi networks
+    <b>awifi</b> - Advanced WiFi (by BSSID/ESSID)
+    <b>file</b> - Specific files
+    <b>sql</b> - SQL database services
+    <b>player</b> - Scan for player-owned computers
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Service Discovery</color>
+    <b>hunt ssh</b>
+    Find 1 SSH service (default count)
+
+    <b>hunt ssh -c 5</b>
+    Find 5 SSH services
+
+    <b>hunt ssh -c 1 -v 1.0.3</b>
+    Find SSH service version 1.0.3
+
+    <b>hunt http -v 1.0.3 -c 1</b>
+    Find HTTP service version 1.0.3
+
+    <color=#e4ff34># Custom Port Searches</color>
+    <b>hunt custom -p 8080</b>
+    Search for port 8080
+
+    <b>hunt custom -p 3000 -c 10</b>
+    Find 10 services on port 3000
+
+    <color=#e4ff34># Library Finding</color>
+    <b>hunt lib</b>
+    Find any library
+
+    <b>hunt lib -n crypto</b>
+    Find libraries matching crypto
+
+    <b>hunt lib -n ssh -d</b>
+    Find and download SSH library
+
+    <b>hunt lib -n net -v 1.2 -d</b>
+    Find and download net library v1.2
+
+    <color=#e4ff34># Saving Results</color>
+    <b>hunt ftp -c 5 -s</b>
+    Find 5 FTP services and save to file
+
+    <b>hunt http -s -v 1.0.1</b>
+    Find HTTP v1.0.1 and save results
+
+    <color=#e4ff34># Special Hunts</color>
+    <b>hunt special -n passwd</b>
+    Find special file matching passwd
+
+    <b>hunt file -n config.txt</b>
+    Search for config.txt files
+
+    <b>hunt bank -c 3</b>
+    Find 3 bank services
+
+    <color=#e4ff34># WiFi Searches</color>
+    <b>hunt wifi</b>
+    Find WiFi network
+
+    <b>hunt wifi -c 10</b>
+    Find 10 WiFi networks
+
+    hunt awifi -e HomeNetwork
+    Find specific WiFi by ESSID
+
+    <b>hunt awifi -b 00:11:22:33:44:55</b>
+    Find specific WiFi by BSSID
+
+    <color=#e4ff34># Background Execution</color>
+    <b>hunt ssh -c 10 -k</b>
+    Find 10 SSH services, auto-stop watchdog
+
+    <b>hunt repo -v 1.0.0 -k -s</b>
+    Find repo v1.0.0, save and stop watchdog
+
+    <color=#e4ff34># Multiple Services</color>
+    <b>hunt employee -c 5 -v 1.0.2</b>
+    Find 5 employee services v1.0.2
+
+    <b>hunt student -c 3 -d</b>
+    Find 3 student services and download
+
+    <b>hunt cam -v 2.0.0 -c 10 -s</b>
+    Find 10 camera services v2.0.0, save
+
+    <color=#e4ff34># Player Hunting</color>
+    <b>hunt player</b>
+    Scan for player computers interactively (type 'n' for next, 'q' to quit)
+
+    <b>hunt player -m</b>
+    Show password hashes from /etc/passwd and text files
+
+    <b>hunt player -m -r</b>
+    Show and attempt to crack hashes (requires crypto loaded)
+
+    <b>hunt player -s</b>
+    Save a report for each confirmed player found
+
+    <b>hunt player -x 10.0.</b>
+    Also accept 10.0.x.x as a valid player subnet
+
+    <b>hunt player -I 173.15.237.5</b>
+    Scan one specific IP for a player
+
+    <b>hunt player -I 173.15.XXX.YYY</b>
+    Sweep entire 173.15.x.x range for players
+
+    <b>hunt player -I 173.15.XXX.YYY -l 50</b>
+    Same sweep but start XXX octet at 50
+
+    <b>hunt player -I 115.102.224.84 -L 192.168.1.5</b>
+    Attack a specific known LAN IP directly (bypass all scanning/filters)
+
+    <b>hunt player -I 115.102.224.84 -L 192.168.1.5 -R</b>
+    Same but use root bounce instead of shell exploit
+
+    <b>hunt player -S</b>
+    Only attempt networks with SSH or RShell detected
+
+    <b>hunt player -S -q 1 -F 3</b>
+    Require SSH/RShell, min rank 1, stop after 3 players found
+
+    <b>hunt player -S -q 1 -F 1 -Q</b>
+    Quiet scan — suppress noise, stop after first player found
+
+    <b>hunt player -t 8 -c 5</b>
+    Allow up to 8 LAN devices and 5 sub-routers before skipping
+<b>SEE ALSO</b>
+    <b>dig</b>, <b>scanlan</b>, <b>lms</b>"

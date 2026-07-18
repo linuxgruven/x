@@ -1,0 +1,45 @@
+// Man page for pRoot
+manPRoot="PROOT(1)                         X Shell Manual                         PROOT(1)
+
+<b>NAME</b>
+    proot - Automated root shell and pivot
+
+<b>SYNOPSIS</b>
+    <b>proot</b> [<b>-y</b>]
+
+<b>DESCRIPTION</b>
+    Automated privilege escalation and directory pivot utility. Secures root
+    shell access and automatically pivots framework into compromised user home
+    directory. Streamlines post-exploitation workflow. Only compatible with
+    shell objects. Optional confirmation bypass for scripted operations.
+
+<b>OPTIONS</b>
+    <b>proot</b>
+        Get root shell and pivot to user home
+        Prompts for confirmation
+
+    <b>proot -y</b>
+        Skip confirmation prompts
+        Immediate execution
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Standard Usage</color>
+    <b>proot</b>
+        Get root and pivot with prompts
+
+    <color=#e4ff34># Automated Workflows</color>
+    <b>proot -y</b>
+        No prompts, quick execution
+
+    <color=#e4ff34># Exploitation Workflow</color>
+    <b>scan -l</b>
+        Get shell access first
+
+    <b>proot</b>
+        Escalate and pivot
+
+    <b>cdl /root</b>
+        Explore root directory
+
+<b>SEE ALSO</b>
+    <b>sudo</b>, <b>su</b>, <b>passwd</b>"

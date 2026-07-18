@@ -1,0 +1,430 @@
+
+//==============================================================================
+// MAIN.SRC - X Shell Entry Point and Module Loader
+//==============================================================================
+//
+// PURPOSE:
+//   Main entry point for the X Shell system. Orchestrates the loading of all
+//   core modules, libraries, commands, and subsystems in the correct dependency
+//   order. Handles authentication, initialization, and bootstrap operations.
+//
+// GREY HACK CONTEXT ARCHITECTURE - CRITICAL UNDERSTANDING:
+// ========================================================
+// Grey Hack's launch function CHANGES EXECUTION CONTEXT to the target system.
+// This is NOT a bug - it's how the game engine works. Understanding this is
+// essential to understanding why this codebase has the architecture it does.
+//
+// THE PROBLEM:
+//   When you build a proxy chain: Home -> Hop1 -> Hop2 -> Hop3 -> Target
+//   Each launch switches context. At Target, these game functions execute
+//   in Target's context, NOT Home's:
+//     - get_router         → Returns Target's router, not Home's
+//     - include_lib(path)  → Loads from Target's /lib, not Home's
+//     - File(computer, p)  → Access Target's files, not Home's
+//     - get_shell          → Gets shell on Target, not Home
+//
+// THE SOLUTIONS (implemented throughout this codebase):
+//   1. G_hasPivoted flag - Tracks when we've switched contexts via launch
+//   2. G_lastIP tracking - Remembers which system we launched from
+//   3. Builder.pack* pattern - Remote execution via build+launch+get_custom_object
+//   4. Session objects - proxy_object/pivot_object/decoy_object manage context state
+//   5. Context routing - if G_hasPivoted then Builder.packRouter else get_router
+//
+// WHY THREE SESSION TYPES EXIST:
+//   - proxy_object: Multi-hop chains, G_hops tracking, hops command, G_proxy global
+//   - pivot_object: Single exploit, simpler, no chain management, G_hasPivoted flag
+//   - decoy_object: Crash recovery when launch operations partially fail
+//
+// DO NOT \"SIMPLIFY\" THESE PATTERNS - They exist because Grey Hack's execution
+// model requires them. Any \"simplification\" will break multi-hop operations.
+//
+// ARCHITECTURE:
+//   This file follows a strict module loading sequence to ensure all dependencies
+//   are satisfied before initialization. The loading order is critical:
+//   1. Kernel and core structures
+//   2. Type extensions (globals, list, string, number, map, multi)
+//   3. Data structures and objects
+//   4. Database and server interfaces
+//   5. Information/error handling systems
+//   6. System modules (bash, shadow, config, gui, boot, etc.)
+//   7. Network and session management
+//   8. Libraries and utilities
+//   9. Compression subsystem
+//   10. Command system and all command modules
+//
+// INITIALIZATION FLOW:
+//   After module loading, the system:
+//   1. Checks for special bootstrap parameters (pass, shell, proxy, pivot, decoy)
+//   2. Validates trusted host status or requires App ID authentication
+//   3. Executes Boot.init to complete system startup
+//
+// BOOTSTRAP MODES:
+//   Standard mode:      No parameters - full shell initialization
+//   Password crack:     params[0]=key, params[1]="pass" - crack password
+//   Shell crack:        params[0]=key, params[1]="shell" - crack shell
+//   Proxy mode:         params[0]=key, params[1]="proxy" - initialize proxy
+//   Pivot mode:         params[0]=key, params[1]="pivot" - initialize pivot
+//   Decoy mode:         params[0]=key, params[1]="decoy" - initialize decoy
+//
+// AUTHENTICATION:
+//   - First parameter must match Kernel.key or script exits with "Key Mismatch"
+//   - Trusted hosts (Boot.trusted) bypass App ID authentication
+//   - Non-trusted hosts must enter correct Kernel.password to proceed
+//   - Empty Kernel.password allows unrestricted access (development mode)
+//
+// SECURITY:
+//   - App ID prompt uses char(0) to hide input
+//   - Infinite retry loop until correct password entered
+//   - Kernel.key prevents unauthorized bootstrap mode access
+//   - Trusted host whitelist for automated deployments
+//
+// DEPENDENCIES:
+//   - All imported modules (see import_code statements below)
+//   - Kernel.key: System authentication key
+//   - Kernel.password: App ID for non-trusted hosts
+//   - Boot.trusted: List of trusted host IP addresses
+//   - Boot.init: Primary initialization function
+//   - Boot.crack: Password/shell cracking bootstrap
+//   - Boot.initProxy/Pivot/Decoy: Special mode bootstraps
+//
+// USAGE:
+//   Standard launch:
+//     ./x
+//   
+//   Bootstrap modes (requires key):
+//     ./x <key> pass        # Launch in password crack mode
+//     ./x <key> shell       # Launch in shell crack mode
+//     ./x <key> proxy       # Initialize as proxy
+//     ./x <key> pivot       # Initialize as pivot
+//     ./x <key> decoy       # Initialize as decoy
+//     ./x <key> decoy <ip>  # Initialize as decoy with target IP
+//
+// MODULE LOADING ORDER:
+//==============================================================================
+//Core kernel and global structures
+import_code("./src/structs/kernel.src")
+import_code("./src/type_ext/globals.src")
+//AI and agent systems
+//Agent object composed lazily in ai command on first use
+import_code("./src/libs/ai.src")
+import_code("./src/libs/agent/agent_core.src")
+import_code("./src/libs/agent/agent_util.src")
+import_code("./src/libs/agent/agent_knowledge.src")
+import_code("./src/libs/agent/agent_nlp.src")
+import_code("./src/libs/agent/agent_learning.src")
+import_code("./src/libs/agent/agent_execute.src")
+import_code("./src/libs/agent/agent_command_registry.src")
+import_code("./src/libs/agent/agent_parser.src")
+import_code("./src/libs/agent/agent_planning.src")
+import_code("./src/libs/agent/agent_execution.src")
+import_code("./src/libs/agent/agent_handlers.src")
+import_code("./src/libs/agent/agent_handlers_attack.src")
+import_code("./src/libs/agent/agent_test.src")
+import_code("./src/libs/agent/knowledge.src")
+//Type extensions for built-in types
+import_code("./src/type_ext/multi.src")
+import_code("./src/type_ext/list.src")
+import_code("./src/type_ext/string.src")
+import_code("./src/type_ext/number.src")
+import_code("./src/type_ext/map.src")
+//Data structures for text
+import_code("./src/structs/text.src")
+//Object system for shell, computer, file, and network management
+import_code("./src/objects/base_object.src")
+import_code("./src/objects/main_object.src")
+import_code("./src/objects/pivot_object.src")
+import_code("./src/objects/proxy_object.src")
+import_code("./src/objects/shell_object.src")
+import_code("./src/objects/ftpshell_object.src")
+import_code("./src/objects/computer_object.src")
+import_code("./src/objects/file_object.src")
+import_code("./src/objects/decoy_object.src")
+//Database servers for exploits and libraries
+import_code("./src/servers/server_common.src")
+import_code("./src/servers/exploit_database.src")
+import_code("./src/servers/library_database.src")
+//Information, error, and warning display systems
+import_code("./src/info/info.src")
+import_code("./src/info/error.src")
+import_code("./src/info/warning.src")
+//Manual page system (man, help documentation) - lazy loaded
+import_code("./src/man/man_loader.src")
+//System modules for core functionality
+import_code("./src/system/bash.src")
+import_code("./src/system/bash_lexer.src")
+import_code("./src/system/bash_builtins.src")
+import_code("./src/system/bash_parser.src")
+import_code("./src/system/bash_executor.src")
+import_code("./src/system/bash_commands.src")
+import_code("./src/system/shadow.src")
+import_code("./src/system/dirty.src")
+import_code("./src/system/system.src")
+import_code("./src/system/config.src")
+import_code("./src/system/gui.src")
+import_code("./src/system/boot.src")
+import_code("./src/system/recover.src")
+//Network management and connectivity
+import_code("./src/network/net.src")
+//Libraries for session, sharing, caching, and logging
+import_code("./src/libs/session.src")
+import_code("./src/libs/share.src")
+import_code("./src/libs/cache.src")
+import_code("./src/libs/saved_libs.src")
+import_code("./src/libs/log.src")
+//Attack, exploit, and security libraries
+import_code("./src/libs/attack.src")
+import_code("./src/libs/attack_dig.src")
+import_code("./src/libs/attack_recon.src")
+import_code("./src/libs/partial_objects.src")
+import_code("./src/libs/email.src")
+import_code("./src/libs/farm.src")
+import_code("./src/libs/heist.src")
+import_code("./src/libs/argument_parser.src")
+import_code("./src/libs/solver.src")
+import_code("./src/libs/date.src")
+import_code("./src/libs/builder.src")
+//Cryptography and encryption libraries
+import_code("./src/libs/crypt.src")
+import_code("./src/libs/encryption.src")
+//Core utility libraries
+import_code("./src/libs/library.src")
+import_code("./src/libs/math.src")
+import_code("./src/libs/ipc.src")
+import_code("./src/libs/parser.src")
+import_code("./src/libs/glob.src")
+import_code("./src/libs/exploit.src")
+import_code("./src/libs/exploit_scan.src")
+import_code("./src/libs/exploit_persist.src")
+import_code("./src/libs/io.src")
+import_code("./src/libs/glosure.src")
+import_code("./src/libs/file_helper.src")
+import_code("./src/libs/proxy.src")
+import_code("./src/libs/crack.src")
+import_code("./src/libs/utility.src")
+import_code("./src/libs/utility_editor.src")
+import_code("./src/libs/utility_notes.src")
+import_code("./src/libs/utility_rat.src")
+import_code("./src/libs/syntaxParser.src")
+import_code("./src/libs/disk.src")
+import_code("./src/libs/missions.src")
+//Remote shell system
+import_code("./src/rshell/rshell_common.src")
+import_code("./src/rshell/rshell.src")
+import_code("./src/rshell/rshell_lite.src")
+//Compression subsystem (encoder first; gzip, zip, lzw, tar depend on it)
+import_code("./src/compression/encoder.src")
+import_code("./src/compression/gzip.src")
+import_code("./src/compression/zip.src")
+import_code("./src/compression/lzw.src")
+import_code("./src/compression/tar.src")
+//Pipe system for command chaining
+import_code("./src/system/pipe.src")
+//Command system core and all command implementations
+import_code("./src/command/command.src")
+import_code("./src/command/command_main.src")
+import_code("./src/command/command_file.src")
+import_code("./src/command/command_computer.src")
+import_code("./src/command/command_shell.src")
+//ES import
+import_code("./src/command/commands/es.src")
+//Utility commands
+import_code("./src/command/commands/ai.src")
+import_code("./src/command/commands/neofetch.src")
+import_code("./src/command/commands/l33t.src")
+import_code("./src/command/commands/clean.src")
+import_code("./src/command/commands/logWatcher.src")
+import_code("./src/command/commands/swap.src")
+import_code("./src/command/commands/wallet.src")
+import_code("./src/command/commands/open.src")
+import_code("./src/command/commands/bork.src")
+import_code("./src/command/commands/split.src")
+import_code("./src/command/commands/locate.src")
+import_code("./src/command/commands/cron.src")
+import_code("./src/command/commands/mkcd.src")
+import_code("./src/command/commands/print.src")
+import_code("./src/command/commands/systemLock.src")
+import_code("./src/command/commands/lsof.src")
+import_code("./src/command/commands/make.src")
+import_code("./src/command/commands/reboot.src")
+import_code("./src/command/commands/tail.src")
+import_code("./src/command/commands/head.src")
+import_code("./src/command/commands/folderWatcher.src")
+import_code("./src/command/commands/rev.src")
+import_code("./src/command/commands/grep.src")
+import_code("./src/command/commands/sed.src")
+import_code("./src/command/commands/cut.src")
+import_code("./src/command/commands/diff.src")
+import_code("./src/command/commands/rmdir.src")
+import_code("./src/command/commands/rn.src")
+import_code("./src/command/commands/join.src")
+import_code("./src/command/commands/uptime.src")
+import_code("./src/command/commands/inject.src")
+import_code("./src/command/commands/wc.src")
+import_code("./src/command/commands/awk.src")
+import_code("./src/command/commands/uniq.src")
+import_code("./src/command/commands/sort.src")
+import_code("./src/command/commands/scrub.src")
+import_code("./src/command/commands/xclip.src")
+import_code("./src/command/commands/trim.src")
+import_code("./src/command/commands/tr.src")
+import_code("./src/command/commands/column.src")
+import_code("./src/command/commands/audit.src")
+import_code("./src/command/commands/jq.src")
+import_code("./src/command/commands/tee.src")
+//Process monitoring and security commands
+import_code("./src/command/commands/psMon.src")
+import_code("./src/command/commands/ids.src")
+import_code("./src/command/commands/initd.src")
+import_code("./src/command/commands/psLock.src")
+//File system navigation and display commands
+import_code("./src/command/commands/ln.src")
+import_code("./src/command/commands/tree.src")
+import_code("./src/command/commands/treeDirectory.src")
+import_code("./src/command/commands/treeWide.src")
+import_code("./src/command/commands/vi.src")
+//Network attack and blockchain commands
+import_code("./src/command/commands/ddos.src")
+import_code("./src/command/commands/blockchain.src")
+//Communication and security commands
+import_code("./src/command/commands/write.src")
+import_code("./src/command/commands/wait.src")
+import_code("./src/command/commands/postPW.src")
+//Hash and password commands
+import_code("./src/command/commands/hashfile.src")
+import_code("./src/command/commands/hashcat.src")
+import_code("./src/command/commands/post.src")
+//Calculator and file utilities
+import_code("./src/command/commands/bc.src")
+import_code("./src/command/commands/cal.src")
+import_code("./src/command/commands/file.src")
+import_code("./src/command/commands/more.src")
+import_code("./src/command/commands/find.src")
+import_code("./src/command/commands/exec.src")
+import_code("./src/command/commands/zap.src")
+//Basic shell commands
+import_code("./src/command/commands/seq.src")
+import_code("./src/command/commands/paste.src")
+import_code("./src/command/commands/printf.src")
+import_code("./src/command/commands/yes.src")
+//Math commands
+import_code("./src/command/commands/radix.src")
+import_code("./src/command/commands/hex.src")
+import_code("./src/command/commands/average.src")
+import_code("./src/command/commands/median.src")
+import_code("./src/command/commands/percent.src")
+import_code("./src/command/commands/binary.src")
+import_code("./src/command/commands/decimal.src")
+import_code("./src/command/commands/bit.src")
+import_code("./src/command/commands/echo.src")
+import_code("./src/command/commands/cd.src")
+import_code("./src/command/commands/su.src")
+import_code("./src/command/commands/ls.src")
+import_code("./src/command/commands/cat.src")
+//Permission and ownership commands
+import_code("./src/command/commands/chgrp.src")
+import_code("./src/command/commands/chmod.src")
+import_code("./src/command/commands/chown.src")
+import_code("./src/command/commands/chog.src")
+//File operations
+import_code("./src/command/commands/cp.src")
+//User and group management
+import_code("./src/command/commands/groupadd.src")
+import_code("./src/command/commands/groupdel.src")
+import_code("./src/command/commands/groups.src")
+//Network interface configuration
+import_code("./src/command/commands/iwconfig.src")
+import_code("./src/command/commands/ifconfig.src")
+//Process and file management
+import_code("./src/command/commands/kill.src")
+import_code("./src/command/commands/mkdir.src")
+import_code("./src/command/commands/mv.src")
+import_code("./src/command/commands/passwd.src")
+import_code("./src/command/commands/ping.src")
+import_code("./src/command/commands/htop.src")
+import_code("./src/command/commands/ps.src")
+import_code("./src/command/commands/stat.src")
+import_code("./src/command/commands/pwd.src")
+import_code("./src/command/commands/qrm.src")
+import_code("./src/command/commands/rm.src")
+import_code("./src/command/commands/touch.src")
+import_code("./src/command/commands/useradd.src")
+import_code("./src/command/commands/userdel.src")
+//File transfer commands
+import_code("./src/command/commands/scp.src")
+import_code("./src/command/commands/rsync.src")
+//Wireless attack commands
+import_code("./src/command/commands/aireplay.src")
+import_code("./src/command/commands/aircrack.src")
+import_code("./src/command/commands/airmon.src")
+//Network reconnaissance commands
+import_code("./src/command/commands/nmap.src")
+import_code("./src/command/commands/nslookup.src")
+import_code("./src/command/commands/smtpUserList.src")
+import_code("./src/command/commands/whois.src")
+//Build and scanning commands
+import_code("./src/command/commands/build.src")
+import_code("./src/command/commands/decipher.src")
+import_code("./src/command/commands/scanlib.src")
+import_code("./src/command/commands/scanrouter.src")
+import_code("./src/command/commands/scanaddress.src")
+//Package management and navigation
+import_code("./src/command/commands/pacman.src")
+import_code("./src/command/commands/jump.src")
+import_code("./src/command/commands/time.src")
+import_code("./src/command/commands/repl.src")
+//==============================================================================
+// BOOTSTRAP AND INITIALIZATION
+//==============================================================================
+//Check for bootstrap parameters with valid key
+if params and params[0]==Kernel.key then
+	//Additional parameters provided - special bootstrap mode
+	if len(params)>1 then
+    //Password cracking mode
+    if params[1]=="pass" then
+      Boot.crack(params[1])
+    //Shell cracking mode
+    else if params[1]=="shell" then
+      Boot.crack(params[1])
+    //Proxy initialization mode
+    else if params[1]=="proxy" then
+      Boot.initProxy
+    //Pivot initialization mode
+    else if params[1]=="pivot" then
+      Boot.initPivot
+    //Decoy initialization mode (with optional target IP)
+    else if params[1]=="decoy" then
+      if len(params)>2 then Boot.initDecoy(params[2]) else Boot.initDecoy
+    //Brute force root mode (launched by Crack.suBrute from shell __su -b)
+    else if params[1]=="brute" then
+      Boot.brute
+    end if
+  //No additional parameters - standard initialization
+  else
+    Boot.init
+  end if
+	//Exit after bootstrap mode execution
+	exit
+//Parameters provided but key mismatch - unauthorized access attempt
+else if params then
+  exit("Key Mismatch")
+end if
+//Check if host is trusted (bypasses authentication)
+if indexOf(Boot.trusted,public_ip_pc(host_computer(get_shell)))!=null then
+	//Trusted host - direct initialization
+	Boot.init
+//Non-trusted host - requires authentication
+else
+	//Development mode - no password required
+	if Kernel.password=="" then
+		Boot.init
+	//Production mode - App ID authentication required
+	else
+		//Loop until correct password entered
+		while true
+			//Prompt for App ID (char(0) hides input)
+			if user_input(white("Enter App ID > ")+char(0))==Kernel.password then break
+		end while
+		//Authentication successful - initialize system
+		Boot.init
+	end if
+end if

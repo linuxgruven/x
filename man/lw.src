@@ -1,0 +1,37 @@
+// Man page for logwatcher
+manLogwatcher="LW(1)                    X Shell Manual                    LW(1)
+
+<b>NAME</b>
+    lw - Real-time log file monitoring
+
+<b>SYNOPSIS</b>
+    <b>lw</b>
+
+<b>DESCRIPTION</b>
+    Real-time log file monitoring utility that watches for new entries and
+    alerts on changes. Essential for monitoring system activity, detecting
+    security events, and tracking administrator actions during exploitation.
+    Runs continuously until interrupted.
+
+<b>OPTIONS</b>
+    <b>lw</b>
+        Watch log file for new entries
+        Alert on changes in real-time
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Monitoring</color>
+    <b>lw</b>
+        Start log watcher
+
+    <color=#e4ff34># Use Cases</color>
+    <b>lw</b>
+        Monitor authentication attempts
+
+    <b>lw</b>
+        Watch for admin activity
+
+    <b>lw</b>
+        Track security events
+
+<b>SEE ALSO</b>
+    <b>logs</b>, <b>lws</b>, <b>grab</b>"

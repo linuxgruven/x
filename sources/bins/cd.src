@@ -1,0 +1,4 @@
+binCd="if len(params)>0 and (params[0]==""-h"" or params[0]==""--help"") then exit(command_info(""cd_usage""))
+targetPath=home_dir
+if(len(params)>0) then targetPath=get_abs_path(params[0])
+print(cd(targetPath))"

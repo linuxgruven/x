@@ -1,0 +1,39 @@
+// Man page for trim
+manTrim="TRIM(1)                          X Shell Manual                        TRIM(1)
+
+<b>NAME</b>
+    trim - strip leading and trailing whitespace from lines
+<b>SYNOPSIS</b>
+    <b>trim</b> FILE
+    <b>trim -w</b> FILE
+    COMMAND <b>| trim</b>
+<b>DESCRIPTION</b>
+    Strip leading and trailing whitespace from each line of a file
+    or piped input. By default, prints the trimmed output to stdout.
+    With <b>-w</b>, writes the result back to the file in-place.
+<b>OPTIONS</b>
+    <b>-w, --write</b>
+      Write trimmed output back to the file in-place instead of
+      printing to stdout. Requires write permission on the file.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man trim</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>trim</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Print trimmed lines</color>
+    <b>trim notes.txt</b>
+    Strips whitespace and displays each line
+
+    <color=#e4ff34># Trim in-place</color>
+    <b>trim -w config.ini</b>
+    Overwrites the file with trimmed content
+
+    <color=#e4ff34># Pipe usage</color>
+    <b>cat data.txt | trim</b>
+    Trims piped input and prints to stdout
+<b>SEE ALSO</b>
+    <b>cut</b>, <b>awk</b>, <b>sed</b>"

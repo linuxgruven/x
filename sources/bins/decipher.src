@@ -1,0 +1,36 @@
+binDecipher="cryptools=include_lib(""/lib/crypto.so"")
+if not cryptools then exit(""Error: Missing crypto library"")
+GetPassword=function(userPass);if len(userPass)!=2 then exit(""decipher: ""+path(file)+"" wrong syntax"");return decipher(cryptools,userPass[1]);end function
+if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""decipher_usage""))
+origFile=get_abs_path(params[0])
+file=File(host_computer(get_shell),origFile)
+if not file then exit(""decipher: can't find ""+origFile)
+if is_binary(file) then exit(""decipher: can't read ""+origFile+"". Binary file"")
+if not has_permission(file,""r"") then exit(""decipher: can't read file. Permission denied"")
+content=get_content(file)
+if len(content)==0 then exit(""decipher: no users found"")
+lines=content.split(char(10))
+password=null
+if len(lines)==1 then
+	userPass=lines[0].split("":"")
+	password=GetPassword(userPass)
+else
+	print(""Multiple users found."")
+	numLine=1
+	for line in lines
+		if len(line)>0 then
+			print(numLine+"": ""+line)
+			numLine=numLine+1
+		end if
+	end for
+	inputOk=false
+	while not inputOk
+		option=to_int(user_input(""Select user: ""))
+		if typeof(option)!=""number"" or (option<1 or option>len(lines)) then print(""Invalid input. Type a valid number"") else inputOk=true
+	end while
+	userPass=lines[option-1].split("":"")
+	print(""Selected user: ""+userPass[0]+char(10)+""Deciphering..."")
+	password=GetPassword(userPass)
+end if
+if not password then exit(""Can't find password :("")
+print(""password found! => ""+password)"

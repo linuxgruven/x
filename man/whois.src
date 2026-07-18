@@ -1,0 +1,29 @@
+// Man page for whois
+manWhois="WHOIS(1)                         X Shell Manual                         WHOIS(1)
+
+<b>NAME</b>
+    whois - gather information about a domain
+<b>SYNOPSIS</b>
+    <b>whois</b> IP or DOMAIN
+<b>DESCRIPTION</b>
+    Provides public information about the IP address, such as
+    domain name and information about the network administrator.
+<b>OPTIONS</b>
+    <b>IP or DOMAIN</b> - Lookup Information
+      Provides public information about a domain.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Domain Lookup</color>
+    <b>whois example.com</b>
+    Lookup domain information
+
+    <b>whois www.github.com</b>
+    Lookup website
+
+    <color=#e4ff34># IP Lookup</color>
+    <b>whois 8.8.8.8</b>
+    Lookup by IP address
+
+    <b>whois 1.1.1.1</b>
+    Lookup another IP
+<b>SEE ALSO</b>
+    <b>nslookup</b>, <b>nmap</b>, <b>scanrouter</b>"

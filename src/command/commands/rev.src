@@ -1,0 +1,71 @@
+// =============================================================================
+// REV
+// Reverse file content: default=all chars, -o=line order, -t=per-line chars.
+// =============================================================================
+Command.rev=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("o",false,"flag")  // Reverse line order
+  _p.addArgument("order",true,"flag")  // Long flag: --order (reverse line order)
+  _p.addArgument("t",false,"flag")  // Reverse characters within each line
+  _p.addArgument("text",true,"flag")  // Long flag: --text (reverse characters per line)
+  argv=_p.parseArgs("rev",argv)
+  if argv isa Error then return
+  // Check for stdin from pipe BEFORE parsePath (check for null, not truthiness - empty string is valid)
+  usePipedInput=false
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then usePipedInput=true
+  content=""
+  fileObj=null
+  if usePipedInput then
+    // Use piped input
+    stdinData=globals.G_pipe.stdin
+    if typeof(stdinData)=="string" then
+      content=stdinData
+    else if stdinData isa list then
+      content=join(stdinData,char(10))
+    else
+      content=str(stdinData)
+    end if
+  else
+    // Parse and validate file path from arguments
+    argv=_p.parsePath(Obj,argv)
+    if argv isa Error then return
+    // Require file argument if not using piped input
+    if not argv.rest or len(argv.rest)==0 then return ""
+    // Retrieve file object using path resolution helper
+    filePath=argv.rest[0]
+    fileObj=Io._getFile(Obj,filePath)
+    if fileObj isa Error then return
+    // Read file content and check for empty files
+    content=get_content(fileObj)
+    if not content then return Info.info("File: "+filePath+" is empty")
+  end if
+  isOrderMode=argv.o or argv.order
+  isTextMode=argv.t or argv.text
+  results=[]
+  if isOrderMode then
+    lines=split(content,char(10))
+    lines.reverse
+    results=lines
+  else if isTextMode then
+    // Mode 2: Reverse text within each line (line order preserved)
+    reversedLines=[]
+    lines=split(content,char(10))
+    for line in lines;reversedLines.push(line.reverse);end for
+    results=reversedLines
+  else
+    // Default: reverse characters within each line (standard rev behavior)
+    reversedLines=[]
+    lines=split(content,char(10))
+    for line in lines;reversedLines.push(line.reverse);end for
+    results=reversedLines
+  end if
+  if globals.G_pipe.PIPE_MODE then
+    for line in results;push(globals.G_pipe.stdout,line);end for
+    return
+  end if
+  if fileObj then
+    set_content(fileObj,join(results,char(10)))
+    return Info.info("Finished reversing "+filePath)
+  end if
+  for line in results;print white(line);end for
+end function

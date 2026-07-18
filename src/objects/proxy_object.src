@@ -1,0 +1,486 @@
+// =============================================================================
+// PROXY_OBJECT
+// Proxy session handler; routes attacks through multi-hop chains for anonymity and evasion.
+// =============================================================================
+ProxyObject={}
+//Main entry point for proxy session
+//Creates or restores proxy session on compromised system with chain tracking
+//Parameters:
+//  this - Session object container
+//  ex - Either shell object (new session) or saved state (restore)
+//Returns: None (runs main command loop)
+ProxyObject.run=function(this,ex,restoreState=null)
+  //Unload any existing pivot cleanup operations (skip when restoring saved session — no launch occurred)
+  if not restoreState then Boot.pivotCOUnload
+	//Helper function to load four core libraries
+	//Searches local /lib directory first, then fetches from main system via SCP
+	//Parameters:
+	//  Obj - Session object with computer, dir, and shell references
+	//Returns: None (sets library properties on Obj)
+  //Initialize library references to null
+  self.aptclient=null
+  self.metaxploit=null
+  self.crypto=null
+  self.blockchain=null
+	init=function(Obj)
+    //Load aptclient library from local /lib or fetch from main
+    Obj.aptclient=Io.getLib(Obj,"aptclient.so","aptclientLib")
+    if not Obj.aptclient then
+      a=Io.findFile(globals.G_main.root,"aptclient.so")
+      if a then
+        Info.info("Fetching AptClient library...")
+        //SCP library from main system to payload directory
+        scp(globals.G_main.shell,path(a),path(Obj.user.home)+"/payload/data",Obj.shell)
+        //Include the copied library
+        Obj.aptclient=include_lib(path(Obj.user.home)+"/payload/data/aptclient.so")
+      end if
+    end if
+    //Register library globally if loaded successfully
+    if Obj.aptclient then
+      Library.aptclient=Obj.aptclient
+      Info.info("AptClient loaded","+")
+    else
+      Info.warning("Unable to load AptClient library")
+    end if
+    //Load metaxploit library from local /lib or fetch from main
+    Obj.metaxploit=Io.getLib(Obj,"metaxploit.so","MetaxploitLib")
+    if not Obj.metaxploit then
+      m=Io.findFile(globals.G_main.root,"metaxploit.so")
+      if m then
+        Info.info("Fetching Metaxploit library...")
+        //SCP library from main system to payload directory
+        scp(globals.G_main.shell,path(m),path(Obj.user.home)+"/payload/data",Obj.shell)
+        //Include the copied library
+        Obj.metaxploit=include_lib(path(Obj.user.home)+"/payload/data/metaxploit.so")
+      end if
+    end if
+    //Register library globally if loaded successfully
+    if Obj.metaxploit then
+      Library.metaxploit=Obj.metaxploit
+      Info.info("Metaxploit loaded","+")
+    else
+      Info.warning("Unable to load Metaxploit library")
+    end if
+    //Load crypto library from local /lib or fetch from main
+    Obj.crypto=Io.getLib(Obj,"crypto.so","cryptoLib")
+    if not Obj.crypto then
+      m=Io.findFile(globals.G_main.root,"crypto.so")
+      if m then
+        Info.info("Fetching Crypto library...")
+        //SCP library from main system to payload directory
+        scp(globals.G_main.shell,path(m),path(Obj.user.home)+"/payload/data",Obj.shell)
+        //Include the copied library
+        Obj.crypto=include_lib(path(Obj.user.home)+"/payload/data/crypto.so")
+      end if
+    end if
+    //Register library globally if loaded successfully
+    if Obj.crypto then
+      Library.crypto=Obj.crypto
+      Info.info("Crypto loaded","+")
+    else
+      Info.warning("Unable to load Crypto library")
+    end if
+    //Load blockchain library from local /lib
+    Obj.blockchain=Io.getLib(Obj,"blockchain.so","blockchainLib")
+    //Register library globally if loaded successfully
+    if Obj.blockchain then
+      Library.blockchain=Obj.blockchain
+      Info.info("Blockchain loaded","+")
+    end if
+    //Clear cleanup operations
+    Boot.clearCO
+    Info.info("Proxy session initialization complete")
+	end function
+  restored=BaseObject.init(self,ex,"shell",["net","commands","gui","aptclient","metaxploit","crypto","blockchain","proxy"])
+  if restored then
+    //Special handling: Reinitialize network with packed router
+    self.net=Net.initNetwork(self,Builder.packRouter(ex))
+    //Re-register libraries globally
+    if ex.aptclient then
+      self.aptclient=ex.aptclient
+      Library.aptclient=ex.aptclient
+    end if
+    if ex.metaxploit then
+      self.metaxploit=ex.metaxploit
+      Library.metaxploit=ex.metaxploit
+    end if
+    if ex.crypto then
+      self.crypto=ex.crypto
+      Library.crypto=ex.crypto
+    end if
+    if ex.blockchain then
+      self.blockchain=ex.blockchain
+      Library.blockchain=ex.blockchain
+    end if
+    //Restore proxy reference and register globally
+    if ex.proxy then
+      self.proxy=ex.proxy
+      globals.G_proxy=ex.proxy
+    end if
+  else
+    //New session initialization branch: ex is shell object
+    self.object=ex
+    self.type="shell"
+    self.rootShell=null
+    //Get computer and shell references
+    self.computer=host_computer(ex)
+    self.shell=ex
+    //Build network metadata with public and local IPs
+    self.meta={
+      "public_ip":public_ip_pc(self.computer),
+      "local_ip":self.computer.local_ip
+    }
+    //Create root directory reference
+    self.root=File(self.computer,"/")
+    //Initialize network with router if network active
+    if is_network_active(self.computer) then self.net=Net.initNetwork(self,get_router) else self.net=Net.initNetwork(self)
+    //Detect machine type
+    self.machineType=System.getMachine(self,self.meta.local_ip)
+    //Get user information
+    self.user=Utility.getUser(self)
+    self.pwa=Gui.pwAccess(self)
+    //Create directory structure with payload and data subdirectories
+    self.dir={
+      "current":self.user.home,
+      "last":self.user.home,
+      "payload":File(self.computer,path(self.user.home)+"/payload"),
+      "data":File(self.computer,path(self.user.home)+"/payload/data")
+    }
+    //Cache program binary reference for cleanup (program_path is only valid in launch context)
+    self.programPath=File(self.computer,program_path)
+    //Configure available services with binary and library mappings
+    self.services={
+      "ssh":{
+        "bin":null,
+        "lib":{"libssh.so":"libssh.so"}
+      },
+      "http":{
+        "bin":null,
+        "lib":{"libhttp.so":"libhttp.so"}
+      },
+      "ftp":{
+        "bin":null,
+        "lib":{"libftp.so":"libftp.so"}
+      },
+      "chat":{
+        "bin":null,
+        "lib":{"libchat.so":"libchat.so"}
+      },
+      "repo":{
+        "bin":null,
+        "lib":{"librepository.so":"librepository.so"}
+      },
+      "rshell":{
+        "bin":null,
+        "lib":{"librshell.so":"librshell.so"}
+      }
+    }
+    //Initialize session state properties
+    self.history=[]
+    self.hw_unit=purple("PROXY")
+    self.nick="Proxy Session"
+    self.layer="proxy"
+    self.temp={}
+    self.logTracker=[]
+    //Initialize library references to null
+    self.aptclient=null
+    self.metaxploit=null
+    self.crypto=null
+    self.blockchain=null
+    //Get computer hostname
+    self.compName=get_name(self.computer)
+    //Load all services for this system
+    System.loadServices(self)
+    //Load libraries via init helper (skip when restoring — use saved refs)
+    if not restoreState then init(self)
+    //Set proxy reference to self and register globally
+    self.proxy=self
+    globals.G_proxy=self
+    //Set global pivot flag to prevent nested pivots/proxies
+    globals.G_hasPivoted=true
+  end if
+  //Restore saved session state after fresh init (reinstantiation)
+  if restoreState then
+    self.id=restoreState.id
+    if hasIndex(restoreState,"history") then self.history=restoreState.history
+    if hasIndex(restoreState,"dir") and restoreState.dir then
+      if hasIndex(restoreState.dir,"current") then self.dir.current=restoreState.dir.current
+      if hasIndex(restoreState.dir,"last") then self.dir.last=restoreState.dir.last
+    end if
+    if hasIndex(restoreState,"nick") then self.nick=restoreState.nick
+    if hasIndex(restoreState,"crp") then self.crp=restoreState.crp
+    //Restore library refs from saved state
+    if hasIndex(restoreState,"aptclient") and restoreState.aptclient then
+      self.aptclient=restoreState.aptclient
+      Library.aptclient=restoreState.aptclient
+    end if
+    if hasIndex(restoreState,"metaxploit") and restoreState.metaxploit then
+      self.metaxploit=restoreState.metaxploit
+      Library.metaxploit=restoreState.metaxploit
+    end if
+    if hasIndex(restoreState,"crypto") and restoreState.crypto then
+      self.crypto=restoreState.crypto
+      Library.crypto=restoreState.crypto
+    end if
+    if hasIndex(restoreState,"blockchain") and restoreState.blockchain then
+      self.blockchain=restoreState.blockchain
+      Library.blockchain=restoreState.blockchain
+    end if
+  end if
+  //Snapshot initial state so other sessions can switch here immediately
+  Session._snapshotState(self)
+  //Anonymize main session
+  Io.anon(globals.G_main,1)
+  //GUI display function
+  //Updates Gui.cp cache with current session information
+  //Returns: None
+  gui=function;Gui.updateCP(this);end function
+  //Expose gui for bash macros that reference self.gui
+  self.gui=@gui
+  //Continue bash macro execution
+  //Called when bash macro needs to resume after operation
+  //Returns: None
+	continueBash=function
+		//Debug output if enabled
+		if globals.G_bash.DEBUG then print orange("Function Call->_continueBash from (PROXY)")
+		//Update GUI cache
+		gui
+		//Continue macro execution
+		Bash.continueMacro(this)
+  end function
+  //Stats command handler
+  //Displays system, framework, library, and database statistics
+  //Parameters:
+  //  argv - Array with subcommand flags (-s=stats, -l=libs, -d=data, -dl=datalong)
+  //Returns: None (prints output) or Error object
+	__stats=function(argv);BaseObject.stats(outer.this,argv);end function
+  //Run command handler
+  __run=function(argv);if Net.hasInternet(this) isa Warning then return;BaseObject.runBash(this,argv);end function
+  //Hops command handler
+  //Manages proxy chain operations (view, wipe logs, access shells)
+  //Parameters:
+  //  argv - Array with subcommand flag (-v=view, -w=wipe, -s=shell)
+  //Returns: None or Error object
+  __hops=function(argv)
+    //Only available when hops attribute is enabled
+    if not globals.G_attributes.hops then return
+    //Default to view if no arguments
+    if not argv then push(argv,"-v")
+		//Get subcommand flag
+		Arg1=lower(argv[0])
+    //View subfunction: displays all hops in proxy chain with IPs
+    view=function(arg)
+      h=[]
+      //Collect all hop IPs
+      for p in globals.G_hops;push(h,yellow(host_computer(p).public_ip));end for
+      //Display chain info
+      Info.info("Proxy Chain:")
+      listNHZ(h)
+    end function
+    //Wipe subfunction: clears logs across all hops in chain
+    wipe=function(arg)
+      //Clear logs on each hop
+      for p in globals.G_hops;Log.shellLog(p);end for
+      Info.info("system logs cleared across the chain")
+    end function
+    //Shell subfunction: provides shell access to specific hop in chain
+    shell=function(arg)
+      //Validate hop ID provided
+      if not arg then return Error.set("proxy id expected")
+      x=to_int(arg[0])
+      //Validate hop ID is number
+      if not x isa number then return Error.set("proxy id expected")
+      //Validate hop ID exists in chain
+      if not hasIndex(globals.G_hops,x) then return Error.set("Invalid proxy id")
+      //Get shell for specified hop
+      return Exploit.getShell(globals.G_hops[x])
+    end function
+		//Command dispatch map for hops subcommands
+		cmds={
+      "-v":@view,
+      "-w":@wipe,
+      "-s":@shell
+		}
+		//Validate subcommand exists
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		//Execute subcommand
+		cmds[Arg1](argv[1:])
+  end function
+  //Exit command handler
+  //Archives files, clears proxy chain, cleans up session, and exits proxy
+  //Parameters:
+  //  argv - Command arguments (-n=no confirm, -y=yes confirm)
+  //Returns: None or Error object
+	__exit=function(argv)
+    //Parse confirmation flags
+    _p=ArgumentParser.init
+    _p.addArgument("n",false,"flag")
+    _p.addArgument("y",false,"flag")
+    argv=_p.parseArgs("proxy",argv)
+    if argv isa Error then return argv
+    //Prompt for confirmation unless -n or -y flag provided
+    if not argv.n and not argv.y then
+      if not Gui.yesNo("Are you sure you want to exit your proxy?") then return
+    end if
+    //Clear proxy chain state
+    globals.G_attributes.hops=false
+    globals.G_hops=[]
+    //Delete proxy state file from main data directory
+    f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/proxy")
+    if f then delete(f)
+    //Set break signal to stop bash
+    globals.G_bash.SIGBREAK=true
+    //Set back flag for navigation
+    globals.G_attributes.back=true
+    //Remove session from global sessions
+    if hasIndex(globals.G_sessions,this.id) then globals.rmSession(this)
+    //Archive program file to data directory
+    if this.programPath then move(this.programPath,path(this.dir.data),"x")
+    //Archive payload directory to data directory
+    move(this.dir.payload,path(this.dir.data),"bye")
+    //Write log file
+    Log.log(this,false)
+    //Stop session loop
+    this.running=false
+    //If this proxy was launched via launch, queue exit for after cleanup
+    //This prevents the "multiple exit" issue where the user has to exit
+    //both the proxy shell and the parent shell that called proxy -q
+    if params and len(params)>1 and params[1]=="proxy" then globals.G_pendingExit=true
+	end function
+  //Close command handler
+  //Exits proxy session without cleanup or archival
+  //Parameters:
+  //  argv - Command arguments (unused)
+  //Returns: None
+  __close=function(argv)
+    //Stop session loop
+    this.running=false
+	end function
+  //Build command map with proxy commands and all callback sets
+  self.commands={
+    "stats":@__stats,
+    "run":@__run,
+    "x":@__exit,
+    "exit":@__exit,
+    "hops":@__hops,
+    "close":@__close,
+    "c":@__close
+  }+Command.mainCallbacks(self)+Command.fileCallbacks(self)+Command.computerCallbacks(self)+Command.shellCallbacks(self)
+	//Add to IPC tracking (unless headless mode)
+	Ipc.addObject(self)
+  //Validate session configuration
+  Session.check(self)
+  //Process continuation and deferred commands
+  BaseObject.processGlobalCmds(self,true)
+  //Clear cleanup operations
+  Boot.clearCO
+  //Clear any stale back flag before continueBash.
+  //A concurrent decoy process shares the same G_attributes object via CO reference semantics,
+  //so its Session.use("main") call may have set back=true. Reset here so that only flags
+  //set BY continueBash's own commands (e.g. _home) are honoured in the check below.
+  globals.G_attributes.back=false
+  //Continue bash if RUN flag set
+  if globals.G_bash.RUN then continueBash
+  //If back flag is set after continueBash (e.g. sess -x from nested proxy), clean up and skip main loop
+  if globals.G_attributes.back then
+    gb=globals.G_bash
+    if gb.RUN then gb.RUN=[]
+    //Clean up remote files before unwinding
+    if self.programPath then move(self.programPath,path(self.dir.data),"x")
+    move(self.dir.payload,path(self.dir.data),"bye")
+    Log.log(self,false)
+    self.running=false
+    return
+  end if
+	//Message storage for command output
+	z=null
+	//Clear stale back flag (may be restored from CO)
+	globals.G_attributes.back=false
+	//Main command loop
+	while self.running
+    //Home flag: child returned to proxy, consume flags and continue
+    if globals.G_attributes.back and globals.G_attributes.home then
+      globals.G_attributes.back=false
+      globals.G_attributes.home=false
+      continue
+    end if
+    //Exit if back flag set (from nested sess -u 0)
+    if globals.G_attributes.back then break
+    //Reset back navigation flag
+    globals.G_attributes.back=false
+		//Handle bash macro execution
+		if globals.G_bash.RUN then
+			while globals.G_bash.RUN;continueBash;end while
+		end if
+    //Update dynamic LAN IPs if enabled
+    if globals.G_settings.dynamicLanIPS then self.commands["rnet"]
+		//Display stored message if any
+		if z then print z
+		z=null
+		//Update GUI cache
+		gui
+    //Build prompt string
+    promptStr=BaseObject.buildPrompt(self,"c = Close")
+		//Get user input and split into command array (quote-aware)
+		_rawInput=trim(user_input(promptStr,0,0,1))
+		c=Pipe._parseArgs(_rawInput)
+		if c then c=c.removeSpace
+		//Skip empty input
+		if not c then continue
+    //Check for chain operators (&&, ;) and pipes (|)
+    cmdStr=join(c," ")
+    if BaseObject.handleChainOrPipe(self,c,cmdStr,_rawInput) then continue
+    //Cache lower command token for reuse
+    cmdKey=lower(c[0])
+    //Cache raw token and first char
+    firstToken=c[0]
+    firstChar=firstToken[0]
+    //Handle history operators (!, !!, !!!)
+    if cmdKey=="!" or cmdKey=="!!" or cmdKey=="!!!" then
+      c=BaseObject.handleHistory(self,cmdKey)
+      if not c then continue
+      cmdKey=lower(c[0])
+      firstToken=c[0]
+      firstChar=firstToken[0]
+      //Re-check for pipe/chain in recalled command
+      cmdStr=join(c," ")
+      if BaseObject.handleChainOrPipe(self, c, cmdStr) then continue
+    end if
+    //Handle * - wildcard command search
+    if BaseObject.handleWildcard(self,firstToken) then continue
+    //Handle @ - execute bash script directly
+    if firstChar=="@" then
+      __run(c)
+      continue
+    end if
+    //Apply command alias if exists
+    _aliasApplied=false
+    if hasIndex(globals.G_settings.alias,cmdKey) then
+      origArgs=c[1:]
+      c=globals.G_settings.alias[cmdKey]
+      if origArgs then c=c+origArgs
+      if c then cmdKey=lower(c[0]);_aliasApplied=true
+    end if
+    //Handle pipe/chain in alias-expanded command (only if alias changed the command)
+    if _aliasApplied then
+      cmdStr=join(c," ")
+      if BaseObject.handleChainOrPipe(self,c,cmdStr) then continue
+    end if
+    //Handle @ in alias-expanded command
+    if cmdKey[0]=="@" then
+      __run(c)
+      continue
+    end if
+    //Execute command if found in command map
+    if hasIndex(self.commands,cmdKey) then
+      f=self.commands[cmdKey]
+      BaseObject.addToHistory(self,c)
+      f(c[1:])
+    else
+      Info.error(Text.msg.command+c[0]+" ]")
+    end if
+	//End main command loop
+	end while
+  //Snapshot session state for potential future reinstantiation
+  Session._snapshotState(self)
+end function

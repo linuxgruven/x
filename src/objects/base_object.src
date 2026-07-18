@@ -1,0 +1,447 @@
+// =============================================================================
+// BASE_OBJECT
+// Shared session initialization logic for ComputerObject, FileObject, ShellObject.
+// =============================================================================
+BaseObject={}
+// Helper: returns true if cmdStr contains a | that is outside quotes
+BaseObject.hasPipeOutsideQuotes=function(cmdStr)
+  if indexOf(cmdStr,"|")== null then return false
+  _inQ=false;_qC=null;_len=len(cmdStr);_i=0
+  while _i<_len
+    _ch=cmdStr[_i];_cc=code(_ch)
+    if not _inQ then
+      if _ch=="""" or _ch=="'" or _cc==8220 or _cc==8216 then
+        _inQ=true;_qC=_ch
+      else if _ch=="|" then
+        return true
+      end if
+    else
+      _qCc=code(_qC)
+      if _ch==_qC or (_qCc==8220 and _cc==8221) or (_qCc==8216 and _cc==8217) then _inQ=false
+    end if
+    _i+=1
+  end while
+  return false
+end function
+// Helper: returns true if cmdStr contains ; or && that is outside quotes
+BaseObject.hasChainOutsideQuotes=function(cmdStr)
+  if indexOf(cmdStr,";")==null and indexOf(cmdStr,"&&")==null then return false
+  _inQ=false;_qC=null;_len=len(cmdStr);_i=0
+  while _i<_len
+    _ch=cmdStr[_i];_cc=code(_ch)
+    if not _inQ then
+      if _ch=="""" or _ch=="'" or _cc==8220 or _cc==8216 then
+        _inQ=true;_qC=_ch
+      else if _ch==";" then
+        return true
+      else if _ch=="&" and _i+1<_len and cmdStr[_i+1]=="&" then
+        return true
+      end if
+    else
+      _qCc=code(_qC)
+      if _ch==_qC or (_qCc==8220 and _cc==8221) or (_qCc==8216 and _cc==8217) then _inQ=false
+    end if
+    _i+=1
+  end while
+  return false
+end function
+// Function: init
+// Purpose: Handle common session init — both restore-from-saved and new-session paths
+// Args:
+//   Obj      - self reference from the calling run function
+//   ex       - raw object (computer/shell/file) or saved session map to restore
+//   skipType - the typeof string to detect a new session (e.g. "computer","shell","file")
+//   skipProps - list of property names to skip during restore copy (default: ["commands","gui"])
+// Returns:
+//   true  - session was restored from saved state (caller should skip new-session init)
+//   false - new session (caller should run its own type-specific init)
+//   Error - ex was falsy on the restore path
+BaseObject.init=function(Obj,ex,skipType,skipProps=null)
+  //Common flags for every session type
+  Obj.running=true
+  //Restore path: ex is a saved session map, not a raw engine object
+  if typeof(ex)!=skipType then
+    if not ex then return Error.set("Invalid object")
+    //Default skip list if not provided
+    if not skipProps then skipProps=["commands","gui","running"]
+    //Copy all properties except closures that must be rebuilt
+    for prop in indexes(ex);if skipProps.indexOf(prop)==null then Obj[prop]=ex[prop];end for
+    return true
+  end if
+  //New-session path: set properties shared by all session types
+  Obj.history=[]
+  Obj.crp=null
+  Obj.id=System.GUID
+  return false
+end function
+// Function: stripIfNotRoot
+// Purpose: Remove "if not root" prefix tokens from a command parts list.
+//          Used by object types that don't track root state (computer, file, pivot, proxy).
+// Args:
+//   parts - split command array (mutated in place)
+BaseObject.stripIfNotRoot=function(parts)
+  if len(parts)>=4 and lower(parts[0])=="if" and lower(parts[1])=="not" and lower(parts[2])=="root" then
+    parts.remove(0)
+    parts.remove(0)
+    parts.remove(0)
+  end if
+end function
+// Function: handleHistory
+// Purpose: Process history operators (!,!!,!!!) in command loop
+// Args:
+//   Obj - Session object with history array
+//   cmdKey - Lowered first command token
+// Returns:
+//   list - New command array from history recall
+//   null - Skip (empty history, no selection, or !!! display)
+BaseObject.handleHistory=function(Obj,cmdKey)
+  if not Obj.history then
+    Info.error("No command history")
+    return null
+  end if
+  if cmdKey=="!" then
+    c=pop(Obj.history)
+    return split(trim(c)," ")
+  end if
+  if cmdKey=="!!!" then
+    print yellow(Obj.history[-1])
+    return null
+  end if
+  //cmdKey=="!!" - interactive history selection
+  c=null
+  useAnyKey=len(Obj.history)<=9
+  while true
+    CH=[green("Command History:")]
+    for h in Obj.history;if __h_idx!=len(Obj.history)-1 then push(CH,white(h)) else push(CH,green(h)+white(" !"));end for
+    push(CH,iyellow("Forget it"))
+    if useAnyKey then UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true) else UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+    if UCH==len(CH)-1 then break
+    c=Obj.history[UCH-1]
+    remove(Obj.history,UCH-1)
+    c=split(trim(c)," ")
+    break
+  end while
+  return c
+end function
+// Function: handleWildcard
+// Purpose: Search commands matching wildcard pattern
+// Args:
+//   Obj - Session object with commands map
+//   firstToken - Raw first token from user input
+// Returns: true if wildcard handled, null otherwise
+BaseObject.handleWildcard=function(Obj,firstToken)
+  if indexOf(firstToken,"*")==null then return null
+  t=firstToken.replace("\*","")
+  a=[]
+  for v in Obj.commands;if indexOf(v.key,t)!=null then push(a,white(v.key));end for
+  if not a then Info.info("Found 0 matches for "+t) else print join(a,char(10))
+  return true
+end function
+// Function: addToHistory
+// Purpose: Add command string to session history (dedup)
+// Args:
+//   Obj - Session object with history array
+//   c - Command array to add
+BaseObject.addToHistory=function(Obj,c)
+  k=join(c," ")
+  if Obj.history.hasAny(k) then remove(Obj.history,indexOf(Obj.history,k))
+  push(Obj.history,k)
+end function
+// Function: handleChainOrPipe
+// Purpose: Process chain (&&, ;) and pipe (|) operators
+// Args:
+//   Obj - Session object
+//   c - Command array
+//   cmdStr - Joined command string
+//   rawCmdStr - Optional raw input string (pre-parse, with quotes intact) for operator checks
+// Returns: true if handled, false otherwise
+BaseObject.handleChainOrPipe=function(Obj,c,cmdStr,rawCmdStr)
+  _checkStr=rawCmdStr
+  if _checkStr==null then _checkStr=cmdStr
+  if BaseObject.hasChainOutsideQuotes(_checkStr) then
+    BaseObject.addToHistory(Obj,c)
+    Bash.chain(Obj,c)
+    return true
+  end if
+  if BaseObject.hasPipeOutsideQuotes(_checkStr) then
+    BaseObject.addToHistory(Obj,c)
+    z=Pipe.run(Obj,c)
+    if z isa list and len(z)>0 then
+      for line in z;print line;end for
+    end if
+    return true
+  end if
+  return false
+end function
+// Function: buildPrompt
+// Purpose: Build formatted command prompt string
+// Args:
+//   Obj - Session object with dir and user
+//   closeText - Close hint text (e.g. "c = Close")
+// Returns: Formatted prompt string
+BaseObject.buildPrompt=function(Obj,closeText)
+  P=path(Obj.dir.current)
+  if P then
+    if globals.G_settings.shortPath then P=P.replace(path(Obj.user.home),"~")
+  else
+    P="hidden {type cd /}"
+  end if
+  P=adjustSize(P)
+  return Gui.cmdPrompt(P,closeText)
+end function
+// Function: runBash
+// Purpose: Execute bash scripts (shared __run logic)
+// Args:
+//   Obj - Session object
+//   argv - Command arguments
+BaseObject.runBash=function(Obj,argv)
+  if not argv then return Man.help(["run"])
+  if globals.G_bash.DEBUG then globals.G_bash.DEBUG=false
+  if globals.G_bash.SIGSTOP then Bash.clear
+  _p=ArgumentParser.init
+  _p.addArgument("n",false,"store")
+  _p.addArgument("e",false,"store")
+  _p.addArgument("o",false,"flag")
+  _p.addArgument("list",true,"flag")
+  _p.addArgument("DEBUG",true,"flag")
+  _p.addArgument("SIGBREAK",true,"flag")
+  _p.addArgument("SIGCONT",true,"flag")
+  _p.addArgument("STARTOVER",true,"flag")
+  _p.addArgument("ONERROR",true,"store")
+  _p.addArgument("FILE",true,"store")
+  _p.addArgument("ALLOWABS",true,"flag")
+  _p.addArgument("reset",true,"flag")
+  argv=_p.parseArgs("run",argv)
+  if argv isa Error then return
+  if argv.n then return Command.vi(Obj,["-n",path(globals.G_main.dir.bash)+"/"+argv.n])
+  if argv.e then return Command.vi(Obj,["-o",path(globals.G_main.dir.bash)+"/"+argv.e])
+  if argv.o then return Command.vi(globals.G_main,["-l",path(globals.G_main.dir.bash)])
+  if argv.FILE then
+    f=Io._getFile(Obj,argv.FILE)
+    if f isa Error then return
+    for l in split(get_content(f),char(10))
+      a=clone(argv)
+      if not l then continue
+      if indexOf(l," ")!=null then
+        a.rest+=split(l," ")
+      else if indexOf(l,",")!=null then
+        a.rest+=split(l,",")
+      else if indexOf(l,":")!=null then
+        a.rest+=split(l,":")
+      else
+        push(a.rest,l)
+      end if
+      globals.G_bash.ACTIVE=1
+      Bash.run(Obj,a)
+    end for
+    globals.G_bash.ACTIVE=null
+    return
+  end if
+  if argv.list then return Bash.listScripts
+  globals.G_bash.ACTIVE=1
+  Bash.run(Obj,argv)
+  globals.G_bash.ACTIVE=null
+end function
+// Function: _processOneCmdList
+// Purpose: Internal helper to process a single command list (continuation or deferred)
+// Args:
+//   Obj - Session object
+//   cmdString - Raw command string to process
+//   handleSu - Whether to handle su chaining
+//   checkIsRoot - Whether to check Obj.user.raw (shell_object behavior)
+BaseObject._processOneCmdList=function(Obj,cmdString,handleSu,checkIsRoot)
+  isDebug=globals.G_agent and hasIndex(globals.G_agent,"config") and hasIndex(globals.G_agent.config,"debug") and globals.G_agent.config.debug
+  isTrainer=globals.G_agent and hasIndex(globals.G_agent,"config") and hasIndex(globals.G_agent.config,"trainer") and globals.G_agent.config.trainer
+  cmdList=split(cmdString," then ")
+  _len=len(cmdList)
+  i=0;while i<_len
+    cmd=cmdList[i]
+    cmdParts=split(cmd," ")
+    if len(cmdParts)>0 and lower(cmdParts[0])=="ai" then cmdParts.remove(0)
+    //Handle "if not root" conditional
+    if checkIsRoot then
+      if len(cmdParts)>=4 and lower(cmdParts[0])=="if" and lower(cmdParts[1])=="not" and lower(cmdParts[2])=="root" then
+        if hasIndex(Obj,"user") and hasIndex(Obj.user,"raw") and lower(Obj.user.raw)=="root" then
+          if isDebug then print green("Debug: Already root, skipping 'if not root' check")
+          i+=1;continue
+        end if
+        cmdParts.remove(0)
+        cmdParts.remove(0)
+        cmdParts.remove(0)
+      end if
+    else
+      BaseObject.stripIfNotRoot(cmdParts)
+    end if
+    if len(cmdParts)>1 and lower(cmdParts[0])=="use" then cmdParts.remove(0)
+    if len(cmdParts)>0 then
+      cmdName=lower(cmdParts[0])
+      if handleSu and cmdName=="su" and i+1<len(cmdList) then
+        remainingCmds=[]
+        j=i+1;while j<_len;remainingCmds.push(cmdList[j]);j+=1;end while
+        if len(remainingCmds)>0 then
+          globals.G_deferred_cmds="ai "+remainingCmds.join(" then ")
+          if isDebug then print green("Debug: Saving remaining commands to G_deferred_cmds before su: "+globals.G_deferred_cmds)
+        end if
+      end if
+      if hasIndex(Obj.commands,cmdName) then
+        cmdParts.remove(0)
+        if isTrainer then
+          cmdStr=cmdName
+          if len(cmdParts)>0 then cmdStr=cmdStr+" "+cmdParts.join(" ")
+          print yellow("Command you need to run: "+cmdStr)
+        end if
+        Obj.commands[cmdName](cmdParts)
+        if handleSu and cmdName=="su" then break
+      else
+        Command.ai(Obj,cmdParts)
+      end if
+    end if
+    i+=1
+  end while
+end function
+// Function: processGlobalCmds
+// Purpose: Process continuation and deferred commands from globals
+// Args:
+//   Obj - Session object
+//   handleSu - Whether to handle su chaining (pivot/proxy/shell)
+//   checkIsRoot - Whether to check Obj.user.raw for root (shell only)
+BaseObject.processGlobalCmds=function(Obj,handleSu=false,checkIsRoot=false)
+  isDebug=globals.G_agent and hasIndex(globals.G_agent,"config") and hasIndex(globals.G_agent.config,"debug") and globals.G_agent.config.debug
+  if hasIndex(globals,"G_continuation_cmds") and globals.G_continuation_cmds then
+    if isDebug then print green("Debug: Found continuation commands in globals: "+globals.G_continuation_cmds)
+    savedContCmds=globals.G_continuation_cmds
+    globals.G_continuation_cmds=null
+    BaseObject._processOneCmdList(Obj,savedContCmds,handleSu,checkIsRoot)
+  end if
+  if globals.G_deferred_cmds then
+    if isDebug then print green("Debug: Found deferred commands in globals: "+globals.G_deferred_cmds)
+    savedDefCmds=globals.G_deferred_cmds
+    globals.G_deferred_cmds=null
+    BaseObject._processOneCmdList(Obj,savedDefCmds,handleSu,checkIsRoot)
+  end if
+end function
+// Function: stats
+// Purpose: Shared stats command handler for pivot/proxy sessions
+// Args:
+//   Obj - Session object with computer, metaxploit, crypto, etc.
+//   argv - Subcommand flags (-s=stats, -l=libs, -d=data, -dl=datalong)
+BaseObject.printGlobalStats=function
+  print blue("[Cached rshell's]---------["+white(str(len(globals.G_rshell.rshells)))+"]")
+  print blue("[RShell's in history]-----["+white(str(len(globals.G_rshell.history)))+"]")
+  print blue("[Sessions]----------------["+white(str(len(globals.G_sessions)))+"]")
+  print blue("[Net sessions]------------["+white(str(len(globals.G_netSessions)))+"]")
+  print blue("[Virtual files]-----------["+white(str(len(globals.G_virtualFiles)))+"]")
+  print blue("[Shared files]------------["+white(str(len(get_files(globals.G_main.dir.share)+get_folders(globals.G_main.dir.share))))+"]")
+  print blue("[Shared libraries]--------["+white(str(len(get_files(globals.G_main.dir.savedLibs)+get_folders(globals.G_main.dir.savedLibs))))+"]")
+  print blue("[Dirty routers]-----------["+white(Dirty.countRaw)+"]")
+  print blue("[Cached systems]----------["+white(Cache.count)+"]")
+  print blue("[Shadow passwords]--------["+white(Shadow.count)+"]")
+  rainbowCount=0
+  if globals.G_main.dir.rainbow then rainbowCount=len(get_files(globals.G_main.dir.rainbow))
+  passwordCount=len(Crack.getPasswords)
+  if globals.G_rainbow then passwordCount=passwordCount+len(globals.G_rainbow)
+  print blue("[Rainbow tables avalable]-["+white(str(rainbowCount))+"]")
+  print blue("[Passwords avalable]------["+white(str(passwordCount))+"]")
+end function
+BaseObject.stats=function(Obj,argv)
+  if not argv then argv=["-s"]
+  stats=function(arg)
+    if not globals.G_rainbow then Crack.load(false)
+    print white("Info ")+orange("==>")
+    print orange(ljust("[X]",26,0,"-")+"["+white("version:"+Kernel.version)+"]")
+    if globals.G_attributes.anon then w=white("True") else w=white("False")
+    print orange("[Using anonymization]-----["+w+"]")
+    print orange("[Up time (HH:MM:SS)]------["+white(Io.getTime)+"]")
+    print white("Curent System ")+purple("==>")
+    print purple("[Host name]---------------["+white(get_name(Obj.computer))+"]")
+    print purple("[Active network card]-----["+white(Obj.net.active_net_card)+"]")
+    print purple("[Active user]-------------["+white(upper(Obj.user.name))+"]")
+    print purple("[Privelege set]-----------["+Obj.user.user+"]")
+    c=Io.count(File(Obj.computer,"/"),1)
+    print purple("[Total files]-------------["+white(str(c.f))+"]")
+    print purple("[Total directories]-------["+white(str(c.d))+"]")
+    print purple("[Total system file count]-["+c.t+"]")
+    if Obj.metaxploit then
+      print white("/lib Folder ")+purple("==>")
+      for f in get_files(File(Obj.computer,"/lib"));q=load(Obj.metaxploit,path(f));if typeof(q)=="MetaLib" then print purple(ljust("--> ["+name(f)+"]",21-len(name(f)),0,"-")+"["+white("version:"+version(q))+"]");end for
+    end if
+    print white("X Data ")+blue("==>")
+    BaseObject.printGlobalStats
+    print white("Local Data ")+green("==>")
+    if Obj.metaxploit!=null then
+      if Obj.aptclient!=null then print green("[AptClient]---------------["+white("version:"+Library.getVersion(Obj,Obj.metaxploit,"aptclient.so"))+"]")
+      if Obj.blockchain!=null then print green("[Blockchain]--------------["+white("version:"+Library.getVersion(Obj,Obj.metaxploit,"blockchain.so"))+"]")
+      if Obj.crypto!=null then print green("[crypto]------------------["+white("version:"+Library.getVersion(Obj,Obj.metaxploit,"crypto.so"))+"]") else print green("[crypto]------------------["+red("CRYPTO NOT INSTALLED")+"]")
+      print green("[metaxploit]--------------["+white("version:"+Library.getVersion(Obj,Obj.metaxploit,"metaxploit.so"))+"]")
+    else
+      if not Obj.crypto then print green("[crypto]------------------["+red("METAXPLOIT AND CRYPTO NOT INSTALLED")+"]") else print green("[crypto]------------------["+red("METAXPLOIT NOT INSTALLED")+"]")
+      print green("[metaxploit]--------------["+red("NOT INSTALLED")+"]")
+    end if
+    if globals.G_metaxploit then print green("[Metaxploit linked]-------["+white("True")+"]") else print green("[Metaxploit Linked]-------["+white("False")+"]")
+    if globals.G_crypto then print green("[Crypto linked]-----------["+white("True")+"]") else print green("[Crypto Linked]-----------["+white("False")+"]")
+    print white("Database ")+yellow("==>")
+    if globals.G_libServer then print yellow("[LMS library count]-------["+white(str(len(globals.G_libraryCache)))+"]")
+    if globals.G_server then print yellow("[Database location]-------["+white("Remote")+"]") else print yellow("[Database Location]-------["+white("Local")+"]")
+    if globals.G_server then print yellow("[Server encryption]-------["+white(globals.G_server.encryption)+"]")
+    z=Exploit.stats
+    print yellow("[Exploits in database]----["+white(z[0])+"]")
+    print yellow("[Payloads in database]----["+white(z[1])+"]")
+    print yellow("[B-Tree count (files)]----["+white(len(globals.G_exploitBtree))+"]")
+    print yellow("[M-Tree count (memory)]---["+white(len(globals.G_mtree))+"]")
+    print yellow("[S-Tree count (unsec)]----["+white(len(globals.G_stree))+"]")
+    print yellow("[R-Tree count (rqmts)]----["+white(len(globals.G_rtree))+"]")
+  end function
+  libs=function(arg)
+    if Obj.metaxploit then
+      for f in get_files(File(Obj.computer,"/lib"))
+        if name(f)=="metaxploit.so" or name(f)=="crypto.so" then continue
+        q=load(Obj.metaxploit,path(f))
+        if typeof(q)=="MetaLib" then print green(ljust("["+name(f)+"]",25-len(name(f)),0,"-")+"["+white("version:"+version(q))+"]")
+      end for
+      if Obj.crypto then print yellow("[crypto]------------------["+white("version:"+version(Obj.crypto))+"]")
+      if Obj.metaxploit then print yellow("[metaxploit]--------------["+white("version:"+version(Obj.metaxploit))+"]")
+    else
+      print yellow("[crypto]------------------["+red("METAXPLOIT NOT INSTALLED")+"]")
+      print yellow("[metaxploit]--------------["+red("NOT INSTALLED")+"]")
+    end if
+  end function
+  data=function(arg)
+    s=System.getSystem
+    for d in get_folders(s.dir.exploits)
+      l=[]
+      for f in get_files(d);l+=split(get_content(f),char(10));end for
+      print white(orange(name(d))+":")
+      print white(white("Records Total")+green(":"))+yellow(str(len(l)))
+    end for
+  end function
+  datalong=function(arg)
+    _p=ArgumentParser.init
+    _p.addArgument("s",false,"flag")
+    arg=_p.parseArgs("stats",arg)
+    s=System.getSystem
+    for d in get_folders(s.dir.exploits)
+      l=[]
+      for f in get_files(d);l+=split(get_content(f),char(10));end for
+      if arg.s then sort(l)
+      print white(orange(name(d))+":")
+      print white(white("Records Total")+green(":"))+yellow(str(len(l)))
+      if name(d)=="stree" or name(d)=="mtree" or name(d)=="rtree" then continue
+      for i in l
+        i=split(split(i,"Б")[0],"_")
+        if len(i)==2 then
+          if arg.s then print blue(i[0]+yellow(":")+green(i[1])) else print blue(i[0]+yellow(":")+green(i[1])+" index["+yellow(__i_idx)+"]")
+        else if len(i)==3 then
+          if arg.s then print blue(i[0]+"_"+i[1]+yellow(":")+green(i[2])) else print blue(i[0]+"_"+i[1]+yellow(":")+green(i[2])+" index["+yellow(__i_idx)+"]")
+        end if
+      end for
+    end for
+  end function
+  cmds={
+    "-d":@data,
+    "-l":@libs,
+    "-dl":@datalong,
+    "-s":@stats
+  }
+  if not hasIndex(cmds,argv[0]) then return Error.set(Text.msg.flag+argv[0]+" ]")
+  cmds[argv[0]](argv[1:])
+end function

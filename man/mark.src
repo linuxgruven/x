@@ -1,0 +1,22 @@
+// Man page for mark
+manMark="MARK(1)                          X Shell Manual                          MARK(1)
+
+<b>NAME</b>
+    mark - Internal timer for benchmarking
+<b>SYNOPSIS</b>
+    <b>mark</b>
+<b>DESCRIPTION</b>
+    Start or display the internal system timer that counts elapsed seconds.
+    If the timer is not running, this command starts it. If already running,
+    it displays the time elapsed in seconds. Primarily used for benchmarking
+    and performance measurement of operations.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Start Timer</color>
+    <b>mark</b>
+    Start the benchmarking timer
+
+    <color=#e4ff34># Check Elapsed Time</color>
+    <b>mark</b>
+    Display seconds since timer started
+<b>SEE ALSO</b>
+    <b>wait</b>"

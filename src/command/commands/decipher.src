@@ -1,0 +1,97 @@
+// =============================================================================
+// DECIPHER
+// Crack password hashes via dictionary attack or crypto library.
+// =============================================================================
+Command.decipher=function(Obj,argv)
+	hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+	if not argv and not hasPipeInput then return Man.help(["decipher"])
+	// Hash validation function - checks for valid 32-char lowercase hex MD5
+	checkHash=function(hash);if not hash.matches("^[a-f0-9]{32}$") then return;return true;end function
+	argv=ArgumentParser.check(argv)
+	_p=ArgumentParser.init
+	_p.addArgument("d",false,"flag")      // Dictionary attack mode
+	_p.addArgument("u",false,"store")     // Username filter
+	_p.addArgument("post",true,"flag")    // Post-processing flag
+	argv=_p.parseArgs("decipher",argv)
+	if argv isa Error then return
+	input=null
+	usePipedInput=false
+	if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+		input=globals.G_pipe.stdin
+		if typeof(input)!="string" then input=str(input)
+		input=trim(input)
+		usePipedInput=true
+	end if
+	// If no piped input, check for argument
+	if not usePipedInput then
+		if not argv.rest or len(argv.rest)==0 then return Man.help(["decipher"])
+		input=argv.rest[0]
+	end if
+	argv=_p.checkRedirect(Obj,"ls",argv)
+	if argv isa Error then return
+	if not usePipedInput then
+		argv=_p.parsePath(Obj,argv)
+		if argv isa Error then return
+	end if
+	useDictionary=argv.d
+	results=[]
+	// Crack a hash using dictionary or crypto
+	_crack=function(hash)
+		if useDictionary then
+			Info.info("Testing...")
+			return Crack.hash(hash)
+		end if
+		if not Library.haveCrypto then return null
+		if globals.G_crypto then crypto=globals.G_crypto else crypto=Library.crypto
+		return Crack.doDecipher(crypto,hash)
+	end function
+	// Output result to pipe, file, or screen
+	_output=function(text,colorText)
+		if globals.G_pipe.PIPE_MODE then
+			push(globals.G_pipe.stdout,text)
+		else if _p.write then
+			push(results,text)
+		else
+			print colorText
+		end if
+	end function
+	// Process single hash input (detected by valid hash format)
+	if checkHash(input) then
+		password=_crack(input)
+		if not password or password isa Error then return
+		_output(password,yellow("Password is [ "+white(password)+" ]"))
+	else if indexOf(input,"/")!=null or indexOf(input,".")!=null or len(input)<32 then
+		// Process file with hash list (detected by path separators or short length)
+		file=Io._getFile(Obj,input)
+		if file isa Error then return file
+		if not has_permission(file,"r") then return Error.set("Can't read file, permission denied")
+		if is_binary(file) then return Error.set("Can't read "+name(file)+" REASON: Binary file")
+		if not get_content(file) then return Info.info("File is empty")
+		for line in split(get_content(file),char(10))
+			if not len(line) then continue
+			// Parse username:hash pairs
+			parts=split(trim(line),":")
+			if not parts then continue
+			if len(parts)!=2 then continue
+			if len(parts[1])!=32 then continue
+			if argv.u and parts[0]!=argv.u then continue
+			password=_crack(parts[1])
+			if not password or password isa Error then continue
+			_output("[ "+parts[0]+" ] password is [ "+password+" ]",yellow("[ "+white(parts[0])+" ] password is [ "+white(password)+" ]"))
+		end for
+	else if indexOf(input,":")!=null then
+		// Process user:hash format input (detected by colon separator)
+		parts=split(trim(input),":")
+		if len(parts)!=2 then return
+		if not checkHash(parts[1]) then return
+		password=_crack(parts[1])
+		if not password or password isa Error then return
+		_output("[ "+parts[0]+" ] password is [ "+password+" ]",yellow("[ "+white(parts[0])+" ] password is [ "+white(password)+" ]"))
+	end if
+	// Return early if in PIPE_MODE - output already buffered
+	if globals.G_pipe.PIPE_MODE then return
+	if _p.write then
+		argv["data"]=results
+		_p.out(Obj,argv)
+	end if
+end function

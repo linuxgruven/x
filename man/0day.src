@@ -1,0 +1,263 @@
+// Man page for 0day
+// XFIX1.0: REMOVE 0day neuro (+ synopsis/OPTIONS/EXAMPLES for Neurobox scanning) —
+// XFIX1.0: whois no longer tags "[Neurobox Network]"; no replacement fingerprint from scripts.
+man0day="0DAY(1)                          X Shell Manual                          0DAY(1)
+
+<b>NAME</b>
+    0day - PObject 0day exploitation framework
+<b>SYNOPSIS</b>
+    <b>0day -m</b>
+    <b>0day -a</b><b> NAME PASSWORD</b>
+    <b>0day -v</b>
+    <b>0day -r</b><b> INDEX</b>
+    <b>0day purge</b>
+    <b>0day -p</b><b> LIBRARY</b>
+    <b>0day -c</b><b> LIBRARY|IP:PORT</b> [true]
+    <b>0day -pa</b><b> PATH</b>
+    <b>0day mode</b> [RSHELL_SERVER_IP]
+    <b>0day neuro</b> [-e EMAIL] [-p EPASS] [-t TARGET] [-i IP] [-l START] [-s SKIP] [-r] [--bash SCRIPT]
+    <b>0day next</b>
+    <b>0day left</b>
+    <b>0day claim</b> <b>USER PASS</b>
+<b>DESCRIPTION</b>
+    The 0day framework provides comprehensive tools for managing PObject exploits,
+    patching libraries, and conducting automated Neurobox IP scanning operations.
+    It maintains engineer credentials, tracks library patch status, and enables
+    0day mode for advanced penetration testing workflows.
+
+    <b>Library Shortcuts:</b>
+      <b>router</b> ------- kernel_router.so
+      <b>ssh</b> ---------- libssh.so
+      <b>ftp</b> ---------- libftp.so
+      <b>http</b> --------- libhttp.so
+      <b>chat</b> --------- libchat.so
+      <b>rshell</b> ------- librshell.so
+      <b>repo</b> --------- librepository.so
+      <b>cam</b> ---------- libcam.so
+      <b>sql</b> ---------- libsql.so
+      <b>smtp</b> --------- libsmtp.so
+      <b>init</b> --------- init.so
+      <b>kernel</b> ------- kernel_module.so
+      <b>net</b> ---------- net.so
+      <b>apt</b> ---------- aptclient.so
+      <b>cry</b> ---------- crypto.so
+      <b>meta</b> --------- metaxploit.so
+
+    <color=#e4ff34>*** Requires root shell for most operations ***</color>
+    <color=#e4ff34>*** Only valid from main, proxy, or shell (disabled for ftpshell) ***</color>
+
+<b>POBJECT INTERPRETER</b>
+    After successful exploitation, you enter the PObject Interpreter - an interactive
+    shell for executing operations on partial objects. The prompt shows:
+    •[library:version]•public_ip:local_ip•
+    PObject Interpreter :~$
+
+    <b>Available Commands:</b>
+      <b>help</b> --------- Display PObject Interpreter help
+      <b>exit</b> --------- Exit the PObject Interpreter
+      <b>cls</b> ---------- Clear the screen
+      <b>libs</b> --------- List all available libraries on target
+      <b>scan</b> --------- Scan a port or library for vulnerabilities
+      <b>meta</b> --------- Launch exploit selection interface
+      <b>ports</b> -------- Display all open ports on edge router
+      <b>probe</b> -------- Check if a file or path exists
+      <b>main</b> --------- Execute commands from main shell context
+
+    <b>File Operations</b> (from file partial object):
+      <b>chmod</b> -------- Change file/folder permissions
+      <b>chown</b> -------- Change file/folder owner
+      <b>chgrp</b> -------- Change file/folder group
+      <b>cp</b> ----------- Copy file
+      <b>mv</b> ----------- Move file
+      <b>rn</b> ----------- Rename file
+      <b>rm</b> ----------- Delete file/folder
+
+    <b>Computer Operations</b> (from computer partial object):
+      <b>mkdir</b> -------- Create directory
+      <b>touch</b> -------- Create file
+      <b>passwd</b> ------- Change user password
+      <b>useradd</b> ------ Create user
+      <b>userdel</b> ------ Delete user
+      <b>groupadd</b> ----- Create group
+      <b>groupdel</b> ----- Delete group
+      <b>ps</b> ----------- Show running processes
+      <b>kill</b> --------- Close/kill process
+
+    <b>Scanning Libraries with Partial Names:</b>
+    The scan command supports flexible library name matching:
+      <b>scan http</b> ---------- Finds libhttp.so (contains http)
+      <b>scan net</b> ----------- Finds net.so (contains net)
+      <b>scan ssh</b> ----------- Finds libssh.so (contains ssh)
+      <b>scan router</b> -------- Finds kernel_router.so (contains router)
+      <b>scan kernel</b> -------- Finds kernel_router.so or kernel_module.so
+      <b>scan init</b> ---------- Finds init.so (contains init)
+      <b>scan libhttp.so</b> ---- Exact match for libhttp.so
+
+    Scanning allows you to switch to different libraries on the same target
+    without exiting the PObject Interpreter. Each library may provide different
+    permissions (root, user, guest) for computer and file access.
+
+    <b>Important Notes:</b>
+    - File operation changes exist only in memory until an exploit is executed
+    - Use <b>meta</b> command to execute exploits and persist changes to target
+    - The system automatically tries all cached library exploits for persistence
+    - Press <b>c</b> to close shell objects returned by successful exploits
+
+<b>OPTIONS</b>
+    <b>-m</b> - Manage Engineer Credentials
+      Interactive menu to manage stored engineer credentials for Neurobox scanning.
+
+    <b>-a NAME PASSWORD</b> - Add Engineer Credentials
+      Store engineer name and password for automated Neurobox authentication.
+
+    <b>-v</b> - View Engineer Credentials
+      Display all saved engineer credentials with indices.
+
+    <b>-r INDEX</b> - Remove Engineer Credential
+      Delete engineer credential at specified INDEX from storage.
+
+    <b>purge</b> - Purge All Data
+      Clear all PObjects from database and remove all engineer credentials.
+
+    <b>-p LIBRARY</b> - Patch Library
+      Patch specified library using shortcut name or full library name.
+
+    <b>-c LIBRARY|IP:PORT</b> [true] - Check Patch Status
+      Check if library or service at IP:PORT has been patched.
+      Returns date in format: dd/MM/yyyy
+      Optional true parameter forces recheck.
+
+    <b>-pa PATH</b> - Patch All Libraries
+      Patch all local libraries found at specified PATH.
+
+    <b>mode</b> [RSHELL_SERVER_IP] - Enable 0day Mode
+      Enable 0day mode to prevent automatic log wiping.
+      Optional RSHELL_SERVER_IP displays server IP in dig/recon query results.
+
+    <b>neuro</b> - Neurobox IP Scanner
+      Automated Neurobox IP scanning with partial IP address resolution.
+      Requires at least 3 known octets and target engineer name for fast scanning.
+      If two octets are XXX, the second is automatically converted to YYY.
+      <b>-e EMAIL</b> - Engineer email address
+      <b>-p EPASS</b> - Engineer password
+      <b>-t TARGET</b> - Target engineer name
+      <b>-i IP</b> - IP address with unknown octets as XXX (or XXX and YYY)
+      <b>-l START</b> - Starting octet for 2-octet scans (YYY position)
+      <b>-s SKIP</b> - Skip XXX octet after N wrong-person hits (default 10, 0=off)
+      <b>-r</b> - Randomize scan order of the XXX octet (YYY still iterates 1-255 linearly)
+      <b>--bash SCRIPT</b> - Bash script to execute on successful scan
+      IP Format (3 octets): 1.XXX.1.1 [faster]
+      IP Format (2 octets): 1.XXX.1.XXX or 1.XXX.1.YYY (slower, use -l/-s)
+
+    <b>next</b> - Next 0day Cycle Time
+      Display real-world time until next 0day cycle begins.
+
+    <b>left</b> - Current Cycle Time Remaining
+      Display real-world time remaining in current 0day cycle.
+
+    <b>claim USER PASS</b> - Quick credential save
+      One-shot helper to claim credentials quickly
+      (reduces the chance of credential theft/leaks).
+
+      Prompts to save the provided credentials if successful.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Credential Management</color>
+    <b>0day -m</b>
+    Open interactive credential management menu
+
+    <b>0day -a Aselleyno password123</b>
+    Add engineer credentials: name and password
+
+    <b>0day -v</b>
+    View all stored engineer credentials
+
+    <b>0day -r 2</b>
+    Remove credential at index 2
+
+    <color=#e4ff34># Library Patching</color>
+    <b>0day -p ssh</b>
+    Patch SSH library using shortcut
+
+    <b>0day -p libhttp.so</b>
+    Patch HTTP library using full name
+
+    <b>0day -c net</b>
+    Check if net.so has been patched
+
+    <b>0day -c 192.168.1.1:22</b>
+    Check if SSH service at IP has been patched
+
+    <b>0day -pa /lib</b>
+    Patch all libraries in /lib directory
+
+    <color=#e4ff34># 0day Mode</color>
+    <b>0day mode</b>
+    Enable 0day mode (disable auto log wiping)
+
+    <b>0day mode 192.168.1.100</b>
+    Enable 0day mode with rshell server IP display
+
+    <color=#e4ff34># Neurobox Scanning</color>
+    <b>0day neuro -e tux@zizolugix.com -p mypass -t Aselleyno -i XXX.17.216.218</b>
+    Scan with 3 known octets (fast) for target engineer Aselleyno
+
+    <b>0day neuro -e tux@zizolugix.com -p mypass -t John -i XXX.YYY.216.218 -l 100</b>
+    Scan with 2 known octets starting from YYY=100
+
+    <b>0day neuro -e tux@site.com -p x -t John -i 233.XXX.216.XXX</b>
+    Two unknown octets — second XXX auto-converts to YYY, skip=10 (default)
+
+    <b>0day neuro -e tux@site.com -p x -t John -i 233.XXX.216.XXX -s 5</b>
+    Skip to next YYY after 5 wrong-person Neurobox hits
+
+    <b>0day neuro -e tux@site.com -p x -t John -i 233.XXX.216.XXX -s 0</b>
+    Disable skipping — scan all 255 IPs per YYY octet
+
+    <b>0day neuro -e admin@site.com -p x -t Dave -i XXX.17.216.218 -s 5 --bash @dige</b>
+    Scan and execute bash script @dige on success
+
+    <b>0day neuro -e tux@site.com -p x -t John -i 233.XXX.216.XXX -s 5 -r --bash @dige</b>
+    Random-order scan (shuffles both XXX and YYY) — faster avg time to hit
+
+    <color=#e4ff34># Cycle Timing</color>
+    <b>0day next</b>
+    Show time until next 0day cycle
+
+    <b>0day left</b>
+    Show time remaining in current cycle
+
+    <color=#e4ff34># Quick claim (no credential storage)</color>
+    <b>0day claim John Doe</b>
+    Claim creds for the current use, then answer <b>No</b> when prompted
+
+    <color=#e4ff34># Database Management</color>
+    <b>0day purge</b>
+    Clear all PObjects and credentials (WARNING: irreversible)
+
+    <color=#e4ff34># PObject Interpreter Usage</color>
+    <b>scan http</b>
+    Scan libhttp.so library (finds library containing http)
+
+    <b>scan router</b>
+    Scan kernel_router.so (finds library containing router)
+
+    <b>scan 22</b>
+    Scan port 22 on current target
+
+    <b>chmod -r 000 /</b>
+    Change all permissions to 000 recursively (requires exploit execution)
+
+    <b>meta</b>
+    Launch exploit interface to persist changes or gain object access
+
+    <b>probe /etc/passwd</b>
+    Check if /etc/passwd file exists on target
+
+    <b>libs</b>
+    List all available libraries on target system
+
+    <b>main ls</b>
+    Execute 'ls' command from main shell context
+
+<b>SEE ALSO</b>
+    <b>lms</b>, <b>dig</b>, <b>recon</b>"

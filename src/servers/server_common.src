@@ -1,0 +1,202 @@
+// =============================================================================
+// SERVER_COMMON
+// Shared server base; common SSH encryption setup and filesystem security operations.
+// =============================================================================
+ServerCommon={}
+//Adapter: return the server global for this instance
+//Override in subclass to return globals.G_server or globals.G_libServer
+ServerCommon._getServerGlobal=function;return null;end function
+//Setup S1 simple SSH encryption
+//Creates encode/decode scripts with plaintext password validation
+//Parameters:
+//  s - Shell object for server
+//  m - Metadata map with ip, port, user, password
+//Returns: 1 on success, Error on failure
+ServerCommon.setupS1=function(s,m)
+  //Mark encryption type
+  m.type="S1"
+	//Encode function: validates password with get_shell, returns "1" or "0"
+  e="Encode=function(password);h=len(password);m=function(a,b,c);return(a*b+c)%256;end function;w=[];for i in range(0,25);push(w,i);end for;d=[];for i in range(0,9);push(d,i);end for;s=floor(127/3);for i in range(0,24);x=25-i;s=m(s,31,17);j=s%(x+1);t=w[x];w[x]=w[j];w[j]=t;end for;s=floor(293/4);for i in range(0,8);x=9-i;s=m(s,31,17);j=s%(x+1);t=d[x];d[x]=d[j];d[j]=t;end for;q=m(h,7,13);z=[];for i in range(0,h-1);q=m(q,31,17);push(z,q);end for;for i in range(0,h-1);z[i]=m(z[i],53,z[(i+1)%h]);end for;b=[];for i in range(0,h-1);push(b,code(password[i]));end for;for i in range(0,h-1);v=b[i];if v>=97 and v<=122 then;b[i]=97+w[(v-97+z[i]%26)%26];else if v>=65 and v<=90 then;b[i]=65+w[(v-65+z[i]%26)%26];else if v>=48 and v<=57 then;b[i]=48+d[(v-48+z[i]%10)%10];end if;end for;e=floor(52/7);for i in range(0,h-1);v=b[i];if v>=97 and v<=122 then;b[i]=97+((v-97)*e+z[i]%26)%26;else if v>=65 and v<=90 then;b[i]=65+((v-65)*e+z[i]%26)%26;else if v>=48 and v<=57 then;b[i]=48+((v-48)*floor(19/6)+z[i]%10)%10;end if;end for;p=z[0];for i in range(0,h-1);v=b[i];if v>=97 and v<=122 then;b[i]=97+(v-97+p%26)%26;else if v>=65 and v<=90 then;b[i]=65+(v-65+p%26)%26;else if v>=48 and v<=57 then;b[i]=48+(v-48+p%10)%10;end if;p=b[i];end for;for i in range(0,floor(h/2)-1);j=z[i]%h;t=b[i];b[i]=b[j];b[j]=t;end for;for i in range(0,h-1);v=b[i];r=z[h-1-i];if v>=97 and v<=122 then;b[i]=97+(v-97+r%26)%26;else if v>=65 and v<=90 then;b[i]=65+(v-65+r%26)%26;else if v>=48 and v<=57 then;b[i]=48+(v-48+r%10)%10;end if;end for;o=[];for i in range(0,h-1);push(o,char(b[i]));end for;return join(o,"""");end function"
+  //e="Encode=function(p);if get_shell(""root"",p) then return ""1"";return ""0"";end function"
+	//Decode function: returns password if "1", else "BadPassword"
+	d="Decode=function(password);n=len(password);letterBox=[];for i in range(0,25);push(letterBox,i);end for;seed=42;for i in range(0,24);idx=25-i;seed=(seed*31+17)%256;j=seed%(idx+1);tmp=letterBox[idx];letterBox[idx]=letterBox[j];letterBox[j]=tmp;end for;invLetter=[];for i in range(0,25);push(invLetter,0);end for;for i in range(0,25);invLetter[letterBox[i]]=i;end for;digitBox=[];for i in range(0,9);push(digitBox,i);end for;seed=73;for i in range(0,8);idx=9-i;seed=(seed*31+17)%256;j=seed%(idx+1);tmp=digitBox[idx];digitBox[idx]=digitBox[j];digitBox[j]=tmp;end for;invDigit=[];for i in range(0,9);push(invDigit,0);end for;for i in range(0,9);invDigit[digitBox[i]]=i;end for;ks=(n*7+13)%256;key=[];for i in range(0,n-1);ks=(ks*31+17)%256;push(key,ks);end for;for i in range(0,n-1);key[i]=(key[i]*53+key[(i+1)%n])%256;end for;codes=[];for i in range(0,n-1);push(codes,code(password[i]));end for;for i in range(0,n-1);v=codes[i];r=key[n-1-i];if v>=97 and v<=122 then;codes[i]=97+(v-97-r%26+26)%26;else if v>=65 and v<=90 then;codes[i]=65+(v-65-r%26+26)%26;else if v>=48 and v<=57 then;codes[i]=48+(v-48-r%10+10)%10;end if;end for;for i in range(floor(n/2)-1,0);j=key[i]%n;tmp=codes[i];codes[i]=codes[j];codes[j]=tmp;end for;prev=key[0];for i in range(0,n-1);v=codes[i];if v>=97 and v<=122 then;codes[i]=97+(v-97-prev%26+26)%26;else if v>=65 and v<=90 then;codes[i]=65+(v-65-prev%26+26)%26;else if v>=48 and v<=57 then;codes[i]=48+(v-48-prev%10+10)%10;end if;prev=v;end for;for i in range(0,n-1);v=codes[i];if v>=97 and v<=122 then;codes[i]=97+((v-97-key[i]%26+26)*15)%26;else if v>=65 and v<=90 then;codes[i]=65+((v-65-key[i]%26+26)*15)%26;else if v>=48 and v<=57 then;codes[i]=48+((v-48-key[i]%10+10)*7)%10;end if;end for;for i in range(0,n-1);v=codes[i];if v>=97 and v<=122 then;codes[i]=97+(invLetter[v-97]-key[i]%26+26)%26;else if v>=65 and v<=90 then;codes[i]=65+(invLetter[v-65]-key[i]%26+26)%26;else if v>=48 and v<=57 then;codes[i]=48+(invDigit[v-48]-key[i]%10+10)%10;end if;end for;out=[];for i in range(0,n-1);push(out,char(codes[i]));end for;return join(out,"""");end function"
+  //d="Decode=function(p);if p==""1"" then return """+m.password+""";return ""BadPassword"";end function"
+	//SSH daemon configuration (encryption enabled, no connection message)
+	c="{""encryption_enabled"":true,""message_encrypted_conn"":false,""path_enc"":""/server/encode.src"",""path_dec"":""/server/decode.bin""}"
+	//Ask if encryption message should be shown
+	if Gui.yesNo("Show that the server is using encryption during connection?",false) then c="{""encryption_enabled"":true,""message_encrypted_conn"":true,""path_enc"":""/server/encode.src"",""path_dec"":""/server/decode.bin""}"
+	//Get server computer
+	z=host_computer(s)
+	//Write SSH configuration
+	r=File(z,"/server/conf/sshd.conf")
+	if r then set_content(r,c)
+	//Write encode script
+	r=File(z,"/server/encode.src")
+	if r then set_content(r,e)
+	//Remove old decode binary
+	r=File(z,"/server/decode.bin")
+	if r then delete(r)
+	//Create decode source file
+	touch(z,"/server/","decode.bin.src")
+	set_content(File(z,"/server/decode.bin.src"),d)
+	//Build decode binary
+	x=build(s,"/server/decode.bin.src","/server",0)
+	if x=="" then
+		//Clean up source file
+		delete(File(z,"/server/decode.bin.src"))
+		//Test connection with password
+		if not connect_service(get_shell,m.ip,m.port,m.user,m.password,"ssh") isa string then return 1 else return Error.set("Failed to setup S1 encryption")
+	else
+		//Build failed
+		return Error.set(x)
+	end if
+end function
+//Setup R1 hash-based SSH encryption with date salt
+//Creates encode/decode scripts with temporal hash validation
+//Parameters:
+//  s - Shell object for server
+//  m - Metadata map with ip, port, user, password
+//Returns: 1 on success, Error on failure
+ServerCommon.setupR1=function(s,m)
+  //Mark encryption type
+  m.type="R1"
+	//Encode function: passthrough (no encoding needed)
+	e="Encode=function(p);return p;end function"
+	//Decode function: includes R1 hash implementation with current_date salt
+	//R1 hash: custom algorithm with block processing, XOR, rotation, and mixing
+	d=System._R1_HASH+"Decode=function(h);if h==R1("""+m.password+"""+current_date) then return """+m.password+""" else return ""BadPassword"";end function"
+	//SSH daemon configuration
+	c="{""encryption_enabled"":true,""message_encrypted_conn"":false,""path_enc"":""/server/encode.src"",""path_dec"":""/server/decode.bin""}"
+	//Ask if encryption message should be shown
+	if Gui.yesNo("Show that the server is using encryption during connection?",false) then c="{""encryption_enabled"":true,""message_encrypted_conn"":true,""path_enc"":""/server/encode.src"",""path_dec"":""/server/decode.bin""}"
+	//Get server computer
+	z=host_computer(s)
+	//Write SSH configuration
+	r=File(z,"/server/conf/sshd.conf")
+	if r then set_content(r,c)
+	//Write encode script (passthrough)
+	r=File(z,"/server/encode.src")
+	if r then set_content(r,e)
+	//Remove old decode binary
+	r=File(z,"/server/decode.bin")
+	if r then delete(r)
+	//Create decode source file
+	touch(z,"/server/","decode.bin.src")
+	set_content(File(z,"/server/decode.bin.src"),d)
+	//Build decode binary
+	x=build(s,"/server/decode.bin.src","/server",0)
+	if x=="" then
+		//Clean up source file
+		delete(File(z,"/server/decode.bin.src"))
+		//Test connection with R1 hash (password+current_date)
+		if not connect_service(get_shell,m.ip,m.port,m.user,Crypt.R1(m.password+current_date),"ssh") isa string then return 1 else return Error.set("Failed to setup R1 encryption")
+	else
+		//Build failed
+		return Error.set(x)
+	end if
+end function
+//Remove SSH encryption from server
+//Disables encryption in SSH daemon configuration
+//Parameters: None (uses self._getServerGlobal)
+//Returns: None
+ServerCommon.removeEncryption=function
+	//Write configuration with encryption disabled
+	set_content(File(host_computer(self._getServerGlobal.shell),"/server/conf/sshd.conf"),"{""encryption_enabled"":false,""message_encrypted_conn"":false,""path_enc"":""/server/encode.src"",""path_dec"":""/server/decode.bin""}")
+end function
+//Lock down filesystem for security
+//Removes unnecessary files and strips permissions
+//Parameters: None (uses self._getServerGlobal)
+//Returns: None
+//WARNING: This operation is destructive and irreversible
+ServerCommon.lockFilesystem=function
+	Info.info("Securing the server...")
+	//Get server computer
+	c=self._getServerGlobal.computer
+	//Remove all files from /bin (keeps reboot)
+	if len(get_files(File(c,"/bin")))>1 then
+		Info.info("Removing all files from /bin (reboot is exempt)...")
+		for f in get_files(File(c,"/bin"));if name(f)!="reboot" then delete(f);end for
+	end if
+	Info.info("Checking for unnecessary files...")
+	//Remove /home directory
+	f=File(c,"/home")
+	if f then
+		Info.warning("Removing /home...","-")
+		delete(f)
+	end if
+	//Remove Downloads folder
+	f=File(c,"/root/Downloads")
+	if f then
+		Info.warning("Removing the Downloads folder...","-")
+		delete(f)
+	end if
+	//Remove Desktop folder
+	f=File(c,"/root/Desktop")
+	if f then
+		Info.warning("Removing the Desktop folder...","-")
+		delete(f)
+	end if
+	//Remove Config folder
+	f=File(c,"/root/Config")
+	if f then
+		Info.warning("Removing the Config folder...","-")
+		delete(f)
+	end if
+	//Remove passwd file
+	f=File(c,"/etc/passwd")
+	if f then
+		Info.warning("Removing the passwd file...","-")
+		delete(f)
+	end if
+	//Optionally remove GUI applications
+	if Gui.yesNo("Remove unnessesary Gui.exe files?",false) then
+		//Remove Mail.exe
+		f=File(c,"/usr/bin/Mail.exe")
+		if f then
+			Info.warning("Removing Mail.exe...","-")
+			delete(f)
+		end if
+		//Remove FileExplorer.exe
+		f=File(c,"/usr/bin/FileExplorer.exe")
+		if f then
+			Info.warning("Removing FileExplorer.exe...","-")
+			delete(f)
+		end if
+		//Remove Notepad.exe
+		f=File(c,"/usr/bin/Notepad.exe")
+		if f then
+			Info.warning("Removing Notepad.exe...","-")
+			delete(f)
+		end if
+		//Remove CodeEditor.exe
+		f=File(c,"/usr/bin/CodeEditor.exe")
+		if f then
+			Info.warning("Removing CodeEditor.exe...","-")
+			delete(f)
+		end if
+		//Remove ImageViewer.exe
+		f=File(c,"/usr/bin/ImageViewer.exe")
+		if f then
+			Info.warning("Removing ImageViewer.exe...","-")
+			delete(f)
+		end if
+		//Remove PDFReader.exe
+		f=File(c,"/usr/bin/PDFReader.exe")
+		if f then
+			Info.warning("Removing PDFReader.exe...","-")
+			delete(f)
+		end if
+	end if
+	Info.info("Removing file permissions from /...")
+	//Get root directory
+	f=File(c,"/")
+	//Set owner to root recursively
+	set_owner(f,"root",1)
+	//Set group to root recursively
+	set_group(f,"root",1)
+	//Strip all permissions recursively
+	chmod(f,"o-wrx",1)
+	chmod(f,"u-wrx",1)
+	chmod(f,"g-wrx",1)
+	Info.info("Server secured")
+end function

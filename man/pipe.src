@@ -1,0 +1,609 @@
+// Man page for pipe
+manPipe="PIPE(1)                          X Shell Manual                          PIPE(1)
+
+<b>NAME</b>
+    pipe - Unix-style command chaining with output redirection
+<b>SYNOPSIS</b>
+    <b>pipe</b><b> env</b> [<i>VAR</i>] [<b>-c</b>]
+    <b>pipe</b><b> unset</b> <i>VAR</i>
+    <b>pipe</b><b> debug</b> [<b>on</b>|<b>off</b>]
+    
+    <b>COMMAND1</b><b> | </b><b>COMMAND2</b><b> | </b><b>COMMAND3</b>
+    <b>COMMAND</b><b> > </b><b>FILE</b>
+    <b>COMMAND</b><b> >> </b><b>FILE</b>
+    <b>COMMAND1</b><b> | </b><b>COMMAND2</b><b> > </b><b>FILE</b>
+<b>DESCRIPTION</b>
+    The pipe system allows chaining multiple commands together using the pipe
+    operator <b>|</b> to pass output from one command as input to the next. This enables
+    powerful data processing workflows similar to Unix/Linux command-line tools.
+    Output can be redirected to files using <b>></b> [overwrite] or <b>>></b> [append].
+
+    <b>Supported Pipe Commands:</b>
+      <b>alias</b> ----- Manage aliases; -l output is pipeable, -s reads from stdin
+      <b>awk</b>-------- Process and extract fields from text
+      <b>average</b> --- Compute average of piped numeric values
+      <b>bc</b> -------- Calculator for arithmetic expressions (supports parentheses)
+      <b>binary</b> ---- Convert numbers to/from binary via pipe
+      <b>bit</b> ------- Bitwise operations on piped numbers
+      <b>build</b> ----- Compile .src files; pipe sources, pass destination as arg
+      <b>cat</b> ------- Read and output file contents
+      <b>chog</b> ------ Change owner+group+perms; pipe filenames, pass user as arg
+      <b>chmod</b> ----- Change permissions; pipe filenames, pass mode as arg
+      <b>chown</b> ----- Change owner; pipe filenames, pass user as arg
+      <b>column</b> ---- Align text into readable columns
+      <b>cp</b> -------- Copy files; pipe sources, pass destination as arg
+      <b>cut</b> ------- Extract fields or characters from lines
+      <b>debug</b> ----- Toggle pipe debug output
+      <b>decimal</b> --- Convert piped numbers to decimal
+      <b>decipher</b> -- Decrypt or crack password hashes
+      <b>diff</b> ------ Compare text and output differences
+      <b>echo</b> ------ Output text to stdout (supports -e for escape sequences)
+      <b>email</b> ----- Email client; pipe credentials for -c and -l flags
+      <b>env</b> ------- List/show/clear pipe variables
+      <b>exec</b> ------ Execute file by path; pipe filenames to run
+      <b>file</b> ------ Detect file type information
+      <b>find</b> ------ Search for files by name or pattern
+      <b>grep</b> ------ Search for patterns in text
+      <b>groupadd</b> -- Add group; pipe names to create multiple groups
+      <b>groupdel</b> -- Delete group; pipe names to remove multiple groups
+      <b>hashcat</b> --- Hash/crack values; pipe hashes as input
+      <b>hashfile</b> -- Hash files; pipe filenames to hash
+      <b>head</b> ------ Show first lines from input
+      <b>hex</b> ------- Convert piped numbers to/from hex
+      <b>join</b> ------ Combine lines with a delimiter
+      <b>jq</b> -------- Query and format JSON data
+      <b>kill</b> ------ Kill processes; pipe PIDs to terminate
+      <b>l33t</b> ------ Convert text to l33t speak
+      <b>locate</b> ---- Locate files quickly by name
+      <b>ls</b> -------- List directory entries for chaining
+      <b>main</b> ------ Download/upload; pipe filenames for -d/-u
+      <b>median</b> ---- Compute median of piped numeric values
+      <b>mkdir</b> ----- Create directories; pipe names to create multiple
+      <b>more</b> ------ Page through piped text output
+      <b>mv</b> -------- Move files; pipe sources, pass destination as arg
+      <b>nmap</b> ------ Pipe-aware host/port scanning
+      <b>nslookup</b> -- Resolve domains/IPs in chains
+      <b>open</b> ------ Open GUI app with piped file paths as arguments
+      <b>pacman</b> ---- Package manager; pipe package names
+      <b>paste</b> ----- Merge/combine lines; accepts piped input
+      <b>percent</b> --- Percentage calculations on piped numbers
+      <b>ping</b> ------ Connectivity checks in pipelines
+      <b>printf</b> ---- Formatted output; accepts piped format strings
+      <b>ps</b> -------- List running processes
+      <b>pwd</b> ------- Emit current working directory
+      <b>qrm</b> ------- Quiet remove (no log); pipe filenames to delete
+      <b>radix</b> ----- Convert piped numbers between bases
+      <b>rev</b> ------- Reverse text or line order
+      <b>rm</b> -------- Remove files; pipe filenames to delete
+      <b>rmdir</b> ----- Remove directories; pipe names to remove
+      <b>rsync</b> ----- Sync files; pipe sources to sync
+      <b>scanaddress</b> Scan zone addresses from args/stdin
+      <b>scanlib</b> ---- Library scanner with pipe output
+      <b>scanrouter</b>  Scan router data in chains
+      <b>scp</b> ------- Secure file copy; pipe filenames for -d/-u
+      <b>sed</b> ------- Find and replace text patterns
+      <b>seq</b> ------- Generate number sequences for piping
+      <b>set</b> ------- Store pipe variables
+      <b>sort</b> ------ Sort lines alphabetically or numerically
+      <b>split</b> ----- Split text by delimiter
+      <b>stat</b> ------ System/file statistics in pipe mode
+      <b>su</b> -------- Switch user; pipe password as stdin
+      <b>tail</b> ------ Show last lines from input
+      <b>tee</b> ------- Write stdin to file and pass through
+      <b>time</b> ------ Emit command/time info for chaining
+      <b>touch</b> ----- Create/update files; pipe names to create multiple
+      <b>tr</b> -------- Translate or delete characters (supports escape sequences)
+      <b>trim</b> ------ Remove leading/trailing whitespace
+      <b>uniq</b> ------ Remove duplicate lines (works on lines, not words)
+      <b>unset</b> ----- Remove pipe variables
+      <b>uptime</b> ---- Emit system uptime in pipe mode
+      <b>useradd</b> --- Add user account; pipe names to create multiple
+      <b>userdel</b> --- Delete user account; pipe names to remove multiple
+      <b>wc</b> -------- Count lines, words, or characters
+      <b>whois</b> ----- WHOIS lookup output for filters
+      <b>xargs</b> ----- Build and run command lines from stdin
+      <b>xc</b> -------- Clipboard operations
+      <b>xclip</b> ----- Clipboard read/write in pipelines
+<b>OPTIONS</b>
+    <b>OUTPUT REDIRECTION:</b>
+      <b>></b> FILE    Redirect output to FILE (overwrite)
+      <b>>></b> FILE    Append output to FILE
+      <b>> </b>    Redirect to 'pipe_out.txt' (default filename)
+      <b>>> </b>    Append to 'pipe_out.txt' (default filename)
+
+    <b>REDIRECT RULES:</b>
+      • Redirects must be at the END of a pipe chain
+      • Cannot redirect in the middle of pipes
+      • If no filename is specified, uses 'pipe_out.txt'
+      • File is created automatically if it doesn't exist
+      • <b>></b> overwrites existing file content
+      • <b>>></b> appends to existing file content
+
+    <b>awk</b> OPTIONS:
+      <b>-F</b><b>DELIM</b>       Set field separator (default: space)
+      <b>'{print $N}'</b>   Print field N (1-indexed)
+      <b>'{print $0}'</b>   Print entire line
+      <b>'{print $NF}'</b>  Print last field
+      <b>'{print NF}'</b>   Print number of fields
+
+    <b>bc</b> FUNCTIONS:
+      Operators: <b>  -  *  /  %  ^</b> (add, subtract, multiply, divide, modulo, power)
+      Functions: <b>abs sqrt floor ceil round sign sin cos tan</b>
+      Constants: <b>pi</b> (3.141593)
+      Utilities: <b>ip [N]</b> - Generate N random IP addresses (default: 1)
+      
+      <b>ORDER OF OPERATIONS:</b>
+        1. Parentheses () - nested parentheses supported
+        2. Exponentiation (^)
+        3. Multiplication (*), Division (/), Modulo (%)
+        4. Addition (+), Subtraction (-)
+
+    <b>cat</b> OPTIONS:
+      FILE    Read and output file contents line by line
+
+    <b>cut</b> OPTIONS:
+      <b>-f</b><b> N</b>    Extract field N
+      <b>-f</b><b> N,M</b>    Extract fields N and M
+      <b>-f</b><b> N-M</b>    Extract fields N through M
+      <b>-c</b><b> N-M</b>    Extract characters N through M
+      <b>-d</b><b> DELIM</b>   Set field delimiter (default: tab)
+
+    <b>echo</b> OPTIONS:
+      <b>-e</b>    Interpret escape sequences
+        \"+char(8203)+"n  newline
+        \"+char(8203)+"t  tab
+        \"+char(8203)+"r  carriage return
+        \"+char(8203)+"\  backslash
+
+    <b>decipher</b> OPTIONS:
+      <b>-d</b>    Use crypto library for decryption
+      <b>-b</b>    Use brute force/dictionary attack
+
+    <b>debug</b> OPTIONS:
+      <b>on</b>     Enable pipe debug output
+      <b>off</b>    Disable pipe debug output
+      Show current debug state (if no argument)
+
+    <b>env</b> OPTIONS:
+      <b>VAR</b>    Show value of variable VAR
+      <b>-c</b>       Clear all pipe variables
+
+    <b>grep</b> OPTIONS:
+      <b>-e</b>    Enable regex mode
+      <b>-i</b>    Ignore case (case-insensitive)
+      <b>-v</b>    Invert match (show non-matching lines)
+      <b>-n</b>    Invert match (same as -v)
+      <b>-l</b>    Show line numbers
+      <b>-o</b>    Count occurrences only
+      <b>-c</b>    Count matching lines
+
+    <b>ps</b> OPTIONS:
+      <b>-u</b> USER    Filter by username (exact match)
+      <b>-C</b> CMD    Filter by command name (partial match)
+
+    <b>sed</b> OPTIONS:
+      <b>PATTERN REPLACEMENT</b>   Find and replace PATTERN with REPLACEMENT
+      <b>-i</b>    In-place editing (or case-insensitive when used with pattern)
+
+    <b>set</b> OPTIONS:
+      <b>VAR</b>    Store piped input in variable VAR
+      Must be used within a pipe chain
+
+    <b>sort</b> OPTIONS:
+      <b>-r</b>    Reverse sort (descending order)
+      <b>-n</b>    Numeric sort
+
+    <b>tr</b> OPTIONS:
+      <b>SET1 SET2</b>     Translate characters from SET1 to SET2
+      <b>-d</b> SET1    Delete characters in SET1
+      <b>-s</b> SET1 [SET2] Squeeze repeated characters
+      <b>-c</b>    Complement SET1 (invert character set)
+      
+      <b>ESCAPE SEQUENCES:</b> Both SET1 and SET2 support:
+        \"+char(8203)+"n  newline
+        \"+char(8203)+"t  tab
+        \"+char(8203)+"r  carriage return
+        \"+char(8203)+"\  backslash
+
+    <b>uniq</b> OPTIONS:
+      <b>-s</b>    Sort unique items alphabetically
+
+    <b>unset</b> OPTIONS:
+      <b>VAR</b>    Remove variable VAR
+
+    <b>xargs</b> OPTIONS:
+      <b>-n</b> N         Pass N items per invocation (-n 1 = one per line)
+      <b>-I</b> PH        Replace PH in args with each item (implies -n 1)
+      <b>-d</b> DELIM     Split stdin on DELIM (single char; default newline)
+      <b>-t</b>           Trace: print each command before running
+      <b>CMD</b> [ARGS...] Target command and any leading args
+
+      Reads stdin, splits on the delimiter, runs CMD once per chunk
+      with the items appended (or substituted via -I). Each child also
+      receives the chunk as its stdin, so pipe-aware commands work the
+      same as commands that take args. Output from every invocation is
+      collected and forwarded to the next stage. Press <b>q</b> to abort.
+      Capped at 5000 items.
+
+      Both <b>-n N</b> and <b>-nN</b> forms are accepted (likewise -I, -d).
+
+      Examples:
+        <b>echo -e ""a\"+char(8203)+"nb\"+char(8203)+"nc"" | xargs -n1 rev</b>      reverse each line
+        <b>echo -e ""a\"+char(8203)+"nb\"+char(8203)+"nc\"+char(8203)+"nd"" | xargs -n2 echo</b>     two per call
+        <b>echo -e ""x\"+char(8203)+"ny"" | xargs -I{} echo ""[{}]""</b>     placeholder substitution
+        <b>echo ""a,b,c"" | xargs -d , -n1 rev</b>          custom delimiter
+        <b>cat ips.txt | xargs -n1 -t scan</b>             trace each invocation
+        <b>ls *.log | xargs -I{} mv {} {}.old</b>          rename in place
+        <b>find /tmp -name '*.bak' | xargs rm</b>          bulk delete
+        <b>cat hosts.txt | xargs -n1 dig | grep -v fail</b> chain into next stage
+        <b>echo -e ""1\"+char(8203)+"n2\"+char(8203)+"n3"" | xargs -n1 echo | wc -l</b>  count = 3
+        <b>echo -e ""x\"+char(8203)+"n\"+char(8203)+"n\"+char(8203)+"ny"" | xargs -n1 rev</b>          blanks skipped
+
+    <b>wc</b> OPTIONS:
+      <b>-l</b>    Count lines (supports multiple files)
+      <b>-w</b>    Count words (supports multiple files)
+      <b>-c</b>    Count characters (supports multiple files)
+      
+      <b>MULTIPLE FILES:</b> Shows count for each file individually
+      
+      Format: <b>COUNT FILENAME</b> (one line per file)
+      Last line shows <b>TOTAL total</b> when processing 2 files
+
+    <b>xc</b> OPTIONS:
+      <b>INDEX</b>    Retrieve line at INDEX from piped input
+      <b>-p INDEX</b>    Print line at INDEX
+      <b>--number N</b> Add number N to output
+      <b>--clear</b>    Return empty (clear operation)
+<b>PIPE VARIABLES</b>
+    The pipe system supports bash-like variable assignment and expansion for
+    storing and reusing values across pipeline stages.
+
+    <b>VARIABLE ASSIGNMENT:</b>
+      <b>echo value | set VAR</b>    Store value in VAR
+      <b>cmd | set VAR</b>     Store command output in VAR
+      Syntax: pipe value TO set, then specify variable name
+
+    <b>VARIABLE EXPANSION:</b>
+      <b>$VAR</b>    Expand to value of VAR
+      <b>${VAR}</b>    Explicit expansion (useful for adjacent text)
+
+    <b>VARIABLE MANAGEMENT (Piped):</b>
+      <b>echo | env VAR</b>    Show value of specific VAR
+      <b>echo | env -c</b>    Clear all variables
+      <b>echo | unset VAR</b>    Remove variable VAR
+
+    <b>VARIABLE MANAGEMENT (Standalone - MAIN Session Only):</b>
+      <b>pipe env</b>    List all pipe variables
+      <b>pipe env VAR</b>    Show value of VAR
+      <b>pipe env -c</b>    Clear all variables
+      <b>pipe unset VAR</b>    Remove variable VAR
+
+    <b>DEBUG MODE (Piped):</b>
+      <b>echo | debug on</b>    Enable debug output (shows variable expansions)
+      <b>echo | debug off</b>    Disable debug output
+      <b>echo | debug</b>    Show current debug state
+
+    <b>DEBUG MODE (Standalone - MAIN Session Only):</b>
+      <b>pipe debug on</b>    Enable debug output
+      <b>pipe debug off</b>    Disable debug output
+      <b>pipe debug</b>    Show current debug state
+
+    <b>NOTES:</b>
+      • Variables persist across commands until unset or cleared
+      • set returns empty to avoid polluting pipe chains
+      • Word boundaries prevent partial name matches ($VAR won't match $VARIABLE)
+      • <b>IMPORTANT:</b> Within pipe chains, use <b>set VAR</b> (not <b>pipe set VAR</b>)
+      • <b>IMPORTANT:</b> Standalone commands require <b>pipe</b> prefix (MAIN session only)
+      
+      <b>CORRECT SYNTAX:</b>
+        In pipe chain:   <b>bc ip | set IP && echo $IP</b>
+        Standalone:      <b>pipe env IP</b> (show value)
+        
+      <b>INCORRECT:</b>
+        Don't use:       <b>bc ip | pipe set IP</b> (wrong - removes 'pipe' prefix)
+<b>COMMON ERRORS</b>
+    <b>Wrong in pipe chain:</b> <b>bc ip | pipe set IP</b>
+    <b>Right in pipe chain:</b> <b>bc ip | set IP</b>
+
+    <b>Wrong standalone:</b> <b>env IP</b>
+    <b>Right standalone:</b> <b>pipe env IP</b>
+
+    <b>Wrong standalone:</b> <b>unset IP</b>
+    <b>Right standalone:</b> <b>pipe unset IP</b>
+
+    <b>Wrong standalone:</b> <b>debug on</b>
+    <b>Right standalone:</b> <b>pipe debug on</b>
+
+    <b>Invalid redirect position:</b> <b>cmd1 > out.txt | cmd2</b>
+    Redirects must be at the end of the chain.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic piping examples</color>
+    <b>grep root /etc/passwd</b>
+    Search for 'root' in passwd file
+
+    <b>echo hello world | rev</b>
+    Reverse text: 'dlrow olleh'
+
+    <b>echo ""5 + 3 * 2"" | bc</b>
+    Calculate with order of operations: 11
+
+    <b>echo ""((2 + 3) * 4) + 1"" | bc</b>
+    Calculate with nested parentheses: 21
+
+    <color=#e4ff34># Field extraction with awk</color>
+    <b>cat /etc/passwd | awk -F: '{print $1}'</b>
+    Extract usernames (field 1)
+
+    <b>awk -F: '{print $1, $3}' /etc/passwd</b>
+    Extract username and UID (fields 1 and 3)
+
+    <color=#e4ff34># Field extraction with cut</color>
+    <b>cat /etc/passwd | cut -d: -f1,2</b>
+    Extract username and password hash
+
+    <b>echo abcdef | cut -c 2-4</b>
+    Extract characters 2-4: 'bcd'
+
+    <color=#e4ff34># Text processing</color>
+    <b>echo hello world | sed world universe</b>
+    Replace 'world' with 'universe': 'hello universe'
+
+    <b>echo Hello WORLD | sed -i hello goodbye</b>
+    Case-insensitive replacement: 'goodbye WORLD'
+
+    <b>echo ""  hello world  "" | trim | rev</b>
+    Trim whitespace and reverse: 'dlrow olleh'
+
+    <color=#e4ff34># Filtering and searching</color>
+    <b>grep -v root /etc/passwd</b>
+    Show lines that don't contain 'root'
+
+    <b>grep -i ROOT /etc/passwd</b>
+    Case-insensitive search for 'root'
+
+    <b>grep -e ^root: /etc/passwd</b>
+    Regex: lines starting with 'root:' (requires -e flag)
+
+    <color=#e4ff34># Sorting and uniqueness</color>
+    <b>echo -e '3\"+char(8203)+"n1\"+char(8203)+"n2' | sort</b>
+    Sort lines with newlines: 1, 2, 3
+
+    <b>echo 3 1 2 | tr ' ' '\"+char(8203)+"n' | sort</b>
+    Convert spaces to newlines, then sort: 1, 2, 3
+
+    <b>echo 10 5 20 15 | tr ' ' '\"+char(8203)+"n' | sort -n -r</b>
+    Numeric reverse sort: 20, 15, 10, 5
+
+    <b>echo -e 'line1\"+char(8203)+"nline2\"+char(8203)+"nline1\"+char(8203)+"nline3' | uniq</b>
+    Remove duplicate lines: line1, line2, line3
+
+    <b>echo a b a c | tr ' ' '\"+char(8203)+"n' | uniq</b>
+    Convert words to lines, remove duplicates: a, b, c
+
+    <b>echo a b a c | tr ' ' '\"+char(8203)+"n' | uniq | tr '\"+char(8203)+"n' ' '</b>
+    Unique words back to one line: 'a b c'
+
+    <color=#e4ff34># Counting</color>
+    <b>wc -l /etc/passwd</b>
+    Count lines in file
+
+    <b>echo hello world foo bar | wc -w</b>
+    Count words: 4
+
+    <b>echo test | wc -c</b>
+    Count characters: 4
+
+    <color=#e4ff34># Network scanning</color>
+    <b>echo 192.168.1.1 | nmap | grep open</b>
+    Scan IP address and show only open ports
+
+    <b>bc ip | nmap | grep open</b>
+    Scan random IP and show open ports
+
+    <color=#e4ff34># Complex multi-stage pipelines</color>
+    <b>cat /etc/passwd | cut -d: -f1,3 | sort | wc -l</b>
+    Extract users and UIDs, sort, count lines
+
+    <b>grep -e ^root: /etc/passwd | cut -d: -f2 | decipher -d</b>
+    Extract root password hash and decrypt it
+
+    <b>echo a:b:c:d | split : | sort | join ,</b>
+    Split by colon, sort, join with comma: 'a,b,c,d'
+
+    <b>echo 3 1 2 | tr ' ' '\"+char(8203)+"n' | sort | tr '\"+char(8203)+"n' ' '</b>
+    Sort numbers: convert to lines, sort, convert back
+
+    <b>cat file.txt | tr ' ' '\"+char(8203)+"n' | sort | uniq</b>
+    Extract unique words from file and sort them
+
+    <color=#e4ff34># Pipe variables - assignment and expansion</color>
+    <b>echo test | set MYVAR</b>
+    Store 'test' in MYVAR variable
+
+    <b>echo 5 | set NUM | echo ""$NUM * 2"" | bc | set RESULT | echo Result: $RESULT</b>
+    Store value, calculate, store result, display: 'Result: 10'
+
+    <b>echo 10 | set X | echo 20 | set Y | echo ""$X + $Y"" | bc | set SUM | echo ""$X + $Y = $SUM""</b>
+    Multiple variables in math: '10 + 20 = 30'
+
+    <b>cat /etc/passwd | cut -d: -f1 | set USERS | echo $USERS</b>
+    Store all usernames (multi-line output)
+
+    <b>grep -e ^root: /etc/passwd | cut -d: -f2 | set ROOTPW | echo $ROOTPW</b>
+    Extract and store root password hash
+
+    <color=#e4ff34># Combining pipes with chain operators (&&)</color>
+    <b>bc ip | set IP && nmap $IP | grep open && echo $IP</b>
+    Generate random IP, store it, scan ports, filter open ports, display IP
+    (Each stage executes conditionally - only if previous stage succeeds)
+
+    <b>echo test | set VAR && echo Value is: $VAR</b>
+    Store value and display it (second command runs after first succeeds)
+
+    <b>cat file.txt | grep error | set ERRORS && echo Found errors: $ERRORS</b>
+    Search for errors, store matches, display confirmation
+
+    <b>ps | grep python | wc -l | set COUNT && echo Python processes: $COUNT</b>
+    Count processes, store count, display result
+
+    <color=#e4ff34># Variable management - standalone (MAIN session only)</color>
+    <b>pipe env</b>
+    List all pipe variables and their values
+
+    <b>pipe env MYVAR</b>
+    Display value of MYVAR
+
+    <b>pipe env -c</b>
+    Clear all variables
+
+    <b>pipe unset MYVAR</b>
+    Remove MYVAR variable
+
+    <color=#e4ff34># Debug mode</color>
+    <b>pipe debug on</b>
+    Enable debug output (shows variable expansions and pipe stages)
+
+    <b>pipe debug off</b>
+    Disable debug output
+
+    <b>pipe debug</b>
+    Show current debug state
+
+    <color=#e4ff34># Output redirection</color>
+    <b>cat /etc/passwd > backup.txt</b>
+    Save file contents to backup.txt (overwrite)
+
+    <b>grep root /etc/passwd > root_users.txt</b>
+    Save search results to file
+
+    <b>cat file.txt | sort | uniq >> unique_sorted.txt</b>
+    Append sorted unique lines to existing file
+
+    <b>cat /etc/passwd | awk -F: '{print $1}' > usernames.txt</b>
+    Extract and save usernames
+
+    <b>echo ""5 + 3 * 2"" | bc > result.txt</b>
+    Calculate and save result: 11
+
+    <b>ps | grep -i python | wc -l > process_count.txt</b>
+    Count matching processes and save to file
+
+    <b>cat file.txt | wc -l ></b>
+    Count lines and save to default 'pipe_out.txt'
+
+    <color=#e4ff34># File operations with piped filenames</color>
+    <b>find *.log | rm</b>
+    Delete all matched files
+
+    <b>find *.src | qrm</b>
+    Silently delete matched files (no log entry)
+
+    <b>find *.txt | cp /backup</b>
+    Copy all matched files to /backup
+
+    <b>find *.log | mv /archive</b>
+    Move all matched files to /archive
+
+    <b>find *.src | chmod 755</b>
+    Make all matched files executable
+
+    <b>find *.src | chown root</b>
+    Transfer ownership of all matched files
+
+    <b>find *.src | chog admin</b>
+    Set owner, group, and full perms on matched files
+
+    <b>find *.src | build /home/user/bin</b>
+    Compile all matched source files to a directory
+
+    <b>find *.src | scp -u /remote/path</b>
+    Upload all matched files to a remote path
+
+    <b>find *.jpg | scp -d /home/user/loot</b>
+    Download (save locally) all matched files
+
+    <b>find *.log | open -l</b>
+    Open matched log files in Log Viewer
+
+    <b>find *.src | open -c</b>
+    Open matched source files in Code Editor
+
+    <color=#e4ff34># Email with piped credentials</color>
+    <b>echo ""user@mail.com pass"" | email -c</b>
+    Open email client with piped credentials
+
+    <b>cat creds.txt | email -l</b>
+    Login with credentials from file
+
+    <color=#e4ff34># Advanced examples</color>
+    <b>cat /etc/passwd | awk -F: '{print $1}' | sort | uniq > sorted_users.txt</b>
+    Extract usernames, sort, remove duplicates, save to file
+
+    <b>grep -e ^# script.src | wc -l</b>
+    Count comment lines in source file
+
+    <b>cat log.txt | grep -i error | cut -c 1-50 > errors.txt</b>
+    Extract first 50 chars of error lines
+
+    <color=#e4ff34># Calculator examples</color>
+    <b>echo sqrt 16 | bc</b>
+    Square root: 4
+
+    <b>echo ""pi * 2"" | bc</b>
+    Calculate 2π: 6.283186
+
+    <b>echo abs -5 | bc</b>
+    Absolute value: 5
+
+    <b>echo ""2 ^ 8"" | bc</b>
+    Power: 256
+
+    <b>echo ""10 / 3"" | bc</b>
+    Division with decimals: 3.333333
+
+    <b>bc ip | nmap</b>
+    Generate random IP and scan with nmap
+
+    <color=#e4ff34># Character translation (tr)</color>
+    <b>echo hello world | tr aeiou 43100</b>
+    Translate vowels to numbers: 'h3ll0 w0rld'
+
+    <b>echo HELLO | tr A-Z a-z</b>
+    Convert to lowercase: 'hello'
+
+    <b>echo ""hello  world"" | tr -s "" ""</b>
+    Squeeze multiple spaces: 'hello world'
+
+    <b>echo hello123world | tr -d 0-9</b>
+    Delete all digits: 'helloworld'
+
+    <b>echo 3 1 2 | tr ' ' '\"+char(8203)+"n' | sort</b>
+    Replace spaces with newlines, then sort: 1, 2, 3
+
+    <b>echo -e 'hello\"+char(8203)+"nworld' | tr '\"+char(8203)+"n' ' '</b>
+    Replace newlines with spaces: 'hello world'
+
+    <color=#e4ff34># Escape sequences with echo -e</color>
+    <b>echo -e 'Line 1\"+char(8203)+"nLine 2\"+char(8203)+"nLine 3'</b>
+    Print multiple lines with newlines
+
+    <b>echo -e 'Name:\"+char(8203)+"tJohn\"+char(8203)+"nAge:\"+char(8203)+"t25'</b>
+    Print formatted text with tabs and newlines
+
+    <b>echo -e '3\"+char(8203)+"n1\"+char(8203)+"n2' | sort</b>
+    Create separate lines and sort: 1, 2, 3
+
+    <color=#e4ff34># xargs - run a command per item</color>
+    <b>echo -e ""a\"+char(8203)+"nb\"+char(8203)+"nc"" | xargs -n1 rev</b>
+    Reverse each line individually: 'a', 'b', 'c'
+
+    <b>echo -e ""x\"+char(8203)+"ny"" | xargs -I{} echo ""[{}]""</b>
+    Wrap each item with brackets: '[x]', '[y]'
+
+    <b>echo ""a,b,c"" | xargs -d , -n1 rev</b>
+    Custom delimiter (comma instead of newline)
+
+    <b>cat ips.txt | xargs -n1 -t scan</b>
+    Scan every IP in a file, tracing each call
+<b>SEE ALSO</b>
+    <b>awk</b>, <b>cat</b>, <b>cut</b>, <b>grep</b>"

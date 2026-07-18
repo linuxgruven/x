@@ -1,0 +1,32 @@
+// Man page for ifconfig
+manIfconfig="IFCONFIG(8)                      X Shell Manual                      IFCONFIG(8)
+
+<b>NAME</b>
+    ifconfig - view ethernet information
+<b>SYNOPSIS</b>
+    <b>ifconfig</b>
+    <b>ifconfig </b><b>DEVICE </b><b>LAN_IP </b><b>GATEWAY_IP</b>
+<b>DESCRIPTION</b>
+    View and configure ethernet network device. Display current network information
+    or connect to different LAN networks by specifying device, IP, and gateway.
+<b>OPTIONS</b>
+    <b>ifconfig</b>
+    Display ethernet info
+    Current device status
+
+    <b>DEVICE LAN_IP GATEWAY</b>
+    Connect to LAN
+    Configure network device
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View Info</color>
+    <b>ifconfig</b>
+    Display ethernet status
+
+    <color=#e4ff34># Connect to Network</color>
+    <b>ifconfig eth0 new.host.ip router.ip.addr</b>
+    Configure eth0 device
+
+    <b>ifconfig eth1 192.168.2.100 192.168.2.1</b>
+    Switch to different LAN
+<b>SEE ALSO</b>
+    <b>iwconfig</b>, <b>ping</b>, <b>net</b>"

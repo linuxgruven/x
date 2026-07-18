@@ -1,0 +1,45 @@
+// Man page for more
+manMore="MORE(1)                          X Shell Manual                          MORE(1)
+
+<b>NAME</b>
+    more - use to view a file a few lines at a time
+<b>SYNOPSIS</b>
+    <b>more </b><b>FILE</b> [FILE...]
+    more [<b>-c </b> [<b>NUMBER</b>]] <b>FILE</b> [FILE...]
+<b>DESCRIPTION</b>
+    Display file content in paginated chunks for easier viewing. By default, shows 25 lines
+    at a time. Specify a custom number with -c to control how many lines are displayed per
+    page. Useful for viewing large files without overwhelming the terminal. Supports redirects
+    including standard output, append, and POST formatting. Redirect output is never printed to
+    the terminal. Supports glob patterns for multiple files: <b>*.log</b>, <b>src/*</b>
+<b>OPTIONS</b>
+    <b>more FILE</b>
+    Display file contents 25 lines at a time
+    Default pagination view
+
+    <b>-c NUMBER</b>
+    Number of lines to view at a time
+    Specify custom page size
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Usage</color>
+    <b>more file.txt</b>
+    View file 25 lines at a time
+
+    <b>more log.txt</b>
+    Page through log file
+
+    <color=#e4ff34># Custom Page Size</color>
+    <b>more -c 10 file.txt</b>
+    Show 10 lines per page
+
+    <b>more -c 50 data.dat</b>
+    Show 50 lines per page
+
+    <color=#e4ff34># With Redirects</color>
+    <b>more params --post</b>
+    POST formatted output
+
+    <b>more file.txt > output.txt</b>
+    Redirect to file
+<b>SEE ALSO</b>
+    <b>cat</b>, <b>file</b>, <b>ls</b>"

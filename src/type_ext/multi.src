@@ -1,0 +1,90 @@
+// =============================================================================
+// MULTI
+// Polymorphic utilities that work across list, map, and string types.
+// =============================================================================
+clone=function(self)
+  r=null
+  if self isa list then r=self+[]
+  if self isa map then r=self+{}
+  if not r then return null
+  for i in indexes(self);if r[@i] isa list or r[@i] isa map then r[@i]=clone(r[@i]);end for
+  return r
+end function
+map.clone=@clone
+list.clone=@clone
+// Flatten nested lists or maps; pass R=false for shallow (one level only)
+flatten=function(self,R=true)
+  t=null
+  r=null
+  if self isa list then
+    t=list
+    r=[]
+  else if self isa map then
+    t=map
+    r={}
+  end if
+  for i in self;if @i isa t and R then r=r+flatten(i);if not @i isa t or not R then push(r,@i);end for
+  return r
+end function
+list.flatten=@flatten
+map.flatten=@flatten
+// Remove the first occurrence of v; returns true if found, false if not
+removeValue=function(self,v);for i in indexes(self);if self[@i]!=@v then continue;remove(self,@i);return true;end for;return false;end function
+list.removeValue=@removeValue
+map.removeValue=@removeValue
+// Print lines with 1-based numbers; lines in m are highlighted yellow.
+// For strings, only increments counter on already-numbered lines (has ":" in first 3 chars).
+showNumbers=function(self,m)
+  if not m then return
+  if self isa list then
+    for a in self
+      if hasAny(m,__a_idx+1) then
+        if __a_idx<9 then print yellow("0"+(__a_idx+1)+": "+a) else print yellow((__a_idx+1)+": "+a)
+      else
+        if __a_idx<9 then print "0"+(__a_idx+1)+": "+a else print (__a_idx+1)+": "+a
+      end if
+    end for
+  else if self isa string then
+    l=split(self,char(10))
+    c=1
+    for i in l
+      if indexOf(i[:3],":")!=null then
+        if hasAny(m,c) then print yellow(i) else print i
+        c+=1
+      else
+        print i
+      end if
+    end for
+  end if
+end function
+list.showNumbers=@showNumbers
+string.showNumbers=@showNumbers
+// Deduplicate — note: list.uniq returns a map, map.uniq returns a list of values
+uniq=function(self)
+	m={}
+  if self isa list then
+    for i in self;m[i]=i;end for
+    return m
+  else if self isa map then
+    for i in self;m[i]=i;end for
+    return values(m)
+  end if
+end function
+map.uniq=@uniq
+list.uniq=@uniq
+// Returns basename from a path string, or space-separated basenames from a list of paths
+clean=function(self)
+  if self isa string then return split(self,"/")[-1]
+  if self isa list then
+    r=""
+    for i in self;r+=split(i,"/")[-1]+" ";end for
+    return r
+  end if
+end function
+string.clean=@clean
+list.clean=@clean
+// Returns true if i is found in list, map, or string
+contains=function(self,i);return indexOf(self,i)!=null;end function
+list.contains=@contains
+map.contains=@contains
+string.contains=@contains

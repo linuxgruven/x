@@ -1,0 +1,29 @@
+// Man page for ping
+manPing="PING(1)                          X Shell Manual                          PING(1)
+
+<b>NAME</b>
+    ping - ping is a method to measure minimum time needed to send data
+<b>SYNOPSIS</b>
+    <b>ping</b> <b>IP|DOMAIN</b>
+<b>DESCRIPTION</b>
+    Test network connectivity and measure round-trip time between systems.
+    Accepts IP addresses or domain names. Essential for network diagnostics.
+<b>OPTIONS</b>
+    <b>IP|DOMAIN</b>
+    Target to ping. IP address or hostname.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># IP Address</color>
+    <b>ping 192.168.1.1</b>
+    Ping router
+
+    <b>ping router.ip.addr</b>
+    Test router connection
+
+    <color=#e4ff34># Domain Name</color>
+    <b>ping www.somesite.com</b>
+    Test domain
+
+    <b>ping target.local</b>
+    Local network test
+<b>SEE ALSO</b>
+    <b>nmap</b>, <b>net</b>, <b>whois</b>"

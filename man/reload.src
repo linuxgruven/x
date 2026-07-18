@@ -1,0 +1,64 @@
+// Man page for reload
+manReload="RELOAD(1)                        X Shell Manual                        RELOAD(1)
+
+<b>NAME</b>
+    reload - Reload cached data lists
+<b>SYNOPSIS</b>
+    <b>reload -a</b>
+    <b>reload -d</b>
+    <b>reload -P</b>
+    <b>reload -m</b>
+    <b>reload -c</b>
+<b>DESCRIPTION</b>
+    Reload x framework cached data including exploits, rainbow index,
+    metaxploit, and crypto libraries. Use when databases have been
+    updated or corrupted.
+<b>OPTIONS</b>
+    <b>-a</b> - Reload All
+      Reload all cached lists and databases.
+
+    <b>-d</b> - Reload Exploits
+      Reload exploit database.
+
+    <b>-P</b> - Rebuild Rainbow Index
+      Rebuild rainbow table hash index.
+
+    <b>-m</b> - Reload Metaxploit
+      Reload metaxploit framework data.
+
+    <b>-c</b> - Reload Crypto
+      Reload crypto library data.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Reload All Data</color>
+    <b>reload -a</b>
+    Reload all cached lists
+
+    <color=#e4ff34># Reload Specific Modules</color>
+    <b>reload -d</b>
+    Reload exploit database only
+
+    <b>reload -P</b>
+    Rebuild rainbow index only
+
+    <b>reload -m</b>
+    Reload metaxploit data
+
+    <b>reload -c</b>
+    Reload crypto data
+
+    <color=#e4ff34># After Database Updates</color>
+    <b>reload -d</b>
+    Reload after adding new exploits
+
+    <b>reload -P</b>
+    Rebuild after updating rainbow tables
+
+    <color=#e4ff34># Troubleshooting</color>
+    <b>reload -a</b>
+    Fix corrupted cache data
+
+    <b>reload -d && reload -m</b>
+    Reload exploits and metaxploit
+<b>SEE ALSO</b>
+    <b>load</b>, <b>exp</b>"

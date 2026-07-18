@@ -1,0 +1,555 @@
+toolWatchdog="config_dir=""""
+config_file_path=""""
+log_file_path=""""
+user_home=""""
+NL=char(10)
+_is_whitelisted=function(p,wl_files,wl_folders)
+  _len=len(wl_files)
+  i=0
+  while i<_len
+    if p==wl_files[i] then return true
+    i=i+1
+  end while
+  _len=len(wl_folders)
+  i=0
+  while i<_len
+    if indexOf(p,wl_folders[i]+""/"")==0 then return true
+    i=i+1
+  end while
+  return false
+end function
+migrate_old_configs=function(comp)
+  cfg=[""# Watchdog Configuration File"",""# Set clean_trash to true or false"",""clean_trash = true"","""",""[watch_procs]"",""# Terminate automatically"",""viper"",""jumpfile"",""dsession"",""rshell"",""ps"",""rshell_client"",""doom"","""",""[watch_files]"",""# Delete automatically"",""jumpfile.src"",""jumpfile"",""unity"",""dcall"",""viper"","""",""[whitelist_files]"",""# Never delete"",config_dir+""/watchdog.conf"",config_dir+""/total_sizes.ini"",config_dir+""/monitor.log"","""",""[whitelist_folders]"",""# Exclude from monitoring"",config_dir,""/lib"",""/bin"",user_home+""/payload""]
+  touch(comp,config_dir,""watchdog.conf"")
+  cf=File(comp,config_file_path)
+  set_content(cf,join(cfg,NL))
+  print(""<color=white>{+} Created default watchdog.conf</color>"")
+  old=File(comp,config_dir+""/watch_files.txt"")
+  if old then delete(old)
+  old=File(comp,config_dir+""/watch_procs.txt"")
+  if old then delete(old)
+  print(""<color=white>{+} Migrated to new config format</color>"")
+end function
+load_config=function(comp)
+  cfg={}
+  cfg.watch_procs=[]
+  cfg.watch_files=[]
+  cfg.whitelist_files=[]
+  cfg.whitelist_folders=[]
+  cfg.clean_trash=true
+  cf=File(comp,config_file_path)
+  if not cf then return cfg
+  raw=get_content(cf)
+  if raw==null or raw=="""" then return cfg
+  lines=split(raw,NL)
+  _len=len(lines)
+  i=0
+  section=""""
+  while i<_len
+    line=trim(lines[i])
+    i=i+1
+    if line=="""" or line[0]==""#"" then continue
+    if line[0]==""["" and line[-1]==""]"" then
+      section=lower(line[1:-1])
+      continue
+    end if
+    if section=="""" then
+      eq=indexOf(line,""="")
+      if eq!=null then
+        key=trim(line[:eq])
+        val=trim(line[eq+1:])
+        if key==""clean_trash"" then cfg.clean_trash=(lower(val)==""true"")
+      end if
+      continue
+    end if
+    if section==""watch_procs"" then
+      push(cfg.watch_procs,line)
+    else if section==""watch_files"" then
+      push(cfg.watch_files,line)
+    else if section==""whitelist_files"" then
+      push(cfg.whitelist_files,line)
+    else if section==""whitelist_folders"" then
+      push(cfg.whitelist_folders,line)
+    end if
+  end while
+  return cfg
+end function
+log_message=function(comp,msg)
+  lf=File(comp,log_file_path)
+  if not lf then
+    if not globals.monitor_log_missing_warning_shown then
+      print(""<color=red>[!] Warning: monitor.log deleted</color>"")
+      globals.monitor_log_missing_warning_shown=true
+    end if
+    touch(comp,config_dir,""monitor.log"")
+    lf=File(comp,log_file_path)
+    if not lf then
+      print(""<color=red>[!] Failed to recreate monitor.log</color>"")
+      return
+    end if
+    print(""<color=green>[*] monitor.log recreated</color>"")
+    globals.monitor_log_missing_warning_shown=false
+  else
+    globals.monitor_log_missing_warning_shown=false
+  end if
+  set_content(lf,get_content(lf)+""[""+current_date+""] ""+msg+NL)
+end function
+ensure_config=function(comp)
+  if File(comp,config_file_path) then
+    globals.config_file_missing_warning_shown=false
+    return
+  end if
+  if not globals.config_file_missing_warning_shown then
+    msg=""[!] Warning: watchdog.conf deleted""
+    print(""<color=red>""+msg+""</color>"")
+    log_message(comp,msg)
+    globals.config_file_missing_warning_shown=true
+  end if
+  migrate_old_configs(comp)
+  print(""<color=green>[*] watchdog.conf recreated</color>"")
+  log_message(comp,""watchdog.conf recreated"")
+  globals.config_file_missing_warning_shown=false
+end function
+get_current_file_state=function(comp)
+  root=File(comp,""/"")
+  fm={}
+  stack=[root]
+  while len(stack)>0
+    cur=pop(stack)
+    if not cur then continue
+    if is_folder(cur) then
+      subs=get_folders(cur)
+      if subs then
+        _len=len(subs)
+        i=0
+        while i<_len;push(stack,subs[i]);i=i+1;end while
+      end if
+      files=get_files(cur)
+      if files then
+        _len=len(files)
+        i=0
+        while i<_len;f=files[i];fm[path(f)]=size(f);i=i+1;end while
+      end if
+    else
+      fm[path(cur)]=size(cur)
+    end if
+  end while
+  return fm
+end function
+index_file_system=function(comp,cf)
+  fm=get_current_file_state(comp)
+  keys=indexes(fm)
+  _len=len(keys)
+  i=0
+  out=""""
+  while i<_len;p=keys[i];out=out+p+"" ""+fm[p]+NL;i=i+1;end while
+  set_content(cf,out)
+  print(""<color=white>[+] File system indexed for monitoring</color>"")
+  print(""<color=white>[i] Indexed </color><color=#FF00AAff>""+len(fm)+""</color><color=white> files</color>"")
+end function
+monitor_folder_check=function(comp)
+  if File(comp,config_dir) then
+    globals.config_dir_missing_warning_shown=false
+    return
+  end if
+  if not globals.config_dir_missing_warning_shown then
+    print(""<color=red>[!] Warning: watchdog_config directory deleted</color>"")
+    globals.config_dir_missing_warning_shown=true
+  end if
+  _p=split(config_dir,""/"")
+  _cname=_p[-1]
+  _cparent=join(_p[:-1],""/"")
+  if not File(comp,_cparent) then create_folder(comp,join(_p[:-2],""/""),_p[-2])
+  create_folder(comp,_cparent,_cname)
+  print(""<color=green>[*] watchdog_config directory recreated</color>"")
+  migrate_old_configs(comp)
+  touch(comp,config_dir,""monitor.log"")
+  print(""<color=green>[*] All config files recreated</color>"")
+  globals.config_dir_missing_warning_shown=false
+  globals.config_file_missing_warning_shown=false
+  globals.monitor_log_missing_warning_shown=false
+  globals.clean_trash_disabled_notice_shown=false
+  touch(comp,config_dir,""total_sizes.ini"")
+  sf=File(comp,config_dir+""/total_sizes.ini"")
+  if sf then index_file_system(comp,sf)
+end function
+get_current_process_map=function(comp)
+  ps=split(show_procs(comp),NL)
+  pm={}
+  _len=len(ps)
+  i=1
+  while i<_len
+    row=ps[i]
+    if row!="""" then
+      parts=split(row,"" "")
+      pm[parts[1]]=row
+    end if
+    i=i+1
+  end while
+  return pm
+end function
+find_files_by_name=function(root,names,wl_files,wl_folders)
+  found=[]
+  stack=[root]
+  while len(stack)>0
+    cur=pop(stack)
+    if not cur then continue
+    if is_folder(cur) then
+      skip=false
+      cp=path(cur)
+      _len=len(wl_folders)
+      i=0
+      while i<_len
+        wp=wl_folders[i]
+        if cp==wp or indexOf(cp,wp+""/"")==0 then
+          skip=true
+          break
+        end if
+        i=i+1
+      end while
+      if skip then continue
+      subs=get_folders(cur)
+      if subs then
+        _len=len(subs)
+        i=0
+        while i<_len;push(stack,subs[i]);i=i+1;end while
+      end if
+      files=get_files(cur)
+      if files then
+        _len=len(files)
+        i=0
+        while i<_len
+          f=files[i]
+          i=i+1
+          skip=false
+          _len2=len(wl_files)
+          j=0
+          while j<_len2
+            if path(f)==wl_files[j] then
+              skip=true
+              break
+            end if
+            j=j+1
+          end while
+          if skip then continue
+          if indexOf(names,name(f))!=null then push(found,f)
+        end while
+      end if
+    else
+      skip=false
+      _len=len(wl_files)
+      i=0
+      while i<_len
+        if path(cur)==wl_files[i] then
+          skip=true
+          break
+        end if
+        i=i+1
+      end while
+      if skip then continue
+      if indexOf(names,name(cur))!=null then push(found,cur)
+    end if
+  end while
+  return found
+end function
+wipe_sensitive_files=function(comp)
+  sens=[user_home+""/Config/Bank.txt"",user_home+""/Config/Mail.txt"",""/etc/passwd""]
+  home=File(comp,""/home"")
+  if home and is_folder(home) then
+    uf=get_folders(home)
+    if uf then
+      _len=len(uf)
+      i=0
+      while i<_len
+        uname=name(uf[i])
+        if uname!=""guest"" then
+          push(sens,""/home/""+uname+""/Config/Bank.txt"")
+          push(sens,""/home/""+uname+""/Config/Mail.txt"")
+        end if
+        i=i+1
+      end while
+    end if
+  end if
+  _len=len(sens)
+  i=0
+  while i<_len
+    fp=sens[i]
+    i=i+1
+    f=File(comp,fp)
+    if not f then continue
+    if owner(f)!=active_user and active_user!=""root"" then continue
+    if get_content(f)=="""" then continue
+    if is_binary(f)!=0 then continue
+    delete(f)
+    msg=""[!] Wiped sensitive file: ""+fp
+    print(""<color=#ffee00ff>""+msg+""</color>"")
+    log_message(comp,msg)
+  end while
+end function
+monitor_all_processes=function(comp,config)
+  ensure_config(comp)
+  cur=get_current_process_map(comp)
+  keys=indexes(cur)
+  _len=len(keys)
+  i=0
+  while i<_len
+    pid=keys[i]
+    i=i+1
+    if hasIndex(globals.previous_processes,pid) then continue
+    info=split(cur[pid],"" "")
+    msg=""[!] PROCESS STARTED: ""+info[-1]+"" (PID: ""+pid+"", User: ""+info[0]+"")""
+    print(""<color=red>""+msg+""</color>"")
+    log_message(comp,msg)
+  end while
+  keys=indexes(globals.previous_processes)
+  _len=len(keys)
+  i=0
+  while i<_len
+    pid=keys[i]
+    i=i+1
+    if hasIndex(cur,pid) then continue
+    info=split(globals.previous_processes[pid],"" "")
+    msg=""[x] PROCESS ENDED: ""+info[-1]+"" (PID: ""+pid+"", User: ""+info[0]+"")""
+    print(""<color=green>""+msg+""</color>"")
+    log_message(comp,msg)
+  end while
+  watch_procs=config.watch_procs
+  ps=split(show_procs(comp),NL)
+  _len=len(ps)
+  i=1
+  while i<_len
+    row=ps[i]
+    i=i+1
+    if row=="""" then continue
+    parts=split(row,"" "")
+    pid=parts[1]
+    pname=parts[-1]
+    if indexOf(watch_procs,pname)==null then continue
+    msg=""[!] WATCHED PROCESS DETECTED: ""+pname+"" (PID: ""+pid+"")""
+    print(""<color=yellow>""+msg+""</color>"")
+    log_message(comp,msg)
+    close_program(comp,to_int(pid))
+    print(""<color=yellow><b>[+] Terminated process: ""+pname+"" with ID: ""+pid+""</b></color>"")
+  end while
+  globals.previous_processes=cur
+end function
+monitor_files_and_system=function(comp,config)
+  ensure_config(comp)
+  wf=config.watch_files
+  wl_f=config.whitelist_files
+  wl_d=config.whitelist_folders
+  if not wf then wf=[]
+  sizes_path=config_dir+""/total_sizes.ini""
+  sf=File(comp,sizes_path)
+  if not sf then
+    touch(comp,config_dir,""total_sizes.ini"")
+    sf=File(comp,sizes_path)
+    set_content(sf,"""")
+    print(""<color=white>[*] Initializing file system monitor...</color>"")
+    index_file_system(comp,sf)
+    return
+  end if
+  lines=split(get_content(sf),NL)
+  stored={}
+  _len=len(lines)
+  i=0
+  while i<_len
+    line=lines[i]
+    i=i+1
+    if line=="""" then continue
+    parts=split(line,"" "")
+    if len(parts)<2 then continue
+    stored[parts[0]]=parts[1]
+  end while
+  cur=get_current_file_state(comp)
+  root=File(comp,""/"")
+  hits=find_files_by_name(root,wf,wl_f,wl_d)
+  _len=len(hits)
+  i=0
+  while i<_len
+    f=hits[i]
+    i=i+1
+    fp=path(f)
+    msg=""[!] SUSPICIOUS FILE DETECTED: ""+fp
+    print(""<color=red>""+msg+""</color>"")
+    log_message(comp,msg)
+    delete(f)
+    print(""<color=yellow>[x] Deleted file: ""+fp+""</color>"")
+    log_message(comp,""Deleted file: ""+fp)
+    remove(cur,fp)
+    if hasIndex(stored,fp) then remove(stored,fp)
+  end while
+  keys=indexes(cur)
+  _len=len(keys)
+  i=0
+  while i<_len
+    p=keys[i]
+    i=i+1
+    if _is_whitelisted(p,wl_f,wl_d) then continue
+    if not hasIndex(stored,p) then
+      msg=""[+] NEW FILE: ""+p+"" (Size: ""+cur[p]+"")""
+      print(""<color=#FF00AAff>""+msg+""</color>"")
+      log_message(comp,msg)
+    else if stored[p]!=cur[p] then
+      msg=""[!] FILE CHANGED: ""+p+"" (Size: ""+stored[p]+"" → ""+cur[p]+"")""
+      print(""<color=orange>""+msg+""</color>"")
+      log_message(comp,msg)
+    end if
+  end while
+  keys=indexes(stored)
+  _len=len(keys)
+  i=0
+  while i<_len
+    p=keys[i]
+    i=i+1
+    if _is_whitelisted(p,wl_f,wl_d) then continue
+    if not hasIndex(cur,p) then
+      msg=""[!] FILE DELETED: ""+p
+      print(""<color=red>""+msg+""</color>"")
+      log_message(comp,msg)
+    end if
+  end while
+  keys=indexes(cur)
+  _len=len(keys)
+  i=0
+  out=""""
+  while i<_len;p=keys[i];out=out+p+"" ""+cur[p]+NL;i=i+1;end while
+  set_content(sf,out)
+end function
+monitor_system_log=function(comp)
+  sl=File(comp,""/var/system.log"")
+  if not sl then
+    if globals.last_system_log_state!=""missing"" then
+      msg=""[!] WARNING: System.log file missing""
+      print(""<color=red>""+msg+""</color>"")
+      log_message(comp,msg)
+      globals.last_system_log_state=""missing""
+    end if
+    return
+  end if
+  ib=is_binary(sl)
+  if ib==null then
+    if globals.last_system_log_state!=""deleted"" then
+      msg=""[!] WARNING: System.log file deleted during check""
+      print(""<color=red>""+msg+""</color>"")
+      log_message(comp,msg)
+      globals.last_system_log_state=""deleted""
+    end if
+  else if ib==0 then
+    if globals.last_system_log_state!=""corrupted"" then
+      msg=""[!] WARNING: System.log corrupted (not binary)""
+      print(""<color=red>""+msg+""</color>"")
+      log_message(comp,msg)
+      globals.last_system_log_state=""corrupted""
+    end if
+  else
+    if globals.last_system_log_state and globals.last_system_log_state!=""normal"" then
+      msg=""[+] System.log restored to normal state""
+      print(""<color=green>""+msg+""</color>"")
+      log_message(comp,msg)
+    end if
+    globals.last_system_log_state=""normal""
+  end if
+end function
+clean_trash_folders=function(comp,config)
+  if not config.clean_trash then
+    if not globals.clean_trash_disabled_notice_shown then
+      print(""<color=#888888>[i] Trash cleaning disabled in config (clean_trash = false)</color>"")
+      globals.clean_trash_disabled_notice_shown=true
+    end if
+    return
+  end if
+  if not globals.clean_trash_enabled_notice_shown then
+    print(""<color=#888888>[i] Trash cleaning enabled in config (clean_trash = true)</color>"")
+    globals.clean_trash_enabled_notice_shown=true
+  end if
+  globals.clean_trash_disabled_notice_shown=false
+  users=[""root""]
+  home=File(comp,""/home"")
+  if home and is_folder(home) then
+    uf=get_folders(home)
+    if uf then
+      _len=len(uf)
+      i=0
+      while i<_len;push(users,name(uf[i]));i=i+1;end while
+    end if
+  end if
+  cleaned=0
+  _len=len(users)
+  i=0
+  while i<_len
+    u=users[i]
+    i=i+1
+    if u==""root"" then tp=""/root/.Trash"" else tp=""/home/""+u+""/.Trash""
+    tf=File(comp,tp)
+    if tf and is_folder(tf) then
+      if owner(tf)!=active_user and active_user!=""root"" then continue
+      delete(tf)
+      msg=""[+] Cleaned .Trash folder for user: ""+u
+      print(""<color=#00FF00>""+msg+""</color>"")
+      log_message(comp,msg)
+      cleaned=cleaned+1
+    end if
+  end while
+  if cleaned>0 then print(""<color=white>[i] Cleaned ""+cleaned+"" .Trash folders</color>"")
+end function
+init=function(comp)
+  globals.config_dir_missing_warning_shown=false
+  globals.config_file_missing_warning_shown=false
+  globals.monitor_log_missing_warning_shown=false
+  globals.clean_trash_disabled_notice_shown=false
+  globals.clean_trash_enabled_notice_shown=false
+  globals.last_system_log_state=null
+  monitor_folder_check(comp)
+  if not File(comp,config_file_path) then migrate_old_configs(comp)
+  if not File(comp,log_file_path) then
+    touch(comp,config_dir,""monitor.log"")
+    print(""<color=white>{+} Created monitor.log file</color>"")
+  end if
+  globals.previous_processes=get_current_process_map(comp)
+  print(""<color=white>[*] System initialized successfully</color>"")
+end function
+main=function
+  print(""<color=white><b>::: WatchDog :::<b></color>"")
+  print(""<color=orange>[*] Press 'q' to stop, 'r' to reload config</color>"")
+  comp=host_computer(get_shell)
+  if active_user==""root"" then globals.user_home=""/root"" else globals.user_home=""/home/""+active_user
+  globals.config_dir=globals.user_home+""/Config/watchdog""
+  globals.config_file_path=globals.config_dir+""/watchdog.conf""
+  globals.log_file_path=globals.config_dir+""/monitor.log""
+  init(comp)
+  config=load_config(comp)
+  if config.clean_trash then
+    ts=""ENABLED""
+    tc=""#00FF00""
+  else
+    ts=""DISABLED""
+    tc=""#FF0000""
+  end if
+  print(""<color=""+tc+"">[+] Trash cleaning: ""+ts+""</color>"")
+  print(""<color=white>[+] Watch processes: ""+len(config.watch_procs)+"" items</color>"")
+  print(""<color=white>[+] Watch files: ""+len(config.watch_files)+"" items</color>"")
+  print(""<color=white>[+] Whitelist files: ""+len(config.whitelist_files)+"" items</color>"")
+  print(""<color=white>[+] Whitelist folders: ""+len(config.whitelist_folders)+"" items</color>"")
+  print(""<color=white>[+] Config file: ""+config_file_path+""</color>"")
+  print(""<color=white>[+] Log file: ""+log_file_path+""</color>"")
+  log_message(comp,""<color=green>::: Monitoring started :::</color>"")
+  log_message(comp,""Trash cleaning: ""+ts)
+  while true
+    k=poll_input
+    if k==""q"" then exit(""<color=white>[*] Watchdog stopped</color>"")
+    if k==""r"" then
+      config=load_config(comp)
+      print(""<color=#9d9d9d>[*] Config reloaded</color>"")
+    end if
+    comp=host_computer(get_shell)
+    monitor_folder_check(comp)
+    config=load_config(comp)
+    monitor_all_processes(comp,config)
+    monitor_files_and_system(comp,config)
+    monitor_system_log(comp)
+    wipe_sensitive_files(comp)
+    clean_trash_folders(comp,config)
+  end while
+end function
+main"

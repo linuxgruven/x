@@ -1,0 +1,153 @@
+print "<color=#20ff98>Installing X's bash test scripts...</color>"
+import_code("./learn_bash_w.src")
+import_code("./bash_map_test_w.src")
+import_code("./return_test_w.src")
+import_code("./func_test_w.src")
+import_code("./cast_test_w.src")
+import_code("./edge_test_w.src")
+import_code("./switch_test_w.src")
+import_code("./stress_test_w.src")
+import_code("./bash_pipe_test_w.src")
+import_code("./find_pipe_test_w.src")
+import_code("./bash_try_catch_w.src")
+import_code("./builtin_vars_test_w.src")
+import_code("./menu_test_w.src")
+import_code("./bounce_test_w.src")
+import_code("./lan_test_w.src")
+import_code("./local_test_w.src")
+import_code("./scan_test_w.src")
+import_code("./shell_test_w.src")
+import_code("./wifi_test_w.src")
+import_code("./fmon_w.src")
+import_code("./dmon_w.src")
+// Get computer and setup directory
+c=host_computer(get_shell)
+home=File(c,home_dir)
+if not home then exit("<color=red>Unable to access home directory</color>")
+_findAll=function(dir,fName,results)
+  for sub in get_folders(dir)
+    if name(sub)==fName then push(results,sub)
+    _findAll(sub,fName,results)
+  end for
+end function
+payloadDir=File(c,home_dir+"/payload")
+if not payloadDir then
+  print "<color=#ffff00>Locating payload...</color>"
+  _found=[]
+  _findAll(File(c,"/"),"payload",_found)
+  if not _found then exit("<color=red>payload folder not found. Please run X at least once to set up X's file structure.</color>")
+  if len(_found)==1 then
+    payloadDir=_found[0]
+    print "<color=#20ff98>Found payload at: "+path(payloadDir)+"</color>"
+  else
+    print "<color=#ffff00>Multiple payload folders found:</color>"
+    _i=0
+    _len=len(_found)
+    while _i<_len
+      print "<color=#ffffff>  ["+(_i+1)+"] "+path(_found[_i])+"</color>"
+      _i=_i+1
+    end while
+    print "<color=#ffffff>  [0] Cancel</color>"
+    _choice=to_int(user_input("<color=#87ceeb>Select payload (0 to cancel, 1-"+_len+"): </color>"))
+    if _choice==0 then exit("<color=#ffff00>Cancelled.</color>")
+    if _choice<1 or _choice>_len then exit("<color=red>Invalid selection.</color>")
+    payloadDir=_found[_choice-1]
+    print "<color=#20ff98>Using payload at: "+path(payloadDir)+"</color>"
+  end if
+end if
+payload=path(payloadDir)
+bashDir=File(c,payload+"/data/bash")
+if not bashDir then exit("<color=red>payload/data/bash not found. Please run X at least once.</color>")
+p=path(bashDir)
+print("<color=#20ff98>Installing test scripts to "+p+"</color>")
+// Install each test script
+touch(c,p,"learn_bash")
+f=File(c,p+"/learn_bash")
+set_content(f,testLearnBash)
+print "<color=#aaaaaa>  Installed learn_bash</color>"
+touch(c,p,"bash_map_test")
+f=File(c,p+"/bash_map_test")
+set_content(f,testBashMapTest)
+print "<color=#aaaaaa>  Installed bash_map_test</color>"
+touch(c,p,"return_test")
+f=File(c,p+"/return_test")
+set_content(f,testReturnTest)
+print "<color=#aaaaaa>  Installed return_test</color>"
+touch(c,p,"func_test")
+f=File(c,p+"/func_test")
+set_content(f,testFuncTest)
+print "<color=#aaaaaa>  Installed func_test</color>"
+touch(c,p,"cast_test")
+f=File(c,p+"/cast_test")
+set_content(f,testCastTest)
+print "<color=#aaaaaa>  Installed cast_test</color>"
+touch(c,p,"edge_test")
+f=File(c,p+"/edge_test")
+set_content(f,testEdgeTest)
+print "<color=#aaaaaa>  Installed edge_test</color>"
+touch(c,p,"switch_test")
+f=File(c,p+"/switch_test")
+set_content(f,testSwitchTest)
+print "<color=#aaaaaa>  Installed switch_test</color>"
+touch(c,p,"stress_test")
+f=File(c,p+"/stress_test")
+set_content(f,testStressTest)
+print "<color=#aaaaaa>  Installed stress_test</color>"
+touch(c,p,"bash_pipe_test")
+f=File(c,p+"/bash_pipe_test")
+set_content(f,testBashPipeTest)
+print "<color=#aaaaaa>  Installed bash_pipe_test</color>"
+touch(c,p,"find_pipe_test")
+f=File(c,p+"/find_pipe_test")
+set_content(f,testFindPipeTest)
+print "<color=#aaaaaa>  Installed find_pipe_test</color>"
+touch(c,p,"bash_try_catch")
+f=File(c,p+"/bash_try_catch")
+set_content(f,testTryCatch)
+print "<color=#aaaaaa>  Installed bash_try_catch</color>"
+touch(c,p,"builtin_vars_test")
+f=File(c,p+"/builtin_vars_test")
+set_content(f,testBuiltinVars)
+print "<color=#aaaaaa>  Installed builtin_vars_test</color>"
+touch(c,p,"menu_test")
+f=File(c,p+"/menu_test")
+set_content(f,testMenuTest)
+print "<color=#aaaaaa>  Installed menu_test</color>"
+touch(c,p,"bounce_test")
+f=File(c,p+"/bounce_test")
+set_content(f,testBounceTest)
+print "<color=#aaaaaa>  Installed bounce_test</color>"
+touch(c,p,"lan_test")
+f=File(c,p+"/lan_test")
+set_content(f,testLanTest)
+print "<color=#aaaaaa>  Installed lan_test</color>"
+touch(c,p,"local_test")
+f=File(c,p+"/local_test")
+set_content(f,testLocalTest)
+print "<color=#aaaaaa>  Installed local_test</color>"
+touch(c,p,"scan_test")
+f=File(c,p+"/scan_test")
+set_content(f,testScanTest)
+print "<color=#aaaaaa>  Installed scan_test</color>"
+touch(c,p,"shell_test")
+f=File(c,p+"/shell_test")
+set_content(f,testShellTest)
+print "<color=#aaaaaa>  Installed shell_test</color>"
+touch(c,p,"wifi_test")
+f=File(c,p+"/wifi_test")
+set_content(f,testWifiTest)
+print "<color=#aaaaaa>  Installed wifi_test</color>"
+touch(c,p,"fmon")
+f=File(c,p+"/fmon")
+set_content(f,testFmon)
+print "<color=#aaaaaa>  Installed fmon</color>"
+touch(c,p,"dmon")
+f=File(c,p+"/dmon")
+set_content(f,testDmon)
+print "<color=#aaaaaa>  Installed dmon</color>"
+print "<color=#20ff98>Finished installing 21 bash test scripts</color>"
+if params.indexOf("--delete") != null then
+  f=File(c,program_path)
+  if f then delete(f)
+  print "<color=#20ff98>Installer deleted.</color>"
+end if

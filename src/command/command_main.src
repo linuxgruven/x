@@ -1,0 +1,2105 @@
+// =============================================================================
+// COMMAND_MAIN
+// Main session callbacks: exploit framework, network, system, data ops.
+// =============================================================================
+//MainSessionCallbacks
+Command.mainCallbacks=function(Obj)
+  Command=@self
+	__service=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+		if indexOf(argv,"-r")!=null then return System.loadServices(Obj)
+		Net.service(Obj,argv)
+	end function
+	__hunt=function(argv);if Net.hasInternet(Obj) isa Warning then return;Net.hunt(Obj,argv);end function
+	__anon=function(argv);if not globals.G_attributes.anon then globals.G_attributes.anon=true else globals.G_attributes.anon=false;Io.anon(Obj);end function
+	__exp=function(argv)
+    if not argv then return Man.help(["exp"])
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		dump=function(arg);Exploit.dump;end function
+		listAll=function(arg);Exploit.view(arg);end function
+		find=function(arg);Exploit.find(arg);end function
+    defrag=function(arg);Exploit.defrag;end function
+		removeBy=function(arg)
+			if not arg then return Man.help(["exp"])
+      _p=ArgumentParser.init
+      _p.addArgument("i",false,"storeNumber")  // Index of exploit to delete
+      _p.addArgument("l",false,"store")  // Library name (.so)
+      _p.addArgument("v",false,"store")  // Version to remove (X.X.X format)
+      arg=_p.parseArgs("exp",arg)
+      if arg isa Error then return
+			if arg.i isa number then return Exploit.delete(arg.i)
+      if not arg.l then return Info.warning("Missing required flag '-l'")
+      if not arg.v then return Info.warning("Missing required flag '-v'")
+      if indexOf(arg.l,".so")==null then arg.l+=".so"
+      if len(split(arg.v,"\."))!=3 then return Info.warning("Version must be in format X.X.X")
+      Exploit.removeByLabel(arg.l,arg.v)
+		end function
+		viewBy=function(arg)
+			if not arg then return Man.help(["exp"])
+			libIndex=to_int(arg[0])
+			if len(arg)>=2 then
+				exploitIndex=to_int(arg[1])
+				Exploit.useSpecific(libIndex,exploitIndex)
+			else
+				Exploit.use(libIndex)
+			end if
+		end function
+    view=function(arg)
+      _p=ArgumentParser.init
+      _p.addArgument("l",false,"store")  // Library name (.so)
+      _p.addArgument("v",false,"store")  // Version to view (X.X.X format)
+      arg=_p.parseArgs("exp",arg)
+      if arg isa Error then return
+      if not arg.l then return Info.warning("Missing required flag '-l'")
+      if not arg.v then return Info.warning("Missing required flag '-v'")
+      if indexOf(arg.l,".so")==null then arg.l+=".so"
+      if len(split(arg.v,"\."))!=3 then return Info.warning("Version must be in format X.X.X")
+      Exploit.viewByLabel(arg.l,arg.v)
+    end function
+		removeAll=function(arg);Exploit.purge;end function
+    router=function(arg)
+			_p=ArgumentParser.init
+			_p.addArgument("p",false,"storeNumber")  // Number of router exploits to update
+			arg=_p.parseArgs("exp",arg)
+			if arg isa Error then return
+      if not arg.p then arg.p=100
+      Exploit.updateRouter(arg.p)
+    end function
+    bounce=function(arg)
+			_p=ArgumentParser.init
+			_p.addArgument("p",false,"storeNumber")  // Number of passes
+			arg=_p.parseArgs("exp",arg)
+			if arg isa Error then return
+      if not arg.p then arg.p=100
+      Exploit.updateBounce(arg.p)
+    end function
+    _svcUpdate=function(arg,svc)
+			_p=ArgumentParser.init
+			_p.addArgument("p",false,"storeNumber")
+			arg=_p.parseArgs("exp",arg)
+			if arg isa Error then return
+      if not arg.p then arg.p=10
+      Exploit.updateExploits(arg.p,svc)
+    end function
+    http=function(arg);_svcUpdate(arg,"http");end function
+    ssh=function(arg);_svcUpdate(arg,"ssh");end function
+    ftp=function(arg);_svcUpdate(arg,"ftp");end function
+    smtp=function(arg);_svcUpdate(arg,"smtp");end function
+    rshell=function(arg);_svcUpdate(arg,"rshell");end function
+    repo=function(arg);_svcUpdate(arg,"repo");end function
+    sql=function(arg)
+			_p=ArgumentParser.init
+			_p.addArgument("p",false,"storeNumber")  // Number of sql exploits to update
+			arg=_p.parseArgs("exp",arg)
+			if arg isa Error then return
+      if not arg.p then arg.p=10
+      Exploit.updateSQL(arg.p)
+    end function
+    all=function(arg)
+			_p=ArgumentParser.init
+			_p.addArgument("p",false,"storeNumber")  // Number of exploits to update for all services
+			arg=_p.parseArgs("exp",arg)
+			if arg isa Error then return
+      if not arg.p then arg.p=10
+      Exploit.updateAll(arg.p)
+    end function
+		grind=function(arg)
+      if not arg then return Man.help(["exp"])
+			Arg1=arg[0]
+			Obj=outer.Obj
+			remote=function(ag);if Net.hasInternet(Obj) isa Warning then return;Exploit.grindRemote(ag);end function
+			local=function(ag);Exploit.grindLocal(Obj,ag);end function
+			cmds={
+        "-r":@remote,
+        "-l":@local
+      }
+			if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+			cmds[Arg1](arg[1:])
+		end function
+    reset=function(arg);Exploit.resetScannable;end function
+    refresh=function(arg);Exploit.refresh;end function
+    backup=function(arg);Exploit.backup;end function
+    restore=function(arg);Exploit.restore;end function
+    top=function(arg);Exploit.top(arg);end function
+    bloom=function(arg)
+      Arg1=arg[0]
+      stats=function;Exploit.bloomStats;end function
+      analyze=function;Exploit.analyzeBloom;end function
+      reset=function;Exploit.resetBloom;end function
+      rebuild=function;Exploit.buildBloom;end function
+      cmds={
+        "-s":@stats,
+        "-a":@analyze,
+        "reset":@reset,
+        "rebuild":@rebuild
+      }
+      if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+      cmds[Arg1]
+    end function
+		cmds={
+      "-d":@dump,
+      "-l":@listAll,
+      "-f":@find,
+      "-r":@removeBy,
+      "-p":@viewBy,
+      "-x":@removeAll,
+      "view":@view,
+      "router":@router,
+      "bounce":@bounce,
+      "http":@http,
+      "ssh":@ssh,
+      "ftp":@ftp,
+      "smtp":@smtp,
+      "rshell":@rshell,
+      "repo":@repo,
+      "sql":@sql,
+      "all":@all,
+      "defrag":@defrag,
+      "grind":@grind,
+      "reset":@reset,
+      "refresh":@refresh,
+      "bloom":@bloom,
+      "backup":@backup,
+      "restore":@restore,
+      "top":@top
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__su=function(argv);Command.su(Obj,argv);end function
+	__pacman=function(argv);Command.pacman(Obj,argv);end function
+	__password=function(argv);if argv then return Crypt.genPassList(Obj,argv);Crack.edit(Obj);end function
+	__cmds=function(argv);return Man.commands([Obj.layer],false);end function
+	__scan=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+    //Check for piped stdin input
+    inputFromPipe=null
+    if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+      inputFromPipe=globals.G_pipe.stdin
+      if typeof(inputFromPipe)=="string" then
+        inputFromPipe=trim(inputFromPipe)
+      else if inputFromPipe isa Error then
+        return Error.set("","",true)
+      else
+        inputFromPipe=str(inputFromPipe)
+        inputFromPipe=trim(inputFromPipe)
+      end if
+    end if
+    if (not argv or len(argv)==0) and not inputFromPipe then return Man.help(["scan"])
+    if globals.G_settings.dsession then
+      if System.dsession(Obj) isa Warning then
+        if not Gui.yesNo("You have a active root dsession, do you want to continue?") then return
+      end if
+    end if
+		if argv and len(argv)>0 then Arg1=lower(argv[0]) else Arg1=inputFromPipe
+		Obj=outer.Obj
+		random=function(arg);if not Library.haveMetaxploit then return;Attack.scan(Obj,Net.rip);end function
+		findLibraries=function(arg);Net.scanByValue(arg);end function
+		disableFW=function(arg);Net.disableRouters(0);Net.lan(Obj,Library.metaxploit);end function
+		showFW=function(arg);Net.local(Obj);end function
+		showDisableFW=function(arg);Net.disableRouters(0);Net.lan(Obj,Library.metaxploit);end function
+		localNet=function(arg)
+			if not globals.G_hasPivoted then
+        Net.lan(Obj,Library.metaxploit)
+      else
+        if hasIndex(Obj,"metaxploit") then Net.lanShell(Obj,Obj.metaxploit) else Net.lanShell(Obj,Library.metaxploit)
+      end if
+		end function
+		local=function(arg);Exploit.scanLocal(Obj);end function
+    localPO=function(arg)
+      if globals.G_errors.pobject isa Error then return Error.set("PObjects are in an error state, please check the log")
+			for f in get_files(File(Obj.computer,"/lib"))
+				e=load(Library.metaxploit,path(f))
+				if not e then continue
+				Info.info("Processing "+lib_name(e)+":"+version(e)+"...")
+				g=PartialObject.loadDebugger(e)
+				if g isa Error then return
+        r=PartialObject.trySolve(g,e)
+				if r.result isa Error then return r.result
+				if r.result=="No potential issues have been found" then
+					Info.info(lib_name(e)+":"+version(e))+":> no issues found"
+					continue
+				end if
+				t=PartialObject.getPData(r.result,e)
+				if t isa Error then
+					globals.G_errors.pobject=t
+					return
+				end if
+				o=payload(g,t.memory,path(f))
+				if o isa list then
+					if o[2].lib_name==null then continue
+					PartialObject.saveToDatabase(e,t)
+				end if
+			end for
+    end function
+		customLocal=function(arg);return Exploit.scanLocalCustom(Obj,arg);end function
+		disableAllFW=function(arg);if not Library.haveMetaxploit then return;Net.disableRouters(1);end function
+		scanAll=function(arg);Net.scanAll(arg);end function
+		customRemote=function(arg);return Attack.scanCustom(arg);end function
+		scanPObject=function(arg);if globals.G_errors.pobject isa Error then return Error.set("PObjects are in an error state, please check the log");PartialObject.target(arg,false,true,Library.metaxploit,{"public_ip":Obj.meta.public_ip,"local_ip":Obj.meta.local_ip,"metaLib":null});end function
+		scanPODirectory=function(arg)
+			if globals.G_errors.pobject isa Error then return Error.set("PObjects are in an error state, please check the log")
+			if arg then z=arg[0] else z=path(Obj.dir.current)
+			l=File(Obj.computer,z)
+			for f in get_files(l)
+				m=load(Library.metaxploit,path(f))
+				if not m then continue
+				d=PartialObject.loadDebugger(m)
+				if d isa Error then return
+				r=PartialObject.trySolve(d,m)
+				if r.result isa Error then return r.result
+				if r.result=="No potential issues have been found" then
+					Info.info(lib_name(m)+":"+version(m))+":> no issues found"
+					continue
+				end if
+				p=PartialObject.getPData(r.result,m)
+				if p isa Error then
+					globals.G_errors.pobject=p
+					return
+				end if
+				PartialObject.saveToDatabase(m,p)
+			end for
+			Info.info("Scan complete")
+		end function
+		lanCustom=function(arg)
+			_p=ArgumentParser.init
+			_p.addArgument("r",false,"store")  // Custom LAN target route list
+			arg=_p.parseArgs("scan",arg)
+			if arg isa Error then return
+      return Attack.lanCustom(Obj,arg)
+		end function
+    bounce=function(arg);Attack.bounce(arg);end function
+    bounceHeadless=function(arg);return Attack.bounce(arg,false);end function
+    shellBounce=function(arg);return Attack.shellBounce(arg,Obj);end function
+    exploit=function(arg);return Exploit.scanForExploit(Obj,arg,false);end function
+		cmds={
+      "-lp":@localPO,
+      "--n":@lanCustom,
+      "-pd":@scanPODirectory,
+      "-p":@scanPObject,
+      "-a":@scanAll,
+      "-r":@random,
+      "-b":@bounce,
+      "--b":@bounceHeadless,
+      "--s":@shellBounce,
+      "-nd":@disableFW,
+      "-nf":@showFW,
+      "-nfd":@showDisableFW,
+      "-n":@localNet,
+      "-l":@local,
+      "-d":@disableAllFW,
+      "-rv":@findLibraries,
+      "--l":@customLocal,
+      "--c":@customRemote,
+      "--e":@exploit
+		}
+		if hasIndex(cmds,Arg1) then
+			f=cmds[Arg1]
+      restArgs=argv[1:]
+      // Inject pipe stdin as args when no explicit args provided
+      if inputFromPipe then
+        if (Arg1=="-p" or Arg1=="-pd") and (not restArgs or len(restArgs)==0) then
+          restArgs=split(trim(inputFromPipe)," ")
+        else if Arg1=="--b" then
+          // Always inject IPs from pipe; restArgs become trailing commands
+          parts=split(trim(inputFromPipe)," ")
+          if len(parts)>=2 then
+            restArgs=["-p",parts[0],"-l",parts[1]]+restArgs
+          end if
+        else if Arg1=="--s" or Arg1=="--c" then
+          // Prepend pipe tokens as leading positional args (IP [LIB [TYPE]])
+          restArgs=split(trim(inputFromPipe)," ")+restArgs
+        end if
+      end if
+      if indexOf(Arg1,"--")==0 then
+        globals.G_bash.FLAGS["scan_ok"]=false
+        globals.G_bash.FLAGS["hold"]=null
+        // CANCONT suppresses SIGSTOP inside Error.set so scan functions can return
+        // an Error object (for scan_ok=false) without halting the script
+        globals.G_bash.CANCONT=true
+        // ACTIVE=true prevents Exploit.run from showing the interactive null-result menu
+        // for all -- flags (not just --b/--s), and ensures FLAGS are set correctly
+        _prevActive=globals.G_bash.ACTIVE
+        globals.G_bash.ACTIVE=true
+        r=f(restArgs)
+        globals.G_bash.ACTIVE=_prevActive
+        globals.G_bash.CANCONT=false
+        if not globals.G_bash.FLAGS["scan_ok"] then globals.G_bash.FLAGS["scan_ok"]=(r!=null and not (r isa Error))
+        // Never propagate errors from scan flags — Error.set already printed the message,
+        // and $hold/$scan_ok are set via FLAGS. Returning null lets the script continue.
+        return
+      end if
+      return f(restArgs)
+		else
+			if not Library.haveMetaxploit then return
+			if indexOf(Arg1,"-")!=null then return Error.set("check your syntax...there is no flag [ "+Arg1+" ]") else return Attack.scan(Obj,Arg1)
+		end if
+	end function
+	__scanlan=function(argv)
+    if not globals.G_hasPivoted then
+      Obj=outer.Obj
+      deep=function(t,s,z="")
+        R=[]
+        if indexOf(s,t)!=null then return R
+        P=ping(Obj.shell,t)
+        D={
+          "ip":t,
+          "is_reachable":P,
+          "ports":[],
+          "devices":[],
+          "main_router":false,
+          "type":"device",
+          "kernel_version":null,
+          "has_firewall":false,
+          "fw_rules":null
+        }
+        if not P then
+          R.push(D)
+          return R
+        end if
+        push(s,t)
+        r=get_router(t)
+        if r!=null then
+          F=firewall_rules(r)
+          if F isa list and F then D["has_firewall"]=true;D["fw_rules"]=F
+          if get_router(r.public_ip).local_ip==D["ip"] then D["main_router"]=true
+          D["kernel_version"]=kernel_version(r)
+          D["type"]="router"
+          for p in device_ports(r,t)
+            d={}
+            if port_number(p)==8080 then
+              push(D["ports"],{
+                "status":"open",
+                "port_number":0,
+                "service_name":"router",
+                "service_version":kernel_version(r),
+                "lan_ip":local_ip(r)
+              })
+              if get_switch(local_ip(r))!=null then D["type"]="switch"
+              if ping_port(r,8080) then d["status"]="open" else d["status"]="closed"
+            else
+              d["status"]="open"
+            end if
+            I="unknown"
+            if indexOf(port_info(r,p)," ")!=null then
+              o=port_info(r,p)
+              I=get_lan_ip(p)
+            end if
+            o=port_info(r,p)
+            e=split(o," ")
+            d["port_number"]=port_number(p)
+            d["service_name"]=e[0]
+            d["service_version"]=e[1]
+            d["lan_ip"]=I
+            push(D["ports"],d)
+          end for
+          v=devices_lan_ip(r)
+          for c in v
+            if indexOf(s,c)!=null or c==t then continue
+            u=deep(c,s,z+"    ")
+            for l in u;push(D["devices"],l);end for
+          end for
+        else
+          M=get_router(s[0])
+          if M!=null then
+            for p in device_ports(M,t)
+              d={}
+              d["status"]="open"
+              I="unknown"
+              if indexOf(port_info(M,p)," ")!=null then
+                o=port_info(M,p)
+                I=get_lan_ip(p)
+              end if
+              o=port_info(M,p)
+              e=split(o," ")
+              d["port_number"]=port_number(p)
+              d["service_name"]=e[0]
+              d["service_version"]=e[1]
+              d["lan_ip"]=I
+              push(D["ports"],d)
+            end for
+          end if
+        end if
+        push(R,D)
+        return R
+      end function
+      printData=function(W,z="")
+        for _ in W
+          x="|--"
+          q="|     "
+          if not _["is_reachable"] then
+            x="|---- DEVICE"
+            print bold(white(x+" ["+_["ip"]+"]"))
+            print red(q+"|- IP NOT REACHABLE")
+            continue
+          end if
+          C=false
+          A=false
+          S=false
+          Z=false
+          for p in _["ports"]
+            if p["port_number"]==37777 then
+              C=true
+            else if p["port_number"]==1883 then
+              A=true
+            else if p["port_number"]==1222 then
+              S=true
+            else if p["port_number"]==5555 then
+              Z=true
+            end if
+          end for
+          if C then
+            x="|---- CCTV"
+            q="|     "
+          else if A then
+            x="|---- SAPP"
+            q="|     "
+          else if S then
+            x="|---- RSHL"
+            q="|     "
+          else if Z then
+            x="|---- ADB"
+            q="|     "
+          else if _["type"]=="router" then
+            if _["main_router"] then x="|-- EDGE ROUTER" else x="|-- ROUTER"
+            q="|   "
+          else if _["type"]=="switch" then
+            x="|-- SWITCH"
+            q="|   "
+          else
+            x="|---- WORKSTATION"
+            q="|     "
+          end if
+          if _["has_firewall"] then
+            if _["kernel_version"]!=null then print bold(yellow(x+" ["+_["ip"]+"|KERNEL VERSION:"+_["kernel_version"]+"]")) else print bold(yellow(x+" ["+_["ip"]+"]"))
+          else
+            if _["kernel_version"]!=null then
+              print bold(white(x+" ["+_["ip"]+"|KERNEL VERSION:"+_["kernel_version"]+"]"))
+            else
+              y=""
+              if _["ip"]==Obj.computer.local_ip then y=green("[YOU]")
+              print white(x+" ["+_["ip"]+"]"+y)
+            end if
+          end if
+          if _["fw_rules"] then
+            _fwParts=[]
+            for _rule in _["fw_rules"]
+              _r=split(_rule," ")
+              if len(_r)<2 then continue
+              _label=_r[0]+":"+_r[1]
+              if len(_r)>=4 and _r[3]!="Any" then _label=_label+"->"+_r[3]
+              if _r[0]=="DENY" then push(_fwParts,red(_label)) else push(_fwParts,green(_label))
+            end for
+            if len(_fwParts) then print yellow(q+"|- FIREWALL: ")+join(_fwParts," | ")
+          end if
+          if _["ports"] then
+            for p in _["ports"]
+              o="PORT:"+p["port_number"]+"|"+upper(p["status"])+"|"+upper(p["service_name"])+"|"+p["service_version"]
+              if p["lan_ip"]!=_["ip"] then o=o+"|ROUTED TO:"+p["lan_ip"]
+              if upper(p["status"])=="OPEN" then print green(q+"|- "+o) else print red(q+"|- "+o)
+            end for
+          else
+            print red(q+"|- NO OPEN PORTS")
+          end if
+          if _["devices"] then printData(_["devices"],"    ")
+        end for
+      end function
+      print bold(white("/ START SCANLAN >>"))
+      print bold(white("| START PROBE [PUBLIC_IP:"+public_ip(get_router)+"]"))
+      W=deep(local_ip(get_router),[],"")
+      printData(W)
+      print bold(white("| END PROBE"))
+      print bold(white("\ END SCANLAN <<"))
+    else
+      f=File(Obj.computer,path(Obj.user.home)+"/.s")
+      if f then Command.qrm(Obj,[f])
+      f=Command.touch(Obj,["-x",".s.src"])
+      if f isa Error then return
+      _sys=System.getSystem
+      _sf=File(_sys.computer,path(_sys.dir.srcTools)+"/scanlan")
+      if not _sf then return Error.set("Missing scanlan source")
+      set_content(f,get_content(_sf))
+      if build(Obj.shell,path(f),path(Obj.user.home))=="" then launch(Obj.shell,path(Obj.user.home)+"/.s")
+      f=File(Obj.computer,path(Obj.user.home)+"/.s.src")
+      if f then Command.qrm(Obj,[f])
+      f=File(Obj.computer,path(Obj.user.home)+"/.s")
+      if f then Command.qrm(Obj,[f])
+    end if
+	end function
+	__brute=function(argv)
+    if not argv then return Man.help(["brute"])
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		flags=null
+		clean=[]
+		for a in argv[1:]
+			if a=="-c" then
+				if not flags then flags={}
+				flags.c=true
+			else if a=="-C" then
+				if not flags then flags={}
+				flags.C=true
+			else if a=="-n" then
+				if not flags then flags={}
+				flags.n=true
+			else if a=="-N" then
+				if not flags then flags={}
+				flags.N=true
+			else
+				push(clean,a)
+			end if
+		end for
+		local=function(arg);Crack.attack(Obj,arg);end function
+		ssh=function(arg)
+			if Net.hasInternet(Obj) isa Warning then return
+			if len(arg)<2 then return Man.help(["brute"])
+			push(arg,"ssh")
+			Crack.network(arg,flags)
+		end function
+		insert=function(arg);Crack.insert(Obj,arg,flags);end function
+		ftp=function(arg)
+			if Net.hasInternet(Obj) isa Warning then return
+			if len(arg)!=2 then return Man.help(["brute"])
+			push(arg,"ftp")
+			Crack.network(arg,flags)
+		end function
+		email=function(arg);if not arg then return Man.help(["brute"]) else	Crack.email(arg,flags);end function
+		coin=function(arg);if len(arg)!=2 then return Man.help(["brute"]) else	Crack.coin(Obj,arg,flags);end function
+		cmds={
+      "-c":@coin,
+      "-i":@insert,
+      "-e":@email,
+      "-l":@local,
+      "-s":@ssh,
+      "-f":@ftp
+		}
+		if not hasIndex(cmds,Arg1) then return Man.help(["brute"])
+		arg=argv[1:]
+		if Arg1!="-l" then arg=clean
+		cmds[Arg1](arg)
+	end function
+	__dict=function(argv)
+    if not argv then return Man.help(["dict"])
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		printRootPass=function(arg);Crack.dictPost(Obj);end function
+		local=function(arg);Crack.dictAttack(Obj,arg);end function
+		ssh=function(arg)
+			if Net.hasInternet(Obj) isa Warning then return
+			if not arg then return Man.help(["dict"])
+      _p=ArgumentParser.init
+      _p.addArgument("start",true,"storeNumber")  // Long flag: --start (start index in wordlist)
+      _p.addArgument("stop",true,"storeNumber")  // Long flag: --stop (end index in wordlist)
+      _p.addArgument("u",false,"store")  // Username to use (default: root)
+      arg=_p.parseArgs("ssh",arg)
+      if arg isa Error then return
+      if len(arg.rest)!=2 then return Man.help(["dict"])
+      if not arg.start then arg.start=0
+      if not arg.u then arg.u="root"
+      Crack.dictNetwork(arg,"ssh")
+		end function
+		dinsert=function(arg);Crack.dictInsert(Obj);end function
+		ftp=function(arg)
+			if Net.hasInternet(Obj) isa Warning then return
+			if not arg then return Man.help(["dict"])
+      _p=ArgumentParser.init
+      _p.addArgument("start",true,"storeNumber")  // Long flag: --start (start index in wordlist)
+      _p.addArgument("stop",true,"storeNumber")  // Long flag: --stop (end index in wordlist)
+      _p.addArgument("u",false,"store")  // Username to use (default: root)
+      arg=_p.parseArgs("ftp",arg)
+      if arg isa Error then return
+      if len(arg.rest)!=2 then return Man.help(["dict"])
+      if not arg.start then arg.start=0
+      if not arg.u then arg.u="root"
+      Crack.dictNetwork(arg,"ftp")
+		end function
+		email=function(arg)
+			if not arg then return Man.help(["dict"])
+      _p=ArgumentParser.init
+      _p.addArgument("file",true,"store")  // Long flag: --file (path to wordlist file)
+      _p.addArgument("start",true,"storeNumber")  // Long flag: --start (start index in wordlist)
+      _p.addArgument("stop",true,"storeNumber")  // Long flag: --stop (end index in wordlist)
+      arg=_p.parseArgs("email",arg)
+      if arg isa Error then return
+      if not arg.rest then return Error.set("You must specify a email domain to use against")
+      if not arg.start then arg.start=0
+      if not arg.file then return Crack.dictEmail(arg)
+			f=Io._getFile(Obj,arg.file)
+			if f isa Error then return f
+			Info.info("Initialising email dictionary file list attack")
+			if not globals.G_rainbow then self.load
+			Info.info("Testing...")
+			for i in split(get_content(f),char(10));Crack.dictEmailList(i);end for
+		end function
+		coin=function(arg)
+			if not arg then return Man.help(["dict"])
+      _p=ArgumentParser.init
+      _p.addArgument("start",true,"storeNumber")  // Long flag: --start (start index in wordlist)
+      _p.addArgument("stop",true,"storeNumber")  // Long flag: --stop (end index in wordlist)
+      arg=_p.parseArgs("email",arg)
+      if arg isa Error then return
+			if len(arg.rest)!=2 then return Man.help(["dict"])
+      if not arg.start then arg.start=0
+			Crack.dictCoin(Obj,arg)
+		end function
+		cmds={
+      "-c":@coin,
+      "-i":@dinsert,
+      "-e":@email,
+      "-l":@local,
+      "-s":@ssh,
+      "-f":@ftp,
+      "-lp":@printRootPass
+		}
+		if not hasIndex(cmds,Arg1) then return Man.help(["dict"])
+		cmds[Arg1](argv[1:])
+	end function
+	__get=function(argv)
+		if not argv then return Man.help(["get"])
+    Arg1=lower(argv[0])
+		Obj=outer.Obj
+		passwd=function(arg)
+			g="/etc/passwd"
+			d=print(globals.G_main.user.home)+"/Downloads"
+			x=scp(Obj.shell,g,d,globals.G_main.shell)
+			if x==1 then Info.info("passwd successfully downloaded to Downloads") else Info.error(x)
+		end function
+		showWifi=function(arg)
+			z=null
+			if active_net_card(Obj.computer)=="WIFI" then z=wifi_networks(Obj.computer,"wlan0")
+			if z then
+				i=["BSSID PWR ESSID"]
+				for n in z;push(i,n);end for
+				print format_columns(join(i,char(10)))
+			else
+				Info.error("This system is not using a wireless network card")
+			end if
+		end function
+		// XFIX1.0: get -z / bestSize obsolete — compile size follows source length, not filename
+		fileSize=function(arg);Io.bestSize(1,arg and arg.indexOf("-c")!=null);end function
+		proxy=function(arg)
+      if Net.hasInternet(Obj) isa Warning then return
+      _p=ArgumentParser.init
+      _p.addArgument("c",false,"storeNumber")  // Max count to crack
+      _p.addArgument("s",false,"flag")  // Use shells to spawn workers
+      _p.addArgument("d",false,"flag")  // Use decimal mode (skip rainbow tables)
+      _p.addArgument("n",false,"store")  // Output save filename
+      arg=_p.parseArgs("get",arg)
+      if arg isa Error then return
+      if not arg.n then arg.n="crackedPasswords.dat"
+			Farm.get={
+        "countTo":arg.c,
+        "count":0,
+        "useDec":arg.d,
+        "ip":"",
+        "useShells":arg.s,
+        "saveAs":arg.n,
+        "p":0,
+        "m":0,
+        "r":0,
+        "passwordResults":[],
+        "mapResults":[]
+      }
+			if not arg.d then
+				if not globals.G_rainbow then
+					Info.info("Loading rainbow tables...")
+					Crack.load
+					Info.info("Rainbow tables loaded...initiating attack")
+				end if
+				Info.info("Running...")
+				Farm.proxy
+				Cache.load
+			else
+				Farm.proxy
+				Cache.load
+			end if
+			Farm.get={}
+		end function
+		// _runFarm - Shared setup and dispatch for bank/email/names
+		// Args: arg (parsed argv), file (target filename), farmFn (Farm function ref),
+		//       defaultCount (int), defaultSave (string), useRainbow (bool)
+		_runFarm=function(arg, file, farmFn, defaultCount, defaultSave, useRainbow)
+			if Net.hasInternet(Obj) isa Warning then return
+      _p=ArgumentParser.init
+      _p.addArgument("c",false,"storeNumber")  // Max count
+      _p.addArgument("s",false,"flag")  // Use shells
+      _p.addArgument("d",false,"flag")  // Use decipher (decimal mode)
+      _p.addArgument("n",false,"store")  // Output filename
+      arg=_p.parseArgs("get",arg)
+      if arg isa Error then return
+      if not arg.c then arg.c=defaultCount
+      if not arg.n then arg.n=defaultSave
+			Farm.get={
+        "countTo":arg.c,
+        "count":0,
+        "useDec":arg.d,
+        "saveAs":arg.n,
+        "file":file,
+        "useShells":arg.s,
+        "ex":null
+      }
+      if useRainbow and not arg.d then
+        if not globals.G_rainbow then Crack.loading
+        Info.info("Running...")
+      end if
+      st=time
+      farmFn
+      Farm.get={}
+			print yellow("Proccess took: "+round(time-st,2)+" seconds")
+		end function
+		bank=function(arg);_runFarm(arg,"Bank.txt",@Farm.getMailBank,10,"crackedBankAccounts.dat",true);end function
+		names=function(arg);_runFarm(arg,"names.txt",@Farm.names,100,"names.dat",false);end function
+		email=function(arg);_runFarm(arg,"Mail.txt",@Farm.getMailBank,10,"crackedEmailAccounts.dat",true);end function
+		localNet=function(arg)
+			if Net.hasInternet(Obj) isa Warning then return
+			// CONTEXT ROUTING: Check if we're in a pivoted/proxy session
+			// If G_hasPivoted=true AND we're not on the original system (G_lastIP check),
+			// we MUST use Builder.packRouter to get correct router due to context switching
+			// Direct get_router would return the proxy's router, not home's
+			if not globals.G_hasPivoted then r=get_router(public_ip_pc(Obj.computer)) else r=Builder.packRouter(Obj,public_ip_pc(Obj.computer))
+			if is_network_active(Obj.computer) then
+				l=Obj.computer.local_ip
+				p=r.public_ip
+				g=network_gateway(Obj.computer)
+				if active_net_card(Obj.computer)=="WIFI" then
+					print blue("Connected to Wi-Fi:")
+					print blue("Essid:"+essid_name(r))
+					print blue("Bssid:"+bssid_name(r))
+				else
+					print blue("Ethernet connection:")
+				end if
+			else
+				z="0.0.0.0"
+				l=z
+				p=z
+				g=z
+				Info.error("Not connected to a network")
+			end if
+			print yellow("-"*26)
+			print blue("Public IP: "+p)
+			print blue("Local IP : "+l)
+			print blue("Gateway  : "+g)
+		end function
+		cmds={
+      "-e":@email,
+      "-w":@showWifi,
+      "-m":@proxy,
+      "-b":@bank,
+      "-i":@localNet,
+      "-z":@fileSize,
+      "-p":@passwd,
+      "-n":@names
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__set=function(argv)
+    if not argv then return Man.help(["set"])
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		ghostUser=function(arg);Attack.tux(Obj,arg);end function
+		archive=function(arg);Io.lock(Obj,arg);end function
+		zip=function(arg);Io.zip(Obj,arg);end function
+		users=function(arg);System.users(Obj);end function
+		lanIP=function(arg)
+			Obj=outer.Obj
+			print blue("Lets make some network adjustments")
+			print "Current Local IP:"+Obj.computer.local_ip
+			print "Current Gateway :"+network_gateway(Obj.computer)
+			print " "
+			print "Installed Network Cards:"
+			print format_columns(network_devices(Obj.computer))
+			d=Gui.input({"text":"Set your network card","default":"eth0"})
+			i=Gui.inputIP({"text":"Enter a lan IP to use"})
+			if i==null then return Info.info("User Aborted","i",false)
+			g=Gui.inputIP({"text":"Enter a gateway IP"})
+			if g==null then return Info.info("User Aborted","i",false)
+			o=connect_ethernet(Obj.computer,d,i,g)
+			if len(o)>0 then print o else Info.info("Success")
+		end function
+		doChown=function(arg)
+      if not arg then return Man.help(["set"])
+			Z=lower(arg[0])
+			Obj=outer.Obj
+			file=function
+				x=Io.file(Obj,Obj.user.home,"Select file to chown:")
+				if x isa Warning then return x
+				u=Gui.input({"text":"What user is taking ownership of this file?"})
+				if u==null then return
+				Command.chown(Obj,[u,path(x)])
+			end function
+			directory=function
+				x=Io.folder(Obj,Obj.user.home,"Select a directory to chown:")
+				if x isa Warning then return x
+				u=Gui.input({"text":"What user is taking ownership of this file?"})
+				if u==null then return
+				if Gui.yesNo("Recursive?") then Command.chown(Obj,["-r",u,path(x)]) else Command.chown(Obj,[u,path(x)])
+			end function
+			cmds={
+        "-f":@file,
+        "-d":@directory
+			}
+			if hasIndex(cmds,Z) then cmds[Z]
+		end function
+		doChgrp=function(arg)
+      if not arg then return Man.help(["set"])
+			Z=lower(arg[0])
+			Obj=outer.Obj
+			file=function
+				x=Io.file(Obj,Obj.user.home,"Select file to chgrp:")
+				if x isa Warning then return x
+				g=Gui.input({"text":"What group is taking ownership of this file?"})
+				if g==null then return
+				Command.chgrp(Obj,[g,path(x)])
+			end function
+			directory=function
+				x=Io.folder(Obj,Obj.user.home,"Select a directory to chown:")
+				if x isa Warning then return x
+				g=Gui.input({"text":"What group is taking ownership of this file?"})
+				if g==null then return
+				if Gui.yesNo("Recursive?") then Command.chgrp(Obj,["-r",g,path(x)]) else Command.chgrp(Obj,[g,path(x)])
+			end function
+			cmds={
+        "-f":@file,
+        "-d":@directory
+			}
+			if hasIndex(cmds,Z) then cmds[Z]
+		end function
+		doChmod=function(arg)
+      if not arg then return Man.help(["set"])
+			Z=lower(arg[0])
+			Obj=outer.Obj
+			file=function
+				x=Io.file(Obj,Obj.user.home,"Select file to chmod:")
+				if x isa Warning then return x
+				o=Gui.input({"text":"What access permissions are we using on this file [u,g,o+/-wrx]?"})
+				if o==null then return
+				Command.chmod(Obj,[o,path(x)])
+			end function
+			directory=function
+				x=Io.folder(Obj,Obj.user.home,"Select a directory to chmod:")
+				if x isa Warning then return x
+				p=Gui.input({"text":"What access permissions are we using on this folder [u,g,o+/-wrx]?"})
+				if p==null then return
+				if Gui.yesNo("Recursive?") then Command.chmod(Obj,["-r",p,path(x)]) else Command.chmod(Obj,[p,path(x)])
+			end function
+			cmds={
+        "-f":@file,
+        "-d":@directory
+			}
+			if hasIndex(cmds,Z) then cmds[Z]
+		end function
+		emailSettings=function(arg);Email.setup(Obj);end function
+		scriptkiddy=function(arg);Attack.scriptOut(Obj);end function
+		encryption=function(arg);if not hasIndex(Obj,"shell") then return Error.set("Command requires shell access");System.setupEncryption(Obj,arg);end function
+		cmds={
+      "-s":@scriptkiddy,
+      "-t":@ghostUser,
+      "-f":@archive,
+      "-z":@zip,
+      "-u":@users,
+      "-i":@lanIP,
+      "-o":@doChown,
+      "-g":@doChgrp,
+      "-c":@doChmod,
+      "-e":@emailSettings,
+      "--senc":@encryption
+		}
+		cmds=cmds+Command.setBase(Obj)
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ] (type:"+Obj.type+")")
+		cmds[Arg1](argv[1:])
+	end function
+	__system=function(argv)
+    if not argv then return Man.help(["sys"])
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		secure=function(arg)
+			c=Obj.computer
+			f=File(c,"/root")
+			if not f or not has_permission(f,"w") then return Error.set("You do not have the permissions to soft secure this system")
+			s=File(c,"/bin/sudo")
+			if not s then
+				Command.make(Obj,["-b","d","sudo"])
+				f=File(c,path(Obj.dir.current)+"/sudo")
+				if f then
+					if not move(f,"/bin","sudo")==1 then return Error.set("Unable to continue")
+				end if
+			end if
+			chmod(File(c,"/"),"o-wrx",1)
+			chmod(File(c,"/"),"u-wrx",1)
+			chmod(File(c,"/"),"g-wrx",1)
+			u=null
+			for h in get_folders(File(c,"/home"));if name(h)=="guest" then continue;u=name(h);end for
+			k=File(c,"/usr/bin/Terminal.exe")
+			set_owner(k,u)
+			chmod(k,"u+x")
+			k=File(c,"/bin/sudo")
+			set_owner(k,u)
+			chmod(k,"u+x")
+			p=File(c,"/etc/passwd")
+			if p then delete(p)
+			Info.info("Setting X premissions...")
+      k=File(c,globals.G_attributes.program_path)
+      chmod(k,"u+rwx")
+      chmod(k,"g+rx")
+      chmod(k,"o+rx")
+      Info.info("Setting payload premissions...")
+      k=Obj.dir.payload
+      chmod(k,"u+rwx",1)
+      chmod(k,"g+rx",1)
+      chmod(k,"o+rx",1)
+			Info.info("X has secured this machine")
+			Info.warning("You will have too run sudo and get root before you can do anything on your machine after this")
+		end function
+		hardSecure=function(arg)
+			c=Obj.computer
+			f=File(c,"/root")
+			if not f or not has_permission(f,"w") then return Error.set("You do not have the permissions to hard secure this system")
+			u=null
+			x=File(c,"/home")
+			if not x then return Error.set("System is modified aborting...")
+			if len(get_folders(x))>2 then return Error.set("System is modified aborting...")
+			for h in get_folders(x)
+				if name(h)=="guest" then continue
+				if not Gui.yesNo("Identified system user (LOGIN USER) as "+white(name(h))+", is this correct?") then return Error.set("Aborting")
+				u=name(h)
+				t=path(h)
+				Info.info("Clearing Desktop...")
+				for d in get_folders(h)
+					if name(d)!="Desktop" then continue
+					for f in get_files(d);delete(f);end for
+				end for
+			end for
+			if not u then return Error.set("Aborting unable to identify user account")
+			Info.info("Clearing /bin...")
+			for a in get_files(File(c,"/bin"));delete(a);end for
+			chmod(File(c,"/"),"o-wrx",1)
+			chmod(File(c,"/"),"u-wrx",1)
+			chmod(File(c,"/"),"g-wrx",1)
+			set_owner(File(c,"/"),"root",1)
+			set_group(File(c,"/"),"root",1)
+			p=File(c,"/etc/passwd")
+			if p then delete(p)
+			Info.info("Removing groups from: "+u+"...")
+			delete_group(c,u,"root")
+			delete_group(c,u,u)
+			Info.info("Changing passswords...")
+			a=Crypt.genPassword(15)
+			b=Crypt.genPassword(15)
+			g=change_password(c,"root",a)
+			if not g then
+				Info.error("When changing root password to: "+a)
+				get_shell
+			else
+				Info.info("Password changed for root")
+			end if
+			g=change_password(c,u,b)
+			if not g then
+				Info.error("When changing user password to: "+u)
+				Info.info("New root password is: "+a)
+				get_shell
+			else
+				Info.info("Password changed for "+u)
+			end if
+			Info.info("Creating login script...")
+			x=Crypt.genSecure
+			y=t+"/Desktop"
+			s=Command.touch(Obj,[y+"/login.src"])
+			if s isa Error then return
+			set_content(s,"while user_input(""Password: ""+char(0))!="""+x+""";end while;start_terminal(get_shell(""root"","""+a+"""))")
+			Info.info("Building...")
+			build(Obj.shell,y+"/login.src",y)
+			delete(s)
+			l=File(c,y+"/login")
+			chmod(l,"o-rwx")
+			chmod(l,"u-rwx")
+			chmod(l,"u+x")
+			chmod(l,"g-rwx")
+			set_owner(l,u)
+			k=File(c,"/usr/bin/Terminal.exe")
+			set_owner(k,u)
+			chmod(k,"u+x")
+			Info.info("New root password is: "+a)
+			Info.info("Your new password is: "+b)
+			Info.info("Your login token is : "+x)
+			Gui.inputNull("Press enter once you have saved the token")
+			Info.info("Wiping logs...")
+			Log.log(Obj)
+			Info.info("Setting X premissions...")
+      k=File(c,globals.G_attributes.program_path)
+      chmod(k,"u+rwx")
+      chmod(k,"g+rx")
+      chmod(k,"o+rx")
+      Info.info("Setting payload premissions...")
+      k=Obj.dir.payload
+      chmod(k,"u+rwx",1)
+      chmod(k,"g+rx",1)
+      chmod(k,"o+rx",1)
+			Info.info("Configuration complete!")
+			Info.info("X has secured this machine")
+			start_terminal(get_shell)
+		end function
+		resecure=function(arg)
+			c=Obj.computer
+			f=File(c,"/root")
+			if not f or not has_permission(f,"w") then return Error.set("You do not have the permissions to resecure this system")
+			if not File(c,"/home/"+Obj.user.name+"/Desktop/login") then return Warning.set("Need to run [ sys -s ] first")
+			chmod(File(c,"/"),"o-wrx",1)
+			chmod(File(c,"/"),"u-wr",1)
+			chmod(File(c,"/"),"g-wr",1)
+			set_owner(File(c,"/"),"root",1)
+			set_group(File(c,"/"),"root",1)
+			if File(c,"/etc/passwd") then delete(File(c,"/etc/passwd"))
+			if File(c,"/home/root") then delete(File(c,"/home/root"))
+			if File(c,"/root/Config/Bank.txt") then delete(File(c,"/root/Config/Bank.txt"))
+			if File(c,"/root/Config/Mail.txt") then delete(File(c,"/root/Config/Mail.txt"))
+			if File(c,"/root/Config/ConfigLan.conf") and Gui.yesNo("Delete the Rental Server config file?",false) then delete(File(c,"/root/Config/ConfigLan.conf"))
+			if File(c,"/root/Config/Map.conf") and Gui.yesNo("Delete the Map config file?",false) then delete(File(c,"/root/Config/Map.conf"))
+			if File(c,"/root/.Trash") then delete(File(c,"/root/.Trash"))
+			for h in get_folders(File(c,"/home"))
+				if name(h)=="guest" then continue
+				u=name(h)
+				y=path(h)
+				for d in get_folders(h)
+					if name(d)==".Trash" then
+						f=File(c,name(d))
+						if f then delete(f)
+					end if
+				end for
+			end for
+			x=y+"/Desktop"
+			p=File(c,x+"/login")
+			chmod(p,"o-rwx")
+			chmod(p,"u-rwx")
+			chmod(p,"u+x")
+			chmod(p,"g-rwx")
+			set_owner(p,u)
+			t=File(c,"/usr/bin/Terminal.exe")
+			set_owner(t,u)
+			chmod(t,"u+x")
+			Info.info("Wiping logs...")
+			Log.log(Obj)
+			Info.info("Setting X premissions...")
+      k=File(c,globals.G_attributes.program_path)
+      chmod(k,"u+rwx")
+      chmod(k,"g+rx")
+      chmod(k,"o+rx")
+      Info.info("Setting payload premissions...")
+      k=Obj.dir.payload
+      chmod(k,"u+rwx",1)
+      chmod(k,"g+rx",1)
+      chmod(k,"o+rx",1)
+			Info.info("All Locked down :-)")
+		end function
+		favorite=function(arg);System.view(arg);end function
+		audit=function(arg)
+			while true
+				CH=[green("Select an audit option")]
+				push(CH,yellow("Create an audit file of the bin folder"))
+				push(CH,yellow("Test a bin audit file..."))
+				push(CH,green("Create an audit file of the system"))
+				push(CH,green("Test a system audit file..."))
+				push(CH,iyellow("Close"))
+				UCH=Gui.choiceHybrid(CH,{},len(CH)-1,false,true)
+				if UCH==len(CH)-1 then break
+				if UCH==1 then
+					System.createBinAudit(Obj)
+				else if UCH==2 then
+					f=Io.file(Obj,Obj.dir.current,"Select an audit file to test:")
+					if not f isa Warning then
+						if indexOf(name(f),"bin")==null then
+							Info.error(name(f)+" is not a valid bin audit file")
+							continue
+						end if
+						if Io.isBinFolder(f) then
+							Info.error(name(f)+" is not a valid bin audit file")
+							continue
+						end if
+						b={}
+						for a in split(get_content(f),char(10))
+							if not len(a) then continue
+							j=split(a,":")
+              if len(j)!=2 then continue
+							b[j[0]]=j[1]
+						end for
+						System.testBins(Obj,b)
+					end if
+				else if UCH==3 then
+					System.createSystemAudit(Obj)
+				else if UCH==4 then
+					f=Io.file(Obj,Obj.dir.current,"Select an audit file to test:")
+					if not f isa Warning then
+						if indexOf(name(f),"system")==null then
+							Info.error(name(f)+" is not a valid system audit file")
+							continue
+						end if
+						if Io.isBinFolder(f) then
+							Info.error(name(f)+" is not a valid system audit file")
+							continue
+						end if
+						b={}
+						for a in split(get_content(f),char(10))
+							if not len(a) then continue
+							j=split(a,":")
+              if len(j)!=2 then continue
+							b[j[0]]=j[1]
+						end for
+						System.testSystem(Obj,b)
+					end if
+				end if
+			end while
+		end function
+		decrypt=function(arg);Encryption.decryptSystem(Obj);end function
+		encrypt=function(arg);Encryption.encryptSystem(Obj);end function
+		clearBin=function(arg)
+			Info.info("Clearing /bin...")
+			Info.info("Removing all bin files from /bin...")
+			for a in get_files(File(Obj.computer,"/bin"));if not has_permission(a,"w") then continue;delete(a);end for
+		end function
+		database=function(arg);System.db;end function
+		ldatabase=function(arg);System.ldb;end function
+		xLink=function(arg)
+			if not Gui.yesNo("This will create a x system link in /bin. Continue?") then return
+			Command.ln(Obj,["x","/bin","x"])
+			Info.info("Complete")
+		end function
+		bork=function(arg);Command.bork(Obj,argv);end function
+		passwords=function(arg);System.restorePerms(Obj);end function
+		restoreSystem=function(arg);System.restore(Obj,arg);end function
+		compare=function(arg);System.compare(arg);end function
+		check=function(arg)
+			if Obj.id!=0 then return Error.set("This command can only be run from main session")
+			if Net.hasInternet(Obj) isa Warning then return
+			//Load aptclient library if needed
+			if not Library.aptclient then Library.aptclient=Io.getLib(globals.G_main,"aptclient.so","aptclientLib")
+			if not Library.aptclient then return Error.set("Unable to locate aptclient.so library")
+			//Ensure apt cache exists
+			aptCache=File(globals.G_main.computer,"/etc/apt/aptcache.bin")
+			if not aptCache then
+				Info.info("Cache not found, updating...")
+				update(Library.aptclient)
+			end if
+			//Data folder libraries (crypto.so, metaxploit.so)
+			dataLibs=["crypto.so","metaxploit.so"]
+			for lib in dataLibs
+				libFile=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/"+lib)
+				if not libFile then
+					Info.warning(lib+" not found in data folder, installing...")
+					result=install(Library.aptclient,lib,path(globals.G_main.dir.data))
+					//Check if apt cache is missing
+					if result isa string and indexOf(result,"aptcache.bin")!=null then
+						Info.info("Cache missing, updating...")
+						update(Library.aptclient)
+						Info.info("Retrying "+lib+" installation...")
+						result=install(Library.aptclient,lib,path(globals.G_main.dir.data))
+					end if
+					if result isa string and indexOf(result,"not found in the server")!=null then
+						Info.warning("Library not found in current repositories")
+						Info.info("Adding a random repository...")
+						configFile=File(globals.G_main.computer,"/etc/apt/sources.txt")
+						if not configFile then System.genAptConfig(globals.G_main)
+						repo=Net.getRepo
+						if repo and repo.ip then
+							Info.info("Adding repository "+repo.ip+"...")
+							addResult=add_repo(Library.aptclient,repo.ip,repo.port)
+							if addResult then
+								Error.set("Failed to add repository: "+addResult)
+								continue
+							end if
+							Info.info("Repository added, updating...")
+							update(Library.aptclient)
+							Info.info("Retrying "+lib+" installation...")
+							result=install(Library.aptclient,lib,path(globals.G_main.dir.data))
+							if result!=1 then
+								Error.set(result)
+								continue
+							end if
+						else
+							Error.set("Failed to get random repository")
+							continue
+						end if
+					else if result!=1 then
+						Error.set(result)
+						continue
+					end if
+					Info.info("Successfully installed "+lib+" to data folder")
+				else
+					Info.info(lib+" is already installed in data folder")
+				end if
+				//Load library (whether newly installed or already present)
+				if lib=="crypto.so" then
+					if not Library.crypto then
+						Library.crypto=Io.getLib(globals.G_main,lib,"cryptoLib")
+						if Library.crypto then Info.info("Loaded crypto library")
+					end if
+				else if lib=="metaxploit.so" then
+					if not Library.metaxploit then
+						Library.metaxploit=Io.getLib(globals.G_main,lib,"MetaxploitLib")
+						if Library.metaxploit then Info.info("Loaded metaxploit library")
+					end if
+				end if
+			end for
+			//Ensure metaxploit is loaded for version detection
+			if not Library.metaxploit then
+				Warning.set("Metaxploit library not available for version detection")
+				Info.info("Attempting to load metaxploit from data folder...")
+				Library.metaxploit=Io.getLib(globals.G_main,"metaxploit.so","MetaxploitLib")
+				if not Library.metaxploit then return Error.set("Cannot proceed without metaxploit for version detection")
+				Info.info("Metaxploit loaded successfully")
+			end if
+			//Check for metaxploit update
+			metaFile=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/metaxploit.so")
+			if metaFile then
+				Info.info("Checking for a metaxploit update...")
+				r=check_upgrade(Library.aptclient,path(metaFile))
+				if r isa number then
+					if r==1 then
+						Info.info("Update available, installing...")
+						install(Library.aptclient,"metaxploit.so",path(globals.G_main.dir.data))
+						//Reload metaxploit after update
+						Library.metaxploit=Io.getLib(globals.G_main,"metaxploit.so","MetaxploitLib")
+						globals.G_initMetaxploit=Library.metaxploit
+						globals.G_metaxploit=Library.metaxploit
+						if Library.metaxploit then Info.info("Metaxploit updated and reloaded","+") else Warning.set("Metaxploit update installed but failed to reload")
+					else
+						Info.info("Metaxploit is up to date")
+					end if
+				else if r isa string then
+					Info.error(r)
+				else
+					Info.error("Internal error during update check")
+				end if
+			end if
+			//SavedLibs libraries (aptclient.so, librshell.so)
+			savedLibs=["aptclient.so","librshell.so"]
+			for lib in savedLibs
+				found=false
+				for f in get_files(globals.G_main.dir.savedLibs)
+					if indexOf(name(f),lib)!=null then
+						found=true
+						break
+					end if
+				end for
+				if not found then
+					Info.warning(lib+" not found in savedLibs, installing...")
+					libFile=File(globals.G_main.computer,"/lib/"+lib)
+					if not libFile then
+						Info.info("Installing "+lib+"...")
+						result=install(Library.aptclient,lib,"/lib")
+						//Check if apt cache is missing
+						if result isa string and indexOf(result,"aptcache.bin")!=null then
+							Info.info("apt cache missing, updating...")
+							update(Library.aptclient)
+							Info.info("Retrying "+lib+" installation...")
+							result=install(Library.aptclient,lib,"/lib")
+						end if
+						if result isa string and indexOf(result,"not found in the server")!=null then
+							Info.warning("Library not found in current repositories")
+							Info.info("Adding a random repository...")
+							configFile=File(globals.G_main.computer,"/etc/apt/sources.txt")
+							if not configFile then System.genAptConfig(globals.G_main)
+							repo=Net.getRepo
+							if repo and repo.ip then
+								Info.info("Adding repository "+repo.ip+"...")
+								addResult=add_repo(Library.aptclient,repo.ip,repo.port)
+								if addResult then
+									Error.set("Failed to add repository: "+addResult)
+									continue
+								end if
+								Info.info("Repository added, updating...")
+								update(Library.aptclient)
+								Info.info("Retrying "+lib+" installation...")
+								result=install(Library.aptclient,lib,"/lib")
+								if result!=1 then
+									Error.set(result)
+									continue
+								end if
+							else
+								Error.set("Failed to get random repository")
+								continue
+							end if
+						else if result!=1 then
+							Error.set(result)
+							continue
+						end if
+						Info.info("Successfully installed "+lib)
+					else
+						Info.info(lib+" found in /lib")
+					end if
+					Info.info("Adding "+lib+" to savedLibs...")
+					SavedLibs.putFile(globals.G_main,["/lib/"+lib])
+					verified=false
+					for f in get_files(globals.G_main.dir.savedLibs)
+						if indexOf(name(f),lib)!=null then
+							verified=true
+							Info.info(lib+" successfully installed to savedLibs as "+name(f))
+							break
+						end if
+					end for
+					if not verified then
+						Warning.set("Failed to verify "+lib+" installation in savedLibs")
+					else
+						//Delete librshell.so from /lib for security
+						if lib=="librshell.so" then
+							libToDelete=File(globals.G_main.computer,"/lib/"+lib)
+							if libToDelete then
+								delete(libToDelete)
+								Info.info("Removed "+lib+" from /lib for security")
+							end if
+						end if
+					end if
+				else
+					Info.info(lib+" is already installed in savedLibs")
+				end if
+			end for
+			Info.info("All required libraries are installed")
+		end function
+		cmds={
+      "list":@compare,
+      "restore":@restoreSystem,
+      "-l":@xLink,
+      "-c":@secure,
+      "-s":@hardSecure,
+      "-r":@resecure,
+      "-v":@favorite,
+      "-a":@audit,
+      "-d":@database,
+      "-ld":@ldatabase,
+      "-e":@encrypt,
+      "-b":@clearBin,
+      "-z":@decrypt,
+      "-t":@bork,
+      "-p":@passwords,
+      "check":@check
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__coin=function(argv)
+		if len(argv)!=2 then return Man.help(["coin"])
+		push(argv,Gui.inputPass("Enter coin password"))
+		Command.blockchain(Obj,argv)
+	end function
+	__dirty=function(argv)
+    if not argv then return Man.help(["dirty"])
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		count=function;Dirty.count;end function
+		add=function;Dirty.edit;end function
+		scrub=function;if Net.hasInternet(Obj) isa Warning then return;Dirty.router;end function
+		manual=function
+			if Net.hasInternet(Obj) isa Warning then return
+			if not globals.G_dirty then return Info.info("You have no IP's in the dirty buffer...h4ck on")
+			while len(globals.G_dirty)
+				if len(globals.G_dirty)==1 then Info.info("Fetching the last ip...") else Info.info("Fetching the next ip...")
+				i=pull(globals.G_dirty)
+				if len(i) then Attack.scan(Obj,i,1)
+			end while
+			Info.info("Manual dirty buffer cleaning complete...h4ck on")
+			Dirty.save
+		end function
+		listAll=function;if not globals.G_dirty then return Info.info("You have no IP's in the dirty buffer...h4ck on");for i in globals.G_dirty;print white("Router@"+i.key);end for;end function
+		clear=function;Dirty.clear;end function
+		reload=function;Dirty.reload;end function
+		cmds={
+      "-c":@count,
+      "-a":@add,
+      "-x":@clear,
+      "-m":@manual,
+      "-l":@listAll,
+      "-s":@scrub,
+      "-r":@reload
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1]
+	end function
+	__start=function(argv)
+    if not argv then return Man.help(["start"])
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		startX=function(arg)
+			s=null
+			if Shadow.hasPassword(Obj.meta.public_ip) then
+				s=get_shell("root",Shadow.returnPassword(Obj.meta.public_ip))
+				if not s then s=get_shell
+			else
+				s=get_shell
+			end if
+				if arg then Arg1=arg[0] else Arg1=null
+				if not Arg1 then Arg1=path(Obj.dir.current)+"/x"
+				f=File(Obj.computer,Arg1)
+				if f then launch(s,path(f),Kernel.key) else return Error.set("X not found")
+		end function
+		terminal=function(arg);Builder.launchApp(Obj,"Terminal.exe",arg);end function
+    term=function(arg);if Gui.yesNo("This will terminate your current x session. Continue?",false) then start_terminal(Obj.shell);end function
+		remoteConnection=function(arg)
+			_={
+        "user":0,
+        "pass":0,
+        "port":0,
+        "ip":0,
+        "service":"ssh",
+        "set":0
+      }
+			if not arg then
+				_.user=Gui.input({"text":"User"})
+				if _.user==null then return Error.set("User is required")
+				_.pass=Gui.inputPass("Password")
+				if not len(_.pass) then return Error.set("Password is required")
+				_.port=Gui.inputInt({"text":"Port"})
+				if not _.port isa number then return Error.set("Port is required")
+				_.ip=Gui.inputIP({"text":"IP"})
+				if _.ip==null then return Error.set("IP is required")
+				CH=[green("What service to use?")]
+				push(CH,orange("ssh"))
+				push(CH,orange("ftp"))
+				UCH=Gui.choiceHybrid(CH,{},1,false,true)
+				if UCH==1 then _.service="ssh" else _.service="ftp"
+				_.set=1
+			end if
+			if len(arg)>=4 then
+				_.ip=arg[0]
+				_.port=to_int(arg[1])
+				_.user=arg[2]
+				_.pass=arg[3]
+				if len(arg)==5 then _.service=arg[4] else _.service="ssh"
+				_.set=1
+			end if
+			if not _.set then return Error.set("Invalid params")
+			s=get_shell
+			Info.info("Connecting...")
+			r=connect_service(s,_.ip,_.port,_.user,_.pass,_.service)
+			if not r then Info.error("Could not obtain remote shell") else start_terminal(r)
+		end function
+		cmds={
+      "-s":@remoteConnection,
+      "-t":@terminal,
+      "--terminal":@term,
+      "x":@startX
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__load=function(argv);Library.load(argv);end function
+	__proxy=function(argv)
+		if Net.hasInternet(Obj) isa Warning then return
+		if not argv then return Man.help(["proxy"])
+		Proxy.proxy(Obj,argv)
+	end function
+	__ids=function(argv);if Net.hasInternet(Obj) isa Warning then return;Command.ids(Obj,argv);end function
+	__web=function(argv)
+    h=include_lib("/lib/libhttp.so")
+    if not h then
+      Command.pacman(Obj,["-Si","libhttp.so","-p","/lib"])
+      h=include_lib("/lib/libhttp.so")
+      if not h then return Error.set("Unable to load the HTTP library")
+      if not File(Obj.computer,"/Public") then install_service(h)
+    end if
+    r=start_service(h)
+    if r isa string then return Error.set(r)
+    c=Obj.computer
+    _sys=System.getSystem
+    _webDir=_sys.dir.srcWeb
+    _webFiles=get_files(_webDir)
+    if not _webFiles then return Error.set("No web pages installed")
+    while true
+      CH=[green("Choose which Interweb service to use:")]
+      for m in _webFiles;if name(m)=="website" then continue;push(CH,white(name(m)));end for
+      push(CH,iyellow("--- Done using Interweb ---"))
+      UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+      if UCH==len(CH)-1 then
+        z=h.stop_service
+        if z isa string then return Error.set(z) else return Info.info("Interweb session closed")
+      end if
+      _idx=0
+      for m in _webFiles;if name(m)=="website" then continue;if _idx==UCH-1 then break;_idx=_idx+1;end for
+      w=File(c,"/Public/htdocs/website.html")
+      if w then set_content(w,get_content(m))
+      Info.info("Interweb "+name(m)+" is running on "+c.local_ip)
+      Info.info("In a terminal type ' Browser.exe "+c.local_ip+" ' to view the website")
+    end while
+  end function
+	__drop=function(argv)
+    if not argv then return Man.help(["drop"])
+		Arg1=lower(argv[0])
+		Obj=outer.Obj
+		clearLib=function
+			l=["init.so","net.so","kernel_module.so"]
+			for f in get_files(File(Obj.computer,"/lib"))
+				if name(f)=="aptclient.so" then
+					if Gui.yesNo("Remove aptclient.so?") then delete(f)
+					continue
+				end if
+				if indexOf(l,name(f))!=null then continue
+				delete(f)
+			end for
+		end function
+		clearAll=function
+			Shadow.clear([])
+			Cache.purge
+			if globals.G_dirty then
+				globals.G_dirty={}
+				Dirty.save
+			end if
+			Session.fileClear
+			Share.clear
+			SavedLibs.clear
+		end function
+		clearPasswords=function;Shadow.clear([]);Cache.purge;end function
+		clearFiles=function
+      Session.fileClear;Share.clear;SavedLibs.clear
+    end function
+    clearShadow=function;Shadow.clear([]);end function
+    clearCache=function;Cache.purge;end function
+    clearDirty=function
+      if globals.G_dirty then
+        globals.G_dirty={}
+        Dirty.save
+      end if
+    end function
+		clearVfile=function;Session.fileClear;end function
+		clearSharedLibs=function;SavedLibs.clear;end function
+		clearShare=function;Share.clear;end function
+		cmds={
+      "-a":@clearAll,
+      "-p":@clearPasswords,
+      "-f":@clearFiles,
+      "-w":@clearShadow,
+      "-c":@clearCache,
+      "-d":@clearDirty,
+      "-v":@clearVfile,
+      "-l":@clearSharedLibs,
+      "-s":@clearShare,
+      "-m":@clearLib
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1]
+	end function
+  __specs=function(argv);System.getSpecs(Obj);end function
+  __loop=function(argv);if Net.hasInternet(Obj) isa Warning then return;Net.loop(Obj,argv);end function
+  __wallet=function(argv);Command.wallet(Obj,argv);end function
+	__temp=function(argv)
+		if not argv then return Man.help(["temp"])
+    Arg1=lower(argv[0])
+		C=outer.Obj.temp
+		Obj=outer.Obj
+		add=function(arg)
+			if not arg then return Error.set("Missing item")
+      Z=arg[0]
+			if hasIndex(C,Z) then
+				Info.error(Z+" is already in temp")
+			else
+				C[Z]=Z
+				Info.info(Z+" added")
+			end if
+		end function
+		clear=function(arg)
+			if not C then return Info.info("Temp is empty")
+			while C;pop(C);end while
+			if not C then return Info.info("Temp cleared")
+		end function
+		view=function(arg);if not C then return Info.info("Temp is empty");for i in C;print white(i.key);end for;end function
+		readIn=function(arg)
+			r=Io.file(Obj,Obj.dir.current,"Select an list to load:")
+			if r isa Warning then return Man.help(["temp"])
+			if is_binary(r) then return Error.set("Can't use binary files")
+			if not has_permission(r,"r") then return Error.set("Read permissions denied")
+			for i in split(get_content(r),char(10));if len(i)==0 then continue;C[i]=i;end for
+			Info.info(name(r)+" loaded")
+		end function
+		writeOut=function(arg)
+			f=File(Obj.computer,path(Obj.dir.current)+"/temp.lst")
+			if f then
+				set_content(f,get_content(f)+char(10)+join(values(C),char(10)))
+				return
+			end if
+			f=Command.touch(Obj,[path(Obj.dir.current)+"/temp.lst"])
+			if f isa Error then return
+			set_content(f,join(values(C),char(10)))
+			Info.info("Temp writen out to "+path(Obj.dir.current)+"/temp.lst")
+		end function
+		cmds={
+      "-a":@add,
+      "-c":@clear,
+      "-l":@view,
+      "-r":@readIn,
+      "-w":@writeOut
+		}
+		if not hasIndex(cmds,Arg1) then return Man.help(["temp"])
+		cmds[Arg1](argv[1:])
+	end function
+  __recon=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+    _stdin=""
+    if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+      _stdin=globals.G_pipe.stdin
+      globals.G_pipe.stdin=null
+    end if
+    Net.recon(Obj,argv,_stdin)
+    if globals.G_settings.digRshell then
+      if globals.G_settings.rshell then Rshell.list else RshellLite.list
+    end if
+  end function
+	__lt=function(argv)
+		if not argv then return Man.help(["lt"])
+    Arg1=lower(argv[0])
+		C=outer.Obj.logTracker
+		Obj=outer.Obj
+		add=function(arg)
+			if len(arg)==2 then
+				f=arg[0]
+				if len(split(f,"\."))!=4 then return Error.set("Invalid ip format")
+				t=arg[1]
+				if len(split(t,"\."))!=4 then return Error.set("Invalid ip format")
+				if is_lan_ip(f) then f=yellow(ljust(f,15)) else f=green(ljust(f,15))
+				if is_lan_ip(t) then t=yellow(t) else t=green(t)
+				return push(C,f+purple(" ==> ")+t)
+			end if
+			f=Gui.input({"text":"From ip: "})
+      if f==null then return Info.info("User Aborted","i",false)
+			if len(split(f,"\."))!=4 then return Error.set("Invalid ip format")
+			t=Gui.input({"text":"To ip: "})
+      if t==null then return Info.info("User Aborted","i",false)
+			if len(split(t,"\."))!=4 then return Error.set("Invalid ip format")
+			if is_lan_ip(f) then f=yellow(ljust(f,15)) else f=green(ljust(f,15))
+			if is_lan_ip(t) then t=yellow(t) else t=green(t)
+			push(C,f+purple(" ==> ")+t)
+		end function
+		removeIP=function(arg)
+			if not len(C) then return Info.info("Your log tacker is empty")
+			if not arg then return Info.info("IP id expected")
+			x=to_int(arg[0])
+			if not x isa number then return Error.set("IP id expected")
+			if not hasIndex(C,x) then return Error.set("Invalid IP id")
+			w=C[x]
+			remove(C,x)
+			if len(C) then listNHNC(C)
+			print green("Removed: ")+yellow(w)
+		end function
+		listAll=function(arg);if not C then return Info.info("Your log tacker is empty");listNHNC(C);end function
+		clear=function(arg);outer.Obj.logTracker=[];end function
+		managementMode=function(arg)
+			while true
+				clear_screen
+				Info.info("Current ip's in log tracker:")
+				listNHNC(C)
+				CH=[green("Choose an option:")]
+				push(CH,yellow("Add new ip set..."))
+				push(CH,yellow("Remove an ip set..."))
+				push(CH,yellow("Clear log tracker"))
+				push(CH,yellow("Refresh log tracker"))
+				push(CH,iyellow("Forget it"))
+				UCH=Gui.choiceHybrid(CH,{},len(CH)-2)
+				if UCH==len(CH)-1 then break
+				if UCH==len(CH)-2 then continue
+				if UCH==1 then
+					f=Gui.input({"text":"From ip: "})
+          if f==null then
+            Info.info("User Aborted")
+            continue
+          end if
+					if len(split(f,"\."))!=4 then
+						Info.error("Invalid ip format")
+						continue
+					end if
+					t=Gui.input({"text":"To ip: "})
+          if t==null then
+            Info.info("User Aborted")
+            continue
+          end if
+					if len(split(t,"\."))!=4 then
+						Info.error("Invalid ip format")
+						continue
+					end if
+					if is_lan_ip(f) then f=yellow(ljust(f,15)) else f=green(ljust(f,15))
+					if is_lan_ip(t) then t=yellow(t) else t=green(t)
+					push(C,f+purple(" ==> ")+t)
+				else if UCH==2 then
+					if not len(C) then
+						Info.info("There are no ip sets in the log tracker")
+						continue
+					end if
+					n=Gui.inputInt({"text":"Remove what ip set: "})
+					if not n isa number then
+						Info.error("IP id expected")
+						continue
+					end if
+					if not hasIndex(C,n) then
+						Info.error("Invalid IP id")
+						continue
+					end if
+					w=C[n]
+					remove(C,n)
+					print green("Removed: ")+yellow(w)
+				else if UCH==3 then
+					outer.Obj.logTracker=[]
+				end if
+			end while
+		end function
+		write=function(arg)
+			j=[]
+			for l in C;push(j,l.replace("<color=#7e17e6>","").replace("<color=#20ff98>","").replace("<color=#e4ff34>","").replace("</color><color=#7e17e6> ==> </color><color=#20ff98>"," ==> ").replace("</color>",""));end for
+			f=File(Obj.computer,path(Obj.dir.current)+"/ip_tracker.lst")
+			if f then return set_content(f,get_content(f)+char(10)+join(values(j),char(10)))
+			f=Command.touch(Obj,[path(Obj.dir.current)+"/ip_tracker.lst"])
+			if f isa Error then return
+			set_content(f,join(values(j),char(10)))
+			Info.info("Log tracker writen out to "+path(Obj.dir.current)+"/ip_tracker.lst")
+		end function
+		cmds={
+      "-a":@add,
+      "-r":@removeIP,
+      "-l":@listAll,
+      "-x":@clear,
+      "-m":@managementMode,
+      "-w":@write
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+	__config=function(argv)
+		if not argv then return Man.help(["config"])
+    create=function(arg);Config.create;Info.info("Config file created");end function
+		metaxploit=function(arg);if not Config.autoMeta then return;if globals.G_settings.updateMetaOnStart then Info.info("Auto updating Metaxploit turned on") else Info.info("Auto updating Metaxploit turned off");end function
+		rshell=function(arg)
+			if not Config.rshell then return
+			if globals.G_settings.rshell then Info.info("Using rshell shell objects") else Info.info("Using rshell lite")
+      if globals.G_rshell.servers then
+        Info.info("Initializing new rshell settings...")
+        globals.G_rshell.rshells={}
+        globals.G_rshell.history={}
+        if globals.G_settings.rshell then Rshell.refresh(true) else RshellLite.refresh(true)
+      end if
+		end function
+		rainbow=function(arg);if not Config.preloadRainbowIndex then return;if globals.G_settings.preloadRainbowIndex then Info.info("Preload rainbow index turned on") else Info.info("Preload rainbow index turned off");end function
+		sessions=function(arg);if not Config.autoAddSessions then return;if globals.G_settings.autoAddSessions then Info.info("Automatically add session's turned on") else Info.info("Automatically add session's turned off");end function
+		view=function(arg);Config.current;end function
+		dirty=function(arg);if not Config.monitorDirtyips then return;if globals.G_settings.monitorDirtyips then Info.info("Dirty router ip logging turned on") else Info.info("Dirty router ip logging turned off");end function
+		buffer=function(arg);if not Config.clearES then return;if globals.G_settings.clearES then Info.info("Exploit Scan auto clear turned on") else Info.info("Exploit Scan auto clear turned off");end function
+		dynamic=function(arg);if not Config.dynamicLanIPS then return;if globals.G_settings.dynamicLanIPS then Info.info("Dynamic lan tracking turned on") else Info.info("Dynamic lan tracking turned off");end function
+		auto=function(arg);if not Config.autoSolve then return;if globals.G_settings.autoSolve then Info.info("Auto solving turned on") else Info.info("Auto solving turned off");end function
+		pdebug=function(arg);if not Config.pDebug then return;if globals.G_settings.pDebug then Info.info("PObject debugging turned on") else Info.info("PObject debugging turned off");end function
+		debug=function(arg);if not Config.debug then return;if globals.G_settings.debug then Info.info("Debug mode turned on") else Info.info("Debug mode turned off");end function
+		proxyLog=function(arg);if not Config.useProxyLog then return;if globals.G_settings.useProxyLog then Info.info("Use proxy log turned on") else Info.info("Use proxy log turned off");end function
+		shadow=function(arg);if not Config.shadow then return;if globals.G_settings.shadow then Info.info("Clearing the shadow cache on start up turned on") else Info.info("Clearing the shadow cache on start up turned off");end function
+		vulnerableLib=function(arg)
+			if not arg then
+				Info.info("Root router bounce attack library: "+globals.G_settings.vulnerableLib)
+			else if arg[0]=="clear" or arg[0]=="reset" then
+				Config.reset("vulnerableLib")
+				Info.info("Root router bounce attack library cleared (set to null)")
+			else
+				globals.G_settings.vulnerableLib=arg[0]
+				Config.save
+				Info.info("Root router bounce attack library: "+arg[0])
+			end if
+		end function
+		vulnerableLibIndex=function(arg)
+			if not arg then
+				Info.info("Root router bounce attack method index: "+globals.G_settings.vulnerableLibIndex)
+			else if arg[0]=="clear" or arg[0]=="reset" then
+				Config.reset("vulnerableLibIndex")
+				Info.info("Root router bounce attack method index cleared (set to -1)")
+			else
+				globals.G_settings.vulnerableLibIndex=val(arg[0])
+				Config.save
+				Info.info("Root router bounce attack method index set to: "+arg[0])
+			end if
+		end function
+    run=function(arg);Config.prompt;end function
+    on=function(arg);Config.on;end function
+    off=function(arg);Config.off;end function
+    short=function(arg);if not Config.shortPath then return;if globals.G_settings.shortPath then Info.info("Use short home path (~) turned on") else Info.info("Use short home path (~) turned off");end function
+    digRshell=function(arg);if not Config.digRshell then return;if globals.G_settings.digRshell then Info.info("Show rshell server list after dig|recon turned on") else Info.info("Show rshell server list after dig|recon turned off");end function
+    dsession=function(arg);if not Config.dsession then return;if globals.G_settings.dsession then Info.info("Checking for dsession before scanning turned on") else Info.info("Checking for dsession before scanning turned off");end function
+    reset=function(arg)
+      if globals.G_CF then
+        delete(globals.G_CF)
+        Config.create
+        Info.info("Config file reset to default")
+        Info.info("You need to restart X to apply changes")
+      else
+        Info.info("Config file not found")
+      end if
+    end function
+		cmds={
+      "--reset":@reset,
+      "-r":@rshell,
+      "-c":@create,
+      "run":@run,
+      "on":@on,
+      "off":@off,
+      "-y":@proxyLog,
+      "-a":@auto,
+      "-l":@dynamic,
+      "-m":@metaxploit,
+      "-p":@rainbow,
+      "-s":@sessions,
+      "-i":@dirty,
+      "status":@view,
+      "-e":@buffer,
+      "-h":@short,
+      "-k":@pdebug,
+      "-g":@debug,
+      "debug":@debug,
+      "-z":@dsession,
+      "-b":@shadow,
+      "-d":@digRshell,
+      "-v":@vulnerableLib,
+      "-x":@vulnerableLibIndex
+    }
+		if len(argv)>1 then
+			while argv
+        Arg1=pull(argv)
+				if Arg1 and Arg1=="-v" then
+					if len(argv)>0 and argv[0][0]!="-" then cmds[Arg1]([pull(argv)]) else cmds[Arg1]([""])
+					continue
+				end if
+				if Arg1 and Arg1=="-x" then
+					if len(argv)>0 and argv[0][0]!="-" then cmds[Arg1]([pull(argv)]) else cmds[Arg1](["-1"])
+					continue
+				end if
+				if not hasIndex(cmds,Arg1) then Info.warning(Text.msg.flag+Arg1+" ]") else cmds[Arg1](argv)
+			end while
+		else
+			Arg1=argv[0]
+			if not hasIndex(cmds,Arg1) then return Warning.set(Text.msg.flag+Arg1+" ]") else cmds[Arg1](argv[1:])
+		end if
+	end function
+  __batch=function(argv)
+    if not argv then return Man.help(["batch"])
+    Arg1=argv[0]
+    f=Io._getFile(Obj,Arg1)
+    if f isa Error then return
+    for i in split(get_content(f),char(10))
+      if not i then continue
+      i=split(i," ")
+      if i[0][0]=="@" then
+        __run(i)
+      else
+        k=lower(i[0])
+        if hasIndex(Obj.commands,k) then Obj.commands[k](i[1:])
+      end if
+    end for
+  end function
+	__rnet=function(argv)
+    //Update IP addresses
+    globals.G_sessions[0].meta.public_ip=public_ip_pc(Obj.computer)
+    globals.G_sessions[0].meta.local_ip=Obj.computer.local_ip
+    Obj.meta.public_ip=public_ip_pc(Obj.computer)
+    Obj.meta.local_ip=Obj.computer.local_ip
+    //Reinitialize network (like main does)
+    if is_network_active(Obj.computer) then
+      Obj.net=Net.initNetwork(Obj,get_router)
+      globals.G_sessions[0].net=Obj.net
+    else
+      Obj.net=Net.initNetwork(Obj)
+      globals.G_sessions[0].net=Obj.net
+    end if
+    //Recalculate machine type
+    Obj.machineType=System.getMachine(Obj,Obj.meta.local_ip)
+    globals.G_sessions[0].machineType=Obj.machineType
+	end function
+	__pobject=function(argv);PartialObject.hub(Obj,argv,@__linklibs);end function
+	__lms=function(argv)
+    if Net.hasInternet(Obj) isa Warning then return
+		if System.checkLibs isa Error then return
+		LibServer.hub(Obj,argv)
+	end function
+  __heist=function(argv);if Net.hasInternet(Obj) isa Warning then return;Heist.init(Obj,argv);end function
+	__linklibs=function(argv)
+		if not argv then
+			if globals.G_metaxploit or globals.G_crypto then
+				push(argv,"-u")
+			else if not globals.G_metaxploit or not globals.G_crypto then
+				push(argv,"-a")
+			else
+				return Info.errCO.initCrypto
+			end if
+		end if
+    Arg1=lower(argv[0])
+		Obj=outer.Obj
+		link=function(arg);metaxploit(arg);crypto(arg);end function
+		metaxploit=function(arg)
+			if globals.G_initMetaxploit then
+				globals.G_metaxploit=globals.G_initMetaxploit
+			else
+				if not Library.haveMetaxploit then return Error.set("Metaxploit is not loaded")
+				globals.G_metaxploit=G_initCryptoLibrary.metaxploit
+			end if
+			Info.info("Metaxploit linked","+")
+		end function
+		crypto=function(arg)
+			if globals.G_initCrypto then
+				globals.G_crypto=globals.G_initCrypto
+			else
+				if not Library.haveCrypto then return Error.set("Crypto is not loaded")
+				globals.G_crypto=Library.crypto
+			end if
+			Info.info("Crypto linked","+")
+		end function
+		unlink=function(arg)
+			if not globals.G_metaxploit or not globals.G_crypto then return Info.info("No libraries are currently linked")
+			if globals.G_metaxploit then
+				globals.G_metaxploit=null
+				Info.warning("Metaxploit unlinked","-")
+			end if
+			if globals.G_crypto then
+				globals.G_crypto=null
+				Info.warning("Crypto unlinked","-")
+			end if
+			if not Library.crypto then System.fetchCrypto(Obj)
+		end function
+		cmds={
+      "-a":@link,
+      "-c":@crypto,
+      "-m":@metaxploit,
+      "-u":@unlink
+		}
+		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
+		cmds[Arg1](argv[1:])
+	end function
+  __missions=function(argv)
+    bypassRshell=false
+    if argv and len(argv)>0 and argv[0]=="--bypass-rshell" then
+      bypassRshell=true
+      argv=argv[1:]
+    end if
+    inbox=new Inbox
+    inbox.init(argv)
+    inbox.bypassRshell=bypassRshell
+    if inbox.metaMail isa string then return Error.set(inbox.metaMail)
+    if not inbox.metaMail then return Error.set("Failed to initialize inbox")
+    missions=inbox.missions
+    if not missions or not len(missions) then return Info.info("No missions found")
+    completed=0
+    skipped=0
+    results=[]
+    for mission in missions
+      if mission.type=="unknown" then
+        Info.info("Skipping unknown mission type")
+        skipped+=1
+        continue
+      end if
+      info=mission.info
+      if info.skip then
+        Info.info("Skipping mission: "+mission.type)
+        skipped+=1
+        results.push({"mission":mission,"info":info,"skipped":true})
+        continue
+      end if
+      Info.info("Completed mission: "+mission.type)
+      completed+=1
+      results.push({"mission":mission,"info":info,"skipped":false})
+    end for
+    print ""
+    Info.info("Mission Results:")
+    print yellow("Completed: ")+green(str(completed))
+    print yellow("Skipped: ")+orange(str(skipped))
+    print yellow("Total: ")+white(str(len(missions)))
+    print ""
+    if len(results) then
+      Info.info("Mission Details:")
+      for result in results
+        mission=result.mission
+        info=result.info
+        missionType=mission.type.upper
+        print ""
+        if result.skipped then print cyan("[")+orange(missionType)+cyan("] - SKIPPED") else print cyan("[")+white(missionType)+cyan("]")
+        if info.hasIndex("ip") then print "                  "+yellow("IP: ")+white(info.ip)
+        if info.hasIndex("local") then print "               "+yellow("Local: ")+white(info.local)
+        if info.hasIndex("target") then print "              "+yellow("Target: ")+white(info.target)
+        if info.hasIndex("student") then print "             "+yellow("Student: ")+white(info.student)
+        if info.hasIndex("subject") then print "             "+yellow("Subject: ")+white(info.subject)
+        if info.hasIndex("convict") then print "             "+yellow("Convict: ")+white(info.convict)
+        if info.hasIndex("charge") then print "              "+yellow("Charge: ")+white(info.charge)
+        if info.hasIndex("filePattern") then print "        "+yellow("File Pattern: ")+white(info.filePattern)
+        if info.hasIndex("filePath") then print "           "+yellow("File Path: ")+white(info.filePath)
+        if info.hasIndex("username") then print "            "+yellow("Username: ")+white(info.username)
+        if info.hasIndex("anyUser") and info.anyUser then print "            "+yellow("Any User: ")+green("true")
+        if info.hasIndex("answer") then print "              "+yellow("Result: ")+white(info.answer)
+      end for
+    end if
+  end function
+  //Function: __pipe - Standalone pipe command for variable management
+  __pipe=function(argv)
+    //Delegate to System.pipe
+    return System.pipe(Obj,argv)
+  end function
+  return {
+    "service":@__service,
+    "hunt":@__hunt,
+    "anon":@__anon,
+    "exp":@__exp,
+    "su":@__su,
+    "pacman":@__pacman,
+    "pass":@__password,
+    "?":@__cmds,
+    "help":@__cmds,
+    "cmds":@__cmds,
+    "scan":@__scan,
+    "scanlan":@__scanlan,
+    "brute":@__brute,
+    "dict":@__dict,
+    "get":@__get,
+    "set":@__set,
+    "sys":@__system,
+    "coin":@__coin,
+    "dirty":@__dirty,
+    "start":@__start,
+    "load":@__load,
+    "proxy":@__proxy,
+    "ids":@__ids,
+    "web":@__web,
+    "drop":@__drop,
+    "specs":@__specs,
+    "loop":@__loop,
+    "wallet":@__wallet,
+    "temp":@__temp,
+    "recon":@__recon,
+    "lt":@__lt,
+    "config":@__config,
+    "batch":@__batch,
+    "rnet":@__rnet,
+    "0day":@__pobject,
+    "lms":@__lms,
+    "heist":@__heist,
+    "linklibs":@__linklibs,
+    "pipe":@__pipe,
+    "missions":@__missions
+  }
+end function
+//BaseSessionSetup
+Command.setBase=function(Obj)
+	unlock=function(argv)
+    y=0
+    d=0
+    for f in Io.getAll(Obj.root)
+      if is_folder(f) then
+        if chmod(f,"o+rwx",1)=="" then d+=1
+      else
+        if chmod(f,"o+rwx")=="" then y+=1
+      end if
+    end for
+    print white("Total dir unlocked: ")+yellow(str(d))
+    print white("Total files unlocked     : ")+yellow(str(y))
+	end function
+	note=function(argv);Attack.note(Obj,argv);end function
+	bomb=function(argv);Attack.bomb(Obj,argv);end function
+	toggleLog=function(argv);Utility.toggleLog(Obj);end function
+	systemLock=function(argv);Command.systemLock(Obj);end function
+  genAptConfig=function(argv);System.genAptConfig(Obj);end function
+  hackRN=function(argv);System.hackRN(Obj,argv);end function
+	pchog=function(argv);System.pchog(Obj);end function
+	return {
+    "-rn":@hackRN,
+    "-a":@unlock,
+    "-n":@note,
+    "-b":@bomb,
+    "-x":@systemLock,
+    "-l":@toggleLog,
+    "-q":@genAptConfig,
+    "-p":@pchog
+	}
+end function

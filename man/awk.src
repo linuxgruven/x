@@ -1,0 +1,134 @@
+// Man page for awk
+manAwk="AWK(1)                           X Shell Manual                           AWK(1)
+
+<b>NAME</b>
+    awk - pattern scanning and processing language
+<b>SYNOPSIS</b>
+    <b>awk</b> 'PROGRAM' [FILE]
+    <b>awk -F</b> DELIMITER 'PROGRAM' [FILE]
+    cmd | <b>awk</b> 'PROGRAM'
+<b>DESCRIPTION</b>
+    The <b>awk</b> command processes text line by line, splitting each line into
+    fields. A program consists of optional BEGIN/END blocks and
+    pattern-action rules. Supports pipelines.
+
+    <b>Field References:</b>
+      $0  - entire line
+      $1  - first field
+      $N  - Nth field
+      $NF - last field
+      NF  - number of fields
+      NR  - current record (line) number (1-based)
+
+    <b>Special Variables:</b>
+      OFS - output field separator (default: space)
+
+    <b>Program Structure:</b>
+      BEGIN { action }        Run once before any input is read
+      END   { action }        Run once after all input is read
+      /pattern/ { action }    Run action on lines matching regex
+      $N OP value { action }  Run action on lines where field comparison is true
+                              Operators: > >= < <= == !=
+      { action }              Run action on every line
+<b>OPTIONS</b>
+    <b>-F DELIMITER</b>
+      Use custom field delimiter. Default is whitespace.
+
+<b>ACTIONS</b>
+    <b>print expr, expr, ...</b>
+      Print expressions. Comma-separated items joined by OFS.
+      Concatenate with no comma for no separator.
+      Inline string literals adjacent to field refs are concatenated:
+        $1"".""$2"".0.0/16""  →  value-of-$1 . value-of-$2 . .0.0/16
+
+    <b>printf ""fmt"", arg, ...</b>
+      Formatted output. Supports %s, %d, %f. Use \\n for newline.
+
+    <b>length(str)</b>
+      Return length of string or field.
+
+    <b>substr(str, start, len)</b>
+      Return substring starting at position start (1-based), length len.
+      Omit len to go to end of string.
+<b>EXAMPLES</b>
+    <color=#e4ff34># Field Extraction</color>
+    awk '{print $1}' data.txt
+    Print first field from each line
+
+    awk '{print $NF}' data.txt
+    Print last field from each line
+
+    awk '{print NR, $0}' data.txt
+    Print line number and full line
+
+    <color=#e4ff34># Custom Delimiter</color>
+    awk -F: '{print $1}' /etc/passwd
+    Extract usernames (colon-delimited)
+
+    awk -F, '{print $1, $3}' data.csv
+    Print columns 1 and 3 from CSV
+
+    <color=#e4ff34># BEGIN and END Blocks</color>
+    awk 'BEGIN {print ""--- Start ---""} {print $0} END {print ""--- End ---""}' file.txt
+    Print header and footer around output
+
+    cat ~/a | awk 'BEGIN {print ""Results:""} {print NR "". "" $0} END {print NR "" total""}'
+    Number each line with a header and count
+
+    <color=#e4ff34># Pattern Matching</color>
+    awk '/error/ {print $0}' log.txt
+    Print only lines matching 'error'
+
+    cat log.txt | awk '/warning|error/ {print NR "": "" $0}'
+    Print matching lines with line numbers
+
+    <color=#e4ff34># Conditional (Field Comparison)</color>
+    awk '$3 > 100 {print $1, $3}' data.txt
+    Print fields 1 and 3 where field 3 exceeds 100
+
+    <color=#e4ff34># OFS (Output Field Separator)</color>
+    awk 'BEGIN {OFS="",""} {print $1, $2, $3}' data.txt
+    Print fields joined by comma instead of space
+
+    cat /etc/passwd | awk -F: 'BEGIN {OFS="" | ""} {print $1, $3}'
+    Reformat colon-delimited fields with custom separator
+
+    <color=#e4ff34># printf</color>
+    awk '{printf ""[%d] %s\n"", NR, $0}' data.txt
+    Print formatted numbered lines
+
+    cat file.txt | awk '{printf ""%-20s %s\n"", $1, $2}'
+    Left-aligned columns
+
+    <color=#e4ff34># String Concatenation in print</color>
+    echo ""192.168.1.50"" | awk -F. '{print $1"".""$2"".0.0/16""}'
+    Build subnet mask string: 192.168.0.0/16
+
+    echo ""192.168.1.50"" | awk -F. '{print $1"".""$2""."".""0""}'
+    Mix field refs and string literals freely within a single token
+
+    <color=#e4ff34># substr and length</color>
+    awk '{print substr($1, 1, 3)}' data.txt
+    Print first 3 characters of field 1
+
+    awk '{print length($0), $0}' data.txt
+    Print line length followed by line
+
+    <color=#e4ff34># Pipeline Examples</color>
+    cat ~/a | grep ""term"" | awk 'BEGIN {print ""Matches:""} {print ""["" NR-1 ""] "" $0} END {print NR "" found""}'
+    Filter then display indexed results with header and count
+
+    <color=#e4ff34># grep | awk</color>
+    grep ""@"" emails.txt | awk -F@ '{print $2}'
+    Extract domains from lines containing an @ address
+
+    grep ""error"" log.txt | awk '{print NR"". ""$0}'
+    Number each error line
+
+    grep ""192.168"" /etc/hosts | awk '{print $1}'
+    Pull just the IP from matching host entries
+
+    cat data.txt | grep -v ""MISSING"" | awk -F: '{print $1, $3}'
+    Skip MISSING entries then extract fields 1 and 3
+<b>SEE ALSO</b>
+    <b>cut</b>, <b>grep</b>, <b>sed</b>, <b>printf</b>, <b>paste</b>"

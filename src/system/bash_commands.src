@@ -1,0 +1,3091 @@
+// =============================================================================
+// BASH_COMMANDS
+// Command preprocessing, arithmetic evaluation, and built-in command execution.
+// =============================================================================
+// ARITHMETIC EXPRESSION EVALUATOR
+//Evaluate arithmetic expressions with parentheses and operator precedence
+Bash._evalArithmetic=function(expr,Obj=null)
+  expr=trim(expr)
+  if globals.G_bash.DEBUG then print cyan("[EVAL_ARITHMETIC] Input: ")+white(expr)
+  //First, resolve any _getvar calls in the expression
+  while indexOf(expr,"_getvar(")!=null
+    startIdx=indexOf(expr,"_getvar(")
+    parenDepth=0
+    closeIdx=null
+    _len=len(expr)
+    i=startIdx+8
+    while i<_len
+      if expr[i]=="(" then parenDepth+=1
+      if expr[i]==")" then
+        if parenDepth==0 then
+          closeIdx=i
+          break
+        else
+          parenDepth-=1
+        end if
+      end if
+      i+=1
+    end while
+    if closeIdx!=null then
+      getVarCall=expr[startIdx:closeIdx+1]
+      varName=expr[startIdx+8:closeIdx]
+      varValue=self._getVar(varName)
+      expr=expr[:startIdx]+str(varValue)+expr[closeIdx+1:]
+    else
+      break
+    end if
+  end while
+  //Evaluate parentheses recursively (innermost first)
+  while indexOf(expr,"(")!=null
+    //Find innermost parenthesis
+    openIdx=-1
+    _len=len(expr)
+    i=0
+    while i<_len
+      if expr[i]=="(" then openIdx=i
+      if expr[i]==")" then
+        if openIdx!=-1 then
+          //Evaluate expression inside parentheses
+          innerExpr=expr[openIdx+1:i]
+          innerResult=self._evalArithmetic(innerExpr,Obj)
+          expr=expr[:openIdx]+str(innerResult)+expr[i+1:]
+          break
+        end if
+      end if
+      i+=1
+    end while
+    //Safety check: if no closing paren found after opening, break
+    if openIdx!=-1 and indexOf(expr,")")==null then break
+    //Safety check: if we didn't find any parentheses this iteration, break
+    if indexOf(expr,"(")==null then break
+  end while
+  //Now expr has no parentheses, evaluate with operator precedence
+  //Precedence: ** > * / % > + -
+  //Handle power operator (**) - highest precedence
+  while indexOf(expr,"**")!=null
+    opIdx=indexOf(expr,"**")
+    //Find left operand - skip spaces before operator first
+    leftEnd=opIdx-1
+    while leftEnd>=0 and expr[leftEnd]==" ";leftEnd-=1;end while
+    //Now scan backwards through digits
+    leftStart=leftEnd
+    while leftStart>0 and (expr[leftStart]>="0" and expr[leftStart]<="9" or expr[leftStart]==".");leftStart-=1;end while
+    if leftStart<0 or not (expr[leftStart]>="0" and expr[leftStart]<="9" or expr[leftStart]==".") then leftStart+=1
+    leftEnd+=1
+    //Find right operand - skip spaces after operator
+    rightStart=opIdx+2
+    while rightStart<len(expr) and expr[rightStart]==" ";rightStart+=1;end while
+    rightEnd=rightStart
+    while rightEnd<len(expr) and (expr[rightEnd]>="0" and expr[rightEnd]<="9" or expr[rightEnd]==".");rightEnd+=1;end while
+    leftStr=expr[leftStart:leftEnd]
+    rightStr=expr[rightStart:rightEnd]
+    if typeof(leftStr)=="string" then leftStr=leftStr.trim
+    if typeof(rightStr)=="string" then rightStr=rightStr.trim
+    left=val(leftStr)
+    right=val(rightStr)
+    result=left^right
+    expr=expr[:leftStart]+str(result)+expr[rightEnd:]
+  end while
+  //Handle multiplication, division, modulo
+  for op in ["*","/","%"]
+    while indexOf(expr,op)!=null
+      opIdx=indexOf(expr,op)
+      //Find left operand - skip spaces before operator first
+      leftEnd=opIdx-1
+      while leftEnd>=0 and expr[leftEnd]==" ";leftEnd-=1;end while
+      //Now scan backwards through digits
+      leftStart=leftEnd
+      while leftStart>0 and (expr[leftStart]>="0" and expr[leftStart]<="9" or expr[leftStart]==".");leftStart-=1;end while
+      if leftStart<0 or not (expr[leftStart]>="0" and expr[leftStart]<="9" or expr[leftStart]==".") then leftStart+=1
+      //Check for negative sign on left operand
+      if leftStart>0 and expr[leftStart-1]=="-" then leftStart-=1
+      leftEnd+=1
+      //Find right operand (handle negative numbers) - skip spaces after operator
+      rightStart=opIdx+1
+      while rightStart<len(expr) and expr[rightStart]==" ";rightStart+=1;end while
+      rightNeg=false
+      if rightStart<len(expr) and expr[rightStart]=="-" then
+        rightNeg=true
+        rightStart+=1
+      end if
+      rightEnd=rightStart
+      while rightEnd<len(expr) and (expr[rightEnd]>="0" and expr[rightEnd]<="9" or expr[rightEnd]==".");rightEnd+=1;end while
+      leftStr=expr[leftStart:leftEnd]
+      rightStr=expr[rightStart:rightEnd]
+      if typeof(leftStr)=="string" then leftStr=leftStr.trim
+      if typeof(rightStr)=="string" then rightStr=rightStr.trim
+      left=val(leftStr)
+      right=val(rightStr)
+      if rightNeg then right=-right
+      if op=="*" then
+        result=left*right
+      else if op=="/" then
+        if right==0 then return 0
+        result=left/right
+      else if op=="%" then
+        if right==0 then return 0
+        result=left%right
+      end if
+      expr=expr[:leftStart]+str(result)+expr[rightEnd:]
+    end while
+  end for
+  //Handle addition and subtraction
+  arithSafetyAdd=0
+  for op in ["+","-"]
+    while indexOf(expr,op)!=null
+      arithSafetyAdd+=1
+      if arithSafetyAdd>50 then break
+      opIdx=indexOf(expr,op)
+      //Skip if this is a negative number at start or after another operator
+      if opIdx==0 or (opIdx>0 and (expr[opIdx-1]=="+" or expr[opIdx-1]=="-" or expr[opIdx-1]=="*" or expr[opIdx-1]=="/" or expr[opIdx-1]=="%")) then
+        //This is a sign, not an operator - skip it
+        //Try to find next occurrence
+        if opIdx+1<len(expr) then
+          restExpr=expr[opIdx+1:]
+          nextIdx=indexOf(restExpr,op)
+          if nextIdx==null then break
+          opIdx+=1+nextIdx
+        else
+          break
+        end if
+      end if
+      //Find left operand - skip spaces before operator first
+      leftEnd=opIdx-1
+      while leftEnd>=0 and expr[leftEnd]==" ";leftEnd-=1;end while
+      //Now scan backwards through digits
+      leftStart=leftEnd
+      while leftStart>0 and (expr[leftStart]>="0" and expr[leftStart]<="9" or expr[leftStart]==".");leftStart-=1;end while
+      if leftStart<0 or not (expr[leftStart]>="0" and expr[leftStart]<="9" or expr[leftStart]==".") then leftStart+=1
+      //Check for negative sign on left operand
+      if leftStart>0 and expr[leftStart-1]=="-" then leftStart-=1
+      leftEnd+=1
+      //Find right operand (handle negative numbers) - skip spaces after operator
+      rightStart=opIdx+1
+      while rightStart<len(expr) and expr[rightStart]==" ";rightStart+=1;end while
+      rightNeg=false
+      if rightStart<len(expr) and expr[rightStart]=="-" then
+        rightNeg=true
+        rightStart+=1
+      end if
+      rightEnd=rightStart
+      while rightEnd<len(expr) and (expr[rightEnd]>="0" and expr[rightEnd]<="9" or expr[rightEnd]==".");rightEnd+=1;end while
+      leftStr=expr[leftStart:leftEnd]
+      rightStr=expr[rightStart:rightEnd]
+      if typeof(leftStr)=="string" then leftStr=leftStr.trim
+      if typeof(rightStr)=="string" then rightStr=rightStr.trim
+      left=val(leftStr)
+      right=val(rightStr)
+      if rightNeg then right=-right
+      if op=="+" then
+        result=left+right
+      else if op=="-" then
+        result=left-right
+      end if
+      expr=expr[:leftStart]+str(result)+expr[rightEnd:]
+    end while
+  end for
+  //Return final result
+  finalResult=val(expr)
+  if globals.G_bash.DEBUG then print green("[EVAL_ARITHMETIC] Result: ")+yellow(finalResult)
+  return finalResult
+end function
+//Evaluate string concatenation expressions (e.g., "a" + "." + "b" or _getvar(x)+.+_getvar(y))
+Bash._evalStringConcat=function(expr,Obj=null)
+  expr=trim(expr)
+  if globals.G_bash.DEBUG then print cyan("[EVAL_STRING_CONCAT] Input: ")+white(expr)
+  //First, resolve any _getvar calls in the expression
+  while indexOf(expr,"_getvar(")!=null
+    startIdx=indexOf(expr,"_getvar(")
+    parenDepth=0
+    closeIdx=null
+    _len=len(expr)
+    i=startIdx+8
+    while i<_len
+      if expr[i]=="(" then parenDepth+=1
+      if expr[i]==")" then
+        if parenDepth==0 then
+          closeIdx=i
+          break
+        else
+          parenDepth-=1
+        end if
+      end if
+      i+=1
+    end while
+    if closeIdx!=null then
+      getVarCall=expr[startIdx:closeIdx+1]
+      varName=expr[startIdx+8:closeIdx]
+      varValue=self._getVar(varName)
+      //Convert to string if not already
+      if typeof(varValue)!="string" then varValue=str(varValue)
+      expr=expr[:startIdx]+varValue+expr[closeIdx+1:]
+    else
+      break
+    end if
+  end while
+  //Now split by + operator and concatenate all parts
+  //Handle both " + " and "+" patterns
+  parts=[]
+  currentPart=""
+  _len=len(expr)
+  i=0
+  while i<_len
+    if i<len(expr)-1 and expr[i]=="+" then
+      //Check if it's surrounded by spaces or not
+      isOperator=true
+      //Skip spaces before +
+      if len(currentPart)>0 then
+        currentPart=currentPart.trim
+        if currentPart then parts=parts+[currentPart]
+        currentPart=""
+      end if
+      //Skip the + and any spaces after it
+      i+=1
+      _len=len(expr)
+      while i<_len and expr[i]==" ";i+=1;end while
+    else
+      currentPart=currentPart+expr[i]
+      i+=1
+    end if
+  end while
+  //Add last part
+  if currentPart then
+    currentPart=currentPart.trim
+    if currentPart then parts=parts+[currentPart]
+  end if
+  //Concatenate all parts
+  result=""
+  for part in parts;result=result+part;end for
+  if globals.G_bash.DEBUG then print green("[EVAL_STRING_CONCAT] Result: ")+yellow(result)
+  return result
+end function
+// COMMAND PREPROCESSING
+//Preprocess command string with variable substitution and special commands
+Bash.process=function(s,Obj=null)
+  gb=globals.G_bash
+  if gb.DEBUG then
+    print blue("="*60)
+    print blue("Function Call->process")
+    print cyan("  Input Command: ")+white(s)
+    print cyan("  Active Variables: ")+yellow(indexes(gb.VARS))
+  end if
+  //Handle _pause command (explicit pause - show Press [Enter] and return)
+  if trim(s)=="_pause" or trim(s)=="pause" then
+    self.pause
+    return ""
+  end if
+  //Handle pause_ command (substring match for legacy/accidental triggers)
+  if indexOf(s,"pause")!=null then
+    s=s.replace("pause","")
+    self.pause
+  end if
+  //Handle _getvar command - replace all occurrences
+  //BUT skip _getvar when it's inside certain functions that need the actual type preserved
+  preservedGetVars=[]
+  preservedGetVarValues={} //Map of placeholder -> actual value
+  maxGetVarIterations=20
+  getVarIterations=0
+  while indexOf(s,"_getvar(")!=null
+    getVarIterations+=1
+    if getVarIterations>maxGetVarIterations then
+      if gb.DEBUG then print red("WARNING: Too many _getvar iterations, breaking")
+      break
+    end if
+    startIdx=indexOf(s,"_getvar(")
+    if startIdx==null then break
+    if gb.DEBUG then print cyan("Processing _getvar at position ")+str(startIdx)+cyan(" in: ")+s
+    //Check if this _getvar is inside a function that needs type preservation
+    //Look backwards to see if we're inside len, _in, typeof_val, etc.
+    skipSubstitution=false
+    if startIdx>0 then
+      //List of functions that need actual values, not strings
+      funcNames=self._funcNamesP
+      for funcPattern in funcNames
+        //Look for the function name before this get_var
+        searchPos=startIdx-len(funcPattern)
+        if searchPos>=0 then
+          checkStr=s[searchPos:startIdx]
+          if gb.DEBUG then print yellow("  Checking for ")+funcPattern+yellow(" in: [")+checkStr+yellow("]")
+          if indexOf(checkStr,funcPattern)!=null then
+            skipSubstitution=true
+            if gb.DEBUG then print green("  MATCHED! Will preserve type")
+            break
+          end if
+        end if
+      end for
+    end if
+    //If inside a type-preserving function, replace with placeholder
+    //Also check if inside a user-defined function call (scan backward for enclosing open paren)
+    if not skipSubstitution and startIdx>0 then
+      scanDepth=0
+      scanPos=startIdx-1
+      while scanPos>=0
+        if s[scanPos]==")" then scanDepth+=1
+        if s[scanPos]=="(" then
+          if scanDepth==0 then
+            //Found unmatched open paren - extract function name before it
+            funcEnd=scanPos
+            funcStart=funcEnd-1
+            while funcStart>=0;c=s[funcStart];if (c>="a" and c<="z") or (c>="A" and c<="Z") or (c>="0" and c<="9") or c=="_" then funcStart-=1 else break;end while
+            funcStart+=1
+            if funcStart<funcEnd then
+              possibleFunc=s[funcStart:funcEnd]
+              if hasIndex(gb.FUNCS,possibleFunc) or indexOf(self._funcNamesP,possibleFunc+"(")!=null then
+                skipSubstitution=true
+                if gb.DEBUG then print green("  Inside func "+possibleFunc+" - preserving _getvar type")
+              end if
+            end if
+            break
+          else
+            scanDepth-=1
+          end if
+        end if
+        scanPos-=1
+      end while
+    end if
+    if skipSubstitution then
+      parenEnd=indexOf(s[startIdx+8:],")")
+      if parenEnd==null then break
+      getVarEnd=startIdx+8+parenEnd+1
+      getVarCall=s[startIdx:getVarEnd]
+      //Extract variable name and get actual value
+      varName=s[startIdx+8:startIdx+8+parenEnd]
+      actualValue=self._getVar(varName)
+      preservedGetVars.push(getVarCall)
+      placeholder="__GVPRES"+str(len(preservedGetVars)-1)+"__"
+      preservedGetVarValues[placeholder]=actualValue
+      if gb.DEBUG then print green("  Created placeholder ")+placeholder+green(" for ")+varName+green(" = ")+typeof(actualValue)+green(" length=")+str(len(actualValue))
+      s=s[:startIdx]+placeholder+s[getVarEnd:]
+      continue
+    end if
+    parenStart=startIdx+8
+    parenEnd=indexOf(s[parenStart:],")")
+    if parenEnd==null then return Error.set("_getvar internal format is invalid")
+    parenEnd=parenStart+parenEnd
+    varName=s[parenStart:parenEnd]
+    varValue=self._getVar(varName)
+    //Check if there's property access after _getvar like _getvar(x).name
+    propertyAccess=""
+    checkIdx=parenEnd+1
+    _len=len(s)
+    if checkIdx<_len and s[checkIdx]=="." then
+      //Found property access - extract the property path
+      dotStart=checkIdx
+      propertyEnd=checkIdx+1
+      //Find end of property chain (stop at space, parenthesis, etc)
+      while propertyEnd<_len
+        char=s[propertyEnd]
+        if char!="." and char!="_" and (char<"a" or char>"z") and (char<"A" or char>"Z") and (char<"0" or char>"9") then break
+        propertyEnd+=1
+      end while
+      propertyAccess=s[dotStart+1:propertyEnd]
+      //Access the properties
+      if propertyAccess and (typeof(varValue)=="map" or typeof(varValue)=="file" or typeof(varValue)=="computer" or typeof(varValue)=="shell") then
+        props=[]
+        currentProp=""
+        _len=len(propertyAccess)
+        i=0
+        while i<_len
+          if propertyAccess[i]=="." then
+            if currentProp then push(props,currentProp)
+            currentProp=""
+          else
+            currentProp=currentProp+propertyAccess[i]
+          end if
+          i+=1
+        end while
+        if currentProp then push(props,currentProp)
+        currentVal=varValue
+        for prop in props
+          prop=prop.trim
+          if typeof(currentVal)=="map" and hasIndex(currentVal,prop) then
+            currentVal=currentVal[prop]
+          else if typeof(currentVal)=="file" then
+            //File objects - manually call known methods
+            if prop=="path" then
+              currentVal=currentVal.path
+            else if prop=="name" then
+              currentVal=currentVal.name
+            else if prop=="permissions" then
+              currentVal=currentVal.permissions
+            else if prop=="owner" then
+              currentVal=currentVal.owner
+            else if prop=="group" then
+              currentVal=currentVal.group
+            else if prop=="size" then
+              currentVal=currentVal.size
+            else if prop=="is_folder" then
+              currentVal=currentVal.is_folder
+            else if prop=="is_binary" then
+              currentVal=currentVal.is_binary
+            else if prop=="is_symlink" then
+              currentVal=currentVal.is_symlink
+            else if prop=="parent" then
+              currentVal=currentVal.parent
+            else if prop=="allow_import" then
+              currentVal=currentVal.allow_import
+            else if prop=="get_content" then
+              currentVal=currentVal.get_content
+            else if prop=="get_files" then
+              currentVal=currentVal.get_files
+            else if prop=="get_folders" then
+              currentVal=currentVal.get_folders
+            else if prop=="delete" then
+              currentVal=currentVal.delete
+            else
+              currentVal=null
+              break
+            end if
+          else if typeof(currentVal)=="computer" then
+            //Computer objects - manually call known methods
+            if prop=="local_ip" then
+              currentVal=currentVal.local_ip
+            else if prop=="public_ip" then
+              currentVal=currentVal.public_ip
+            else if prop=="active_net_card" then
+              currentVal=currentVal.active_net_card
+            else if prop=="get_name" then
+              currentVal=currentVal.get_name
+            else if prop=="get_ports" then
+              currentVal=currentVal.get_ports
+            else if prop=="is_network_active" then
+              currentVal=currentVal.is_network_active
+            else if prop=="network_devices" then
+              currentVal=currentVal.network_devices
+            else if prop=="network_gateway" then
+              currentVal=currentVal.network_gateway
+            else if prop=="show_procs" then
+              currentVal=currentVal.show_procs
+            else
+              currentVal=null
+              break
+            end if
+          else if typeof(currentVal)=="shell" then
+            //Shell objects - manually call known methods
+            if prop=="host_computer" then
+              currentVal=currentVal.host_computer
+            else
+              currentVal=null
+              break
+            end if
+          else
+            currentVal=null
+            break
+          end if
+        end for
+        varValue=currentVal
+      end if
+      //Replace _getvar(x).property with the value
+      if typeof(varValue)=="list" or typeof(varValue)=="map" then
+        //Preserve typed result via placeholder so _setvar gets the actual object
+        _ph="__PROP"+str(len(preservedGetVarValues))+"__"
+        preservedGetVarValues[_ph]=varValue
+        s=s[:startIdx]+_ph+s[propertyEnd:]
+      else
+        s=s[:startIdx]+str(varValue)+s[propertyEnd:]
+      end if
+    else
+      //No property access - convert to string for substitution
+      if typeof(varValue)=="string" then
+        varValueStr=varValue
+      else if typeof(varValue)=="number" then
+        varValueStr=str(varValue)
+      else
+        varValueStr=str(varValue)
+      end if
+      s=s[:startIdx]+varValueStr+s[parenEnd+1:]
+    end if
+    if gb.DEBUG then print green("Command Bash->_getvar: ")+varName+" = "+str(varValue)
+  end while
+  //Store preserved _getvar values globally so _getVal can access them
+  gb.PRESERVED_GETVAR_VALUES=preservedGetVarValues
+  //DON'T restore preserved _getvar calls - keep them as placeholders
+  //so that _getVal can look up the actual values and preserve types
+  //The placeholders will be evaluated by _getVal when functions like len call it
+  //Handle built-in function calls - evaluate them (but skip if this is a _setvar command)
+  isSetVar=(indexOf(s,"_setvar")!=null)
+  if not isSetVar and indexOf(s,"(")!=null then
+    funcNames=self._funcNames
+    for funcName in funcNames
+      funcIterations=0
+      maxFuncIterations=10
+      while indexOf(s,funcName+"(")!=null
+        funcIterations+=1
+        if funcIterations>maxFuncIterations then
+          if gb.DEBUG then print red("WARNING: Too many iterations for function "+funcName+", breaking")
+          break
+        end if
+        startIdx=indexOf(s,funcName+"(")
+        if startIdx==null then break
+        //Skip if this match is part of a longer identifier (e.g. len( inside _len()
+        if startIdx>0 then
+          prevChar=s[startIdx-1]
+          if (prevChar>="a" and prevChar<="z") or (prevChar>="A" and prevChar<="Z") or (prevChar>="0" and prevChar<="9") or prevChar=="_" then break
+        end if
+        //Find matching closing parenthesis
+        parenStart=startIdx+len(funcName)
+        _len=len(s)
+        if parenStart>=_len then break
+        depth=0
+        closeIdx=null
+        i=parenStart
+        while i<_len
+          if i>=_len then break
+          if s[i]=="(" then depth+=1
+          if s[i]==")" then
+            depth-=1
+            if depth==0 then
+              closeIdx=i
+              break
+            end if
+          end if
+          i+=1
+        end while
+        if closeIdx!=null then
+          //Extract full function call
+          funcCall=s[startIdx:closeIdx+1]
+          //Evaluate it
+          result=self._evalFunc(funcCall,Obj)
+          //Replace in string
+          s=s[:startIdx]+str(result)+s[closeIdx+1:]
+        else
+          break
+        end if
+      end while
+    end for
+  end if
+  //Handle _setvar command
+  if indexOf(s,"_setvar")!=null then
+    s=s.replace("_setvar","")
+    if indexOf(s,"(")==null then return Error.set("_setvar internal format is invalid")
+    p=s[indexOf(s,"("):]
+    r=self.clean(p)
+    //Smart split by comma that respects parentheses and brackets
+    parts=[]
+    currentPart=""
+    parenDepth=0
+    bracketDepth=0
+    _len=len(r)
+    i=0
+    while i<_len
+      if i>=len(r) then break
+      char=r[i]
+      if char=="," and parenDepth==0 and bracketDepth==0 then
+        push(parts,currentPart)
+        currentPart=""
+      else
+        if char=="(" then parenDepth+=1
+        if char==")" then parenDepth-=1
+        if char=="[" then bracketDepth+=1
+        if char=="]" then bracketDepth-=1
+        currentPart=currentPart+char
+      end if
+      i+=1
+    end while
+    push(parts,currentPart)
+    if len(parts)<2 then return Error.set("Invalid _setvar parameters")
+    varName=trim(parts[0])
+    varValue=trim(parts[1])
+    //DON'T evaluate varValue here - store the raw expression
+    if gb.DEBUG then
+      print cyan("  SET_VAR processing")
+      print cyan("    varName: ")+white(varName)
+      print cyan("    varValue (raw): ")+white(varValue)
+    end if
+    //Handle list literals
+    isListLiteral=false
+    builtinResolved=false
+    //Resolve property-access placeholders from process() (preserves typed list/map results)
+    _pvgv=gb.PRESERVED_GETVAR_VALUES
+    if _pvgv and typeof(varValue)=="string" and hasIndex(_pvgv,varValue) then
+      varValue=_pvgv[varValue]
+      builtinResolved=true
+      if typeof(varValue)=="list" then isListLiteral=true
+    end if
+    if varValue=="[]" then
+      varValue=[]
+      isListLiteral=true
+    else if typeof(varValue)=="string" and len(varValue)>2 and varValue[0]=="[" and varValue[len(varValue)-1]=="]" then
+      //Parse list literal [a,b,c]
+      listContent=varValue[1:len(varValue)-1]
+      varValue=split(listContent,",")
+      //Trim each element
+      trimmedList=[]
+      for item in varValue;push(trimmedList,trim(item));end for
+      varValue=trimmedList
+      isListLiteral=true
+      if gb.DEBUG then print green("  Created list literal with "+len(varValue)+" items: ")+yellow(varValue)
+    end if
+    //Check if varValue is a user-defined function call (skip if already converted to list)
+    if not isListLiteral and typeof(varValue)=="string" and indexOf(varValue,"(")!=null then
+      funcNameEnd=indexOf(varValue,"(")
+      potentialFuncName=varValue[:funcNameEnd]
+      if gb.DEBUG then
+        print cyan("  Checking for user-defined function call")
+        print cyan("    varValue: ")+white(varValue)
+        print cyan("    potentialFuncName: ")+white(potentialFuncName)
+        print cyan("    Available functions: ")+yellow(gb.FUNCS.indexes)
+        print cyan("    Function exists? ")+yellow(hasIndex(gb.FUNCS,potentialFuncName))
+      end if
+      if hasIndex(gb.FUNCS,potentialFuncName) then
+        //Extract function arguments
+        funcArgs=[]
+        argStart=funcNameEnd+1
+        //Find matching closing paren (depth-aware, not just first ")")  
+        argDepth=1
+        argEnd=null
+        _len=len(varValue)
+        ai=argStart
+        while ai<_len
+          if varValue[ai]=="(" then argDepth+=1
+          if varValue[ai]==")" then
+            argDepth-=1
+            if argDepth==0 then
+              argEnd=ai
+              break
+            end if
+          end if
+          ai+=1
+        end while
+        if argEnd!=null and argEnd>argStart then
+          argStr=varValue[argStart:argEnd]
+          if argStr then
+            //Smart split by comma respecting parentheses and brackets
+            sfCurrent=""
+            sfPDepth=0
+            sfBDepth=0
+            _len=len(argStr)
+            sfI=0
+            while sfI<_len
+              if sfI>=len(argStr) then break
+              sfC=argStr[sfI]
+              if sfC=="(" then sfPDepth+=1
+              if sfC==")" then sfPDepth-=1
+              if sfC=="[" then sfBDepth+=1
+              if sfC=="]" then sfBDepth-=1
+              if sfC=="," and sfPDepth==0 and sfBDepth==0 then
+                push(funcArgs,trim(sfCurrent))
+                sfCurrent=""
+              else
+                sfCurrent=sfCurrent+sfC
+              end if
+              sfI+=1
+            end while
+            if sfCurrent then push(funcArgs,trim(sfCurrent))
+          end if
+        end if
+        if gb.DEBUG then
+          print green("  Calling user-defined function: ")+white(potentialFuncName)
+          print green("    Arguments: ")+yellow(funcArgs)
+        end if
+        //Call the function with proper context
+        varValue=self._callFunc(Obj,potentialFuncName,funcArgs)
+        builtinResolved=true
+        if gb.DEBUG then print green("  Function returned: ")+yellow(varValue)+" (type: "+typeof(varValue)+")"
+      else
+        //Check if it's a built-in function that should be evaluated
+        //Resolve ALL builtin function calls in the expression (not just the first one)
+        //Resolve ALL builtin function calls innermost-first (like arithmetic parens)
+        bfMaxIter=20
+        bfIter=0
+        while typeof(varValue)=="string" and bfIter<bfMaxIter
+          bfIter+=1
+          //Find the innermost function call (one whose args have no other builtins)
+          bfFound=false
+          for bfName in self._funcNames
+            bfPos=indexOf(varValue,bfName+"(")
+            if bfPos==null then continue
+            //Find matching close paren
+            bfCallStart=bfPos+len(bfName)
+            bfDepth=0
+            bfClose=null
+            _len=len(varValue)
+            bfI=bfCallStart
+            while bfI<_len
+              if varValue[bfI]=="(" then bfDepth+=1
+              if varValue[bfI]==")" then
+                bfDepth-=1
+                if bfDepth==0 then bfClose=bfI; break
+              end if
+              bfI+=1
+            end while
+            if bfClose==null then continue
+            //Check if the args contain another builtin call - if so skip (not innermost)
+            bfArgs=varValue[bfCallStart+1:bfClose]
+            bfHasInner=false
+            for bfInner in self._funcNames;if indexOf(bfArgs,bfInner+"(")!=null then bfHasInner=true; break;end for
+            if bfHasInner then continue
+            //This is an innermost call - evaluate it
+            bfFullCall=varValue[bfPos:bfClose+1]
+            bfResult=self._evalFunc(bfFullCall,Obj)
+            if bfResult!=bfFullCall and str(bfResult)!=bfFullCall then
+              //If this call is the ENTIRE expression, preserve typed result (lists, maps, etc.)
+              if bfPos==0 and bfClose+1>=len(varValue) then
+                varValue=bfResult
+                builtinResolved=true
+                bfFound=true
+                if bfName=="join" then isListLiteral=true
+                if typeof(varValue)=="list" then isListLiteral=true
+              else
+                varValue=varValue[:bfPos]+str(bfResult)+varValue[bfClose+1:]
+                builtinResolved=true
+                bfFound=true
+                if bfName=="join" then isListLiteral=true
+              end if
+            end if
+            break
+          end for
+          if not bfFound then break
+        end while
+        //If builtin resolved and result is a numeric arithmetic expression, evaluate it now
+        if builtinResolved and typeof(varValue)=="string" then
+          brHasOps=(indexOf(varValue,"+")!=null or indexOf(varValue,"-")!=null or indexOf(varValue,"*")!=null or indexOf(varValue,"/")!=null)
+          if brHasOps then
+            brNumeric=true
+            brHasDigit=false
+            _len=len(varValue)
+            brCI=0
+            while brCI<_len
+              brC=varValue[brCI]
+              if brC>="0" and brC<="9" then brHasDigit=true
+              if (brC>="a" and brC<="z") or (brC>="A" and brC<="Z") or brC=="_" then
+                brNumeric=false
+                break
+              end if
+              brCI+=1
+            end while
+            if brNumeric and brHasDigit then varValue=self._evalArithmetic(varValue,Obj)
+          end if
+        end if
+      end if
+    end if
+    //Dynamic get_any support - resolve prompts before arithmetic
+    if indexOf(varValue,"get_any")!=null then
+      msg=null
+      startPos=indexOf(varValue,"get_any")+len("get_any")
+      if startPos<len(varValue) and varValue[startPos]=="(" then
+        restOfString=varValue[startPos:]
+        closeIdx=indexOf(restOfString,")")
+        if closeIdx!=null and closeIdx>1 then msg=varValue[startPos+1:startPos+closeIdx]
+      end if
+      varValue=self._getAny(msg)
+    end if
+    if indexOf(varValue,"get_string")!=null then
+      msg=null
+      startPos=indexOf(varValue,"get_string")+len("get_string")
+      _len=len(varValue)
+      if startPos<_len and varValue[startPos]=="(" then
+        //Find matching closing parenthesis by tracking depth
+        depth=0
+        closeIdx=null
+        i=startPos
+        while i<_len
+          if varValue[i]=="(" then depth+=1
+          if varValue[i]==")" then
+            depth-=1
+            if depth==0 then
+              closeIdx=i
+              break
+            end if
+          end if
+          i+=1
+        end while
+        if closeIdx!=null and closeIdx>startPos+1 then msg=varValue[startPos+1:closeIdx]
+      end if
+      varValue=self._getString(msg)
+    end if
+    if indexOf(varValue,"get_decimal")!=null then
+      msg=null
+      startPos=indexOf(varValue,"get_decimal")+len("get_decimal")
+      _len=len(varValue)
+      if startPos<_len and varValue[startPos]=="(" then
+        //Find matching closing parenthesis by tracking depth
+        depth=0
+        closeIdx=null
+        i=startPos
+        while i<_len
+          if varValue[i]=="(" then depth+=1
+          if varValue[i]==")" then
+            depth-=1
+            if depth==0 then
+              closeIdx=i
+              break
+            end if
+          end if
+          i+=1
+        end while
+        if closeIdx!=null and closeIdx>startPos+1 then msg=varValue[startPos+1:closeIdx]
+      end if
+      varValue=self._getDecimal(msg)
+    end if
+    if indexOf(varValue,"get_integer")!=null then
+      msg=null
+      startPos=indexOf(varValue,"get_integer")+len("get_integer")
+      _len=len(varValue)
+      if startPos<_len and varValue[startPos]=="(" then
+        //Find matching closing parenthesis by tracking depth
+        depth=0
+        closeIdx=null
+        i=startPos
+        while i<_len
+          if varValue[i]=="(" then depth+=1
+          if varValue[i]==")" then
+            depth-=1
+            if depth==0 then
+              closeIdx=i
+              break
+            end if
+          end if
+          i+=1
+        end while
+        if closeIdx!=null and closeIdx>startPos+1 then msg=varValue[startPos+1:closeIdx]
+      end if
+      varValue=self._getInteger(msg)
+    end if
+    if indexOf(varValue,"get_yesno")!=null then
+      msg=null
+      startPos=indexOf(varValue,"get_yesno")+len("get_yesno")
+      _len=len(varValue)
+      if startPos<_len and varValue[startPos]=="(" then
+        //Find matching closing parenthesis by tracking depth
+        depth=0
+        closeIdx=null
+        i=startPos
+        while i<_len
+          if varValue[i]=="(" then depth+=1
+          if varValue[i]==")" then
+            depth-=1
+            if depth==0 then
+              closeIdx=i
+              break
+            end if
+          end if
+          i+=1
+        end while
+        if closeIdx!=null and closeIdx>startPos+1 then msg=varValue[startPos+1:closeIdx]
+      end if
+      varValue=self._getYesNo(msg)
+    end if
+    //Special: _setvar(name, _hold) - store current held object into FLAGS.OBJ map
+    if varValue=="_hold" then
+      globals.G_bash.FLAGS["OBJ"][varName]=globals.G_bash.FLAGS["hold"]
+      s=s[:indexOf(s,"(")]
+      return s
+    end if
+    //Handle no-arg bash commands (_net_random, _fs_pwd, _sys_whoami, _sys_whatami)
+    if typeof(varValue)=="string" then
+      bashCmds=self._bashCmds
+      for bashCmdName in bashCmds
+        if varValue==bashCmdName then
+          if gb.DEBUG then print cyan("  Detected bash command in _setvar: ")+white(bashCmdName)
+          savedPipeMode2=globals.G_pipe.PIPE_MODE
+          globals.G_pipe.PIPE_MODE=true
+          bashCmd=self._prepareCommand(bashCmdName,true,Obj)
+          if bashCmd and not (bashCmd isa Error) then
+            bashResult=self._exec(Obj,bashCmd,true)
+            if bashResult!=null and bashResult!=false and bashResult!=true then
+              varValue=bashResult
+              if gb.DEBUG then print green("  Bash command result: ")+white(varValue)
+            end if
+          end if
+          globals.G_pipe.PIPE_MODE=savedPipeMode2
+          break
+        end if
+      end for
+    end if
+    //Handle commands with arguments via PIPE_MODE capture
+    //e.g. _setvar(ports, _net_ports 1.2.3.4) or _setvar(alive, _net_ping 1.2.3.4)
+    if typeof(varValue)=="string" and not builtinResolved then
+      tokens=split(varValue," ")
+      if len(tokens)>=1 then
+        cmdToken=tokens[0]
+        //Check if first token is a known command name
+        if self._cmdNames.indexOf(cmdToken)!=null then
+          if gb.DEBUG then print cyan("  Detected command in _setvar: ")+white(varValue)
+          //Enable PIPE_MODE so command returns data instead of printing
+          savedPipeMode=globals.G_pipe.PIPE_MODE
+          globals.G_pipe.PIPE_MODE=true
+          cmdMap=self._prepareCommand(varValue,true,Obj)
+          if cmdMap and not (cmdMap isa Error) then
+            cmdResult=self._exec(Obj,cmdMap,true)
+            //Use str() to distinguish boolean false/"true" from integer 0/1
+            //In GreyScript typeof(false)=="number" and 0==false, so != comparisons fail for integers
+            if cmdResult!=null and str(cmdResult)!="false" and not (cmdResult isa Error) then
+              varValue=cmdResult
+              builtinResolved=true
+              if gb.DEBUG then print green("  Command capture result: ")+white(str(varValue))+" (type: "+typeof(varValue)+")"
+            end if
+          end if
+          globals.G_pipe.PIPE_MODE=savedPipeMode
+        end if
+      end if
+    end if
+    //Handle expressions with operators AFTER resolving prompts (only for strings)
+    //Skip arithmetic if value looks like a file path (starts with /)
+    //Check if has parentheses but might still be arithmetic (e.g., (10+5)*2)
+    hasArithmeticOps=(typeof(varValue)=="string" and (indexOf(varValue,"+")!=null or indexOf(varValue,"-")!=null or indexOf(varValue,"*")!=null or indexOf(varValue,"/")!=null or indexOf(varValue,"%")!=null))
+    //Check for string concatenation patterns like: str + . + str or str+.+str
+    isStringConcat=false
+    if typeof(varValue)=="string" and indexOf(varValue,"+")!=null then
+      //First check for explicit dot-based concatenation patterns
+      if indexOf(varValue,".")!=null then
+        if indexOf(varValue," + . + ")!=null or indexOf(varValue,"+.+")!=null or indexOf(varValue," + .")!=null or indexOf(varValue,". + ")!=null then
+          isStringConcat=true
+          if gb.DEBUG then print yellow("  Detected string concatenation pattern in: "+varValue)
+        end if
+      end if
+      //BUT: Only if there are NO OTHER arithmetic operators (-, *, /, %, **)
+      //This prevents detecting "100 / 10 + 5" as string concat (mixed operators = arithmetic)
+      if not isStringConcat then
+        hasOtherOps=(indexOf(varValue,"-")!=null or indexOf(varValue,"*")!=null or indexOf(varValue,"/")!=null or indexOf(varValue,"%")!=null)
+        if not hasOtherOps then
+          plusIdx=indexOf(varValue,"+")
+          firstOperand=varValue[:plusIdx].trim
+          //If first operand can't be converted to number, it's string concat
+          //val returns 0 for non-numeric strings, so check if it's 0 AND not literally "0"
+          testVal=val(firstOperand)
+          if testVal==0 and firstOperand!="0" and firstOperand!="-0" and indexOf(firstOperand,"(")==null then
+            isStringConcat=true
+            if gb.DEBUG then print yellow("  Detected string concatenation (non-numeric operand): "+varValue)
+          end if
+        end if
+      end if
+    end if
+    hasParens=(typeof(varValue)=="string" and indexOf(varValue,"(")!=null and indexOf(varValue,")")!=null)
+    isFunctionCall=false
+    isDateFormat=false
+    if hasParens then
+      //Check if it's a function call or arithmetic expression
+      //Function calls have letters before the opening paren
+      openIdx=indexOf(varValue,"(")
+      if openIdx>0 then
+        charBeforeParen=varValue[openIdx-1]
+        //If character before paren is a letter, it's likely a function call
+        if (charBeforeParen>="a" and charBeforeParen<="z") or (charBeforeParen>="A" and charBeforeParen<="Z") or charBeforeParen=="_" then isFunctionCall=true
+      end if
+    end if
+    //Check if value looks like a date format: DD/MMM/YYYY - HH:MM or YYYY-MM-DD HH:MM:SS
+    if typeof(varValue)=="string" and len(varValue)>=15 then
+      //GreyScript format: "15/Jan/2000 - 07:50" (DD/MMM/YYYY - HH:MM)
+      if indexOf(varValue,"/")!=null and indexOf(varValue," - ")!=null and indexOf(varValue,":")!=null then
+        isDateFormat=true
+      //Alternative format: "2000-01-22 06:38:00" (YYYY-MM-DD HH:MM:SS)
+      else if indexOf(varValue,"-")!=null and indexOf(varValue,":")!=null then
+        if len(varValue)>=19 and varValue[4]=="-" and varValue[7]=="-" and varValue[10]==" " and varValue[13]==":" and varValue[16]==":" then isDateFormat=true
+      end if
+    end if
+    if typeof(varValue)=="string" and len(varValue)>0 and varValue[0]=="/" then
+      //This is likely a file path, don't evaluate as arithmetic
+      if gb.DEBUG then print yellow("  Skipping arithmetic - value looks like a path: "+varValue)
+    else if builtinResolved then
+      //Value already resolved by function call, skip further evaluation
+      if gb.DEBUG then print yellow("  Skipping arithmetic - value resolved by function: "+str(varValue))
+    else if isFunctionCall then
+      //Try to evaluate as a GreyScript expression using call
+      if gb.DEBUG then print yellow("  Attempting to evaluate function call: "+varValue)
+      evalResult=self._evalGreyscriptCall(varValue,Obj)
+      if evalResult!=null and evalResult!=varValue then
+        varValue=evalResult
+        if gb.DEBUG then print green("  Function call evaluated to: "+str(varValue))
+      else
+        //Couldn't evaluate, keep as string
+        if gb.DEBUG then print yellow("  Could not evaluate function call, keeping as string")
+      end if
+    else if isDateFormat then
+      //This is a date format, don't evaluate as arithmetic
+      if gb.DEBUG then print yellow("  Skipping arithmetic - value looks like a date: "+varValue)
+    else if isListLiteral then
+      //This is a list literal or function result that should not be evaluated as arithmetic
+      if gb.DEBUG then print yellow("  Skipping arithmetic - value is list literal or function result: "+varValue)
+    else if isStringConcat then
+      //Handle string concatenation with + operator
+      if gb.DEBUG then print yellow("  Evaluating string concatenation: "+varValue)
+      varValue=self._evalStringConcat(varValue,Obj)
+      if gb.DEBUG then print yellow("  String concat result: "+str(varValue))
+    else if hasArithmeticOps then
+      //Check if it really looks numeric (digits, operators, spaces, dots, parens - no letters)
+      arithSafe=true
+      arithHasDigit=false
+      _len=len(varValue)
+      arI=0
+      while arI<_len
+        arC=varValue[arI]
+        if arC>="0" and arC<="9" then arithHasDigit=true
+        if (arC>="a" and arC<="z") or (arC>="A" and arC<="Z") or arC=="_" then
+          arithSafe=false
+          break
+        end if
+        arI+=1
+      end while
+      if arithSafe and arithHasDigit then
+        //Use comprehensive arithmetic evaluator that handles parentheses and precedence
+        if gb.DEBUG then print yellow("  Evaluating arithmetic expression: "+varValue)
+        varValue=self._evalArithmetic(varValue,Obj)
+        if gb.DEBUG then print yellow("  Arithmetic result: "+str(varValue))
+      else
+        if gb.DEBUG then print yellow("  Skipping arithmetic - value contains alphabetic chars: "+varValue)
+      end if
+    end if
+    //Final evaluation with _getVal if not yet evaluated
+    //Skip if a builtin function already resolved the value (e.g. substr returned "c")
+    //because _getVal would incorrectly resolve it as a variable name
+    if typeof(varValue)=="string" and not builtinResolved then
+      evaluatedValue=self._getVal(varValue,Obj)
+      //Only use evaluated value if it's different from the string
+      if typeof(evaluatedValue)!="string" or evaluatedValue!=varValue then varValue=evaluatedValue
+    end if
+    //If _getVal returned an arithmetic expression (e.g., "5 - 1" from len resolution), evaluate it
+    if typeof(varValue)=="string" and not builtinResolved then
+      postHasOps=(indexOf(varValue,"+")!=null or indexOf(varValue,"-")!=null or indexOf(varValue,"*")!=null or indexOf(varValue,"/")!=null or indexOf(varValue,"%")!=null)
+      if postHasOps then
+        postNumeric=true
+        postHasDigit=false
+        _len=len(varValue)
+        postCI=0
+        while postCI<_len
+          postC=varValue[postCI]
+          if postC>="0" and postC<="9" then postHasDigit=true
+          if (postC>="a" and postC<="z") or (postC>="A" and postC<="Z") or postC=="_" then
+            postNumeric=false
+            break
+          end if
+          postCI+=1
+        end while
+        if postNumeric and postHasDigit then varValue=self._evalArithmetic(varValue,Obj)
+      end if
+    end if
+    self._setVar(varName,varValue)
+    //Remove parameter using string slicing instead of replace
+    s=s[:indexOf(s,"(")]
+    if gb.DEBUG then print green("Command Bash->_setvar: ")+varName+" = "+str(varValue)+" (type: "+typeof(varValue)+")"
+  end if
+  //Note: get_string, get_integer, get_decimal, get_any, get_yesno are ONLY processed
+  //inside _setvar commands above. Don't process them elsewhere to avoid
+  //triggering prompts when these words appear in other contexts (like _print)
+  return s
+end function
+//Prepare command string into parsed command map
+Bash._prepareCommand=function(raw,skipProcess=false,Obj=null)
+  if skipProcess then cmdStr=raw else cmdStr=self.process(raw,Obj)
+  if cmdStr isa Error then return cmdStr
+  cmdStr=trim(cmdStr)
+  // Strip zero-width spaces (char 8203) used in man pages for display
+  cmdStr=cmdStr.replace(char(8203),"")
+  if not cmdStr then return null
+  //Check for function-style syntax: command(arg1,arg2,...)
+  parenIdx=indexOf(cmdStr,"(")
+  if parenIdx!=null and parenIdx>0 then
+    cmdName=cmdStr[:parenIdx]
+    //Only parse as function syntax for known variable commands
+    varCmds=self._varCmds
+    if varCmds.indexOf(cmdName)!=null then
+      //Extract arguments from parentheses
+      closeParenIdx=cmdStr.lastIndexOf(")")
+      if closeParenIdx!=null and closeParenIdx>parenIdx then
+        argsStr=cmdStr[parenIdx+1:closeParenIdx]
+        args=split(argsStr,",")
+        //Trim each argument
+        _len=len(args);i=0;while i<_len;args[i]=trim(args[i]);i+=1;end while
+        return {
+          "str":cmdStr,
+          "name":lower(cmdName),
+          "rawName":cmdName,
+          "args":args
+        }
+      end if
+    end if
+  end if
+  //Default space-separated parsing
+  t=split(cmdStr," ")
+  cmdName=lower(t[0])
+  return {
+    "str":cmdStr,
+    "name":cmdName,
+    "rawName":t[0],
+    "args":t[1:]
+  }
+end function
+// EXPLOIT HELPERS
+// Shared helpers for _shell/_computer/_file/_firewall/_rootpass/_userpass/_bounce/_netbounce
+//Get metaxploit library from current object context
+Bash.getMx=function(Obj)
+  if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then return Obj.packMetaxploit
+  if hasIndex(Obj,"metaxploit") and Obj.metaxploit then return Obj.metaxploit
+  return Library.metaxploit
+end function
+//Common setup for all exploit commands: validate access, get entries
+//Returns {entries, router} map, or an Error
+Bash.exploitSetup=function(Obj,targetIP,cmdName)
+  if not hasIndex(Obj,"computer") or not Obj.computer then return Error.set(cmdName+": no computer access")
+  mx=self.getMx(Obj)
+  if not mx then return Error.set(cmdName+": metaxploit library not available")
+  r=get_router(targetIP)
+  if not r then return Error.set(cmdName+": cannot reach "+targetIP)
+  entries=Exploit.extract(r,targetIP,mx)
+  if entries isa Error then return Error.set(cmdName+": no attack vectors found for "+targetIP)
+  return {"entries":entries,"router":r}
+end function
+//Parse exploit flags from cmd.args starting at startIdx
+//Recognises: --root/-r  --user/-u  --guest/-g  --port/-p <N>
+//Returns {prefUser, port}
+Bash.parseExploitArgs=function(args,startIdx=1)
+  prefUser=""
+  port=null
+  i=startIdx
+  n=len(args)
+  while i<n
+    a=args[i]
+    if a=="--root" or a=="-r" then prefUser="r"
+    if a=="--user" or a=="-u" then prefUser="u"
+    if a=="--guest" or a=="-g" then prefUser="g"
+    if (a=="--port" or a=="-p") and i+1<n then
+      i=i+1
+      port=to_int(args[i])
+    end if
+    i=i+1
+  end while
+  return {"prefUser":prefUser,"port":port}
+end function
+//Find all exploit entry+exploit pairs matching type, user pref, and optional port
+//Returns list of {entry, exploit, pri} sorted best-first, or empty list
+Bash.findBestExploit=function(entries,exploitType,prefUser,port)
+  matches=[]
+  for entry in entries
+    if port!=null and entry["port_number"]!=port then continue
+    lib=entry["metaLib"]
+    if not Exploit.haveAlready(lib) then Exploit.headless(lib)
+    exList=Exploit.get(lib)
+    if not exList then continue
+    for ex in exList
+      if ex.e!=exploitType then continue
+      pri=0
+      if ex.u=="r" then pri=3
+      if ex.u=="u" then pri=2
+      if ex.u=="g" then pri=1
+      if prefUser!="" and ex.u!=prefUser then pri=pri-50
+      if entry["port_number"]==0 then pri=pri-100
+      push(matches,{"entry":entry,"exploit":ex,"pri":pri})
+    end for
+  end for
+  if len(matches)==0 then return []
+  //Sort descending by pri (bubble sort)
+  _len=len(matches)
+  i=0
+  while i<_len-1
+    j=0
+    while j<_len-1-i
+      if matches[j].pri<matches[j+1].pri then
+        tmp=matches[j]
+        matches[j]=matches[j+1]
+        matches[j+1]=tmp
+      end if
+      j+=1
+    end while
+    i+=1
+  end while
+  return matches
+end function
+//Auto-detect a usable LAN IP from a bounce entry's network
+//Prefers first real device (non-router, non-switch); falls back to entry.local_ip
+Bash.findLanIP=function(entry)
+  r=get_router(entry["public_ip"])
+  if r then
+    lan=devices_lan_ip(r)
+    if lan then
+      for dev in lan
+        if get_switch(dev)==null and get_router(dev)==null then return dev
+      end for
+    end if
+  end if
+  return entry["local_ip"]
+end function
+// COMMAND EXECUTION
+//Execute preprocessed command string
+Bash._exec=function(Obj,c,skipProcess=false)
+  gb=globals.G_bash
+  //Check SIGSTOP first - if _home was called, exit immediately
+  if gb.SIGSTOP then
+    if gb.DEBUG then print cyan("  SIGSTOP detected in _exec - skipping command execution")
+    return true
+  end if
+  if gb.DEBUG then
+    print blue("="*60)
+    print blue("Function Call->_exec")
+    print cyan("  Input Type: ")+yellow(typeof(c))
+    print cyan("  Calling Object: ")+yellow(typeof(Obj))
+    if Obj then
+      if hasIndex(Obj,"id") then print cyan("  Object ID: ")+yellow(Obj.id)
+      if hasIndex(Obj,"name") then print cyan("  Object Name: ")+yellow(Obj.name)
+      if hasIndex(Obj,"type") then print cyan("  Object Type: ")+yellow(Obj.type)
+    end if
+    if hasIndex(globals,"G_IPC") then
+      print cyan("  G_IPC property exists: ")+yellow("true")
+      print cyan("  G_IPC type: ")+yellow(typeof(globals.G_IPC))
+      if typeof(globals.G_IPC)=="map" then
+        print cyan("  G_IPC registered processes: ")+yellow(len(globals.G_IPC.indexes))
+        if len(globals.G_IPC.indexes)==0 then print cyan("    ")+red("(no processes registered - empty map)") else print cyan("    Process IDs: ")+yellow(globals.G_IPC.indexes)
+      end if
+    else
+      print cyan("  G_IPC property exists: ")+red("false - not initialized!")
+    end if
+    if globals.G_main then
+      if hasIndex(globals.G_main,"computer") then
+        comp=globals.G_main.computer
+        if comp then
+          if hasIndex(comp,"local_ip") then print cyan("  Local IP: ")+yellow(comp.local_ip)
+          if hasIndex(comp,"public_ip") then print cyan("  Public IP: ")+yellow(comp.public_ip)
+        end if
+      end if
+    end if
+  end if
+  //If input is a string with semicolons or &&, split and execute each command
+  //Check this BEFORE pipes so that "a | b && c | d" is parsed as "(a | b) && (c | d)"
+  //Uses lexer for quote-aware detection — operators inside strings are ignored
+  //Skip for raw-text commands (_print/_printnow) — their args may contain | ; && literally
+  _rawCmd=false
+  if typeof(c)=="string" then
+    _fw=c.split(" ")[0]
+    if _fw=="_print" or _fw=="_printnow" then _rawCmd=true
+  end if
+  if not _rawCmd and typeof(c)=="string" and self._hasChain(c) then
+    if gb.DEBUG then print cyan("  Detected command chain - executing commands")
+    //Parse chain with both ; and && operators (quote-aware via lexer)
+    chainParts=self._splitChain(c)
+    //Execute command chain with conditional logic
+    lastResult=null
+    lastSuccess=true
+    _len=len(chainParts)
+    i=0
+    while i<_len
+      entry=chainParts[i]
+      cmdStr=entry.cmd
+      op=entry.op
+      if not cmdStr or len(cmdStr)==0 then
+        i+=1
+        continue
+      end if
+      //For && operator, only execute if previous command succeeded
+      if i>0 and chainParts[i-1].op=="&&" and not lastSuccess then
+        if gb.DEBUG then print yellow("  Skipping command (previous failed): ")+white(cmdStr)
+        i+=1
+        continue
+      end if
+      if gb.DEBUG then print cyan("  Executing command: ")+white(cmdStr)+" "+yellow("["+op+"]")
+      //Recursively execute command, always re-process for variable substitution
+      //This allows variables set in earlier chain segments to be used in later segments
+      result=self._exec(Obj,cmdStr,false)
+      //Track success: command succeeded if result is not an Error
+      lastSuccess=not (result isa Error)
+      lastResult=result
+      if gb.DEBUG then
+        resultStatus=green("SUCCESS")
+        if not lastSuccess then resultStatus=red("FAILED")
+        print cyan("    Result: ")+resultStatus
+      end if
+      //Stop if SIGSTOP is set
+      if gb.SIGSTOP then return result
+      i+=1
+    end while
+    //Return the final result
+    return lastResult
+  end if
+  //If input is a string with pipes, execute as pipeline using Pipe.run
+  //Uses lexer for quote-aware detection — pipe chars inside strings are ignored
+  if not _rawCmd and typeof(c)=="string" and self._hasPipe(c) then
+    if gb.DEBUG then print cyan("  Detected pipes - delegating to Pipe.run")
+    //Pre-tokenize so | is its own token — passing as [c] causes Pipe.run's re-quoting
+    //loop to wrap the whole string (spaces + embedded |) in quotes, hiding the pipe separator
+    argv=Pipe._parseArgs(c)
+    //Enable Pipe debugging if bash debugging is on
+    if gb.DEBUG and not globals.G_pipeDebug then globals.G_pipeDebug=true
+    //Call Pipe.run to handle the entire pipeline
+    result=Pipe.run(Obj,argv)
+    //Restore Pipe debug state
+    if not gb.DEBUG and globals.G_pipeDebug then globals.G_pipeDebug=false
+    //Handle result display for bash context
+    if result isa Error then
+      //Don't print error object structure - error was already displayed by Error.set
+      return []
+    else if result isa list then
+      if len(result)>0 then
+        for line in result;print line;end for
+      end if
+    else if result isa string then
+      if len(result)>0 then print result
+    end if
+    return result
+  end if
+  //Allow callers to pass either raw string or prepared command map
+  if typeof(c)=="map" then
+    cmd=c
+    //Check if this is a deferred IF statement
+    if hasIndex(cmd,"type") and cmd.type=="deferred_if" then
+      if gb.DEBUG then
+        print cyan("  Executing deferred IF statement")
+        print cyan("    Condition: ")+white(cmd.cond)
+      end if
+      //Evaluate condition with current Obj context
+      condResult=self._evalCond(cmd.cond,Obj)
+      if gb.DEBUG then
+        print cyan("    Result: ")+yellow(condResult)
+        print cyan("    Then Block: ")+yellow(len(cmd.thenBlock)+" lines")
+        print cyan("    Elif Branches: ")+yellow(len(cmd.elif))
+        print cyan("    Else Block: ")+yellow(len(cmd.elseBlock)+" lines")
+      end if
+      if condResult then
+        if gb.DEBUG then print cyan("    => Executing THEN block")
+        //Parse and execute then block
+        thenAst=self._parseScript(cmd.thenBlock)
+        self._execBody(Obj,thenAst,false)
+      else
+        if gb.DEBUG then print cyan("    => Condition FALSE, checking elif/else")
+        //Check elif branches
+        executed=false
+        elifCount=0
+        for elifBranch in cmd.elif
+          elifCount+=1
+          if gb.DEBUG then
+            print cyan("    Evaluating ELIF "+elifCount)
+            print cyan("      Condition: ")+white(elifBranch.cond)
+          end if
+          elifResult=self._evalCond(elifBranch.cond,Obj)
+          if gb.DEBUG then print cyan("      Result: ")+yellow(elifResult)
+          if elifResult then
+            if gb.DEBUG then print cyan("      => Executing ELIF "+elifCount+" block")
+            elifAst=self._parseScript(elifBranch.body)
+            self._execBody(Obj,elifAst,false)
+            executed=true
+            break
+          end if
+        end for
+        if not executed and len(cmd.elseBlock)>0 then
+          if gb.DEBUG then print cyan("    => No conditions matched, executing ELSE block")
+          elseAst=self._parseScript(cmd.elseBlock)
+          self._execBody(Obj,elseAst,false)
+        else if not executed then
+          if gb.DEBUG then print cyan("    => No conditions matched, no ELSE block")
+        end if
+      end if
+      return false
+    end if
+    if gb.DEBUG then print cyan("  Using pre-parsed command map")
+  else
+    if gb.DEBUG then print cyan("  Parsing raw command string")
+    //OBJ(name) cmdName [args...] - dispatch command to a named object in FLAGS.OBJ
+    if typeof(c)=="string" and indexOf(c,"OBJ(")==0 then
+      parenEnd=indexOf(c,")")
+      if parenEnd!=null then
+        varName=c[4:parenEnd]
+        rest=trim(c[parenEnd+1:])
+        if rest then
+          objMap=globals.G_bash.FLAGS["OBJ"]
+          if not hasIndex(objMap,varName) then return Error.set("OBJ: '"+varName+"' not found (use _setvar("+varName+", _hold) first)")
+          storedObj=objMap[varName]
+          if not storedObj then return Error.set("OBJ: '"+varName+"' is null")
+          if not hasIndex(storedObj,"commands") then return Error.set("OBJ: '"+varName+"' has no commands")
+          parts=split(rest," ")
+          cmdName=lower(parts[0])
+          cmdArgs=parts[1:]
+          if cmdName=="home" or cmdName=="exit" then
+            if hasIndex(storedObj.commands,"exit") then storedObj.commands["exit"]([])
+            objMap[varName]=null
+            return false
+          end if
+          if not hasIndex(storedObj.commands,cmdName) then return Error.set("OBJ: unknown command '"+cmdName+"'")
+          _fn=storedObj.commands[cmdName] //split: obj.prop[key](args) fails at this nesting depth
+          objResult=_fn(cmdArgs)
+          //If the command returns a shell/object (e.g. su returning a root shell),
+          //update the stored entry so subsequent OBJ(name) calls use the new object
+          if objResult!=null and objResult!=false and hasIndex(objResult,"commands") then
+            objMap[varName]=objResult
+            globals.G_bash.FLAGS["hold"]=objResult
+          end if
+          return false
+        end if
+      end if
+    end if
+    cmd=self._prepareCommand(c,skipProcess,Obj)
+  end if
+  //Skip blank commands quietly
+  if cmd==null then
+    if gb.DEBUG then print yellow("  Command is blank - skipping")
+    return gb.SIGSTOP
+  end if
+  //Processing failure clears bash state
+  if cmd isa Error then
+    if gb.DEBUG then print red("  ERROR during preprocessing - clearing state")
+    return self.clear
+  end if
+  //Evaluate bash command arguments (_net_random, _sys_whoami, etc.) for all commands
+  if cmd.args and len(cmd.args)>0 then
+    evaluatedArgs=[]
+    for arg in cmd.args
+      argStr=str(arg)
+      //Check if argument contains _getvar or other function-like syntax
+      if indexOf(argStr,"_getvar(")!=null then
+        //Extract variable name from _getvar(varname)
+        startIdx=indexOf(argStr,"_getvar(")+8
+        endIdx=indexOf(argStr,")",startIdx)
+        if endIdx!=null then
+          varName=argStr[startIdx:endIdx]
+          varValue=self._getVar(varName)
+          if varValue!=null then push(evaluatedArgs,str(varValue)) else push(evaluatedArgs,argStr)
+          continue
+        end if
+      end if
+      //Expand pipe variables ($VAR syntax)
+      if indexOf(argStr,"$")!=null then argStr=Pipe._expandVars(argStr)
+      //Check for other bash commands
+      bashCmds=self._bashCmds
+      //Check if argument is a bash command that needs evaluation
+      if bashCmds.indexOf(argStr)!=null then
+        bashCmd=self._prepareCommand(argStr,false,Obj)
+        if bashCmd and bashCmd!=null and not (bashCmd isa Error) then
+          bashResult=self._exec(Obj,bashCmd,false)
+          if bashResult!=null and bashResult!=false and bashResult!=true then push(evaluatedArgs,str(bashResult)) else push(evaluatedArgs,argStr)
+        else
+          push(evaluatedArgs,argStr)
+        end if
+      else
+        push(evaluatedArgs,argStr)
+      end if
+    end for
+    cmd.args=evaluatedArgs
+    //Glob expansion: expand wildcard patterns in args for filesystem commands
+    //Commands that read/search existing files benefit from glob expansion
+    globCmds=["_fs_read","_fs_view","_fs_find","_fs_ls","_fs_cd"]
+    if indexOf(globCmds,cmd.name)!=null then
+      globExpanded=[]
+      for gArg in cmd.args
+        if typeof(gArg)=="string" and indexOf(gArg,"*")!=null then
+          expanded=Glob.expand(Obj,gArg)
+          if expanded and typeof(expanded)=="list" then globExpanded=globExpanded+expanded else push(globExpanded,gArg)
+        else
+          push(globExpanded,gArg)
+        end if
+      end for
+      cmd.args=globExpanded
+    end if
+  end if
+  if gb.DEBUG then
+    print green("  Final command build: ")+white(cmd.str)
+    print green("  Command name: ")+white(cmd.name)
+    print green("  Arguments: ")+yellow(cmd.args)
+    print green("  Args count: ")+yellow(len(cmd.args))
+  end if
+  //Dispatch to handler — O(1) map lookup, built locally on first call then cached in gb.
+  //IMPORTANT: map must be constructed inside this function (not at module level).
+  //GreyScript invokes @refs in module-level maps at init time (no args → crash).
+  //Local construction stores references correctly; same pattern as _builtinMap in bash_builtins.src.
+  if not hasIndex(gb,"_dc") then
+    gb._dc={
+      "_print":@_ef_print,
+      "_printnow":@_ef_print,
+      "_push":@_ef_push,
+      "_pop":@_ef_pop,
+      "_pull":@_ef_pull,
+      "_len":@_ef_len,
+      "_in":@_ef_in,
+      "_sleep":@_ef_sleep,
+      "sleep":@_ef_sleep,
+      "_exit":@_ef_exit,
+      "_throw":@_ef_throw,
+      "_home":@_ef_home,
+      "_fs_mkdir":@_ef_fs_mkdir,
+      "_fs_cd":@_ef_fs_cd,
+      "_fs_pwd":@_ef_fs_pwd,
+      "_sys_whoami":@_ef_sys_whoami,
+      "_sys_whatami":@_ef_sys_whatami,
+      "_net_ping":@_ef_net_ping,
+      "_net_port":@_ef_net_port,
+      "_net_ports":@_ef_net_ports,
+      "_net_devices":@_ef_net_devices,
+      "_net_router":@_ef_net_router,
+      "_net_devports":@_ef_net_devports,
+      "_net_fwrules":@_ef_net_fwrules,
+      "_scan":@_ef_scan,
+      "_shell":@_ef_shell,
+      "_computer":@_ef_computer,
+      "_file":@_ef_file,
+      "_firewall":@_ef_firewall,
+      "_rootpass":@_ef_rootpass,
+      "_userpass":@_ef_userpass,
+      "_local":@_ef_local,
+      "_bounce":@_ef_bounce,
+      "_netbounce":@_ef_netbounce,
+      "_lan":@_ef_lan,
+      "_wifi":@_ef_wifi,
+      "_net_random":@_ef_net_random,
+      "_sys_procs":@_ef_sys_procs,
+      "_hold":@_ef_hold,
+      "_holduser":@_ef_holduser,
+      "_sys_kill":@_ef_sys_kill,
+      "_fs_canwrite":@_ef_fs_canwrite,
+      "_fs_canexec":@_ef_fs_canexec,
+      "_fs_read":@_ef_fs_read,
+      "_fs_view":@_ef_fs_view,
+      "_fs_write":@_ef_fs_write,
+      "_fs_put":@_ef_fs_put,
+      "_fs_get":@_ef_fs_get,
+      "_fs_find":@_ef_fs_find
+    }
+  end if
+  if hasIndex(gb._dc,cmd.name) then
+    _ef=gb._dc[cmd.name]
+    return _ef(cmd,Obj)
+  end if
+  //Check if it's a user-defined function call
+  funcLookup=cmd.name
+  if hasIndex(cmd,"rawName") and cmd.rawName then funcLookup=cmd.rawName
+  if hasIndex(gb.FUNCS,funcLookup) then
+    if gb.DEBUG then
+      print cyan("  Command is user-defined function")
+      print cyan("    Calling function: ")+white(funcLookup)
+    end if
+    self._callFunc(Obj,funcLookup)
+    return false
+  end if
+  //Execute command from command table
+  if hasIndex(Obj.commands,cmd.name) then
+    if gb.DEBUG then
+      print cyan("  Command found in command table")
+      print cyan("    Executing: ")+white(cmd.name)
+    end if
+    _fn=Obj.commands[cmd.name]
+    _cmdRet=_fn(cmd.args)
+    if hasIndex(gb,"PENDING_OUTPUT") and gb.PENDING_OUTPUT then
+      print gb.PENDING_OUTPUT
+      gb.PENDING_OUTPUT=null
+    end if
+    if gb.SIGSTOP then return true
+    return _cmdRet
+  else
+    if gb.DEBUG then
+      print red("  WARNING: Command not found")
+      print red("    Command: ")+white(cmd.name)
+      print red("    Available functions: ")+yellow(gb.FUNCS.indexes)
+    end if
+  end if
+  if gb.DEBUG then print blue("  _exec complete")
+  //Check if there's pending output from network functions and print it immediately
+  if hasIndex(gb,"PENDING_OUTPUT") and gb.PENDING_OUTPUT then
+    print gb.PENDING_OUTPUT
+    gb.PENDING_OUTPUT=null
+  end if
+  return gb.SIGSTOP
+end function
+  //Check for _print/_printnow command
+_ef_print=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing _print command")
+    print cyan("    Message: ")+white(join(cmd.args," "))
+  end if
+  //Evaluate any GreyScript function calls in arguments
+  evaluatedArgs=[]
+  argCount=len(cmd.args)
+  argIdx=0
+  for arg in cmd.args
+    argStr=str(arg)
+    //Check if argument is a bash command (_sys_whoami, _sys_whatami, etc.)
+    //Only evaluate if it's the LAST argument to prevent mid-sentence evaluation
+    bashCmds=Bash._bashCmds
+    if bashCmds.indexOf(argStr)!=null and argIdx==argCount-1 then
+      bashCmd=Bash._prepareCommand(argStr,false,Obj)
+      if bashCmd and bashCmd!=null and not (bashCmd isa Error) then
+        bashResult=Bash._exec(Obj,bashCmd,false)
+        //All these commands should return a value (pwd now returns path string)
+        if bashResult!=null and bashResult!=false and bashResult!=true then push(evaluatedArgs,str(bashResult)) else push(evaluatedArgs,argStr)
+      else
+        push(evaluatedArgs,argStr)
+      end if
+    else if indexOf(argStr,"(")!=null and indexOf(argStr,")")!=null then
+      //Check if argument looks like a function call
+      openIdx=indexOf(argStr,"(")
+      if openIdx>0 then
+        charBefore=argStr[openIdx-1]
+        if (charBefore>="a" and charBefore<="z") or (charBefore>="A" and charBefore<="Z") or charBefore=="_" then
+          //Try to evaluate it
+          evalResult=Bash._evalGreyscriptCall(argStr,Obj)
+          if evalResult!=null and evalResult!=argStr then push(evaluatedArgs,str(evalResult)) else push(evaluatedArgs,argStr)
+        else
+          push(evaluatedArgs,argStr)
+        end if
+      else
+        push(evaluatedArgs,argStr)
+      end if
+    else
+      push(evaluatedArgs,argStr)
+    end if
+    argIdx+=1
+  end for
+  msg=join(evaluatedArgs," ")
+  //Process color functions: blue(text), red(text), etc.
+  colorFuncs=Bash._colorFuncs
+  for colorFunc in colorFuncs
+    while indexOf(msg,colorFunc+"(")!=null
+      startIdx=indexOf(msg,colorFunc+"(")
+      if startIdx==null then break
+      parenStart=startIdx+len(colorFunc)+1
+      //Check if parenStart is within bounds
+      _len=len(msg)
+      if parenStart>=_len then break
+      //Find matching closing paren
+      depth=1
+      closeIdx=null
+      i=parenStart
+      while i<_len
+        if msg[i]=="(" then depth+=1
+        if msg[i]==")" then
+          depth-=1
+          if depth==0 then
+            closeIdx=i
+            break
+          end if
+        end if
+        i+=1
+      end while
+      if closeIdx!=null then
+        //Extract text inside function call
+        innerText=msg[parenStart:closeIdx]
+        //Apply color function
+        if colorFunc=="orange" then
+          coloredText=innerText.orange
+        else if colorFunc=="cyan" then
+          coloredText=innerText.cyan
+        else if colorFunc=="magenta" then
+          coloredText=innerText.magenta
+        else if colorFunc=="lime" then
+          coloredText=innerText.lime
+        else if colorFunc=="bred" then
+          coloredText=innerText.bred
+        else if colorFunc=="green" then
+          coloredText=innerText.green
+        else if colorFunc=="password" then
+          coloredText=innerText.password
+        else if colorFunc=="blue" then
+          coloredText=innerText.blue
+        else if colorFunc=="liteblue" then
+          coloredText=innerText.liteblue
+        else if colorFunc=="yellow" then
+          coloredText=innerText.yellow
+        else if colorFunc=="white" then
+          coloredText=innerText.white
+        else if colorFunc=="purple" then
+          coloredText=innerText.purple
+        else if colorFunc=="iyellow" then
+          coloredText=innerText.iyellow
+        else if colorFunc=="liteGrey" then
+          coloredText=innerText.liteGrey
+        else if colorFunc=="error" then
+          coloredText=innerText.error
+        else if colorFunc=="red" then
+          coloredText=innerText.red
+        else if colorFunc=="grey" then
+          coloredText=innerText.grey
+        else if colorFunc=="black" then
+          coloredText=innerText.black
+        else if colorFunc=="bold" then
+          coloredText=innerText.bold
+        end if
+        //Replace function call with colored text
+        msg=msg[:startIdx]+coloredText+msg[closeIdx+1:]
+      else
+        break
+      end if
+    end while
+  end for
+  print msg
+  if cmd.name=="_printnow" then wait(0.01)
+  return false
+end function
+  //Check for _push command
+_ef_push=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing _push command")
+    print cyan("    Variable: ")+white(cmd.args[0])
+    if len(cmd.args)>1 then print cyan("    Value: ")+white(join(cmd.args[1:]," "))
+  end if
+  if len(cmd.args)<2 then return Error.set("_push requires 2 arguments: varname value")
+  varName=cmd.args[0]
+  value=join(cmd.args[1:]," ")
+  if not hasIndex(globals.G_bash.VARS,varName) then globals.G_bash.VARS[varName]=[]
+  if not (typeof(globals.G_bash.VARS[varName])=="list") then globals.G_bash.VARS[varName]=[globals.G_bash.VARS[varName]]
+  push(globals.G_bash.VARS[varName],value)
+  return false
+end function
+  //Check for _pop command
+_ef_pop=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing pop command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_pop requires 1 argument: varname")
+  varName=cmd.args[0]
+  if not hasIndex(globals.G_bash.VARS,varName) then return Error.set("Variable not found: "+varName)
+  if typeof(globals.G_bash.VARS[varName])!="list" then return Error.set("Variable is not a list: "+varName)
+  if len(globals.G_bash.VARS[varName])==0 then return Error.set("Cannot pop from empty list: "+varName)
+  pop(globals.G_bash.VARS[varName])
+  return false
+end function
+  //Check for _pull command
+_ef_pull=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing pull command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_pull requires 1 argument: varname")
+  varName=cmd.args[0]
+  if not hasIndex(globals.G_bash.VARS,varName) then return Error.set("Variable not found: "+varName)
+  if typeof(globals.G_bash.VARS[varName])!="list" then return Error.set("Variable is not a list: "+varName)
+  if len(globals.G_bash.VARS[varName])==0 then return Error.set("Cannot pull from empty list: "+varName)
+  pull(globals.G_bash.VARS[varName])
+  return false
+end function
+  //Check for _len command (get length of array or string)
+_ef_len=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing len command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_len requires 1 argument: varname")
+  varName=cmd.args[0]
+  if not hasIndex(globals.G_bash.VARS,varName) then return Error.set("Variable not found: "+varName)
+  varValue=globals.G_bash.VARS[varName]
+  lenVal=0
+  if typeof(varValue)=="list" or typeof(varValue)=="string" then lenVal=len(varValue)
+  //Print to terminal only when not in pipe/capture context
+  if not globals.G_pipe.PIPE_MODE then print lenVal
+  return lenVal
+end function
+  //Check for _in command (check if value exists in array)
+_ef_in=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing in command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<2 then return Error.set("_in requires 2 arguments: varname value")
+  varName=cmd.args[0]
+  searchValue=join(cmd.args[1:]," ")
+  if not hasIndex(globals.G_bash.VARS,varName) then return Error.set("Variable not found: "+varName)
+  if typeof(globals.G_bash.VARS[varName])!="list" then return Error.set("Variable is not a list: "+varName)
+  print indexOf(globals.G_bash.VARS[varName],searchValue)!=null
+  return false
+end function
+  //Check for _sleep command
+_ef_sleep=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing sleep command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_sleep requires 1 argument: seconds")
+  seconds=val(cmd.args[0])
+  if seconds<0.01 then seconds=0.01
+  if seconds>300 then seconds=300
+  wait(seconds)
+  return false
+end function
+  //Check for _exit command
+_ef_exit=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing exit command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  exitCode=0
+  if len(cmd.args)>=1 then exitCode=to_int(cmd.args[0])
+  globals.G_bash.SIGSTOP=true
+  if exitCode!=0 then print red("Exit with code "+exitCode)
+  return true
+end function
+  //Throw error for try/catch - raises error and halts execution
+_ef_throw=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing throw command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  msg="Script error"
+  if len(cmd.args)>=1 then msg=join(cmd.args," ")
+  globals.G_bash.LAST_ERROR=msg
+  globals.G_bash.SIGSTOP=true
+  print white(bold("["+error("!")+"] ")+msg)
+  return true
+end function
+  //Check for _home command - safe version that works in bash scripts
+_ef_home=function(cmd,Obj)
+  if globals.G_bash.DEBUG then print cyan("  Executing _home - unwinding session stack")
+  //Unwind all tracked sessions
+  if hasIndex(globals.G_bash,"SESSION_STACK") and globals.G_bash.SESSION_STACK then
+    sessionIds=globals.G_bash.SESSION_STACK.indexes
+    sessionCount=len(sessionIds)
+    if globals.G_bash.DEBUG then print cyan("    Tracked sessions: "+sessionCount)
+    //Loop through all sessions and close them
+    for sessionId in sessionIds
+      sessionObj=globals.G_bash.SESSION_STACK[sessionId]
+      if globals.G_bash.DEBUG then
+        objType="unknown"
+        if hasIndex(sessionObj,"type") then objType=sessionObj.type
+        print cyan("      Closing session: "+objType+" ("+sessionId+")")
+      end if
+      //Call exit command on the session object to close it
+      if hasIndex(sessionObj,"commands") and hasIndex(sessionObj.commands,"exit") then sessionObj.commands["exit"]([])
+    end for
+    //Clear the session stack
+    globals.G_bash.SESSION_STACK={}
+  end if
+  //Clean up IPC safe list entry
+  if hasIndex(globals.G_IPCSafe,Obj.id) then remove(globals.G_IPCSafe,Obj.id)
+  //Clear the command queue to prevent nested continueMacro calls from processing stale commands
+  if globals.G_bash.RUN then globals.G_bash.RUN=[]
+  //Signal proxy/pivot to consume the back flag and stay running
+  if globals.G_hasPivoted then globals.G_attributes.home=true
+  //Stop bash execution - set both SIGSTOP and SIGBREAK to halt all processing
+  globals.G_bash.SIGSTOP=true
+  globals.G_bash.SIGBREAK=true
+  return true
+end function
+//Check for _fs_mkdir command
+_ef_fs_mkdir=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing fs_mkdir command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_fs_mkdir requires 1 argument: dirname")
+  if not hasIndex(Obj,"computer") or not Obj.computer then return Error.set("No computer access available")
+  absPath=Io._getPath(Obj,cmd.args[0])
+  if absPath isa Error then return absPath
+  pathParts=absPath.split("/")
+  dirName=pathParts[-1]
+  parentPath=join(pathParts[:-1],"/")
+  if len(parentPath)==0 then parentPath="/"
+  result=create_folder(Obj.computer,parentPath,dirName)
+  if result!=1 then
+    if result isa string then return Info.error(result)
+    return Info.error("Failed to create directory: "+cmd.args[0])
+  end if
+  return false
+end function
+//Check for _fs_cd command
+_ef_fs_cd=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing fs_cd command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_fs_cd requires 1 argument: path")
+  targetPath=cmd.args[0]
+  //Resolve to absolute path using get_abs_path — handles .., ../foo, ~, . and absolute paths
+  curPath=""
+  if hasIndex(Obj,"dir") and Obj.dir and Obj.dir.current then
+    curPath=path(Obj.dir.current)
+  else if hasIndex(Obj,"root") and Obj.root then
+    curPath=path(Obj.root)
+  end if
+  absPath=get_abs_path(targetPath,curPath)
+  //Detect "already at root" — going up from / stays at /
+  if targetPath==".." and absPath==curPath then return Info.error("Already at root directory")
+  targetDir=Io.getFileObj(Obj,absPath)
+  if not targetDir or targetDir isa Error then return Info.error("Directory not found: "+targetPath)
+  if not is_folder(targetDir) then return Info.error("Not a directory: "+targetPath)
+  if hasIndex(Obj,"dir") and Obj.dir then Obj.dir.current=targetDir
+  return false
+end function
+  //Check for _fs_pwd command
+_ef_fs_pwd=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing fs_pwd command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  pathResult=""
+  if hasIndex(Obj,"dir") and Obj.dir and Obj.dir.current then
+    pathResult=path(Obj.dir.current)
+  else if hasIndex(Obj,"root") and Obj.root then
+    pathResult=path(Obj.root)
+  else
+    pathResult="/"
+  end if
+  if not globals.G_pipe.PIPE_MODE then print pathResult
+  return pathResult
+end function
+  //Check for _sys_whoami command
+_ef_sys_whoami=function(cmd,Obj);if hasIndex(Obj,"user") and Obj.user and hasIndex(Obj.user,"raw") then return Obj.user.raw else return "unknown";end function
+  //Check for _sys_whatami command
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing sys_whoami command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+_ef_sys_whatami=function(cmd,Obj);if hasIndex(Obj,"type") and Obj.type then return Obj.type else return "unknown";end function
+  //Check for _net_ping command
+_ef_net_ping=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing _net_ping command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_net_ping requires 1 argument: ip_address")
+  targetIP=cmd.args[0]
+  if not hasIndex(Obj,"shell") or not Obj.shell then return Error.set("No shell access available")
+  result=Obj.shell.ping(targetIP)
+  if globals.G_pipe.PIPE_MODE then
+    if typeof(result)=="string" then return 0
+    return result
+  end if
+  if typeof(result)=="string" then
+    print red("Invalid IP: "+result)
+  else if result==1 then
+    print green("Host "+targetIP+" is reachable")
+  else
+    print red("Host "+targetIP+" is not reachable")
+  end if
+  return false
+end function
+  //Check for _net_port command
+_ef_net_port=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing net_port command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<2 then return Error.set("_net_port requires 2 arguments: ip_address port")
+  targetIP=cmd.args[0]
+  portNum=to_int(cmd.args[1])
+  if not hasIndex(Obj,"computer") or not Obj.computer then
+    if globals.G_pipe.PIPE_MODE then return 0
+    return Error.set("No computer access available")
+  end if
+  router=get_router(targetIP)
+  if not router then
+    if globals.G_pipe.PIPE_MODE then return 0
+    print red("Cannot reach "+targetIP)
+    return false
+  end if
+  //Get all used ports and check if the specified port exists
+  ports=router.used_ports
+  portObj=null
+  for p in ports
+    if p.port_number==portNum then
+      portObj=p
+      break
+    end if
+  end for
+  isOpen=0
+  if portObj then
+    if not portObj.is_closed then isOpen=1
+  end if
+  if globals.G_pipe.PIPE_MODE then return isOpen
+  //Print mode
+  if isOpen then
+    print green("Port "+portNum+" is open on "+targetIP)
+    serviceInfo=router.port_info(portNum)
+    if serviceInfo then print "  Service: "+serviceInfo
+  else
+    print red("Port "+portNum+" is closed on "+targetIP)
+  end if
+  return false
+end function
+  //Check for _net_ports command (formatted output)
+  //Check for _net_ports command (unified: prints or returns via PIPE_MODE)
+_ef_net_ports=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing _net_ports command")
+    print cyan("    Target IP: ")+white(cmd.args[0])
+  end if
+  if len(cmd.args)<1 then return Error.set("_net_ports requires 1 argument: ip_address")
+  targetIP=cmd.args[0]
+  if not hasIndex(Obj,"computer") or not Obj.computer then
+    if globals.G_pipe.PIPE_MODE then return []
+    return Error.set("No computer access available")
+  end if
+  router=get_router(targetIP)
+  if not router then
+    if globals.G_pipe.PIPE_MODE then return []
+    print "Cannot reach "+targetIP
+    return false
+  end if
+  //Get all used ports from the router
+  usedPorts=used_ports(router)
+  //Return mode: return list of port data maps (for _setvar capture and pipes)
+  if globals.G_pipe.PIPE_MODE then
+    openPorts=[]
+    seenPorts=[]
+    //Insert port 0 (router) for public IPs
+    push(seenPorts,0)
+    routerService="Kernel_router "+kernel_version(router)
+    push(openPorts,{"port":0,"service":routerService})
+    if usedPorts and typeof(usedPorts)=="list" then
+      for port in usedPorts
+        portNum=port.port_number
+        if portNum!=null and seenPorts.indexOf(portNum)==null then
+          push(seenPorts,portNum)
+          result=router.port_info(port)
+          portData={"port":portNum,"service":result}
+          push(openPorts,portData)
+        end if
+      end for
+    end if
+    return openPorts
+  end if
+  //Print mode: formatted output (standalone)
+  if usedPorts and typeof(usedPorts)=="list" then push(usedPorts,{"get_lan_ip":local_ip(router),"port_number":0,"is_closed":0,"version":kernel_version(router),"service":"Kernel_router","classID":"port"}) else usedPorts=[{"get_lan_ip":local_ip(router),"port_number":0,"is_closed":0,"version":kernel_version(router),"service":"Kernel_router","classID":"port"}]
+  allPorts=[]
+  output=[]
+  for port in usedPorts
+    portNum=port.port_number
+    portLanIP=port.get_lan_ip
+    if portNum!=null and allPorts.indexOf(portNum)==null then
+      push(allPorts,portNum)
+      if portNum==0 then
+        result=port.service+" "+port.version
+        push(output,"[OPEN] Port "+portNum+" - "+result+" -> "+portLanIP+":"+portNum)
+      else
+        result=router.port_info(port)
+        if result then push(output,"[OPEN] Port "+portNum+" - "+result+" -> "+portLanIP+":"+portNum) else push(output,"[OPEN] Port "+portNum+" -> "+portLanIP+":"+portNum)
+      end if
+    end if
+  end for
+  commonPorts=Bash._commonPorts
+  for scanPort in commonPorts
+    if allPorts.indexOf(scanPort)==null then
+      result=router.port_info(scanPort)
+      if result then
+        push(allPorts,scanPort)
+        push(output,"[OPEN] Port "+scanPort+" - "+result)
+      end if
+    end if
+  end for
+  if len(allPorts)==0 then
+    print "No open ports found on "+targetIP
+  else
+    lines=["Found "+len(allPorts)+" open port(s) on "+targetIP]
+    for line in output;push(lines,"  "+line);end for
+    print join(lines,char(10))
+  end if
+  return false
+end function
+  //Check for _net_devices command (unified: prints or returns via PIPE_MODE)
+_ef_net_devices=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing net_devices command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_net_devices requires 1 argument: router_ip")
+  routerIP=cmd.args[0]
+  if not hasIndex(Obj,"computer") or not Obj.computer then
+    if globals.G_pipe.PIPE_MODE then return []
+    return Error.set("No computer access available")
+  end if
+  router=get_router(routerIP)
+  if not router then
+    if globals.G_pipe.PIPE_MODE then return []
+    print "Cannot reach router "+routerIP
+    return false
+  end if
+  devices=devices_lan_ip(router)
+  if not devices then
+    if globals.G_pipe.PIPE_MODE then return []
+    print "No devices found on LAN"
+    return false
+  end if
+  //Return mode
+  if globals.G_pipe.PIPE_MODE then return devices
+  //Print mode
+  if len(devices)==0 then
+    print "No devices found on LAN"
+    return false
+  end if
+  lines=["Found "+len(devices)+" device(s) on LAN:"]
+  for deviceIP in devices;push(lines,"  [DEVICE] "+deviceIP);end for
+  print join(lines,char(10))
+  return false
+end function
+  //Check for _net_router command (unified: prints or returns via PIPE_MODE)
+_ef_net_router=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing net_router command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_net_router requires 1 argument: router_ip")
+  routerIP=cmd.args[0]
+  if not hasIndex(Obj,"computer") or not Obj.computer then
+    if globals.G_pipe.PIPE_MODE then return {}
+    return Error.set("No computer access available")
+  end if
+  router=get_router(routerIP)
+  if not router then
+    if globals.G_pipe.PIPE_MODE then return {}
+    print red("Cannot reach router "+routerIP)
+    return false
+  end if
+  //Return mode
+  if globals.G_pipe.PIPE_MODE then
+    routerData={}
+    routerData["local_ip"]=local_ip(router)
+    routerData["public_ip"]=public_ip(router)
+    routerData["bssid"]=bssid_name(router)
+    routerData["essid"]=essid_name(router)
+    routerData["kernel_version"]=kernel_version(router)
+    routerData["used_ports"]=used_ports(router)
+    return routerData
+  end if
+  //Print mode
+  resultStr="=== Router Information ==="
+  resultStr=resultStr+char(10)+"Local IP: "+router.local_ip
+  resultStr=resultStr+char(10)+"Public IP: "+router.public_ip
+  resultStr=resultStr+char(10)+"BSSID: "+router.bssid_name
+  resultStr=resultStr+char(10)+"ESSID: "+router.essid_name
+  resultStr=resultStr+char(10)+"Kernel Version: "+router.kernel_version
+  usedPorts=router.used_ports
+  resultStr=resultStr+char(10)+"Used Ports: "+len(usedPorts)
+  print resultStr
+  return false
+end function
+  //Check for _net_devports command (unified: prints or returns via PIPE_MODE)
+_ef_net_devports=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing net_devports command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<2 then return Error.set("_net_devports requires 2 arguments: router_ip device_ip")
+  routerIP=cmd.args[0]
+  deviceIP=cmd.args[1]
+  if not hasIndex(Obj,"computer") or not Obj.computer then
+    if globals.G_pipe.PIPE_MODE then return []
+    return Error.set("No computer access available")
+  end if
+  router=get_router(routerIP)
+  if not router then
+    if globals.G_pipe.PIPE_MODE then return []
+    print "Cannot reach router "+routerIP
+    return false
+  end if
+  ports=device_ports(router,deviceIP)
+  if not ports then
+    if globals.G_pipe.PIPE_MODE then return []
+    print "Cannot get ports for device "+deviceIP
+    return false
+  end if
+  if typeof(ports)=="string" then
+    if globals.G_pipe.PIPE_MODE then return []
+    print ports
+    return false
+  end if
+  openPorts=[]
+  for port in ports;if not is_closed(port) then push(openPorts,port);end for
+  //Return mode
+  if globals.G_pipe.PIPE_MODE then
+    portDataList=[]
+    for port in openPorts
+      portData={}
+      portData["port_number"]=port_number(port)
+      portData["service"]=port_info(router,port)
+      portData["lan_ip"]=lan_ip(port)
+      push(portDataList,portData)
+    end for
+    return portDataList
+  end if
+  //Print mode
+  if len(openPorts)==0 then
+    print "Device "+deviceIP+" has no open ports"
+    return false
+  end if
+  resultStr="Device "+deviceIP+" has "+len(openPorts)+" open port(s):"
+  for port in openPorts;portInfo=port_info(router,port);if portInfo then resultStr=resultStr+char(10)+"  [OPEN] Port "+port_number(port)+" - "+portInfo else resultStr=resultStr+char(10)+"  [OPEN] Port "+port_number(port);end for
+  print resultStr
+  return false
+end function
+  //Check for _net_fwrules command (unified: prints or returns via PIPE_MODE)
+_ef_net_fwrules=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing net_fwrules command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_net_fwrules requires 1 argument: router_ip")
+  routerIP=cmd.args[0]
+  if not hasIndex(Obj,"computer") or not Obj.computer then
+    if globals.G_pipe.PIPE_MODE then return []
+    return Error.set("No computer access available")
+  end if
+  router=get_router(routerIP)
+  if not router then
+    if globals.G_pipe.PIPE_MODE then return []
+    print "Cannot reach router "+routerIP
+    return false
+  end if
+  rules=firewall_rules(router)
+  if not rules then
+    if globals.G_pipe.PIPE_MODE then return []
+    print "No firewall rules found"
+    return false
+  end if
+  //Return mode
+  if globals.G_pipe.PIPE_MODE then return rules
+  //Print mode
+  if len(rules)==0 then
+    print "No firewall rules found"
+    return false
+  end if
+  resultStr="=== Firewall Rules ==="
+  ruleNum=0
+  for rule in rules;ruleNum+=1;resultStr=resultStr+char(10)+"["+str(ruleNum)+"] "+rule;end for
+  print resultStr
+  return false
+end function
+  //Check for _scan command - scan a remote IP and return port/exploit data as a map
+  //Usage: _setvar(result, _scan 1.2.3.4)
+  //Returns: {"ip":..., "port_info":[{port,service,local_ip,public_ip},...], "metalib":{port:lib,...}}
+_ef_scan=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing scan command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_scan requires 1 argument: ip_address")
+  targetIP=Net.lookup(cmd.args[0])
+  if not targetIP then return Error.set("_scan: invalid ip: "+cmd.args[0])
+  if indexOf(targetIP,".")==null then return Error.set("_scan: not a valid ip: "+targetIP)
+  if not hasIndex(Obj,"computer") or not Obj.computer then return Error.set("_scan: no computer access")
+  _mx=Library.metaxploit
+  if hasIndex(Obj,"metaxploit") and Obj.metaxploit then _mx=Obj.metaxploit
+  if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then _mx=Obj.packMetaxploit
+  if not _mx then return Error.set("_scan: metaxploit library not available")
+  r=get_router(targetIP)
+  if not r then
+    if globals.G_pipe.PIPE_MODE then return {}
+    print red("_scan: cannot reach "+targetIP)
+    return false
+  end if
+  //Build port service lookup from router
+  portServices={}
+  portServices["0"]="kernel_router "+kernel_version(r)
+  upList=used_ports(r)
+  if upList then
+    for _up in upList
+      _pn=str(port_number(_up))
+      _svc=port_info(r,_up)
+      if not _svc then _svc=""
+      portServices[_pn]=_svc
+    end for
+  end if
+  entries=Exploit.extract(r,targetIP,_mx)
+  if entries isa Error then
+    if globals.G_pipe.PIPE_MODE then return {}
+    print red("_scan: no attack vectors found for "+targetIP)
+    return false
+  end if
+  portInfoList=[]
+  metalibMap={}
+  for entry in entries
+    portNum=entry["port_number"]
+    portEntry={}
+    portEntry["port"]=portNum
+    portEntry["service"]=portServices[str(portNum)]
+    if not portEntry["service"] then portEntry["service"]=""
+    portEntry["local_ip"]=entry["local_ip"]
+    portEntry["public_ip"]=entry["public_ip"]
+    _lib=entry["metaLib"]
+    if not Exploit.haveAlready(_lib) then Exploit.headless(_lib)
+    _exploitList=Exploit.get(_lib)
+    _exploitNames=[]
+    if _exploitList then
+      for _ex in _exploitList
+        if _ex.e=="?" or _ex.e=="t" then continue
+        _exStr=Exploit.getItem[_ex.e]
+        if _ex.u and _ex.u!="?" then _exStr=_exStr+" ("+Exploit.getItem[_ex.u]+")"
+        push(_exploitNames,_exStr)
+      end for
+    end if
+    portEntry["exploits"]=_exploitNames
+    push(portInfoList,portEntry)
+    metalibMap[str(portNum)]=entry["metaLib"]
+  end for
+  scanResult={"ip":targetIP,"port_info":portInfoList,"metalib":metalibMap}
+  if not globals.G_pipe.PIPE_MODE then
+    print green("Scan: "+targetIP+" — "+len(portInfoList)+" service(s)")
+    for _pe in portInfoList
+      _svc=_pe["service"]
+      if not _svc then _svc="unknown"
+      print "  ["+str(_pe["port"])+"] "+_svc+" ("+_pe["local_ip"]+")"
+    end for
+  end if
+  return scanResult
+end function
+  //_shell - Find best shell exploit for an IP and return headless ShellObject
+  //Usage: _shell <ip> [--root|--user|--guest] [--port N]
+  //Stores ShellObject in FLAGS["hold"]; use _hold <cmd> to dispatch
+_ef_shell=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing shell command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_shell requires 1 argument: ip_address")
+  targetIP=Net.lookup(cmd.args[0])
+  if not targetIP then return Error.set("_shell: invalid ip: "+cmd.args[0])
+  if indexOf(targetIP,".")==null then return Error.set("_shell: not a valid ip: "+targetIP)
+  setup=Bash.exploitSetup(Obj,targetIP,"_shell")
+  if setup isa Error then return setup
+  flags=Bash.parseExploitArgs(cmd.args)
+  matches=Bash.findBestExploit(setup.entries,"s",flags.prefUser,flags.port)
+  if len(matches)==0 then return Error.set("_shell: no shell exploit found for "+targetIP)
+  obj=null;match=null
+  for m in matches
+    raw=Exploit.run(m.exploit,m.entry)
+    if not raw or raw isa Error then continue
+    obj=Exploit.getShell(raw,false,[],true)
+    if not obj or obj isa Error then
+      obj=null
+    else
+      match=m
+      break
+    end if
+  end for
+  if not obj then return Error.set("_shell: all shell exploits failed for "+targetIP)
+  globals.G_bash.FLAGS["hold"]=obj
+  if globals.G_pipe.PIPE_MODE then return obj
+  print green("_shell: "+obj.user.name+"@"+obj.meta.public_ip+" ["+obj.user.raw+"] on port "+str(match.entry["port_number"]))
+  return false
+end function
+  //_computer - Find best computer exploit for an IP and return headless ComputerObject
+  //Usage: _computer <ip> [--root|--user|--guest] [--port N]
+  //Stores ComputerObject in FLAGS["hold"]; use _hold <cmd> to dispatch
+_ef_computer=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing computer command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_computer requires 1 argument: ip_address")
+  targetIP=Net.lookup(cmd.args[0])
+  if not targetIP then return Error.set("_computer: invalid ip: "+cmd.args[0])
+  if indexOf(targetIP,".")==null then return Error.set("_computer: not a valid ip: "+targetIP)
+  setup=Bash.exploitSetup(Obj,targetIP,"_computer")
+  if setup isa Error then return setup
+  flags=Bash.parseExploitArgs(cmd.args)
+  matches=Bash.findBestExploit(setup.entries,"c",flags.prefUser,flags.port)
+  if len(matches)==0 then return Error.set("_computer: no computer exploit found for "+targetIP)
+  obj=null;match=null
+  for m in matches
+    raw=Exploit.run(m.exploit,m.entry)
+    if not raw or raw isa Error then continue
+    obj=Exploit.getComputer(raw,true)
+    if not obj or obj isa Error then
+      obj=null
+    else
+      match=m
+      break
+    end if
+  end for
+  if not obj then return Error.set("_computer: all computer exploits failed for "+targetIP)
+  globals.G_bash.FLAGS["hold"]=obj
+  if globals.G_pipe.PIPE_MODE then return obj
+  print green("_computer: "+obj.user.name+"@"+obj.meta.public_ip+" ["+obj.user.raw+"] on port "+str(match.entry["port_number"]))
+  return false
+end function
+  //_file - Find best file exploit for an IP and return headless FileObject
+  //Usage: _file <ip> [--root|--user|--guest] [--port N]
+  //Stores FileObject in FLAGS["hold"]; use _hold <cmd> to dispatch
+_ef_file=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing file command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_file requires 1 argument: ip_address")
+  targetIP=Net.lookup(cmd.args[0])
+  if not targetIP then return Error.set("_file: invalid ip: "+cmd.args[0])
+  if indexOf(targetIP,".")==null then return Error.set("_file: not a valid ip: "+targetIP)
+  setup=Bash.exploitSetup(Obj,targetIP,"_file")
+  if setup isa Error then return setup
+  flags=Bash.parseExploitArgs(cmd.args)
+  matches=Bash.findBestExploit(setup.entries,"f",flags.prefUser,flags.port)
+  if len(matches)==0 then return Error.set("_file: no file exploit found for "+targetIP)
+  obj=null;match=null
+  for m in matches
+    raw=Exploit.run(m.exploit,m.entry)
+    if not raw or raw isa Error then continue
+    obj=Exploit.getFile(raw,m.entry,true)
+    if not obj or obj isa Error then
+      obj=null
+    else
+      match=m
+      break
+    end if
+  end for
+  if not obj then return Error.set("_file: all file exploits failed for "+targetIP)
+  globals.G_bash.FLAGS["hold"]=obj
+  if globals.G_pipe.PIPE_MODE then return obj
+  print green("_file: "+obj.user.name+"@"+obj.meta.public_ip+" ["+obj.user.raw+"] on port "+str(match.entry["port_number"]))
+  return false
+end function
+  //_firewall - Disable firewall on target IP
+  //Usage: _firewall <ip> [--port N]
+_ef_firewall=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing firewall command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_firewall requires 1 argument: ip_address")
+  targetIP=Net.lookup(cmd.args[0])
+  if not targetIP then return Error.set("_firewall: invalid ip: "+cmd.args[0])
+  if indexOf(targetIP,".")==null then return Error.set("_firewall: not a valid ip: "+targetIP)
+  setup=Bash.exploitSetup(Obj,targetIP,"_firewall")
+  if setup isa Error then return setup
+  if public_ip(setup.router)!=targetIP and local_ip(setup.router)!=targetIP then return Error.set("_firewall: "+targetIP+" is not a router")
+  flags=Bash.parseExploitArgs(cmd.args)
+  matches=Bash.findBestExploit(setup.entries,"d","",flags.port)
+  if len(matches)==0 then return Error.set("_firewall: no firewall exploit found for "+targetIP)
+  result=null
+  for m in matches
+    result=Exploit.run(m.exploit,m.entry)
+    if result and not (result isa Error) then break
+    result=null
+  end for
+  if not result then return Error.set("_firewall: all firewall exploits failed for "+targetIP)
+  if globals.G_pipe.PIPE_MODE then return result
+  print green("_firewall: firewall disabled on "+targetIP)
+  return false
+end function
+  //_rootpass - Change root password on target IP
+  //Usage: _rootpass <ip> <newpassword> [--port N]
+_ef_rootpass=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing rootpass command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<2 then return Error.set("_rootpass requires 2 arguments: ip_address newpassword")
+  targetIP=Net.lookup(cmd.args[0])
+  if not targetIP then return Error.set("_rootpass: invalid ip: "+cmd.args[0])
+  if indexOf(targetIP,".")==null then return Error.set("_rootpass: not a valid ip: "+targetIP)
+  setup=Bash.exploitSetup(Obj,targetIP,"_rootpass")
+  if setup isa Error then return setup
+  flags=Bash.parseExploitArgs(cmd.args,2)
+  matches=Bash.findBestExploit(setup.entries,"p","",flags.port)
+  if len(matches)==0 then return Error.set("_rootpass: no root password exploit found for "+targetIP)
+  result=null
+  for m in matches
+    result=Exploit.run(m.exploit,m.entry,cmd.args[1])
+    if result and not (result isa Error) then break
+    result=null
+  end for
+  if not result then return Error.set("_rootpass: all root password exploits failed for "+targetIP)
+  if globals.G_pipe.PIPE_MODE then return result
+  print green("_rootpass: root password changed on "+targetIP)
+  return false
+end function
+  //_userpass - Change user password on target IP
+  //Usage: _userpass <ip> <newpassword> [--port N]
+_ef_userpass=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing userpass command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<2 then return Error.set("_userpass requires 2 arguments: ip_address newpassword")
+  targetIP=Net.lookup(cmd.args[0])
+  if not targetIP then return Error.set("_userpass: invalid ip: "+cmd.args[0])
+  if indexOf(targetIP,".")==null then return Error.set("_userpass: not a valid ip: "+targetIP)
+  setup=Bash.exploitSetup(Obj,targetIP,"_userpass")
+  if setup isa Error then return setup
+  flags=Bash.parseExploitArgs(cmd.args,2)
+  matches=Bash.findBestExploit(setup.entries,"w","",flags.port)
+  if len(matches)==0 then return Error.set("_userpass: no user password exploit found for "+targetIP)
+  result=null
+  for m in matches
+    result=Exploit.run(m.exploit,m.entry,cmd.args[1])
+    if result and not (result isa Error) then break
+    result=null
+  end for
+  if not result then return Error.set("_userpass: all user password exploits failed for "+targetIP)
+  if globals.G_pipe.PIPE_MODE then return result
+  print green("_userpass: user password changed on "+targetIP)
+  return false
+end function
+  //_local - Attack current machine's /lib folder using a specific exploit type
+  //Usage: _local [shell|computer|file|firewall|bounce|rootpass|userpass] [<password>]
+  //Default type: shell. rootpass/userpass require a password argument.
+  //Must be run from a computer context (after _bounce/_shell/_computer)
+_ef_local=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing local command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if not hasIndex(Obj,"computer") or not Obj.computer then return Error.set("_local: no computer access")
+  isShell=hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit!=null
+  //Determine type from first arg; default to shell
+  typeName="shell"
+  newPass=""
+  if len(cmd.args)>=1 then
+    _a0=cmd.args[0]
+    if _a0=="shell" or _a0=="computer" or _a0=="file" or _a0=="firewall" or _a0=="bounce" or _a0=="rootpass" or _a0=="userpass" then
+      typeName=_a0
+      if len(cmd.args)>=2 then newPass=cmd.args[1]
+    end if
+  end if
+  //Parse optional --lib flag
+  _libHint=""
+  _li=0
+  while _li<len(cmd.args)
+    if cmd.args[_li]=="--lib" and _li+1<len(cmd.args) then
+      _li=_li+1
+      _libHint=cmd.args[_li]
+      if _li==2 then newPass=""  //don't treat --lib value as password
+    end if
+    _li=_li+1
+  end while
+  //Map type name to exploit code
+  if typeName=="shell" then
+    _code="s"
+  else if typeName=="computer" then
+    _code="c"
+  else if typeName=="file" then
+    _code="f"
+  else if typeName=="firewall" then
+    _code="d"
+  else if typeName=="bounce" then
+    _code="l"
+  else if typeName=="rootpass" then
+    _code="p"
+  else if typeName=="userpass" then
+    _code="w"
+  else
+    _code="s"
+  end if
+  if (_code=="p" or _code=="w") and not newPass then return Error.set("_local: "+typeName+" requires a password argument")
+  //Build argv for scanForExploit
+  //  p/w: [code, password]   bounce: [code, lanIP?]   others: [code]
+  _argv=[_code]
+  if (_code=="p" or _code=="w") and newPass then push(_argv,newPass)
+  if _code=="l" and newPass then push(_argv,newPass)
+  if _libHint then push(_argv,"-l");push(_argv,_libHint)
+  raw=Exploit.scanForExploit(Obj,_argv,isShell,true)
+  if not raw or raw isa Error then return Error.set("_local: no "+typeName+" exploit found")
+  //Get result object
+  obj=null
+  if _code=="s" then
+    obj=Exploit.getShell(raw,false,[],true)
+  else if _code=="c" or _code=="l" then
+    obj=Exploit.getComputer(raw,true)
+  else if _code=="f" then
+    obj=Exploit.getFile(raw,null,true)
+  else if _code=="d" then
+    obj=true
+  else if _code=="p" or _code=="w" then
+    obj=true
+  end if
+  if not obj or (obj isa Error) then return Error.set("_local: "+typeName+" exploit failed")
+  //Store in hold (non-boolean results only)
+  if not (obj==true) then globals.G_bash.FLAGS["hold"]=obj
+  if globals.G_pipe.PIPE_MODE then return obj
+  //Print result
+  if _code=="d" then
+    print green("_local: firewall disabled on "+Obj.computer.public_ip)
+  else if _code=="p" or _code=="w" then
+    print green("_local: "+typeName+" changed to "+newPass+" on "+Obj.computer.public_ip)
+  else
+    print green("_local: "+typeName+" → "+obj.user.name+" ["+obj.user.raw+"] on "+Obj.computer.public_ip)
+  end if
+  return false
+end function
+  //_bounce - LAN bounce; get a computer on the target router's local network
+  //Usage: _bounce <ip> [<lan_ip>] [--port N]
+  //Auto-detects LAN IP if not supplied. Stores ComputerObject in FLAGS["hold"].
+_ef_bounce=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing bounce command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if not hasIndex(Obj,"computer") or not Obj.computer then return Error.set("_bounce: no computer access")
+  _curIP=Obj.computer.public_ip
+  _r=get_router(_curIP)
+  if not _r or (public_ip(_r)!=_curIP and local_ip(_r)!=_curIP) then return Error.set("_bounce: must be run from a router")
+  if len(cmd.args)<1 then return Error.set("_bounce requires 1 argument: ip_address")
+  targetIP=Net.lookup(cmd.args[0])
+  if not targetIP then return Error.set("_bounce: invalid ip: "+cmd.args[0])
+  if indexOf(targetIP,".")==null then return Error.set("_bounce: not a valid ip: "+targetIP)
+  setup=Bash.exploitSetup(Obj,targetIP,"_bounce")
+  if setup isa Error then return setup
+  if public_ip(setup.router)!=targetIP and local_ip(setup.router)!=targetIP then return Error.set("_bounce: "+targetIP+" is not a router")
+  flags=Bash.parseExploitArgs(cmd.args)
+  matches=Bash.findBestExploit(setup.entries,"l","",flags.port)
+  if len(matches)==0 then return Error.set("_bounce: no bounce exploit found for "+targetIP)
+  _argLanIP=null
+  if len(cmd.args)>=2 and cmd.args[1]!="--port" and cmd.args[1]!="-p" then _argLanIP=cmd.args[1]
+  obj=null;match=null
+  for m in matches
+    lanIP=_argLanIP
+    if not lanIP then lanIP=Bash.findLanIP(m.entry)
+    raw=Exploit.run(m.exploit,m.entry,lanIP)
+    if not raw or raw isa Error then continue
+    obj=Exploit.getComputer(raw,true)
+    if not obj or obj isa Error then
+      obj=null
+    else
+      match=m
+      break
+    end if
+  end for
+  if not obj then return Error.set("_bounce: all bounce exploits failed for "+targetIP)
+  globals.G_bash.FLAGS["hold"]=obj
+  if globals.G_pipe.PIPE_MODE then return obj
+  print green("_bounce: "+obj.user.name+"@"+obj.meta.public_ip+" ["+obj.user.raw+"] (via "+targetIP+")")
+  return false
+end function
+  //_netbounce - Internal LAN bounce; get a computer on the target's internal network
+  //Usage: _netbounce <ip> [<lan_ip>] [--port N]
+  //Auto-detects LAN IP if not supplied. Stores ComputerObject in FLAGS["hold"].
+_ef_netbounce=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing netbounce command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if not hasIndex(Obj,"computer") or not Obj.computer then return Error.set("_netbounce: no computer access")
+  _curIP=Obj.computer.public_ip
+  _r=get_router(_curIP)
+  if not _r or (public_ip(_r)!=_curIP and local_ip(_r)!=_curIP) then return Error.set("_netbounce: must be run from a router")
+  if len(cmd.args)<1 then return Error.set("_netbounce requires 1 argument: ip_address")
+  targetIP=Net.lookup(cmd.args[0])
+  if not targetIP then return Error.set("_netbounce: invalid ip: "+cmd.args[0])
+  if indexOf(targetIP,".")==null then return Error.set("_netbounce: not a valid ip: "+targetIP)
+  setup=Bash.exploitSetup(Obj,targetIP,"_netbounce")
+  if setup isa Error then return setup
+  if public_ip(setup.router)!=targetIP and local_ip(setup.router)!=targetIP then return Error.set("_netbounce: "+targetIP+" is not a router")
+  flags=Bash.parseExploitArgs(cmd.args)
+  matches=Bash.findBestExploit(setup.entries,"i","",flags.port)
+  if len(matches)==0 then return Error.set("_netbounce: no internal bounce exploit found for "+targetIP)
+  _argLanIP=null
+  if len(cmd.args)>=2 and cmd.args[1]!="--port" and cmd.args[1]!="-p" then _argLanIP=cmd.args[1]
+  obj=null;match=null
+  for m in matches
+    lanIP=_argLanIP
+    if not lanIP then lanIP=Bash.findLanIP(m.entry)
+    raw=Exploit.run(m.exploit,m.entry,lanIP)
+    if not raw or raw isa Error then continue
+    obj=Exploit.getComputer(raw,true)
+    if not obj or obj isa Error then
+      obj=null
+    else
+      match=m
+      break
+    end if
+  end for
+  if not obj then return Error.set("_netbounce: all internal bounce exploits failed for "+targetIP)
+  globals.G_bash.FLAGS["hold"]=obj
+  if globals.G_pipe.PIPE_MODE then return obj
+  print green("_netbounce: "+obj.user.name+"@"+obj.meta.public_ip+" ["+obj.user.raw+"] (via "+targetIP+")")
+  return false
+end function
+  //Check for _lan command - scan local LAN and return device list as a map
+  //Usage: _setvar(result, _lan) or just _lan
+  //Returns: [{ip,port_info:[{port,service,local_ip,public_ip},...],metalib:{port:lib,...}},...]
+_ef_lan=function(cmd,Obj)
+  //_lan [ip] - get shell on target, run Builder.packLan there; no ip=scan own LAN
+  //Returns {ip, devices:[{ip, ports:[{port,service,public_ip}]}]} like _scan returns its map
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing lan command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)>=1 then
+    targetIP=Net.lookup(cmd.args[0])
+    if not targetIP then return Error.set("_lan: invalid ip: "+cmd.args[0])
+    if indexOf(targetIP,".")==null then return Error.set("_lan: not a valid ip: "+targetIP)
+    setup=Bash.exploitSetup(Obj,targetIP,"_lan")
+    if setup isa Error then return setup
+    flags=Bash.parseExploitArgs(cmd.args)
+    matches=Bash.findBestExploit(setup.entries,"s",flags.prefUser,flags.port)
+    if len(matches)==0 then return Error.set("_lan: no shell exploit found for "+targetIP)
+    shellObj=null
+    for m in matches
+      raw=Exploit.run(m.exploit,m.entry)
+      if not raw or raw isa Error then continue
+      shellObj=Exploit.getShell(raw,false,[],true)
+      if not shellObj or shellObj isa Error then shellObj=null else break
+    end for
+    if not shellObj then return Error.set("_lan: could not get shell on "+targetIP)
+    //Run LAN scan on target machine via Builder
+    devices=Builder.packLan(shellObj)
+    if devices isa Error then return devices
+    if not devices then devices={}
+    if not globals.G_pipe.PIPE_MODE then
+      _ips=indexes(devices)
+      print green("_lan: "+targetIP+" — "+len(_ips)+" device(s)")
+      for _ip in _ips
+        _ports=devices[_ip]
+        if _ports and len(_ports)>0 then
+          portStr=""
+          for _p in _ports
+            if portStr then portStr=portStr+","
+            portStr=portStr+str(_p["port"])
+          end for
+          print "  "+_ip+" ["+portStr+"]"
+        else
+          print "  "+_ip
+        end if
+      end for
+    end if
+    return devices
+  end if
+  //No IP arg: scan own LAN via Builder (runs on current session)
+  if not hasIndex(Obj,"computer") or not Obj.computer then return Error.set("_lan: no computer access")
+  devices=Builder.packLan(Obj)
+  if devices isa Error then return devices
+  if not devices then devices={}
+  if not globals.G_pipe.PIPE_MODE then
+    _ips=indexes(devices)
+    print green("_lan: "+len(_ips)+" device(s) on local LAN")
+    for _ip in _ips
+      _ports=devices[_ip]
+      if _ports and len(_ports)>0 then
+        portStr=""
+        for _p in _ports
+          if portStr then portStr=portStr+","
+          portStr=portStr+str(_p["port"])
+        end for
+        print "  "+_ip+" ["+portStr+"]"
+      else
+        print "  "+_ip
+      end if
+    end for
+  end if
+  return devices
+end function
+  //Check for _wifi command - return visible wifi networks as a list of maps
+  //Usage: _setvar(result, _wifi) or just _wifi
+  //Returns: [{bssid,signal,essid},...]
+_ef_wifi=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing wifi command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if not hasIndex(Obj,"net") or not Obj.net then
+    if globals.G_pipe.PIPE_MODE then return []
+    print red("_wifi: network not initialized")
+    return false
+  end if
+  if not Obj.net.hasWifi then
+    if globals.G_pipe.PIPE_MODE then return []
+    print yellow("_wifi: wifi is not active")
+    return false
+  end if
+  wlan=Obj.net.wlan
+  if not wlan then
+    if globals.G_pipe.PIPE_MODE then return []
+    print "No wifi networks detected"
+    return false
+  end if
+  result=[]
+  _len=len(wlan)
+  i=0
+  while i<_len
+    entry=wlan[i]
+    wifiEntry={"bssid":entry[0],"signal":entry[1].replace("%",""),"essid":entry[2]}
+    push(result,wifiEntry)
+    i=i+1
+  end while
+  if globals.G_pipe.PIPE_MODE then return result
+  print green("WiFi Networks: "+len(result))
+  for w in result;print "  "+w["bssid"]+"  "+w["signal"]+"%  "+w["essid"];end for
+  return false
+end function
+  //Check for _net_random command (generates random reachable router IP at runtime)
+_ef_net_random=function(cmd,Obj)
+  if globals.G_bash.DEBUG then print cyan("  Executing _net_random command")
+  return Net.rip
+end function
+  //Check for _sys_procs command
+_ef_sys_procs=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing sys_procs command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if not hasIndex(Obj,"computer") or not Obj.computer then return Error.set("No computer access available")
+  processes=show_procs(Obj.computer)
+  if processes then print processes else print "No processes found"
+  return false
+end function
+  //_hold - Run a command on the held object (set by headless scan -- calls)
+_ef_hold=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing hold command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  held=globals.G_bash.FLAGS["hold"]
+  if not held then return Error.set("_hold: no held object (scan_ok was false or no -- flag was used)")
+  if len(cmd.args)==0 then return false
+  cmdName=lower(cmd.args[0])
+  cmdArgs=cmd.args[1:]
+  if cmdName=="home" or cmdName=="exit" then
+    if hasIndex(held,"commands") and hasIndex(held.commands,"exit") then
+      _fn=held.commands["exit"]
+      _fn([])
+    end if
+    globals.G_bash.FLAGS["hold"]=null
+    return false
+  end if
+  if not hasIndex(held,"commands") then return Error.set("_hold: held object has no commands")
+  if not hasIndex(held.commands,cmdName) then return Error.set("_hold: unknown command '" + cmdName + "'")
+  _fn=held.commands[cmdName]
+  _fn(cmdArgs)
+  return false
+end function
+_ef_holduser=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing holduser command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  held=globals.G_bash.FLAGS["hold"]
+  if not held then return ""
+  if hasIndex(held,"user") and hasIndex(held.user,"name") then return held.user.name
+  return ""
+end function
+  //Check for _sys_kill command
+_ef_sys_kill=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing sys_kill command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_sys_kill requires 1 argument: pid")
+  pid=to_int(cmd.args[0])
+  if not hasIndex(Obj,"computer") or not Obj.computer then return Error.set("No computer access available")
+  result=close_program(Obj.computer,pid)
+  if result then print green("Process "+pid+" terminated") else print red("Failed to terminate process "+pid)
+  return false
+end function
+//Check for _fs_canwrite command
+_ef_fs_canwrite=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing fs_canwrite command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_fs_canwrite requires 1 argument: path or file object")
+  fileArg=cmd.args[0]
+  if typeof(fileArg)=="file" then fileObj=fileArg else fileObj=Io._getFile(Obj,fileArg)
+  if not fileObj or fileObj isa Error then
+    print red("File not found: "+cmd.args[0])
+    return false
+  end if
+  perms=fileObj.get_permissions
+  if perms then print indexOf(perms,"w")!=null else print false
+  return false
+end function
+//Check for _fs_canexec command
+_ef_fs_canexec=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing fs_canexec command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_fs_canexec requires 1 argument: path or file object")
+  fileArg=cmd.args[0]
+  if typeof(fileArg)=="file" then fileObj=fileArg else fileObj=Io._getFile(Obj,fileArg)
+  if not fileObj or fileObj isa Error then
+    print red("File not found: "+cmd.args[0])
+    return false
+  end if
+  perms=fileObj.get_permissions
+  if perms then print indexOf(perms,"x")!=null else print false
+  return false
+end function
+//Check for _fs_read command
+_ef_fs_read=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing fs_read command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_fs_read requires 1 argument: filepath or file object")
+  fileArg=cmd.args[0]
+  if typeof(fileArg)=="file" then
+    fileObj=fileArg
+  else
+    fileObj=Io._getFile(Obj,fileArg)
+    if not fileObj or fileObj isa Error then return Info.error("File not found: "+fileArg)
+  end if
+  if is_binary(fileObj) then return Info.error("Cannot read binary file")
+  if is_folder(fileObj) then return Info.error("Cannot read folder")
+  content=get_content(fileObj)
+  if content==null then return Info.error("Failed to read file")
+  return content
+end function
+//Check for _fs_view command
+_ef_fs_view=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing fs_view command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_fs_view requires 1 argument: filepath or file object")
+  fileArg=cmd.args[0]
+  if typeof(fileArg)=="file" then
+    fileObj=fileArg
+  else
+    fileObj=Io._getFile(Obj,fileArg)
+    if not fileObj or fileObj isa Error then return Info.error("File not found: "+fileArg)
+  end if
+  if is_binary(fileObj) then return Info.error("Cannot view binary file")
+  if is_folder(fileObj) then return Info.error("Cannot view folder")
+  content=get_content(fileObj)
+  if content==null then return Info.error("Failed to read file")
+  print content
+  return false
+end function
+//Check for _fs_write command
+_ef_fs_write=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing _fs_write command")
+    if len(cmd.args)>0 then print cyan("    Path: ")+white(cmd.args[0])
+  end if
+  if len(cmd.args)<2 then return Error.set("_fs_write requires 2 arguments: filepath/file_object content")
+  fileArg=cmd.args[0]
+  content=join(cmd.args[1:]," ")
+  if typeof(fileArg)=="file" then
+    fileObj=fileArg
+  else
+    fileObj=Io._getFile(Obj,fileArg)
+    if not fileObj or fileObj isa Error then
+      //File doesn't exist — resolve absolute path and create it
+      if not hasIndex(Obj,"computer") or not Obj.computer then return Error.set("No computer access available")
+      absPath=Io._getPath(Obj,fileArg)
+      if absPath isa Error then return absPath
+      pathParts=absPath.split("/")
+      fileName=pathParts[-1]
+      dirPath=join(pathParts[:-1],"/")
+      if len(dirPath)==0 then dirPath="/"
+      parentDir=File(Obj.computer,dirPath)
+      if not parentDir then return Info.error("Directory not found: "+dirPath)
+      touchResult=touch(Obj.computer,dirPath,fileName)
+      if touchResult isa string then return Info.error(touchResult)
+      if touchResult!=1 then return Info.error("Failed to create file: "+fileArg)
+      fileObj=Io._getFile(Obj,fileArg)
+      if not fileObj or fileObj isa Error then return Info.error("Could not retrieve created file: "+fileArg)
+    end if
+  end if
+  if is_binary(fileObj) then return Info.error("Cannot write to binary file")
+  if is_folder(fileObj) then return Info.error("Cannot write to folder")
+  result=set_content(fileObj,content)
+  if result!=1 then
+    if result isa string then return Info.error(result)
+    return Info.error("Failed to write file: "+str(fileArg))
+  end if
+  return false
+end function
+  //Check for _fs_put command (upload to remote via scp)
+_ef_fs_put=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing _fs_put command")
+    print cyan("    Source: ")+white(cmd.args[0])
+    if len(cmd.args)>1 then print cyan("    Dest: ")+white(cmd.args[1])
+  end if
+  //Requires both local shell (to read file) and remote shell (to write file)
+  if not hasIndex(globals.G_main,"shell") or not globals.G_main.shell then return Error.set("No local shell available - _fs_put requires local shell access")
+  if not hasIndex(Obj,"type") then return Error.set("Cannot determine object type")
+  if Obj.type!="shell" then return Error.set("Unable to use "+Obj.type+" for this command - requires remote shell connection")
+  if not hasIndex(Obj,"shell") or not Obj.shell then return Error.set("No remote shell connection available")
+  if len(cmd.args)<1 then return Error.set("_fs_put requires at least 1 argument: source_file [dest_path]")
+  sourcePath=cmd.args[0]
+  //Default destination is remote current directory
+  destPath="/"
+  if len(cmd.args)>=2 then
+    destPath=cmd.args[1]
+  else if hasIndex(Obj,"dir") and Obj.dir and Obj.dir.current then
+    destPath=path(Obj.dir.current)
+  else if hasIndex(Obj,"root") and Obj.root then
+    destPath=path(Obj.root)
+  end if
+  //Execute scp upload from local (G_main) to remote (Obj)
+  result=scp(globals.G_main.shell,sourcePath,destPath,Obj.shell)
+  if result isa string then return Info.error(result)
+  if result==1 then print "File uploaded successfully".green
+  return false
+end function
+  //Check for _fs_get command (download from remote via scp)
+_ef_fs_get=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing _fs_get command")
+    print cyan("    Source: ")+white(cmd.args[0])
+    if len(cmd.args)>1 then print cyan("    Dest: ")+white(cmd.args[1])
+  end if
+  //Only works with shell objects
+  if not hasIndex(Obj,"type") then return Error.set("Cannot determine object type")
+  if Obj.type!="shell" then return Error.set("Unable to use "+Obj.type+" for this command")
+  if not hasIndex(Obj,"shell") or not Obj.shell then return Error.set("No active shell connection")
+  if len(cmd.args)<1 then return Error.set("_fs_get requires at least 1 argument: source_file [dest_path]")
+  sourcePath=cmd.args[0]
+  //Default destination is local current directory
+  destPath="/"
+  if len(cmd.args)>=2 then
+    destPath=cmd.args[1]
+  else if hasIndex(globals.G_main,"dir") and globals.G_main.dir and globals.G_main.dir.current then
+    destPath=path(globals.G_main.dir.current)
+  else if hasIndex(globals.G_main,"root") and globals.G_main.root then
+    destPath=path(globals.G_main.root)
+  end if
+  //Execute scp download from remote (Obj) to local (G_main)
+  result=scp(Obj.shell,sourcePath,destPath,globals.G_main.shell)
+  if result isa string then return Info.error(result)
+  if result==1 then print "File downloaded successfully".green
+  return false
+end function
+//Check for _fs_find command
+_ef_fs_find=function(cmd,Obj)
+  if globals.G_bash.DEBUG then
+    print cyan("  Executing fs_find command")
+    if len(cmd.args)>0 then print cyan("    Args: ")+white(str(cmd.args))
+  end if
+  if len(cmd.args)<1 then return Error.set("_fs_find requires at least 1 argument: search_path [pattern] [-c|-e]")
+  searchPath=cmd.args[0]
+  searchPattern=""
+  searchContent=false
+  exactMatch=false
+  //Parse arguments for pattern and flags
+  _len=len(cmd.args)
+  argIdx=1
+  while argIdx<_len
+    arg=cmd.args[argIdx]
+    if arg=="-c" or arg=="--content" then
+      searchContent=true
+    else if arg=="-e" or arg=="--exact" then
+      exactMatch=true
+    else
+      searchPattern=arg
+    end if
+    argIdx+=1
+  end while
+  //Get starting directory using Io._getFile for proper path resolution
+  if searchPath=="." then startDir=Io._getFile(Obj,"./") else startDir=Io._getFile(Obj,searchPath)
+  if not startDir or startDir isa Error then return Info.error("Directory not found: "+searchPath)
+  if not is_folder(startDir) then return Info.error("Not a directory: "+searchPath)
+  //Search by filename (default) or content (with -c flag)
+  if searchContent then
+    if searchPattern=="" then return Error.set("Pattern required for content search")
+    allFiles=Io.getAll(startDir)
+    if allFiles isa Error then return Info.error("Failed to search directory: "+searchPath)
+    foundCount=0
+    for f in allFiles
+      if is_folder(f) then continue
+      fileContent=get_content(f)
+      if fileContent and indexOf(fileContent,searchPattern)!=null then
+        print path(f)
+        foundCount+=1
+      end if
+    end for
+    if foundCount==0 then print yellow("No files containing '"+searchPattern+"' found in "+searchPath)
+  else if exactMatch then
+    if searchPattern=="" then return Error.set("Pattern required for exact match")
+    result=Io.findFile(startDir,searchPattern)
+    if result isa Error then
+      print yellow("No file named '"+searchPattern+"' found in "+searchPath)
+    else
+      if is_folder(result) then print cyan(path(result)+"/") else print path(result)
+    end if
+  else
+    allFiles=Io.getAll(startDir)
+    if allFiles isa Error then return Info.error("Failed to search directory: "+searchPath)
+    foundCount=0
+    for f in allFiles
+      fileName=name(f)
+      filePath=path(f)
+      if searchPattern!="" then
+        if indexOf(fileName,searchPattern)==null then
+          if indexOf(searchPattern,"*")!=null or indexOf(searchPattern,"?")!=null then
+            if not Glob.match(fileName,searchPattern) then continue
+          else
+            continue
+          end if
+        end if
+      end if
+      if is_folder(f) then print cyan(filePath+"/") else print filePath
+      foundCount+=1
+    end for
+    if foundCount==0 then
+      if searchPattern!="" then print yellow("No files matching '"+searchPattern+"' found in "+searchPath) else print yellow("No files found in "+searchPath)
+    end if
+  end if
+  return false
+end function

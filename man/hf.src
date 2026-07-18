@@ -1,0 +1,61 @@
+// Man page for hashfile
+manHashfile="HASHFILE(1)                      X Shell Manual                      HASHFILE(1)
+
+<b>NAME</b>
+    hf - Bulk hash cracking from files
+
+<b>SYNOPSIS</b>
+    <b>hf</b> FILE
+    <b>hf</b> <b>-p</b>
+
+<b>DESCRIPTION</b>
+    Batch hash cracking utility that processes all MD5 hashes in a file.
+    Automatically writes cracked passwords back to source file when write
+    permissions are available. Supports multiple hash formats including
+    username:hash pairs, raw hashes, and mixed formats.
+
+    <color=#e4ff34>*** Modifies original file if writable ***</color>
+
+    <b>Supported Formats:</b>
+      user:hash format, raw hash list, or mixed
+
+<b>OPTIONS</b>
+    <b>hf FILE</b>
+        Crack all hashes in specified file
+        Writes results back to file if writable
+
+    <b>hf -p</b>
+        Crack hashes in /etc/passwd
+        Target system password file
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Hash Cracking</color>
+    <b>hf hashes.txt</b>
+        Crack all hashes in file
+
+    <b>hf /root/captured_hashes</b>
+        Process captured hash file
+
+    <color=#e4ff34># Password File Attacks</color>
+    <b>hf -p</b>
+        Crack system passwd file
+
+    <b>hf /etc/passwd</b>
+        Direct passwd file crack
+
+    <color=#e4ff34># Post-Exploitation</color>
+    <b>hf /home/admin/backup.passwd</b>
+        Crack backup password file
+
+    <b>hf /var/backups/shadow.bak</b>
+        Process shadow backup
+
+    <color=#e4ff34># Workflow</color>
+    <b>scp -d /etc/passwd /root/loot.passwd</b>
+        Download passwd file
+
+    <b>hf /root/loot.passwd</b>
+        Crack downloaded file
+
+<b>SEE ALSO</b>
+    <b>hc</b>, <b>decipher</b>, <b>rainbow</b>"

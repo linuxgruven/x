@@ -1,0 +1,68 @@
+// _format_columns builtin test script
+// Tests that _format_columns wraps the native format_columns() correctly.
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     _format_columns TESTS</color>
+_print <color=#eb0cc6>============================================</color>
+_print
+
+// ---------------------------------------------------------------
+// TEST 1: Basic table - process list style
+// ---------------------------------------------------------------
+_print <color=#00ccff>--- Test 1: Process-style table ---</color>
+_setvar(rows, "USER PID CPU MEM COMMAND")
+_setvar(rows, concat(_getvar(rows), "
+root 1234 0.5% 12.3% kernel"))
+_setvar(rows, concat(_getvar(rows), "
+tux 5678 1.2% 8.7% Terminal"))
+_setvar(rows, concat(_getvar(rows), "
+tux 9012 0.0% 0.4% watchdog"))
+_print _format_columns(_getvar(rows))
+
+// ---------------------------------------------------------------
+// TEST 2: Network scan table
+// ---------------------------------------------------------------
+_print <color=#00ccff>--- Test 2: Port scan table ---</color>
+_setvar(scan, "PORT SERVICE VERSION")
+_setvar(scan, concat(_getvar(scan), "
+22 ssh 1.0.0"))
+_setvar(scan, concat(_getvar(scan), "
+80 http 1.2.6"))
+_setvar(scan, concat(_getvar(scan), "
+3306 mysql 5.7.1"))
+_setvar(scan, concat(_getvar(scan), "
+443 https 2.0.0"))
+_print _format_columns(_getvar(scan))
+
+// ---------------------------------------------------------------
+// TEST 3: Stored in variable then printed
+// ---------------------------------------------------------------
+_print <color=#00ccff>--- Test 3: Store result in variable ---</color>
+_setvar(data, "NAME VALUE TYPE")
+_setvar(data, concat(_getvar(data), "
+alpha 42 integer"))
+_setvar(data, concat(_getvar(data), "
+beta hello string"))
+_setvar(data, concat(_getvar(data), "
+gamma 3.14 float"))
+_setvar(result, _format_columns(_getvar(data)))
+_print Formatted result:
+_print _getvar(result)
+
+// ---------------------------------------------------------------
+// TEST 4: Uneven column widths
+// ---------------------------------------------------------------
+_print <color=#00ccff>--- Test 4: Uneven column widths ---</color>
+_setvar(t, "A B C")
+_setvar(t, concat(_getvar(t), "
+short x verylongvalue"))
+_setvar(t, concat(_getvar(t), "
+averagewidth y z"))
+_setvar(t, concat(_getvar(t), "
+q longercolumn mid"))
+_print _format_columns(_getvar(t))
+
+_print
+_print <color=#00ff00>All _format_columns tests complete.</color>
+_print

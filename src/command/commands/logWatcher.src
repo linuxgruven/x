@@ -1,0 +1,13 @@
+// =============================================================================
+// LOGWATCHER
+// Watch /var/system.log for new entries; clears log to establish baseline.
+// =============================================================================
+Command.logWatcher=function(Obj)
+  logFile=Io.getFileObj(Obj,"/var/system.log")
+  if logFile isa Error then return Info.warning("system.log not found")
+  if not has_permission(logFile,"w") then return Error.set("You do not have the permissions to perform a log watch")
+  self.qrm(Obj,[path(logFile)])
+  Info.info("Watching...")
+  Utility.pressQ
+  while poll_input!="q";logFile=Io.getFileObj(Obj,"/var/system.log");if logFile isa Error then continue;return Info.info("An entry has been logged!");end while
+end function

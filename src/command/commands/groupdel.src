@@ -1,0 +1,25 @@
+// =============================================================================
+// GROUPDEL
+// Remove a user from a group.
+// =============================================================================
+Command.groupdel=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  if (not argv or len(argv)<2) and not hasPipeInput then return Man.help(["groupdel"])
+  if hasPipeInput then
+    if not argv then argv=[]
+    _pipeUsers=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(_pipeUsers,line);end for
+    if len(_pipeUsers)>0 then
+      _savedStdin=globals.G_pipe.stdin
+      globals.G_pipe.stdin=null
+      for _pipeUser in _pipeUsers;Command.groupdel(Obj,[_pipeUser]+argv);end for
+      globals.G_pipe.stdin=_savedStdin
+      return
+    end if
+  end if
+  username=argv[0]
+  groupName=argv[1]
+  result=delete_group(Obj.computer,username,groupName)
+  if result==1 then return Info.info("Group "+groupName+" deleted from user "+username)
+  Info.error(result)
+end function

@@ -1,0 +1,42 @@
+// Man page for split
+manSplit="SPLIT(1)                         X Shell Manual                         SPLIT(1)
+
+<b>NAME</b>
+    split - Split text file by pattern
+<b>SYNOPSIS</b>
+    <b>split</b> PATTERN FILE
+    <b>split -w</b> PATTERN FILE
+    <b>split -n</b> PATTERN FILE
+<b>DESCRIPTION</b>
+    Split a text file by a specified pattern. Can display results to screen,
+    save to original file, or save to a new file. Useful for parsing and
+    reformatting structured text data.
+<b>OPTIONS</b>
+    <b>PATTERN FILE</b> - Split to Screen
+      Split text file by pattern and display results on screen.
+
+    <b>-w PATTERN FILE</b> - Save to Original
+      Split text file by pattern and save results to original file.
+
+    <b>-n PATTERN FILE</b> - Save to New File
+      Split text file by pattern and save results to new file.
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man split</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>split</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Split File</color>
+    <b>split : /etc/passwd</b>
+    Split passwd file by colon delimiter
+
+    <b>split -w , data.csv</b>
+    Split CSV by comma and save to original
+
+    <b>split -n | logfile.txt</b>
+    Split by pipe and save to new file
+<b>SEE ALSO</b>
+    <b>join</b>, <b>sed</b>, <b>grep</b>"

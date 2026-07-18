@@ -1,0 +1,197 @@
+// Man page for config
+manConfig="CONFIG(8)                        X Shell Manual                        CONFIG(8)
+
+<b>NAME</b>
+    config - Framework configuration management
+<b>SYNOPSIS</b>
+    <b>config -c</b>
+    <b>config -a</b>
+    <b>config -k</b>
+    <b>config -m</b>
+    <b>config -e</b>
+    <b>config -p</b>
+    <b>config -s</b>
+    <b>config -i</b>
+    <b>config -l</b>
+    <b>config -y</b>
+    <b>config -w</b>
+    <b>config status</b>
+    <b>config run</b>
+    <b>config on</b>
+    <b>config off</b>
+    <b>config -h</b>
+    <b>config -z</b>
+    <b>config -r</b>
+    <b>config --reset</b>
+    <b>config -b</b>
+    <b>config -d</b>
+    <b>config -v</b> [NAME]
+    <b>config -x</b> [INDEX]
+    <b>config -n</b>
+    <b>config -t</b> [N]
+<b>DESCRIPTION</b>
+    Framework configuration system controlling framework behavior. Once config
+    exists, x stops self-removal on exit. Auto-recreates on corruption. All
+    settings disabled by default.
+<b>OPTIONS</b>
+    <b>-c</b>
+    Create config file
+    Recreate if exists
+
+    <b>-a</b>
+    Auto solve PObjects
+    Toggle automatic solving
+
+    <b>-k</b>
+    PObject solver debug
+    Enable debugging output
+
+    <b>-g</b>
+    Debug output mode
+    Enable debug messages
+
+    <b>-m</b>
+    Update metaxploit on launch
+    Auto-update exploit database
+
+    <b>-e</b>
+    Auto clear exploit scan buffer
+    Clear es buffer automatically
+
+    <b>-p</b>
+    Build rainbow index on launch
+    Preload rainbow hash index
+
+    <b>-s</b>
+    Auto-add sessions
+    Automatic session management
+
+    <b>-i</b>
+    Dirty router IP logging
+    Enable router logging
+
+    <b>-l</b>
+    Dynamic LAN IP tracking
+    Track LAN IPs dynamically
+
+    <b>-y</b>
+    Proxy log for crash recovery
+    Fast re-log after IO errors
+
+    <b>status</b>
+    View current settings
+    Display all config values
+
+    <b>run</b>
+    Interactive config change
+    Prompt for all settings
+
+    <b>on</b>
+    Enable all settings
+    Turn everything on
+
+    <b>off</b>
+    Disable all settings
+    Turn everything off
+
+    <b>-h</b>
+    Short home path
+    Use tilde notation
+
+    <b>-z</b>
+    Check dsession before scan
+    Verify session before scanning
+
+    <b>-r</b>
+    Use rshell shell objects
+    Reinitialize imported servers
+
+    <b>--reset</b>
+    Reset to defaults
+    Requires framework relaunch
+
+    <b>-b</b>
+    Clear shadow cache on startup
+    Clean cache automatically
+
+    <b>-d</b>
+    Show rshell list after dig
+    Display server list after each dig run
+
+    <b>-v</b> [NAME]
+    Root router bounce attack library
+    Set library name for automated exploits
+    Use 'clear' or 'reset' to unset
+
+    <b>-x</b> [INDEX]
+    Root router bounce attack method index
+    Set method index for automated exploits
+    Use 'clear' or 'reset' to unset
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Initial Setup</color>
+    <b>config -c</b>
+    Create config file
+
+    <b>config status</b>
+    View settings
+
+    <color=#e4ff34># Bulk Operations</color>
+    <b>config on</b>
+    Enable all
+
+    <b>config off</b>
+    Disable all
+
+    <b>config run</b>
+    Interactive setup
+
+    <color=#e4ff34># Automation Settings</color>
+    <b>config -p</b>
+    Toggle rainbow index preload
+
+    <color=#e4ff34># Automation Settings</color>
+    <b>config -a</b>
+    Toggle PObject solving
+
+    <b>config -s</b>
+    Toggle auto sessions
+
+    <b>config -m</b>
+    Toggle metaxploit update
+
+    <color=#e4ff34># Network Settings</color>
+    <b>config -l</b>
+    Toggle LAN tracking
+
+    <b>config -i</b>
+    Toggle router logging
+
+    <b>config -y</b>
+    Toggle proxy log
+
+    <color=#e4ff34># System Settings</color>
+    <b>config -h</b>
+    Toggle short home
+
+    <b>config -w</b>
+    Toggle watchdog (press 'q' to stop long processes)
+
+    <b>config -d</b>
+    Show rshell list after each dig
+
+    <b>config -v libssh.so</b>
+    Root router bounce attack library
+
+    <b>config -v clear</b>
+    Clear vulnerable library setting
+
+    <b>config -x 3</b>
+    Use root router bounce attack method index 3
+
+    <b>config -x reset</b>
+    Reset method index to default (-1)
+
+    <b>config --reset</b>
+    Reset all to defaults
+<b>SEE ALSO</b>
+    <b>sys</b>, <b>make</b>, <b>set</b>, <b>alias</b>"

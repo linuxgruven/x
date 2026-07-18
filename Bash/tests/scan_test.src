@@ -1,0 +1,34 @@
+// scan — Test for _scan command
+// Usage: @scan <public_ip>
+// Example: @scan 91.0.0.1
+
+_print <color=#00bfff>=== Scan Test ===</color>
+_print yellow(Target: ) $1
+
+_setvar(result, _scan $1)
+
+_print green(IP: ) _getvar(result).ip
+
+_setvar(portlist, _getvar(result).port_info)
+_setvar(nports, len(portlist))
+_print cyan(Ports found: ) _getvar(nports)
+_print white(----------------------------)
+
+for entry in _getvar(portlist)
+  _print yellow(Port:    ) _getvar(entry).port
+  _print yellow(Service: ) _getvar(entry).service
+  _print yellow(Local:   ) _getvar(entry).local_ip
+  _print yellow(Public:  ) _getvar(entry).public_ip
+  _setvar(exlist, _getvar(entry).exploits)
+  _setvar(nexpl, len(exlist))
+  _print magenta(Exploits [) _getvar(nexpl) magenta(]:)
+  for exname in _getvar(exlist)
+    _print white( •) _getvar(exname)
+  endfor
+  _print white(------------------------------)
+endfor
+
+_setvar(metalib, _getvar(result).metalib)
+_print cyan(Metalib ports: ) map_keys(_getvar(metalib))
+
+_print <color=#00bfff>=== done ===</color>

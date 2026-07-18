@@ -1,0 +1,72 @@
+// Man page for ls
+manLs="LS(1)                            X Shell Manual                            LS(1)
+
+<b>NAME</b>
+    ls - view the contents of a directory
+<b>SYNOPSIS</b>
+    <b>ls</b>
+    <b>ls </b><b>-o</b>|<b>--octal</b> [<b>PATH</b>]
+    <b>ls </b><b>-a</b>|<b>--all</b> [<b>PATH</b>]
+    <b>ls </b><b>-n</b> [<b>PATH</b>]
+    <b>ls </b><b>--list</b>
+<b>DESCRIPTION</b>
+    List files and directories on remote system. Shows current or specified path.
+    Supports redirects and octal permission display. Use -a to list all system files.
+    Redirect output not printed to terminal
+<b>OPTIONS</b>
+    <b>ls</b>
+    List current directory
+    Show files and folders
+
+    <b>-o, --octal</b>
+    Octal permissions
+    Show numeric mode
+
+    <b>-a, --all</b>
+    List all files
+    System-wide listing
+
+    <b>-n</b>
+    Names only
+    4 per row, column-aligned
+
+    <b>--list</b>
+    Detailed file list
+    [perms owner group]  /path/*name
+<b>COLORS</b>
+    Used by <b>-a</b> and <b>-n</b> flags:
+
+    <color=#e4ff34>name</color>        folder
+    <color=#20ff98>*</color>name        .so library  (* prefix)
+    <color=#ffa500>*</color>name        binary       (* prefix)
+    name        text / other
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic List</color>
+    <b>ls</b>
+    List current dir
+
+    <b>ls /home/tux</b>
+    List specific path
+
+    <color=#e4ff34># With Options</color>
+    <b>ls -o</b>
+    Show octal permissions
+
+    <b>ls --all</b>
+    List all system files
+
+    <color=#e4ff34># Names Only</color>
+    <b>ls -n</b>
+
+    <b>ls -n /home/tux</b>
+    Names from path
+
+    <color=#e4ff34># Detailed List</color>
+    <b>ls --list</b>
+    [-rwxr-xr-x root root]  /bin/*ls
+
+    <color=#e4ff34># With Redirects</color>
+    <b>ls params --post</b>
+    POST formatted output
+<b>SEE ALSO</b>
+    <b>cd</b>, <b>tree</b>"

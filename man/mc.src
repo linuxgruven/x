@@ -1,0 +1,160 @@
+// Man page for mc
+manMc="MC(1)                            X Shell Manual                            MC(1)
+
+<b>NAME</b>
+    mc - Interactive file explorer and manager
+<b>SYNOPSIS</b>
+    <b>mc</b> [-d] (path1) (path2)
+<b>DESCRIPTION</b>
+    Advanced interactive file explorer for navigating and managing the file
+    system. Provides a full-featured interface for browsing directories,
+    opening files, editing content, and performing file operations. Supports
+    both single panel and dual panel modes for side-by-side directory viewing.
+    Features include sorting, filtering, hidden file display, permission
+    management, and more.
+<b>OPTIONS</b>
+    <b>-d</b> - Start in dual panel mode
+      Launch with two side-by-side directory panels for easy
+      file operations between directories.
+
+    <b>path1</b> - Starting directory (optional)
+      Left panel path. Defaults to current directory.
+
+    <b>path2</b> - Right panel directory (optional, requires -d)
+      Right panel path. Only used in dual panel mode.
+
+    <color=#e4ff34># Display Features</color>
+      <b>Directory Size</b> - Shows total size of files in current directory
+      <b>File Counts</b>   - Displays number of files and folders
+      <b>Permissions</b>   - Toggle between symbolic and octal display
+      <b>Symlinks</b>      - Show or hide symbolic link targets
+      <b>Hidden Files</b>  - Toggle display of files starting with '.'
+
+    <color=#e4ff34># Sorting Options</color>
+      <b>Sort By Name</b> - Alphabetical sorting (default)
+      <b>Sort By Size</b> - Sort by file size
+      <b>Sort By Date</b> - Sort by modification date
+      <b>Reverse Order</b> - Reverse current sort order
+      <b>Un-Sort</b>       - Disable sorting
+
+    <color=#e4ff34># File Operations</color>
+      <b>Rename File</b>     - Rename files and directories
+      <b>New File</b>        - Create new files
+      <b>New Directory</b>   - Create new directories
+      <b>Delete Files</b>    - Delete files and directories
+      <b>Change Permissions</b> - Set permissions (supports octal)
+
+    <color=#e4ff34># Navigation</color>
+      <b>cd...</b>              - Change to any directory
+      <b>Quick Nav</b>          - Jump to /, home, or other panel
+      <b>Filter</b>             - Filter current directory by name
+      <b>Search for File</b> - Recursively search and navigate to file
+
+    <color=#e4ff34># Dual Panel Features</color>
+    When in dual panel mode:
+      <b>Copy Files</b>   - Copy files between panels with progress
+      <b>Move Files</b>   - Move files between panels with progress
+      <b>Switch Panel</b> - Toggle between left and right panels
+      <b>Single Panel</b> - Return to single panel mode
+      [X] indicates the active panel
+
+    <color=#e4ff34># SSH Remote Connections</color>
+    Each panel can independently connect to remote SSH servers:
+      <b>Connect to SSH</b>  - Connect active panel to remote server
+      <b>Disconnect SSH</b>  - Return active panel to local filesystem
+      <b>Panel Headers</b>   - Show connection status (user@IP)
+      <b>SCP Support</b>     - Copy/move files between SSH servers
+      <b>Cross-Server Ops</b> - Transfer files between two SSH sessions
+
+    Connection status displays in panel headers:
+      <b>Local:</b>  Standard directory path
+      <b>SSH:</b>    username@IP.address (truncated if needed)
+
+    Requirements for SSH operations:
+      - Panel must have shell access to connect
+      - Both panels need shell access for cross-server transfers
+      - Disconnect returns to local home directory
+
+    <color=#e4ff34># Keyboard Shortcuts</color>
+    Available directly from the file list:
+      <b>o</b> + Enter - Open Options Menu
+      <b>p</b> + Enter - Switch Panel (dual mode only)
+
+    Available in Options Menu:
+      <b>m</b> - Move Files    <b>c</b> - Copy Files
+      <b>s</b> - SSH Connect   <b>d</b> - SSH Disconnect
+      <b>p</b> - Switch Panel  <b>1</b> - Single Panel
+      <b>2</b> - Dual Panel    <b>e</b> - Execute Command
+      <b>l</b> - Toggle Symlinks  <b>h</b> - Toggle Hidden Files
+      <b>o</b> - Toggle Octal/Symbolic Permissions
+      <b>C</b> - Change Directory  <b>q</b> - Quick Navigation
+      <b>f</b> - Search File   <b>F</b> - Filter Files
+      <b>S</b> - Sort Mode     <b>r</b> - Reverse Sort
+      <b>u</b> - Unsort        <b>n</b> - New File
+      <b>N</b> - New Directory <b>R</b> - Rename File
+      <b>M</b> - Change Permissions  <b>D</b> - Delete Files
+      <b>b</b> - Browse Again  <b>x</b> - Exit
+
+    <color=#e4ff34># Permission Management</color>
+    Change permissions using octal or symbolic notation:
+      <b>777</b>     - Set full permissions (rwxrwxrwx)
+      <b>755</b>     - Standard executable (rwxr-xr-x)
+    Press <b>o</b> + Enter from file list, or select <b>Options Menu</b>:
+      - Sorting and display options
+      - File creation and deletion
+      - Permission management
+      - Panel and display toggles
+      - SSH connection management
+
+    <color=#e4ff34># Quick Panel Switching</color>
+    Press <b>p</b> + Enter from file list to instantly switch
+    between left and right panels in dual mode
+    <color=#e4ff34># Basic Launch</color>
+    <b>mc</b>
+    Open in current directory (single panel)
+
+    <b>mc /home</b>
+    Open /home directory
+
+    <color=#e4ff34># Dual Panel Mode</color>
+    <b>mc -d</b>
+    Open in dual panel mode
+
+    <b>mc -d /home/user /var</b>
+    Open with /home/user in left, /var in right
+
+    <color=#e4ff34># Using Options Menu</color>
+    Select <b>Options Menu</b> from file list to access:
+      - Sorting and display options
+      - File creation and deletion
+      - Permission management
+      - Panel and display toggles
+
+    <color=#e4ff34># Quick Navigation</color>
+    Use <b>Quick Nav</b> to jump to common locations:
+      - Root directory (/)
+      - Home directory
+      - Other panel (in dual mode)
+
+    <color=#e4ff34># Filter and Search</color>
+    <b>Filter</b> - Shows only files matching the filter text
+    Filters the current directory view by partial name match
+
+    <color=#e4ff34># SSH Remote Access</color>
+    <b>Connect to SSH</b> from Options Menu:
+    1. Enter IP address of target server
+    2. Enter port (default: 22)
+    3. Enter username (default: root)
+    4. Enter password (hidden input)
+    5. Panel header shows: username@IP.address
+
+    <b>Cross-Server File Operations:</b>
+    - Copy/Move between two SSH-connected panels
+    - Uses SCP for efficient transfers
+    - Requires shell access on both panels
+    - Progress displayed for each file
+
+    <b>Disconnect SSH</b> returns panel to local filesystem
+    and navigates to your home directory
+<b>SEE ALSO</b>
+    <b>ls</b>, <b>cd</b>, <b>chmod</b>"

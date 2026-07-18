@@ -1,0 +1,16 @@
+// TEST 5: FOR loop with pivot + after-loop commands
+// Expected: All 3 iterations run their body fully in proxy context
+// After-loop commands execute after all iterations complete
+
+_printnow <color=#ff0>== FOR LOOP + AFTER COMMANDS TEST ==</color>
+
+for item in [alpha, beta, gamma]
+  _printnow <color=#0f0>[LOOP]</color> Processing _getvar(item)
+  proxy -q
+  _printnow <color=#0f0>[LOOP]</color> Done with _getvar(item)
+endfor
+
+_printnow <color=#ff0>[AFTER LOOP 1]</color> This should print after all iterations
+_printnow <color=#ff0>[AFTER LOOP 2]</color> This too
+
+_printnow <color=#ff0>== TEST COMPLETE ==</color>

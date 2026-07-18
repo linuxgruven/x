@@ -1,0 +1,110 @@
+// Man page for share
+manShare="SHARE(1)                         X Shell Manual                         SHARE(1)
+
+<b>NAME</b>
+    share - is x's file sharing framework
+<b>SYNOPSIS</b>
+    <b>share </b><b>-l</b>
+    <b>share </b><b>-a </b><b>FILE </b><b>FILE</b>...
+    <b>share </b><b>-ap</b>
+    <b>share </b><b>-al</b>
+    <b>share </b><b>-v </b><b>ID</b>
+    <b>share </b><b>-g </b> [<b>-p</b> [<b>PATH</b>]] <b>ID </b><b>ID</b>...
+    <b>share </b><b>-r </b><b>ID </b><b>ID</b>...
+    <b>share </b><b>-z</b>
+    <b>share </b><b>-x</b>
+    <b>share </b><b>-m</b>
+<b>DESCRIPTION</b>
+    Manage the persistent share directory for file exchange between all objects. Files stored
+    in share are accessible across sessions and remain until explicitly removed. Add files to
+    share, view contents, download to local machine, or transfer between objects. Quick access
+    to passwd and system.log files. Management mode provides interactive get and remove interface.
+    Share directory persists across x sessions unlike vfile cache.
+<b>OPTIONS</b>
+    <b>-l</b>
+    List shared files
+    Display all files in share directory
+
+    <b>-a FILE FILE...</b>
+    Add files to share directory
+    Store one or more files persistently
+
+    <b>-ap</b>
+    Add passwd file to share
+    Quick share of passwd file
+
+    <b>-al</b>
+    Add system.log file to share
+    Quick share of system log
+    <color=#e4ff34>*** Only valid for MAIN or SHELL objects ***</color>
+
+    <b>-v ID</b>
+    View file contents by ID
+    Display shared file content
+
+    <b>-g ID ID...[-p PATH]</b>
+    Get share files by ID
+    Download to current dir or specified path
+    <color=#e4ff34>*** MAIN and Shell only for binaries/directories ***</color>
+
+    <b>-r ID ID...</b>
+    Remove files from share by ID
+    Delete one or more shared files
+
+    <b>-z</b>
+    Remove a range of files
+    Delete multiple consecutive files
+
+    <b>-x</b>
+    Clear all files from share directory
+    Remove all shared files
+
+    <b>-m</b>
+    Management mode
+    Interactive access to get and remove operations
+<b>EXAMPLE:</b>
+    <color=#e4ff34># List and Add</color>
+    <b>share -l</b>
+    List all shared files
+
+    <b>share -a /etc/passwd</b>
+    Share passwd file
+
+    <b>share -a data.txt logs.txt</b>
+    Share multiple files
+
+    <color=#e4ff34># Quick Access</color>
+    <b>share -ap</b>
+    Share passwd file
+
+    <b>share -al</b>
+    Share system.log
+
+    <color=#e4ff34># View and Get</color>
+    <b>share -v 1</b>
+    View file ID 1
+
+    <b>share -g 1</b>
+    Download file ID 1
+
+    <b>share -g 2 3 -p /home/guest</b>
+    Download to specific path
+
+    <color=#e4ff34># Remove and Clear</color>
+    <b>share -r 1</b>
+    Remove file ID 1
+
+    <b>share -r 2 3 4</b>
+    Remove multiple files
+
+    <b>share -z</b>
+    Remove range of files
+
+    <b>share -x</b>
+    Clear all shared files
+
+    <color=#e4ff34># Management Mode</color>
+    <b>share -m</b>
+    Interactive file management
+<b>SEE ALSO</b>
+    <b>vfile</b>, <b>cp</b>, <b>mv</b>"

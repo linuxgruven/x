@@ -1,0 +1,37 @@
+// Man page for show
+manShow="SHOW(1)                          X Shell Manual                          SHOW(1)
+
+<b>NAME</b>
+    show - Display cached credentials and public IP
+<b>SYNOPSIS</b>
+    <b>show</b>
+<b>DESCRIPTION</b>
+    Display root password from shadow cache and public IP address.
+    The public IP is always shown, while the root password only
+    displays if available in the cache.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View Credentials</color>
+    <b>show</b>
+    Display cached password and public IP
+
+    <b>scan -l && show</b>
+    Exploit local system then show credentials
+
+    <color=#e4ff34># Save Information</color>
+    <b>show > target_info.txt</b>
+    Save credentials to file
+
+    <b>show | grep password</b>
+    Extract password line only
+
+    <color=#e4ff34># Verification Workflow</color>
+    <b>info</b>
+    View password only
+
+    <b>show</b>
+    View password with IP address
+
+    <b>shadow -v</b>
+    View all shadow cache entries
+<b>SEE ALSO</b>
+    <b>info</b>, <b>shadow</b>, <b>addpass</b>"

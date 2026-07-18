@@ -1,0 +1,128 @@
+// Man page for rshell
+manRshell="RSHELL(1)                        X Shell Manual                        RSHELL(1)
+
+<b>NAME</b>
+    rshell - x's rshell framework
+<b>SYNOPSIS</b>
+    <b>rshell </b><b>-s</b> [<b>IP</b>] [<b>[PORT]</b>] [<b>[NAME]</b>]
+    <b>rshell </b><b>import</b>
+    <b>rshell </b><b>-b</b>
+    <b>rshell </b><b>-i</b>
+    <b>rshell </b><b>-bi</b>
+    <b>rshell </b><b>-d</b> [<b>INDEX</b>] [<b>TFILE_[PATH]</b>] [<b>D[PATH]</b>]
+    <b>rshell </b><b>-da</b> [<b>TFILE_[PATH]</b>] [<b>D[PATH]</b>]
+    <b>rshell </b><b>-dc</b> [<b>INDEX</b>] [<b>TFILE_[PATH]</b>] [<b>D[PATH]</b>]
+    <b>rshell </b><b>-dca</b> [<b>TFILE_[PATH]</b>] [<b>D[PATH]</b>]
+    <b>rshell </b><b>-p</b> [<b>INDEX</b>] [<b>TFILE_[PATH]</b>] [<b>U[PATH]</b>]
+    <b>rshell </b><b>-pa</b> [<b>TFILE_[PATH]</b>] [<b>U[PATH]</b>]
+    <b>rshell </b><b>-pc</b> [<b>INDEX</b>] [<b>TFILE_[PATH]</b>] [<b>U[PATH]</b>]
+    <b>rshell </b><b>-pca</b> [<b>TFILE_[PATH]</b>] [<b>U[PATH]</b>]
+    <b>rshell </b><b>dump</b> [<b>[PATH]</b>]
+    <b>rshell </b><b>-z</b> [<b>-u</b>] [<b>INDEX,INDEX,INDEX...</b>] [<b>TFILE_[PATH]</b>] [<b>U[PATH]</b>]
+    <b>rshell </b><b>-z</b> [<b>-d</b>] [<b>INDEX,INDEX,INDEX...</b>] [<b>TFILE_[PATH]</b>] [<b>D[PATH]</b>]
+    <b>rshell </b><b>-z </b><b>-e </b><b>INDEX,INDEX,INDEX...</b><b>COMMAND</b> [<b>PARAMS</b>]
+    <b>rshell </b><b>-z </b><b>-k </b><b>INDEX,INDEX,INDEX...</b>
+    <b>rshell </b><b>-e </b><b>INDEX </b><b>COMMAND</b> [<b>PARAMS</b>]
+    <b>rshell </b><b>-ea </b><b>COMMAND</b> [<b>PARAMS</b>]
+    <b>rshell </b><b>-l</b>
+    <b>rshell </b><b>-u </b><b>INDEX</b>
+    <b>rshell </b><b>-c </b><b>-a</b>
+    <b>rshell </b><b>-c </b><b>-h</b>
+    <b>rshell </b><b>-c </b><b>-r</b>
+    <b>rshell </b><b>-c </b><b>-s</b>
+    <b>rshell </b><b>logs</b>
+    <b>rshell </b><b>list</b>
+    <b>rshell </b><b>refresh</b>
+    <b>rshell </b><b>-k </b><b>INDEX</b> [<b>P[NAME]</b>]
+    <b>rshell </b><b>-x </b> [<b>P[NAME]</b>]
+    <b>rshell </b><b>-h </b> [<b>-l</b>]
+    <b>rshell </b><b>-h </b><b>-u </b><b>INDEX</b>
+    <b>rshell </b><b>-h </b><b>-c</b>
+<b>DESCRIPTION</b>
+    <b>rshell</b> is used to start, view, build and manage rshell connections.
+    By default X will only look for process rshell_client, pd and fstab.
+    If you use a different name then you will need to use your custom name
+    when killing a rshell. You can choose to use rshell shell objects or rshell lite
+    as your rshell interface. If you use rshell lite then you will not be able to use
+    the rshell (shell command functions) against the rshell. The trade off is that rshell
+    lite can be much faster and uses less resources.
+<b>OPTIONS</b>
+    <b>rshell </b><b>-s</b> [<b>IP</b>] [<b>[PORT]</b>] [<b>[NAME]</b>]
+    Start a temporary rshell with optional rshell server ip, rshell server port
+    and name. If no IP is given, auto-resolves from saved IPs or imported servers.
+    One imported server is used automatically; multiple prompts a selection menu.
+    <b>rshell </b><b>import</b>
+    Import a rshell server.
+    <b>rshell </b><b>-b</b>
+    Build a rshell.
+    <b>rshell </b><b>-i</b>
+    Install an already built rshell and launch it.
+    <b>rshell </b><b>-bi</b>
+    Build and install an rshell.
+    <b>rshell </b><b>-d</b> [<b>INDEX</b>] [<b>TFILE_[PATH]</b>] [<b>D[PATH]</b>]
+    Download a file from a rshell by id
+    <b>rshell </b><b>-da</b> [<b>TFILE_[PATH]</b>] [<b>D[PATH]</b>]
+    Download a file from all rshells.
+    <b>rshell </b><b>-dc</b> [<b>INDEX</b>] [<b>TFILE_[PATH]</b>] [<b>D[PATH]</b>]
+    Download a file [p] from a rshell by id to the active object.
+    <b>rshell </b><b>-dca</b> [<b>TFILE_[PATH]</b>] [<b>D[PATH]</b>]
+    Download a file from all rshells to the active object.
+    <b>rshell </b><b>-p</b> [<b>INDEX</b>] [<b>TFILE_[PATH]</b>] [<b>U[PATH]</b>]
+    Upload a file [p] to a rshell by id.
+    <b>rshell </b><b>-pa</b> [<b>TFILE_[PATH]</b>] [<b>U[PATH]</b>]
+    Upload a file to all rshells.
+    <b>rshell </b><b>-pc</b> [<b>INDEX</b>] [<b>TFILE_[PATH]</b>] [<b>U[PATH]</b>]
+    Upload a file to a rshell by id to the active object.
+    <b>rshell </b><b>-pca</b> [<b>TFILE_[PATH]</b>] [<b>U[PATH]</b>]
+    Upload a file to all rshells from the active object.
+    NOTE: If a destination path is not specified then the file
+    will be saved to the current location of either.
+    <b>rshell </b><b>dump</b> [<b>[PATH]</b>]
+    Dump the rshell server list to a file.
+    <b>rshell </b><b>-z</b> [<b>-u</b>] [<b>INDEX,INDEX,INDEX...</b>] [<b>TFILE_[PATH]</b>] [<b>U[PATH]</b>]
+    Upload a file to multiple rshells by id.
+    <b>rshell </b><b>-z</b> [<b>-d</b>] [<b>INDEX,INDEX,INDEX...</b>] [<b>TFILE_[PATH]</b>] [<b>D[PATH]</b>]
+    Download a file [p] from multiple rshells by id.
+    <b>rshell </b><b>-z </b><b>-e </b><b>INDEX,INDEX,INDEX...</b><b>COMMAND</b> [<b>PARAMS</b>]
+    Execute a command with params on multiple rshells by id.
+    <color=#e4ff34>*** NOT AVAILABLE WHEN USING RSHELL LITE ***</color>
+    <b>rshell </b><b>-z </b><b>-k </b><b>INDEX,INDEX,INDEX...</b>
+    Kill captured rshells by id [i].
+    <b>rshell </b><b>-e </b><b>INDEX </b><b>COMMAND</b> [<b>PARAMS</b>]
+    Execute a command with params on a rshell by id.
+    <color=#e4ff34>*** NOT AVAILABLE WHEN USING RSHELL LITE ***</color>
+    <b>rshell </b><b>-ea </b><b>COMMAND</b> [<b>PARAMS</b>]
+    Execute a command with params across all rshells.
+    <color=#e4ff34>*** NOT AVAILABLE WHEN USING RSHELL LITE ***</color>
+    <b>rshell </b><b>-l</b>
+    List captured rshells.
+    <b>rshell </b><b>-u </b><b>INDEX</b>
+    Opens a shell from the selected rshell id. Can also use '--use'.
+    <b>rshell </b><b>-c </b><b>-a</b>
+    Clears all the rshell caches.
+    <b>rshell </b><b>-c </b><b>-h</b>
+    Clears the rshell history cache.
+    <b>rshell </b><b>-c </b><b>-r</b>
+    Clears all the rshells from the cache.
+    <b>rshell </b><b>-c </b><b>-s</b>
+    Clears the rshell server cache.
+    <b>rshell </b><b>logs</b>
+    Download all system.log files from current rshells.
+    <b>rshell </b><b>list</b>
+    List all imported rshell server's. The rshell service must be running.
+    <b>rshell </b><b>refresh</b>
+    Checks for new rshells and adds them to the rshell list.
+    <b>rshell </b><b>-k </b><b>INDEX</b> [<b>P[NAME]</b>]
+    Kill a captured rshell by id [i]. If you deviated from the default naming
+    scheme use the name of your rshell.
+    <b>rshell </b><b>-x </b> [<b>P[NAME]</b>]
+    Kill all captured rshells. If you deviated from the default naming
+    scheme use the name of your rshell.
+    <b>rshell </b><b>-h </b> [<b>-l</b>]
+    List captured rshells from history.
+    <b>rshell </b><b>-h </b><b>-u </b><b>INDEX</b>
+    Opens a shell object by id [i]. Can also use '--use'.
+    <b>rshell </b><b>-h </b><b>-c</b>
+    Clears the rshell history cache.
+<b>EXAMPLE:</b>
+    rshell -z -e 4,2,5 ps"

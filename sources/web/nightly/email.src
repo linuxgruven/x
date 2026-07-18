@@ -1,0 +1,184 @@
+webEmail="<!doctype html>
+<style type='text/css'>
+  html {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: #f0e8ea;
+  }
+  body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: #4a3f45;
+    font: 14px ""Trebuchet MS"", ""Segoe UI"", Arial, sans-serif;
+  }
+  .scroll-root {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    padding: 18px 0;
+  }
+  .page {
+    width: 860px;
+    max-width: 95%;
+    margin: 0 auto 16px auto;
+    border: 1px solid #c8b1b7;
+    background: #fffafb;
+    box-shadow: 0 8px 16px rgba(93, 62, 72, 0.18);
+  }
+  .shell {
+    margin: 10px;
+    border: 1px solid #e0c9cf;
+    background: #ffffff;
+  }
+  .top {
+    padding: 9px 12px;
+    border-bottom: 1px solid #e0c9cf;
+    background: #a92222;
+    color: #fff2f2;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+  }
+  .brand {
+    font-weight: bold;
+    float: right;
+    font-size: 11px;
+    letter-spacing: 0.4px;
+  }
+  .btn-group {
+    margin: 12px;
+    text-align: center;
+  }
+  .btn {
+    background-color: #7e1e1e;
+    border: 1px solid #cd9ea0;
+    color: #fff7f7;
+    padding: 5px 6px;
+    font-size: 11px;
+    width: 108px;
+    margin: 3px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn-sel {
+    background-color: #ba3a3a;
+    border-color: #e0b5b7;
+  }
+  .btn-group button:hover {
+    background-color: #ba3a3a;
+  }
+  .hero {
+    margin: 0 12px 12px 12px;
+    border: 1px solid #e1ccd1;
+    background: #fff6f8;
+    padding: 14px;
+    text-align: center;
+  }
+  .kicker {
+    margin: 0 0 6px 0;
+    color: #9b3f47;
+    font-size: 10px;
+    letter-spacing: 1px;
+    font-weight: bold;
+  }
+  .headline {
+    margin: 0;
+    color: #6c5a62;
+    font-size: 13px;
+    font-weight: normal;
+    letter-spacing: 0;
+  }
+  .sub {
+    margin: 8px 0 0 0;
+    color: #6c5a62;
+    font-size: 13px;
+  }
+  .mail-icon {
+    margin: 0 0 0 0;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 4px 0 0 0;
+    box-sizing: border-box;
+    text-align: center;
+  }
+  img {
+    display: inline-block;
+    margin: 0;
+  }
+  .section-title {
+    margin: 0 12px 8px 12px;
+    color: #8f3b46;
+    font-size: 12px;
+    letter-spacing: 0.7px;
+  }
+  .info-panel {
+    margin: 0 12px 12px 12px;
+    border: 1px solid #e1ccd1;
+    background: #fff8fa;
+    padding: 10px 12px;
+  }
+  .info-line {
+    margin: 0 0 7px 0;
+    color: #64535b;
+    font-size: 12px;
+  }
+  .info-line:last-child {
+    margin-bottom: 0;
+  }
+  .footer {
+    margin: 0 12px 12px 12px;
+    border-top: 1px solid #e1ccd1;
+    padding-top: 8px;
+    color: #8e7a82;
+    font-size: 11px;
+    text-align: center;
+  }
+  @media (max-width: 700px) {
+    .brand {
+      float: none;
+      display: block;
+      margin-top: 4px;
+      text-align: left;
+      font-size: 15px;
+    }
+    .btn {
+      width: 94%;
+      max-width: 260px;
+    }
+  }
+</style>
+<div class=""scroll-root"">
+  <div class=""page"">
+    <div class=""shell"">
+      <div class=""top"">
+        MAIL SERVICES HUB
+        <span class=""brand""> X</span>
+      </div>
+      <div class=""btn-group"">
+        <button type=""button"" class=""btn btn-primary btn-sel"" id=""Main"">Main</button>
+        <button type=""button"" class=""btn btn-primary"" id=""RegisterMail"">Email services</button>
+      </div>
+      <div class=""hero"">
+        <p class=""kicker"">PERSONAL & PROFESSIONAL MAIL</p>
+        <p class=""headline"">Do not have an email account? Do you live in the past?<br><br>Luckily at X, we offer you a reliable and secure mail service. Register for free now!</p>       
+        <div class=""mail-icon"">
+          <img src=""email_alter.png"" width=""50"" height=""50"" align=""center"">
+        </div>
+      </div>
+      <p class=""section-title"">SERVICE FEATURES</p>
+      <div class=""info-panel"">
+        <p class=""info-line"">- Account creation with simple credential setup.</p>
+        <p class=""info-line"">- Reliable inbox access for personal and operational messages.</p>
+        <p class=""info-line"">- Registration and access options available in Email services.</p>
+      </div>
+      <div class=""footer"">X's mail platform Trusted message delivery</div>
+    </div>
+  </div>
+</div>"

@@ -1,0 +1,45 @@
+// =============================================================================
+// SCANLIB
+// Scan a .so library for exploitable memory zones using metaxploit.
+// =============================================================================
+Command.scanlib=function(Obj,argv)
+  if not Library.haveMetaxploit then return
+  hasPathArg=argv and len(argv)>0
+  if hasPathArg then libPath=argv[0] else libPath=null
+  libFile=null
+  if not libPath then
+    libFile=Io.file(Obj,Obj.dir.current,"Select the Library file you would like to scan:")
+    if libFile isa Warning then return libFile
+  else
+    libFile=Io._getFile(Obj,libPath)
+    if libFile isa Error then return libFile
+  end if
+  Info.info("Scanning memory address...")
+  metaLib=load(Library.metaxploit,path(libFile))
+  if not metaLib then return Error.set("Unable to load "+libPath)
+  memoryZones=scan(globals.G_metaxploit,metaLib)
+  zoneCount=len(memoryZones)
+  if not zoneCount then return Info.info("Scan completed: No issues detected")
+  if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+    for zone in memoryZones;push(globals.G_pipe.stdout,str(zone));end for
+    return
+  end if
+  while true
+    // Build menu choices with memory zone addresses
+    choices=[green("Select memory index:")]
+    for zone in memoryZones;choices.push(purple(": ["+white(str(zone))+"]"));end for
+    // Display scan summary with library metadata
+    print blue("Scan completed: detected issues in "+white(str(zoneCount))+" memory zones")
+    print yellow("Name: ")+green(metaLib.lib_name)+" "+yellow("Version: ")+green(metaLib.version)
+    choices.push(iyellow("--- Done scanning this lib ---"))
+    // Prompt user to select memory zone or exit
+    userChoice=Gui.choiceHybrid(choices,{},len(choices)-1)
+    isDone=userChoice==len(choices)-1
+    if isDone then break
+    // Display detailed vulnerability information for selected zone
+    selectedZone=memoryZones[userChoice-1]
+    print yellow("Scanning for vulnerabilities at memory zone: ")+white(selectedZone)
+    print white(scan_address(globals.G_metaxploit,metaLib,selectedZone))
+    Gui.inputNull("Press enter when ready")
+  end while
+end function

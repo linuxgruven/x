@@ -1,0 +1,119 @@
+// Man page for net
+manNet="NET(1)                           X Shell Manual                           NET(1)
+
+<b>NAME</b>
+    net - is a network toolkit
+<b>SYNOPSIS</b>
+    <b>net </b><b>-c </b><b>IP </b><b>PORT </b><b>USER </b><b>PASSWORD</b>
+    <b>net </b><b>-l</b>
+    <b>net </b><b>-b </b><b>-l </b> [<b>-m </b> [<b>MIN</b>]] [<b>-x </b> [<b>MAX</b>]] [<b>SECONDS</b>]
+    <b>net </b><b>-b </b><b>-f </b><b>FILE</b> [<b>SECONDS</b>]
+    <b>net </b><b>-b </b><b>-w </b><b>FILE</b> [<b>SECONDS</b>]
+    <b>net </b><b>-g</b>
+    <b>net </b><b>-x</b> <b>ID</b>
+    <b>net </b><b>-u</b> <b>ID</b>
+    <b>net </b><b>-z</b>
+    <b>net </b><b>-i</b> <b>rshell</b>
+    <b>net </b><b>-i</b> <b>ssh</b>
+    <b>net </b><b>-i</b> <b>ftp</b>
+    <b>net </b><b>-i</b> <b>http</b>
+    <b>net </b><b>-i</b> <b>chat</b>
+    <b>net </b><b>-i</b> <b>repo</b>
+<b>DESCRIPTION</b>
+    Comprehensive network toolkit for managing SSH connections, IP spoofing, and server
+    installation. Background SSH connections to resume later, change LAN IP addresses
+    dynamically for evasion, rotate WiFi connections from lists, and install various server
+    types including rshell, SSH, FTP, HTTP, chat, and repository servers. Manage network
+    configuration, clear cache, and control background connections.
+<b>OPTIONS</b>
+    <b>-c IP PORT USER PASSWORD</b>
+    Connect to a network
+    Establish SSH connection with credentials
+
+    <b>-l</b>
+    List background connections
+    Show all active backgrounded SSH sessions
+
+    <b>-b -l [SECONDS] [-m MIN] [-x MAX]</b>
+    Change local LAN IP dynamically
+    Rotates IP every 4 seconds by default, min 2 max 255
+
+    <b>-b -f FILE [SECONDS]</b>
+    Change local LAN IP from file
+    Rotate IPs from file every 4 seconds, format: 192.168.xxx.1
+
+    <b>-b -w FILE [SECONDS]</b>
+    Change WiFi connection from file
+    Rotate WiFi every 3 seconds, format: BSSID-ESSID-PASS
+
+    <b>-g</b>
+    View network configuration
+    Display current network settings
+
+    <b>-x ID</b>
+    Close a background network connection
+    Terminate backgrounded SSH session by ID
+
+    <b>-u ID</b>
+    Switch to background connection
+    Resume backgrounded SSH session by ID
+
+    <b>-z</b>
+    Clear the network cache
+    Flush cached network data
+
+    <b>-i rshell|ssh|ftp|http|chat|repo</b>
+    Install server on localhost
+    Searches vfile then share for server binaries
+<b>EXAMPLE:</b>
+    <color=#e4ff34># SSH Management</color>
+    <b>net -c 192.168.1.5 22 admin pass123</b>
+    Connect to SSH server
+
+    <b>net -l</b>
+    List background connections
+
+    <b>net -u 1</b>
+    Switch to connection ID 1
+
+    <b>net -x 1</b>
+    Close connection ID 1
+
+    <color=#e4ff34># IP Rotation</color>
+    <b>net -b -l</b>
+    Auto-rotate LAN IP
+
+    <b>net -b -l -m 10 -x 100 5</b>
+    Rotate IP between .10-.100 every 5 sec
+
+    <b>net -b -f ips.txt</b>
+    Rotate from IP list file
+
+    <color=#e4ff34># WiFi Rotation</color>
+    <b>net -b -w wifi.txt</b>
+    Rotate WiFi from list
+
+    <b>net -b -w networks.txt 5</b>
+    Rotate WiFi every 5 seconds
+
+    <color=#e4ff34># Network Config</color>
+    <b>net -g</b>
+    View network configuration
+
+    <b>net -z</b>
+    Clear network cache
+
+    <color=#e4ff34># Server Installation</color>
+    <b>net -i ssh</b>
+    Install SSH server
+
+    <b>net -i rshell</b>
+    Install rshell server
+
+    <b>net -i ftp</b>
+    Install FTP server
+
+    <b>net -i http</b>
+    Install HTTP server
+<b>SEE ALSO</b>
+    <b>service</b>, <b>ifconfig</b>"

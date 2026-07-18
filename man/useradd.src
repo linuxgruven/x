@@ -1,0 +1,52 @@
+// Man page for useradd
+manUseradd="USERADD(8)                       X Shell Manual                       USERADD(8)
+
+<b>NAME</b>
+    useradd - add a user to the system
+<b>SYNOPSIS</b>
+    <b>useradd </b><b>USER</b> (<b>PASSWORD</b>)
+    <b>useradd -n </b><b>COUNT</b>
+    <b>useradd -n </b><b>USER:PASS</b> (<b>USER:PASS</b>...)
+<b>DESCRIPTION</b>
+    Create new user accounts on the system. Optionally set initial password.
+    New users added to standard groups with default permissions.
+
+    With <b>-n</b>, create multiple users at once. Provide a number to
+    auto-generate tux1..tuxN with matching passwords, or provide
+    explicit user:pass pairs.
+<b>OPTIONS</b>
+    <b>USER</b>
+    New username
+    Must be unique
+
+    <b>PASSWORD</b>
+    Optional initial password
+    Can set later with passwd
+
+    <b>-n</b>
+    Bulk creation mode
+    Follow with a count (1-15) or user:pass pairs
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Create Account</color>
+    <b>useradd tux</b>
+    Add tux user
+
+    <b>useradd guest</b>
+    Add guest account
+
+    <color=#e4ff34># With Password</color>
+    <b>useradd hacker password123</b>
+    Create with password
+
+    <b>useradd admin SecurePass456</b>
+    Admin account setup
+
+    <color=#e4ff34># Bulk Create (auto-generate)</color>
+    <b>useradd -n 5</b>
+    Creates tux1..tux5 with passwords tux1..tux5
+
+    <color=#e4ff34># Bulk Create (custom pairs)</color>
+    <b>useradd -n alice:pass1 bob:pass2 charlie:pass3</b>
+    Creates three users with specified passwords
+<b>SEE ALSO</b>
+    <b>userdel</b>, <b>passwd</b>, <b>groups</b>"

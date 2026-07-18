@@ -1,0 +1,465 @@
+// =============================================================================
+// GREP
+// Search files for text patterns; supports regex, -r recursive, -n line numbers.
+// =============================================================================
+Command.grep=function(Obj,argv)
+  if not argv then return Man.help(["grep"])
+  argv=ArgumentParser.check(argv)
+  _p=ArgumentParser.init
+  _p.addArgument("p",false,"store")        // Pattern (literal mode)
+  _p.addArgument("pattern",true,"store")   // Pattern (long form)
+  _p.addArgument("i",false,"flag")         // Case-insensitive
+  _p.addArgument("ignore",true,"flag")     // Case-insensitive (long)
+  _p.addArgument("n",false,"flag")         // Line numbers
+  _p.addArgument("non",true,"flag")        // Non-matching (long, alias for -v)
+  _p.addArgument("v",false,"flag")         // Invert match
+  _p.addArgument("invert",true,"flag")     // Invert match (long)
+  _p.addArgument("l",false,"flag")         // List files with matches
+  _p.addArgument("line",true,"flag")       // Line numbers (long)
+  _p.addArgument("o",false,"flag")         // Occurrence count
+  _p.addArgument("occur",true,"flag")      // Occurrence count (long)
+  _p.addArgument("c",false,"flag")         // Count lines
+  _p.addArgument("count",true,"flag")      // Count lines (long)
+  _p.addArgument("e",false,"flag")         // Regex mode
+  _p.addArgument("regex",true,"flag")      // Regex mode (long)
+  _p.addArgument("r",false,"flag")         // Recursive
+  _p.addArgument("recursive",true,"flag")  // Recursive (long)
+  _p.addArgument("A",false,"store")         // After context lines
+  _p.addArgument("after",true,"store")      // After context (long)
+  _p.addArgument("B",false,"store")         // Before context lines
+  _p.addArgument("before",true,"store")     // Before context (long)
+  _p.addArgument("C",false,"store")         // Context lines (before+after)
+  _p.addArgument("context",true,"store")    // Context (long)
+  _p.addArgument("w",false,"flag")          // Whole word match
+  _p.addArgument("word",true,"flag")        // Whole word (long)
+  _p.addArgument("m",false,"store")         // Max matches
+  _p.addArgument("max",true,"store")        // Max matches (long)
+  _p.addArgument("x",false,"store")          // Exclude folders
+  _p.addArgument("exclude",true,"store")     // Exclude folders (long)
+  _p.addArgument("post",true,"flag")       // Post-process flag
+  argv=_p.parse("grep",argv,Obj)
+  if argv isa Error then return
+  if argv.l and (argv.c or argv.count or argv.n or argv.line or argv.o or argv.occur) then return Error.set("Cannot use -l with -c, -n, or -o")
+  if (argv.c or argv.count) and (argv.o or argv.occur) then return Error.set("Cannot use -c and -o together")
+  usePipedInput=false
+  stdinContent=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinContent=globals.G_pipe.stdin
+    usePipedInput=true
+    if hasIndex(globals.G_bash,"DEBUG") and globals.G_bash.DEBUG then
+      debugInfo=""
+      if typeof(stdinContent)=="string" then debugInfo=len(stdinContent)+" chars" else debugInfo="non-string"
+      print cyan("[grep] Using piped stdin (")+yellow(typeof(stdinContent))+cyan(", ")+yellow(debugInfo)+cyan(")")
+    end if
+  end if
+  hasFileArgs=(argv.rest and len(argv.rest)>0) or (hasIndex(argv,"files") and argv.files and len(argv.files)>0)
+  if not hasFileArgs and not usePipedInput then return Error.set("Missing file argument")
+  pattern=null
+  useRegex=false
+  if argv.e or argv.regex then useRegex=true
+  if argv.p then
+    pattern=argv.p
+    // -p flag forces literal mode even if -e is specified
+    useRegex=false
+  else if argv.pattern then
+    pattern=argv.pattern
+  else if argv.rest and len(argv.rest)>=1 then
+    pattern=argv.rest[0]
+    if len(argv.rest)>=2 then argv.rest=argv.rest[1:] else argv.rest=[]
+  end if
+  if not pattern then return Error.set("Missing pattern")
+  if len(pattern)==0 then return Error.set("Pattern cannot be empty")
+  if len(pattern)>=2 then
+    if (pattern[0]=="""" and pattern[-1]=="""") or (pattern[0]=="'" and pattern[-1]=="'") then pattern=pattern[1:-1]
+  end if
+  // Auto-enable regex mode if pattern contains regex metacharacters
+  if not useRegex and pattern.is_match("[|.+*?^${}()\[\]\\]") then useRegex=true
+  fileTargets=[]
+  if usePipedInput then
+  else if hasIndex(argv,"files") and argv.files and len(argv.files)>0 then
+    fileTargets=argv.files
+  else if argv.rest and argv.rest isa list and len(argv.rest)>0 then
+    for fileArg in argv.rest
+      // Check if it contains a glob pattern
+      if fileArg.indexOf("*")!=null then
+        expanded=Glob.expand(Obj,fileArg)
+        if expanded and len(expanded)>0 then
+          // Check if expansion actually worked (not just returning original pattern)
+          if len(expanded)==1 and expanded[0]==fileArg then
+            // Glob didn't expand, treat as literal filename
+            fileObj=Io._getFile(Obj,fileArg)
+            if fileObj and not(fileObj isa Error) then push(fileTargets,fileObj)
+          else
+            for filePath in expanded;fileObj=Io._getFile(Obj,filePath);if fileObj and not(fileObj isa Error) then push(fileTargets,fileObj);end for
+          end if
+        else
+          fileObj=Io._getFile(Obj,fileArg)
+          if fileObj and not(fileObj isa Error) then push(fileTargets,fileObj)
+        end if
+      else
+        fileObj=Io._getFile(Obj,fileArg)
+        if fileObj and not(fileObj isa Error) then push(fileTargets,fileObj)
+      end if
+    end for
+  end if
+  if not usePipedInput and (not fileTargets or len(fileTargets)==0) then return Error.set("No files found")
+  showLineNumbers=false
+  if argv.line or argv.n then showLineNumbers=true
+  listFiles=false
+  if argv.l then listFiles=true
+  invertMatch=false
+  if argv.v or argv.invert or argv.non then invertMatch=true
+  countOnly=false
+  if argv.o or argv.occur then countOnly=true
+  countLines=false
+  if argv.c or argv.count then countLines=true
+  recursive=false
+  if argv.r or argv.recursive then recursive=true
+  afterCtx=0
+  if argv.A then afterCtx=to_int(argv.A)
+  if argv.after then afterCtx=to_int(argv.after)
+  beforeCtx=0
+  if argv.B then beforeCtx=to_int(argv.B)
+  if argv.before then beforeCtx=to_int(argv.before)
+  if argv.C then
+    afterCtx=to_int(argv.C)
+    beforeCtx=to_int(argv.C)
+  end if
+  if argv.context then
+    afterCtx=to_int(argv.context)
+    beforeCtx=to_int(argv.context)
+  end if
+  wholeWord=false
+  if argv.w or argv.word then wholeWord=true
+  maxMatches=0
+  if argv.m then maxMatches=to_int(argv.m)
+  if argv.max then maxMatches=to_int(argv.max)
+  excludeNames=null
+  excludeRaw=null
+  if argv.x then
+    excludeRaw=argv.x
+  else if argv.exclude then
+    excludeRaw=argv.exclude
+  end if
+  if excludeRaw then excludeNames=excludeRaw.split(":")
+  totalMatches=0
+  caseMode="none"
+  if argv.i or argv.ignore then caseMode="i"
+  results=[]      // List of matched lines with formatting
+  matchCount=0    // Total occurrence count (for -o)
+  lineCount=0     // Total matching lines (for -c)
+  processFile=function(fileObj,fileName)
+    content=get_content(fileObj)
+    if not content then return
+    lines=content.split(char(10))
+    if not lines then return
+    _len=len(lines)
+    contextSet={}
+    idx=0
+    while idx<_len
+      line=lines[idx]
+      if not line then
+        idx=idx+1
+        continue
+      end if
+      matchText=line
+      searchPattern=outer.pattern
+      useRegexMode=outer.useRegex
+      caseSetting=outer.caseMode
+      if caseSetting=="i" then
+        matchText=lower(matchText)
+        searchPattern=lower(searchPattern)
+      end if
+      hasMatch=false
+      localMatchCount=0
+      if useRegexMode then
+        matchList=matches(matchText,searchPattern)
+        localMatchCount=len(matchList)
+        hasMatch=(localMatchCount>0)
+      else if outer.wholeWord then
+        pos=indexOf(matchText,searchPattern)
+        while pos!=null
+          before=pos>0 and indexOf("abcdefghijklmnopqrstuvwxyz0123456789_",lower(matchText[pos-1]))!=null
+          aft=pos+len(searchPattern)<len(matchText) and indexOf("abcdefghijklmnopqrstuvwxyz0123456789_",lower(matchText[pos+len(searchPattern)]))!=null
+          if not before and not aft then
+            hasMatch=true
+            localMatchCount=localMatchCount+1
+          end if
+          nxt=indexOf(matchText[pos+1:],searchPattern)
+          if nxt==null then break
+          pos=pos+1+nxt
+        end while
+      else
+        if indexOf(matchText,searchPattern)!=null then
+          hasMatch=true
+          localMatchCount=1
+        end if
+      end if
+      if outer.maxMatches>0 and outer.totalMatches>=outer.maxMatches then break
+      if fileName!=null then filePrefix=cyan(name(fileObj))+yellow(" ["+fileName+"]")+blue(":") else filePrefix=null
+      if outer.invertMatch then
+        if hasMatch then
+          idx=idx+1
+          continue
+        end if
+        if outer.showLineNumbers then formattedLine=green(str(idx+1))+blue(":")+line else formattedLine=line
+        if filePrefix!=null then formattedLine=filePrefix+formattedLine
+        _pl=line;if outer.showLineNumbers then _pl=str(idx+1)+":"+line
+        push(outer.results,{"formatted":formattedLine,"plain":_pl,"isContext":false})
+        outer.totalMatches=outer.totalMatches+1
+      else
+        if not hasMatch then
+          idx=idx+1
+          continue
+        end if
+        if outer.listFiles then
+          push(outer.results,{"formatted":cyan(path(fileObj)),"plain":path(fileObj),"isContext":false})
+          return
+        end if
+        if outer.countOnly then
+          outer.matchCount=outer.matchCount+localMatchCount
+        else if outer.countLines then
+          outer.lineCount=outer.lineCount+1
+        else
+          bStart=idx-outer.beforeCtx
+          if bStart<0 then bStart=0
+          b=bStart
+          while b<idx
+            if not hasIndex(contextSet,str(b)) then
+              contextSet[str(b)]=true
+              cl=lines[b]
+              if cl==null then cl=""
+              if outer.showLineNumbers then cf=green(str(b+1))+blue("-")+cl else cf=cl
+              if filePrefix!=null then cf=filePrefix+cf
+              push(outer.results,{"formatted":cf,"plain":cl,"isContext":true})
+            end if
+            b=b+1
+          end while
+          if not hasIndex(contextSet,str(idx)) then
+            contextSet[str(idx)]=true
+            if outer.showLineNumbers then formattedLine=green(str(idx+1))+blue(":")+line else formattedLine=line
+            if filePrefix!=null then formattedLine=filePrefix+formattedLine
+            _pl=line;if outer.showLineNumbers then _pl=str(idx+1)+":"+line
+            push(outer.results,{"formatted":formattedLine,"plain":_pl,"isContext":false})
+          end if
+          outer.totalMatches=outer.totalMatches+1
+          aEnd=idx+outer.afterCtx
+          if aEnd>=_len then aEnd=_len-1
+          a=idx+1
+          while a<=aEnd
+            if not hasIndex(contextSet,str(a)) then
+              contextSet[str(a)]=true
+              cl=lines[a]
+              if cl==null then cl=""
+              if outer.showLineNumbers then cf=green(str(a+1))+blue("-")+cl else cf=cl
+              if filePrefix!=null then cf=filePrefix+cf
+              push(outer.results,{"formatted":cf,"plain":cl,"isContext":true})
+            end if
+            a=a+1
+          end while
+        end if
+      end if
+      idx=idx+1
+    end while
+  end function
+  if usePipedInput then
+    content=stdinContent
+    if typeof(content)!="string" then content=str(content)
+    lines=split(content,char(10))
+    if lines then
+      _len=len(lines)
+      contextSet={}
+      idx=0
+      while idx<_len
+        line=lines[idx]
+        if not line then
+          idx=idx+1
+          continue
+        end if
+        matchText=line
+        searchPattern=pattern
+        if caseMode=="i" then
+          matchText=lower(matchText)
+          searchPattern=lower(searchPattern)
+        end if
+        hasMatch=false
+        localMatchCount=0
+        if useRegex then
+          matchList=matches(matchText,searchPattern)
+          localMatchCount=len(matchList)
+          hasMatch=(localMatchCount>0)
+        else if wholeWord then
+          pos=indexOf(matchText,searchPattern)
+          while pos!=null
+            before=pos>0 and indexOf("abcdefghijklmnopqrstuvwxyz0123456789_",lower(matchText[pos-1]))!=null
+            aft=pos+len(searchPattern)<len(matchText) and indexOf("abcdefghijklmnopqrstuvwxyz0123456789_",lower(matchText[pos+len(searchPattern)]))!=null
+            if not before and not aft then
+              hasMatch=true
+              localMatchCount=localMatchCount+1
+            end if
+            nxt=indexOf(matchText[pos+1:],searchPattern)
+            if nxt==null then break
+            pos=pos+1+nxt
+          end while
+        else
+          if indexOf(matchText,searchPattern)!=null then
+            hasMatch=true
+            localMatchCount=1
+          end if
+        end if
+        if maxMatches>0 and totalMatches>=maxMatches then break
+        if invertMatch then
+          if hasMatch then
+            idx=idx+1
+            continue
+          end if
+          if showLineNumbers then formattedLine=green(str(idx+1))+blue(":")+line else formattedLine=line
+          _pl=line;if showLineNumbers then _pl=str(idx+1)+":"+line
+          push(results,{"formatted":formattedLine,"plain":_pl,"isContext":false})
+          totalMatches=totalMatches+1
+        else
+          if not hasMatch then
+            idx=idx+1
+            continue
+          end if
+          if countOnly then
+            matchCount=matchCount+localMatchCount
+          else if countLines then
+            lineCount+=1
+          else
+            bStart=idx-beforeCtx
+            if bStart<0 then bStart=0
+            b=bStart
+            while b<idx
+              if not hasIndex(contextSet,str(b)) then
+                contextSet[str(b)]=true
+                cl=lines[b]
+                if cl==null then cl=""
+                if showLineNumbers then cf=green(str(b+1))+blue("-")+cl else cf=cl
+                push(results,{"formatted":cf,"plain":cl,"isContext":true})
+              end if
+              b=b+1
+            end while
+            if not hasIndex(contextSet,str(idx)) then
+              contextSet[str(idx)]=true
+              if showLineNumbers then formattedLine=green(str(idx+1))+blue(":")+line else formattedLine=line
+              _pl=line;if showLineNumbers then _pl=str(idx+1)+":"+line
+              push(results,{"formatted":formattedLine,"plain":_pl,"isContext":false})
+            end if
+            totalMatches=totalMatches+1
+            aEnd=idx+afterCtx
+            if aEnd>=_len then aEnd=_len-1
+            a=idx+1
+            while a<=aEnd
+              if not hasIndex(contextSet,str(a)) then
+                contextSet[str(a)]=true
+                cl=lines[a]
+                if cl==null then cl=""
+                if showLineNumbers then cf=green(str(a+1))+blue("-")+cl else cf=cl
+                push(results,{"formatted":cf,"plain":cl,"isContext":true})
+              end if
+              a=a+1
+            end while
+          end if
+        end if
+        idx=idx+1
+      end while
+    end if
+  end if
+  for fileTarget in fileTargets
+    if not fileTarget or fileTarget isa Error then continue
+    if is_folder(fileTarget) then
+      if recursive then
+        allFiles=Io.getAll(fileTarget,excludeNames)
+        if allFiles isa Error then continue
+        for targetFile in allFiles;if Io.isBinFolder(targetFile) then continue;if not has_permission(targetFile,"r") then continue;processFile(targetFile,path(targetFile));end for
+      else
+        dirFiles=get_files(fileTarget)
+        if not dirFiles then continue
+        for targetFile in dirFiles;if is_binary(targetFile) then continue;if not has_permission(targetFile,"r") then continue;processFile(targetFile,path(targetFile));end for
+      end if
+    else
+      processFile(fileTarget,null)
+    end if
+  end for
+  if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+    if not len(results) and not countOnly and not countLines then return true // Return empty output (allows pipe chain to continue)
+    if hasIndex(globals.G_bash,"DEBUG") and globals.G_bash.DEBUG then print cyan("[grep] PIPE_MODE detected - adding output to PIPE_OUTPUT array")
+    if countOnly then
+      push(globals.G_pipe.stdout,str(matchCount))
+    else if countLines then
+      push(globals.G_pipe.stdout,str(lineCount))
+    else
+      // Add all matching lines (strip color codes for pipe)
+      for result in results;push(globals.G_pipe.stdout,result.plain);end for
+    end if
+    return true
+  end if
+  if _p.write then
+    output=[]
+    if countOnly then
+      push(output,str(matchCount))
+    else if countLines then
+      push(output,str(lineCount))
+    else
+      for result in results
+        line=result.formatted
+        cleanLine=line
+        cleanLine=cleanLine.replace("<color=#36abe8>","")
+        cleanLine=cleanLine.replace("<color=#20ff98>","")
+        cleanLine=cleanLine.replace("<color=#ff2052>","")
+        cleanLine=cleanLine.replace("</color>","")
+        push(output,cleanLine)
+      end for
+    end if
+    argv.data=output
+    return _p.out(Obj,argv)
+  end if
+  // Check for no results in normal mode (not pipe, not redirect)
+  if not len(results) and not countOnly and not countLines then return Warning.set("No matches found")
+  if countOnly then
+    if matchCount==0 then return Info.info("0 matches found")
+    print green(str(matchCount))
+  else if countLines then
+    if lineCount==0 then return Info.info("0 matching lines found")
+    print green(str(lineCount))
+  else
+    if invertMatch then Info.info("Showing non-matches for '"+pattern+"'") else Info.info("Showing matches for '"+pattern+"'")
+    for result in results
+      line=result.formatted
+      plainText=result.plain
+      // Apply syntax highlighting for matches (not for inverted)
+      if not invertMatch then
+        matchText=plainText
+        matchPattern=pattern
+        if caseMode=="i" then
+          matchText=lower(matchText)
+          matchPattern=lower(matchPattern)
+        end if
+        highlightedText=plainText
+        if useRegex then
+          // Regex mode: find match positions and wrap each with highlight color
+          mList=matches(matchText,matchPattern)
+          if mList and len(mList)>0 then
+            // Use the full match (key "0") to highlight in the original line
+            fullMatch=mList.values[0]
+            if fullMatch then
+              redMatch="<color=#ff2052>"+fullMatch+"</color>"
+              highlightedText=plainText.replace(fullMatch,redMatch)
+            end if
+          end if
+        else
+          // Literal mode: replace all pattern occurrences with red version
+          if indexOf(matchText,matchPattern)!=null then
+            redMatch="<color=#ff2052>"+pattern+"</color>"
+            highlightedText=plainText.replace(pattern,redMatch)
+          end if
+        end if
+        // Reconstruct line preserving line number prefix if present
+        lineNumEnd=indexOf(line,blue(":"))
+        if lineNumEnd!=null then line=line[:lineNumEnd+len(blue(":"))]+highlightedText else line=highlightedText
+      end if
+      print white(line)
+    end for
+  end if
+end function

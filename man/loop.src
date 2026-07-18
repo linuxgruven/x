@@ -1,0 +1,52 @@
+// Man page for loop
+manLoop="LOOP(1)                          X Shell Manual                          LOOP(1)
+
+<b>NAME</b>
+    loop - Memory buffer overflow exploitation tool
+<b>SYNOPSIS</b>
+    <b>loop -r</b> [IP:PORT] [-m MEMORY] [-c CODE] [-w WAIT] [-p PARAMS]
+    <b>loop -l</b> [LIBRARY] [-m MEMORY] [-c CODE] [-w WAIT] [-p PARAMS]
+<b>DESCRIPTION</b>
+    Initiates a loop attack to exploit memory buffer overflows in vulnerable
+    services. The loop command repeatedly attempts to exploit a specified
+    memory address with an unsecure value at defined intervals. All times
+    are specified in seconds. IP:PORT and LIBRARY path can be piped via
+    stdin. Any missing arguments are prompted interactively. Press q or x
+    to stop the loop.
+<b>OPTIONS</b>
+    <b>-r</b> - Remote Attack
+      Launch loop attack against remote IP address and port.
+      IP:PORT can be the first positional arg or piped from stdin.
+      <b>-m</b> MEMORY    Memory address to target (hex format)
+      <b>-c</b> CODE      Overflow value to inject
+      <b>-w</b> WAIT      Seconds between attack attempts
+      <b>-p</b> PARAMS    Optional extra parameter (e.g. password, LAN IP for bounce)
+
+    <b>-l</b> - Local Attack
+      Launch loop attack against local library file.
+      LIBRARY path can be the first positional arg, -f flag, or piped from stdin.
+      <b>-f</b> LIBRARY   Path to local library file
+      <b>-m</b> MEMORY    Memory address to target (hex format)
+      <b>-c</b> CODE      Overflow value to inject
+      <b>-w</b> WAIT      Seconds between attack attempts
+      <b>-p</b> PARAMS    Optional extra parameter (e.g. password, LAN IP for bounce)
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Remote Loop Attack</color>
+    <b>loop -r 127.1.1.1:22 -m 0x29320210 -c destr -w 5</b>
+    Attack SSH service every 5 seconds
+
+    <b>loop -r 192.168.1.100:80 -m 0x12345678 -c overflow -w 3 -p root</b>
+    Attack HTTP service every 3 seconds with password param
+
+    <color=#e4ff34># Local Loop Attack</color>
+    <b>loop -l -f /lib/aptclient.so -m 0x29320210 -c destr -w 5</b>
+    Attack local library
+
+    <b>loop -l -f /lib/aptclient.so -m 0x29320210 -c destr -w 5 -p 192.168.0.3</b>
+    Attack local library with LAN bounce target IP
+
+    <color=#e4ff34># Pipe IP into loop</color>
+    <b>echo ""1.2.3.4:22"" | loop -r -m 0x29320210 -c destr -w 5</b>
+    Pipe target into remote loop
+<b>SEE ALSO</b>
+    <b>decipher</b>, <b>scanlib</b>, <b>build</b>"

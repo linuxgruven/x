@@ -1,0 +1,222 @@
+toolHopper="computer=host_computer(get_shell)
+cryptoLib=include_lib(""/lib/crypto.so"")
+if not cryptoLib then cryptoLib=include_lib(current_path+""/crypto.so"")
+if not cryptoLib then exit(""Error: Missing crypto library"")
+credsPath=home_dir+""/.wifi_creds""
+_load=function
+	db={}
+	credFile=File(outer.computer,outer.credsPath)
+	if not credFile then return db
+	lines=split(get_content(credFile),char(10))
+	for line in lines
+		fields=split(line,""\|"")
+		if len(fields)<3 then continue
+		fl=""clean""
+		if len(fields)>=4 then fl=fields[3]
+		db[fields[0]]={""BSSID"":fields[0],""ESSID"":fields[1],""PASS"":fields[2],""flag"":fl}
+	end for
+	return db
+end function
+_save=function(db)
+	lines=[]
+	for key in db.indexes
+		entry=db[key]
+		push(lines,entry.BSSID+""|""+entry.ESSID+""|""+entry.PASS+""|""+entry.flag)
+	end for
+	credFile=File(outer.computer,outer.credsPath)
+	if credFile then delete(credFile)
+	touch(outer.computer,home_dir,"".wifi_creds"")
+	credFile=File(outer.computer,outer.credsPath)
+	if not credFile then exit(""Error: Failed to create creds file"")
+	set_content(credFile,join(lines,char(10)))
+end function
+doInit=function
+	wifiList=wifi_networks(outer.computer,""wlan0"")
+	if not wifiList then exit(""No WiFi networks found"")
+	db=_load
+	airmon(outer.cryptoLib,""start"",""wlan0"")
+	newCount=0
+	for network in wifiList
+		parts=split(network,"" "")
+		bssid=parts[0]
+		signal=parts[1]
+		essid=parts[2]
+		if hasIndex(db,bssid) then
+			print(""[i] Skipping ""+essid+"" (already cracked)"")
+			continue
+		end if
+		signalVal=to_int(signal.replace(""%"",""""))
+		numAcks=ceil(300000/(signalVal+15))
+		print(""[i] Cracking ""+essid+"" (""+bssid+"") signal:""+signal+"" ACKs:""+numAcks+""..."")
+		aireplay(outer.cryptoLib,bssid,essid,numAcks)
+		pw=aircrack(outer.cryptoLib,""/home/""+active_user+""/file.cap"")
+		capFile=File(outer.computer,home_dir+""/file.cap"")
+		if capFile then delete(capFile)
+		if pw!=""null"" and pw then
+			print(""[+] Cracked ""+essid+"": ""+pw)
+			db[bssid]={""BSSID"":bssid,""ESSID"":essid,""PASS"":pw,""flag"":""clean""}
+			newCount=newCount+1
+		else
+			print(""[-] Failed to crack ""+essid)
+		end if
+	end for
+	if len(db)==0 then exit(""Failed to crack any networks"")
+	_save(db)
+	print(""[+] Saved ""+len(db)+"" credentials (""+newCount+"" new)"")
+end function
+doList=function
+	db=_load
+	if len(db)==0 then exit(""No creds. Run: hopper init"")
+	cleanCount=0
+	burnedCount=0
+	idx=0
+	for key in db.indexes
+		entry=db[key]
+		if entry.flag==""clean"" then
+			print(""  [""+idx+""] <color=#1EFF00>[clean]</color>  ""+entry.ESSID+"" (""+entry.BSSID+"")"")
+			cleanCount=cleanCount+1
+		else
+			print(""  [""+idx+""] <color=#FF0000>[burned]</color> ""+entry.ESSID+"" (""+entry.BSSID+"")"")
+			burnedCount=burnedCount+1
+		end if
+		idx=idx+1
+	end for
+	print(""[i] ""+cleanCount+"" clean, ""+burnedCount+"" burned"")
+end function
+doBurn=function(arg)
+	db=_load
+	if len(db)==0 then exit(""No creds. Run: hopper init"")
+	if not arg then
+		router=get_router(outer.computer)
+		if not router then exit(""Not connected to WiFi"")
+		bssid=router.bssid_name
+		if not hasIndex(db,bssid) then exit(""Current network not in arsenal"")
+		db[bssid].flag=""burned""
+		_save(db)
+		print(""[!] Burned ""+db[bssid].ESSID)
+		return
+	end if
+	found=null
+	numIdx=to_int(arg)
+	if numIdx isa number and numIdx>=0 then
+		keys=db.indexes
+		if numIdx<len(keys) then found=keys[numIdx]
+	end if
+	if not found then
+		for key in db.indexes
+			if lower(db[key].ESSID)==lower(arg) then
+				found=key
+				break
+			end if
+		end for
+	end if
+	if not found then exit(""Network '""+arg+""' not found"")
+	db[found].flag=""burned""
+	_save(db)
+	print(""[!] Burned ""+db[found].ESSID)
+end function
+doRevive=function(arg)
+	db=_load
+	if len(db)==0 then exit(""No creds. Run: hopper init"")
+	if not arg then exit(""Usage: hopper revive <ESSID|INDEX|all>"")
+	if arg==""all"" then
+		reviveCount=0
+		for key in db.indexes
+			if db[key].flag==""burned"" then
+				db[key].flag=""clean""
+				reviveCount=reviveCount+1
+			end if
+		end for
+		if reviveCount==0 then exit(""No burned networks to revive"")
+		_save(db)
+		print(""[+] Revived ""+reviveCount+"" networks"")
+		return
+	end if
+	found=null
+	numIdx=to_int(arg)
+	if numIdx isa number and numIdx>=0 then
+		keys=db.indexes
+		if numIdx<len(keys) then found=keys[numIdx]
+	end if
+	if not found then
+		for key in db.indexes
+			if lower(db[key].ESSID)==lower(arg) then
+				found=key
+				break
+			end if
+		end for
+	end if
+	if not found then exit(""Network '""+arg+""' not found"")
+	if db[found].flag==""clean"" then exit(db[found].ESSID+"" is already clean"")
+	db[found].flag=""clean""
+	_save(db)
+	print(""[+] Revived ""+db[found].ESSID)
+end function
+doHop=function(waitTime)
+	db=_load
+	if len(db)==0 then
+		print(""[i] No creds found, running init..."")
+		doInit
+		db=_load
+	end if
+	cleanNets=[]
+	for key in db.indexes
+		if db[key].flag==""clean"" then push(cleanNets,db[key])
+	end for
+	if len(cleanNets)==0 then exit(""No clean networks. Use: hopper list / hopper revive"")
+	maxNets=len(cleanNets)
+	last=-1
+	print(""[i] Hopping between ""+maxNets+"" clean networks (""+waitTime+""s interval). Ctrl+C to stop."")
+	while 1
+		idx=floor(rnd*maxNets)
+		if idx==last and maxNets>1 then idx=(idx+1)%maxNets
+		last=idx
+		print(""[i] Hopping to ""+cleanNets[idx].ESSID+""..."")
+		connect_wifi(outer.computer,""wlan0"",cleanNets[idx].BSSID,cleanNets[idx].ESSID,cleanNets[idx].PASS)
+		wait waitTime
+	end while
+end function
+if active_net_card(computer)!=""WIFI"" then exit(""Error: WiFi not active"")
+if not params or len(params)==0 then
+	doHop(3)
+	exit
+end if
+cmd=lower(params[0])
+if cmd==""init"" then
+	doInit
+	exit
+end if
+if cmd==""list"" then
+	doList
+	exit
+end if
+if cmd==""burn"" then
+	arg=null
+	if len(params)>=2 then arg=params[1]
+	doBurn(arg)
+	exit
+end if
+if cmd==""revive"" then
+	arg=null
+	if len(params)>=2 then arg=params[1]
+	doRevive(arg)
+	exit
+end if
+if cmd==""-t"" then
+	waitTime=3
+	if len(params)>=2 then waitTime=to_int(params[1])
+	if not waitTime isa number or waitTime<1 then waitTime=3
+	doHop(waitTime)
+	exit
+end if
+if cmd==""-h"" or cmd==""--help"" then
+	print(""Usage: hopper [init|list|burn|revive|-t N|-h]"")
+	print(""  init          Crack all visible WiFi networks"")
+	print(""  list          Show arsenal with clean/burned status"")
+	print(""  burn [ID]     Mark network burned (current if no arg)"")
+	print(""  revive <ID>   Un-burn a network (or 'all')"")
+	print(""  -t SECONDS    Hop with custom interval (default 3)"")
+	print(""  (no args)     Start hopping between clean networks"")
+	exit
+end if
+exit(""Unknown command: ""+cmd+"". Use -h for help"")"

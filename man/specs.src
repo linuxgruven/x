@@ -1,0 +1,15 @@
+// Man page for specs
+manSpecs="SPECS(1)                         X Shell Manual                         SPECS(1)
+
+<b>NAME</b>
+    specs - System specifications calculator
+<b>SYNOPSIS</b>
+    <b>specs</b>
+<b>DESCRIPTION</b>
+    Display a system specifications calculator showing hardware
+    and system information for the current machine.
+<b>EXAMPLE:</b>
+    <b>specs</b>
+    Show system specifications calculator
+<b>SEE ALSO</b>
+    <b>ifconfig</b>, <b>iwconfig</b>, <b>stats</b>"

@@ -1,0 +1,52 @@
+// Man page for load
+manLoad="LOAD(1)                          X Shell Manual                          LOAD(1)
+
+<b>NAME</b>
+    load - Load libraries into memory
+<b>SYNOPSIS</b>
+    <b>load -m</b> | <b>-c</b> | <b>-b</b> | <b>-a</b> | <b>-t</b> | <b>-s</b>
+<b>DESCRIPTION</b>
+    Load specific libraries into memory for immediate use. Only six libraries
+    are supported: metaxploit.so, crypto.so, blockchain.so, aptclient.so,
+    libtrafficnet.so, and libsmartappliance.so. Loading libraries into memory
+    makes their functions available without repeated disk access.
+<b>OPTIONS</b>
+    <b>-m</b> - Load Metaxploit
+      Load metaxploit.so exploit framework into memory.
+
+    <b>-c</b> - Load Crypto
+      Load crypto.so cryptographic library into memory.
+
+    <b>-b</b> - Load Blockchain
+      Load blockchain.so cryptocurrency library into memory.
+
+    <b>-a</b> - Load APTClient
+      Load aptclient.so package manager library into memory.
+
+    <b>-t</b> - Load TrafficNet
+      Load libtrafficnet.so network traffic library into memory.
+
+    <b>-s</b> - Load Smart Appliance
+      Load libsmartappliance.so IoT device library into memory.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Load Individual Libraries</color>
+    <b>load -m</b>
+    Load metaxploit framework
+
+    <b>load -c</b>
+    Load crypto library
+
+    <b>load -b</b>
+    Load blockchain library
+
+    <color=#e4ff34># Network Libraries</color>
+    <b>load -t</b>
+    Load traffic network library
+
+    <b>load -s</b>
+    Load smart appliance library
+
+    <b>load -a</b>
+    Load APT client library
+<b>SEE ALSO</b>
+    <b>libs</b>, <b>lms</b>"

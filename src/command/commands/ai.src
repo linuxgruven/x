@@ -1,0 +1,279 @@
+// =============================================================================
+// AI
+// Natural language interface; parses English commands into shell operations.
+// =============================================================================
+_AUTONOMOUS_KEYWORDS=["decide how","figure out","you decide","your choice","think for yourself","be creative","choose your"]
+Command.ai=function(Obj,argv)
+  //Lazy-load AI system on first use
+  if not globals.G_agent then
+    Info.info("Initializing AI module...")
+    globals.G_agent={}
+    for key in indexes(AgentCore);globals.G_agent[key]=AgentCore[key];end for
+    for key in indexes(AgentLearning);globals.G_agent[key]=AgentLearning[key];end for
+    for key in indexes(AgentExecute);globals.G_agent[key]=AgentExecute[key];end for
+    for key in indexes(AgentParser);globals.G_agent[key]=AgentParser[key];end for
+    for key in indexes(AgentPlanning);globals.G_agent[key]=AgentPlanning[key];end for
+    for key in indexes(AgentExecution);globals.G_agent[key]=AgentExecution[key];end for
+    for key in indexes(AgentHandlers);globals.G_agent[key]=AgentHandlers[key];end for
+    for key in indexes(AgentTest);globals.G_agent[key]=AgentTest[key];end for
+    AI.init
+    Info.info("Initializing Agent...")
+    globals.G_agent.init
+    Knowledge.init
+    if len(indexes(globals.G_agent.commandKnowledgeCache)) then Info.info("Loaded Agent knowledge base with "+len(indexes(globals.G_agent.commandKnowledgeCache))+" commands")
+  end if
+  //Always ensure config exists
+  if not globals.G_agent or not hasIndex(globals.G_agent,"config") or not globals.G_agent.config then
+    if globals.G_agent then globals.G_agent.init else return Error.set("AI Agent initialization failed")
+  end if
+  if not argv then return Man.help(["ai"])
+  //CRITICAL: Guard against invalid argv
+  if typeof(argv)!="list" then return
+  //CRITICAL: Block shell control commands IMMEDIATELY
+  if len(argv)>0 then
+    //Use typeof check to avoid any string method issues
+    if typeof(argv[0])=="string" then
+      arg0=argv[0]
+      if arg0=="home" then return
+      if arg0=="x" then return  
+      if arg0=="exit" then return
+      if arg0=="close" then return
+      if arg0=="c" then return
+      if arg0=="HOME" then return
+      if arg0=="X" then return
+      if arg0=="EXIT" then return
+      if arg0=="CLOSE" then return
+      if arg0=="C" then return
+    end if
+  end if
+  //Check for help patterns: "how do i <command>", "how to <command>"
+  //But exclude autonomous patterns like "decide how", "figure out how"
+  if len(argv)>=3 then
+    fullCMD=join(argv," ")
+    cmdLower=lower(fullCMD)
+    //Skip if this looks like an autonomous command
+    isAutonomous=false
+    for keyword in _AUTONOMOUS_KEYWORDS
+      if indexOf(cmdLower,keyword)!=null then
+        isAutonomous=true
+        break
+      end if
+    end for
+    if not isAutonomous then
+      //Pattern: "how do i use <command>", "how do i <command>", "how to use <command>", "how to <command>"
+      helpPrefixes=["how do i use ","how do i ","how to use ","how to "]
+      for prefix in helpPrefixes
+        pos=indexOf(cmdLower,prefix)
+        if pos!=null then
+          commandName=trim(fullCMD[pos+len(prefix):])
+          if len(commandName)>0 then
+            if hasIndex(Obj.commands,"man") then return Obj.commands.man([commandName]) else return Command.man(Obj,[commandName])
+          end if
+        end if
+      end for
+    end if
+  end if
+  if argv[0]=="status" then
+    status=globals.G_agent.status
+    if not status then return Error.set("Could not get agent status")
+    Info.info("AI Agent Status:")
+    if hasIndex(status,"historyCount") then print white("  Commands executed: "+str(status.historyCount))
+    if hasIndex(status,"activeSessions") then print white("  Active sessions: "+str(status.activeSessions))
+    if hasIndex(status,"lastTarget") then
+      if status.lastTarget then print white("  Last target: "+str(status.lastTarget)) else print white("  Last target: none")
+    end if
+    if hasIndex(status,"lastAction") then
+      if status.lastAction then print white("  Last action: "+str(status.lastAction))
+    end if
+    if hasIndex(status,"compromisedHosts") then print white("  Compromised hosts: "+str(status.compromisedHosts))
+    if hasIndex(status,"availableShells") then print white("  Available shells: "+str(status.availableShells))
+    if hasIndex(status,"storedObjectCount") and status.storedObjectCount>0 then
+      print white("  Stored objects: "+str(status.storedObjectCount))
+      if hasIndex(status,"storedObjectList") and len(status.storedObjectList)>0 then
+        for objStr in status.storedObjectList;print white("    "+objStr);end for
+      end if
+    else
+      print white("  Stored objects: none")
+    end if
+    if hasIndex(status,"config") then
+      cfg=status.config
+      if typeof(cfg)=="map" then
+        if hasIndex(cfg,"outputLevel") then
+          level=cfg["outputLevel"]
+          if level==0 then print white("  Output: Silent")
+          if level==1 then print white("  Output: Normal")
+          if level==2 then print white("  Output: Verbose")
+        end if
+        if hasIndex(cfg,"dryRun") then print white("  Dry run: "+str(cfg["dryRun"]))
+        if hasIndex(cfg,"aggressive") then print white("  Aggressive: "+str(cfg["aggressive"]))
+        if hasIndex(cfg,"stealth") then print white("  Stealth: "+str(cfg["stealth"]))
+      end if
+    end if
+    return
+  else if argv[0]=="history" then
+    history=globals.G_agent.history
+    if len(history)==0 then Info.info("No command history")
+    print white("AI Agent Command History ("+str(len(history))+" commands):")
+    print ""
+    _len=len(history)
+    i=0
+    while i<_len
+      entry=history[i]
+      print white(str(i+1)+". "+entry.command)
+      if hasIndex(entry.result,"success") then
+        if entry.result.success then print white("   Result: Success") else print red("   Result: Failed")
+      end if
+      print ""
+    i+=1
+    end while
+    return
+  else if argv[0]=="clear" then
+    if len(argv)>1 then
+      //Check if it's a number (clear specific object)
+      if val(argv[1]) isa number then
+        objIndex=val(argv[1])
+        result=globals.G_agent.clearStoredObjects(objIndex)
+        if hasIndex(result,"success") and result.success then return Info.info(result.message) else return Error.set("Failed to clear stored object: "+result.error)
+      else if argv[1]=="stored" or argv[1]=="object" or argv[1]=="objects" then
+        result=globals.G_agent.clearStoredObjects
+        if hasIndex(result,"success") and result.success then return Info.info(result.message) else return Error.set("Failed to clear stored objects: "+result.error)
+      end if
+    else
+      globals.G_agent.reset
+      result=globals.G_agent.clearStoredObjects
+      messages=["AI Agent reset complete"]
+      if hasIndex(result,"success") and result.success then push(messages,result.message)
+      return Info.info(join(messages,char(10)))
+    end if
+  else if argv[0]=="learn" then
+    if len(argv)<2 then return Error.set("Usage: ai learn <command> or ai learn all")
+    if argv[1]=="all" then
+      result=globals.G_agent.learnAllCommands(Obj)
+      if hasIndex(result,"success") and result.success then return Info.info("Learned "+result.learned+" commands (skipped "+result.skipped+" without man pages)") else return Error.set("Failed to learn commands: "+result.error)
+    else
+      cmdName=argv[1]
+      result=globals.G_agent.learnCommand(Obj,cmdName)
+      if hasIndex(result,"success") and result.success then return Info.info("Learned about command: "+cmdName) else return Error.set("Failed to learn command: "+result.error)
+    end if
+  else if argv[0]=="save" then
+    result=globals.G_agent.saveKnowledge
+    if hasIndex(result,"success") and result.success then return Info.info("Knowledge base saved successfully") else return Error.set("Failed to save knowledge base: "+result.error)
+  else if argv[0]=="load" then
+    result=globals.G_agent.loadKnowledge
+    if hasIndex(result,"success") and result.success then return Info.info("Knowledge base loaded: "+str(result.entries)+" entries") else return Error.set("Failed to load knowledge base: "+result.error)
+  else if argv[0]=="undo" or argv[0]=="rollback" then
+    steps=1
+    if len(argv)>1 then steps=to_int(argv[1])
+    result=globals.G_agent.rollback(steps)
+    if hasIndex(result,"success") and result.success then return Info.info("Rolled back "+str(steps)+" steps to: "+result.snapshot.label) else return Error.set("Rollback failed: "+result.error)
+  else if argv[0]=="snapshots" then
+    result=globals.G_agent.listSnapshots
+    if len(result.snapshots)==0 then return Info.info("No state snapshots available")
+    print white("Available State Snapshots ("+str(result.count)+"):")
+    for snap in result.snapshots;print white("  "+str(snap.index)+". "+snap.label+" ("+snap.timestamp+")");end for
+    return
+  else if argv[0]=="export" or argv[0]=="telemetry" then
+    filepath=null
+    if len(argv)>1 then filepath=argv[1]
+    result=globals.G_agent.exportTelemetry(filepath)
+    if hasIndex(result,"success") and result.success then return Info.info("Telemetry exported to: "+result.path) else return Error.set("Export failed: "+result.error)
+  end if
+  options={}
+  commandParts=[]
+  for arg in argv
+    if arg=="-v" then
+      options.verbose=true
+    else if arg=="-q" then
+      options.quiet=true
+    else if arg=="-d" then
+      options.dry_run=true
+    else if arg=="-a" then
+      options.aggressive=true
+    else if arg=="-s" then
+      options.stealth=true
+    else if arg=="-t" then
+      options.trainer=true
+    else if arg=="-D" then
+      options.debug=true
+    else
+      push(commandParts,arg)
+    end if
+  end for
+  command=join(commandParts," ")
+  if len(command)==0 then return Error.set("No command specified")
+  result=globals.G_agent.execute(Obj,command,options)
+  if hasIndex(result,"plan") and hasIndex(result.plan,"needs_prompt") then
+    print white(result.plan.prompt_message)
+    print white("Options:")
+    _len=len(result.plan.options);i=0;while i<_len;opt=result.plan.options[i];if opt==result.plan.default_option then print white("  "+str(i+1)+". "+opt+" (default)") else print white("  "+str(i+1)+". "+opt);i+=1;end while
+    choice=user_input(white("Select option (1-"+str(len(result.plan.options))+") or press Enter for default: "))
+    choice=trim(choice)
+    if choice=="" then
+      selected=result.plan.default_option
+    else
+      choice_num=to_int(choice)
+      if choice_num>0 and choice_num<=len(result.plan.options) then selected=result.plan.options[choice_num-1] else return Error.set("Invalid choice")
+    end if
+    new_command=selected+" "+result.plan.target
+    result=globals.G_agent.execute(Obj,new_command,options)
+  end if
+  if hasIndex(result,"error") then return Error.set(str(result.error))
+  //Skip printing message if it's a config command (already printed in agent.src)
+  if hasIndex(result,"message") and not (hasIndex(result,"isConfig") and result.isConfig) then print white(str(result.message))
+  if hasIndex(result,"success") then
+    if result.success then
+      quietMode=false
+      if hasIndex(options,"quiet") then quietMode=options.quiet
+      //Don't print "Done" if we're about to open a shell session
+      //But DO print "Done" (and don't open) if the user asked to store instead
+      willOpenShell=false
+      isShouldStore=hasIndex(result,"context") and result.context and hasIndex(result.context,"shouldStore") and result.context.shouldStore
+      if not isShouldStore and hasIndex(result,"context") and result.context then
+        if (hasIndex(result.context,"rootShell") and result.context.rootShell) or (hasIndex(result.context,"shell") and result.context.shell) then willOpenShell=true
+      end if
+      if not quietMode and not willOpenShell then print blue("Agent: Done. Awaiting further instructions.")
+    else
+      print white("Partial completion - "+str(result.stepsCompleted)+"/"+str(result.stepsCompleted+result.stepsFailed)+" steps succeeded")
+    end if
+  end if
+  verboseMode=false
+  if hasIndex(options,"verbose") then verboseMode=options.verbose
+  if verboseMode and result.hasIndex("details") then
+    print("")
+    print white("Execution Details:")
+    for detail in result.details
+      status_icon="+"
+      if not detail.success then status_icon="x"
+      print white("  "+status_icon+" "+str(detail.step))
+      if hasIndex(detail,"message") then print white("    "+str(detail.message))
+      if hasIndex(detail,"error") then print red("    Error: "+str(detail.error))
+    end for
+  end if
+  //If a shell was obtained, return it so the caller can switch into it.
+  //Skip if the user asked to store the shell for later use instead.
+  if result and typeof(result)=="map" and not (hasIndex(result,"context") and result.context and hasIndex(result.context,"shouldStore") and result.context.shouldStore) then
+    sh=null
+    if hasIndex(result,"context") and result.context then
+      if hasIndex(result.context,"rootShell") and result.context.rootShell then
+        sh=result.context.rootShell
+      else if hasIndex(result.context,"shell") and result.context.shell then
+        sh=result.context.shell
+      end if
+    end if
+    if not sh and hasIndex(result,"data") and result.data then sh=result.data
+    if sh then
+      rawShell=null
+      if typeof(sh)=="shell" then
+        rawShell=sh
+      else if typeof(sh)=="map" then
+        if hasIndex(sh,"shell") and typeof(sh.shell)=="shell" then rawShell=sh.shell
+      end if
+      if rawShell then
+        if typeof(Exploit)=="map" and hasIndex(Exploit,"getShell") then return Exploit.getShell(rawShell)
+        return rawShell
+      end if
+      //Fallback: return wrapped shell objects as-is
+      if typeof(sh)=="map" and hasIndex(sh,"type") and sh.type=="shell" then return sh
+    end if
+  end if
+end function

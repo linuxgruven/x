@@ -1,0 +1,1038 @@
+// =============================================================================
+// LIBRARY_DATABASE
+// Library management server; automated library collection, caching, distribution, and exploit updates.
+// =============================================================================
+LibServer=new ServerCommon
+//Return global library server session object
+//Returns: globals.G_libServer
+LibServer._getServerGlobal=function;return globals.G_libServer;end function
+//Initialize library server session
+//Sets up server object with shell, directories, and metadata
+//Parameters:
+//  ex - Shell object for server access
+//Returns: None (sets up self properties)
+LibServer.run=function(ex)
+	//Store shell object reference
+	self.object=ex
+	self.shell=ex
+	self.type="shell"
+	//Get encryption mode from Boot (default to null if not set)
+	if typeof(Boot)=="unknown" or not Boot.hasIndex("e") then self.encryption=null else self.encryption=Boot.e
+	//Get computer and root directory
+	self.computer=host_computer(ex)
+	self.root=File(host_computer(ex),"/")
+	//Extract user information
+	self.user=Utility.getUserEX(ex)
+	//Initialize directory structure
+	self.dir={
+    "current":File(self.computer,"/root"),
+    "libs":null
+  }
+	//Store network metadata
+	self.meta={
+    "public_ip":public_ip_pc(self.computer),
+    "local_ip":self.computer.local_ip
+  }
+	//Log shell session
+	Log.shellLog(self.shell)
+end function
+//Check if library exists in cache
+//Parameters:
+//  m - Library metadata object with lib_name and version
+//Returns: True if cached, false otherwise
+LibServer.checkCache=function(m)
+	//Check cache index for nameXXXversion key
+	return hasIndex(globals.G_libraryCache,m.lib_name+"XXX"+m.version)
+end function
+//Save library to cache
+//Creates folders as needed (max 240 files per folder)
+//Parameters:
+//  m - Library metadata object
+//  l - Library file path
+//  s - Source shell object
+//Returns: True on success, string/Error on failure
+LibServer.saveLib=function(m,l,s)
+	//Build cache key
+	n=m.lib_name+"XXX"+m.version
+	//Check if already cached
+	if hasIndex(globals.G_libraryCache,n) then return("Library "+m.lib_name+" version "+m.version+" already exists in the cache")
+	//Get server computer
+	c=globals.G_libServer.computer
+	//Create first folder if none exist
+	_gfl=get_folders(globals.G_libServer.dir.libs)
+	if not _gfl then
+		Info.info("Creating a new library folder...")
+		create_folder(c,path(globals.G_libServer.dir.libs),str(len(_gfl)+1))
+		p=get_folders(globals.G_libServer.dir.libs)[-1]
+	//Create new folder if last folder is full (>240 files)
+	else if len(get_files(_gfl[-1]))>240 then
+		Info.info("Creating a new library folder...")
+		create_folder(c,path(globals.G_libServer.dir.libs),str(len(_gfl)+1))
+		p=get_folders(globals.G_libServer.dir.libs)[-1]
+	else
+		//Use last folder
+		p=_gfl[-1]
+	end if
+	//Check folder creation succeeded
+	if not p then return Error.set("Failed to save library")
+	//SCP library from source to server
+	r=scp(s,l,path(p),globals.G_libServer.shell)
+	if r isa string then return Error.set(r)
+	//Extract library name and version
+	x=m.lib_name
+	z=m.version
+	//Get copied file
+	f=File(c,path(p)+"/"+x)
+	if not f then return
+	//Rename to nameXXXversion format
+	if f then rename(f,x+"XXX"+z)
+	//Add to cache
+	globals.G_libraryCache[x+"XXX"+z]={
+    "library":x,
+    "version":z,
+    "file":File(c,path(p)+"/"+x+"XXX"+z)
+  }
+	return true
+end function
+//Get library from cache and SCP to destination
+//Parameters:
+//  l - Library name
+//  v - Library version
+//  p - Destination path
+//  s - Destination shell object
+//Returns: None or Error
+LibServer.getLib=function(l,v,p,s)
+	//Build cache key
+	n=l+"XXX"+v
+	//Check if library exists
+	if not hasIndex(globals.G_libraryCache,n) then return
+	//SCP from server to destination
+	r=scp(globals.G_libServer.shell,path(globals.G_libraryCache[n].file),p,s)
+	//Get copied file
+	f=File(host_computer(s),p+"/"+n)
+	//Rename to remove XXX separator
+	if f then rename(f,split(name(f),"XXX")[0])
+	//Check for SCP errors
+	if r isa string then return Error.set(r)
+end function
+//Remove library from cache
+//Parameters:
+//  l - Library name
+//  v - Library version
+//Returns: True on success, Error on failure
+LibServer.removeLib=function(l,v)
+	//Build cache key
+	n=l+"XXX"+v
+	//Check if library exists
+	if not hasIndex(globals.G_libraryCache,n) then return Error.set("Library "+l+" version "+v+" not found in the cache")
+	//Delete file from disk
+	r=delete(globals.G_libraryCache[n].file)
+	if r isa string and len(r) then return Error.set(r)
+	//Remove from cache
+	remove(globals.G_libraryCache,n)
+	return true
+end function
+//Remove all versions of a library
+//Parameters:
+//  n - Library name
+//Returns: True on success, Error on failure
+LibServer.removeAllLib=function(n)
+	//Iterate through all cached libraries
+	for m in globals.G_libraryCache
+		//Check if library name matches
+		if m.value.library==n then
+			//Delete file from disk
+			r=delete(m.value.file)
+			if r isa string and len(r) then return Error.set(r)
+			//Remove from cache
+			remove(globals.G_libraryCache,m.value.library+"XXX"+m.value.version)
+		end if
+	end for
+	true
+end function
+//Load library cache from disk on startup
+//Scans all library folders and builds cache index
+//Parameters: None (uses globals.G_libServer)
+//Returns: None
+LibServer.loadCache=function
+	//Check library system is valid
+	if System.checkLibs isa Error then return
+	Info.info("Initializing library database...")
+	//Get all library folders
+	d=get_folders(globals.G_libServer.dir.libs)
+	//Process each folder
+	for f in d
+		//Process each file
+		for m in get_files(f)
+			//Split filename by XXX separator
+			i=split(name(m),"XXX")
+			//Skip if not proper format
+			if not len(i)==2 then continue
+			//Add to cache
+			globals.G_libraryCache[name(m)]={
+        "library":i[0],
+        "version":i[1],
+        "file":m
+      }
+		end for
+	end for
+end function
+//Refresh cache with new libraries
+//Only adds new libraries (doesn't remove existing)
+//Parameters: None (uses globals.G_libServer)
+//Returns: None
+LibServer.refresh=function
+	//Check library system is valid
+	if System.checkLibs isa Error then return
+	Info.info("Refreshing library database...")
+	//Get all library folders
+	d=get_folders(globals.G_libServer.dir.libs)
+	//Process each folder
+	for f in d
+		//Process each file
+		for m in get_files(f)
+			//Skip if already in cache
+			if hasIndex(globals.G_libraryCache,name(m)) then continue
+			//Split filename by XXX separator
+			i=split(name(m),"XXX")
+			//Skip if not proper format
+			if not len(i)==2 then continue
+			//Add new library to cache
+			globals.G_libraryCache[name(m)]={
+        "library":i[0],
+        "version":i[1],
+        "file":m
+      }
+		end for
+	end for
+end function
+//Execute server management tasks
+//Parameters:\n//  argv - Command arguments
+//Returns: None or result from subfunction
+LibServer.task=function(argv)
+	//Check library system is valid
+	if System.checkLibs isa Error then return
+	//Require arguments
+	if not len(argv) then return Man.help(["server"])
+	//Launch application on server
+	//Parameters:\n	//  arg - Arguments array (command, args)
+	//Returns: None
+	doLaunch=function(arg)
+		//Require command
+		if not len(arg) then return Man.help(["server"])
+		//Launch with or without arguments
+		if not len(arg[1:]) then r=launch(globals.G_libServer.shell,arg[0]) else r=launch(globals.G_libServer.shell,arg[0],join(arg[1:]," "))
+		if not r==1 then
+      if r isa string then Info.error(r) else Info.error("Failed to launch "+arg[0])
+    end if
+	end function
+	//Start terminal session on server
+	//Parameters:\n	//  arg - Arguments array (none)
+	//Returns: Terminal result
+	terminal=function(arg)
+		//Start terminal
+		return start_terminal(globals.G_libServer.shell)
+	end function
+	//Get interactive shell access
+	//Parameters:\n	//  arg - Arguments array (none)
+	//Returns: None
+	shell=function(arg)
+    //Open shell
+    Exploit.getShell(globals.G_libServer.shell)
+	end function
+	//Browse server filesystem
+	//Parameters:\n	//  arg - Arguments array (path optional)
+	//Returns: None
+	browser=function(arg)
+		//Browse specific path or current
+		if arg then Io.browse(globals.G_libServer,arg)
+	end function
+	//Show filesystem statistics
+	//Parameters:\n	//  arg - Arguments array (none)
+	//Returns: None
+	stats=function(arg)
+		//Display file counts
+		Io.count(File(globals.G_libServer.computer,"/"))
+	end function
+	//Show processes with memory usage
+	//Parameters:\n	//  arg - Arguments array (none)
+	//Returns: None
+	proccess=function(arg)
+		//Display process list with memory
+		Command.ps(globals.G_libServer,["-m"])
+	end function
+	//Clear trash folder
+	//Parameters:\n	//  arg - Arguments array (none)
+	//Returns: None
+	trash=function(arg)
+		//Get trash folder
+		t=File(globals.G_libServer.computer,"/root/.Trash")
+		if t then delete(t) else return
+		Info.info("Trash cleared")
+	end function
+	//Execute filesystem lockdown
+	//Parameters:\n	//  arg - Arguments array (none)
+	//Returns: None
+	secure=function(arg)
+		//Lock filesystem
+		LibServer.lockFilesystem
+	end function
+	//Task command map
+	cmds={
+    "-l":@doLaunch,
+    "-t":@terminal,
+    "-s":@shell,
+    "-b":@browser,
+    "-f":@stats,
+    "-p":@proccess,
+    "-r":@trash,
+    "-z":@secure
+  }
+  //Execute task or show error
+  if not hasIndex(cmds,lower(argv[0])) then return Error.set(Text.msg.flag+argv[0]+" ]")
+  cmds[lower(argv[0])](argv[1:])
+end function
+//Main LMS command hub
+//Central dispatcher for all library management operations
+//Parameters:
+//  Obj - Session object
+//  argv - Command arguments
+//  S - Shell mode flag (use Obj.packMetaxploit vs Library.metaxploit)
+//Returns: None or result from subfunction
+LibServer.hub=function(Obj,argv,S=false)
+	//Load cache if not initialized
+	if not globals.G_libraryCache then LibServer.loadCache
+	if not argv then return Man.help(["lms"])
+  Arg1=lower(argv[0])
+	//Pack libraries from random IPs (automated collection)
+	//Exploits random routers and collects libraries from /lib
+	//Parameters:
+	//  arg - Arguments array (supports -c for pass count)
+	//Returns: None
+	packLibs=function(arg)
+		//Require metaxploit for exploitation
+		if not Library.haveMetaxploit then return
+    //Parse -c argument for pass count
+    _p=ArgumentParser.init
+    _p.addArgument("c",false,"storeNumber")
+    arg=_p.parseArgs("lms",arg)
+    if arg isa Error then return arg
+    //Set pass count (default 10)
+    if arg.c then x=arg.c else x=10
+		s=x
+		a=[]
+		w=0
+		Info.info("Updating the library database...")
+		Info.info("Making "+green(str(x))+" passes...")
+		while x!=0
+			i=Net.rip
+			r=null
+			r=get_router(i)
+			if not r then continue
+			z=used_ports(r)
+			if not z then continue
+			if Net.isPortsClose(z) then continue
+			if globals.G_settings.monitorDirtyips then Dirty.add(i)
+      _=null
+			for m in Exploit.extract(r,i)
+        if m isa Error then continue
+        if m.public_ip+m.local_ip!=_ then _=m.public_ip+m.local_ip
+				if Exploit.haveAlready(m.metaLib) then
+          if Exploit.canScan(m.metaLib) then Exploit.headless(m.metaLib)
+					for ez in Exploit._ex(Exploit.getCacheKey(m.metaLib))
+						if ez.e=="s" then
+							ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"library_database")
+							if typeof(ex)!="shell" then continue
+              e=Exploit.tryShellEX(ex,true)
+              if not e or e isa Error then continue
+              M=Builder.packCOEX(e).metaxploit
+              if not M then continue
+              c=host_computer(e)
+							for f in get_files(File(c,"/lib"))
+								l=load(M,path(f))
+								if not Exploit.haveAlready(l) then
+									Info.info("Adding "+lib_name(l)+":"+version(l)+" to the exploit database")
+									Exploit.headless(l)
+                else
+                  if Exploit.canScan(l) then Exploit.headless(l)
+								end if
+								if not LibServer.checkCache(l) then
+									Info.info("Adding "+lib_name(l)+":"+version(l)+" to the library database")
+									LibServer.saveLib(l,path(f),e)
+									push(a,lib_name(l)+":"+version(l))
+								end if
+							end for
+              Info.info("Checking|Clearing log on "+green(c.public_ip)+":"+yellow(c.local_ip),"+")
+              Log.trylogwipe(e)
+              break
+						end if
+					end for
+				else
+					z=Exploit.get(m.metaLib)
+					if not z then
+						Info.info("Adding "+lib_name(m.metaLib)+":"+version(m.metaLib))
+						Exploit.headless(m.metaLib)
+						for ez in Exploit._ex(Exploit.getCacheKey(m.metaLib))
+							if ez.e=="s" then
+								ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"library_database")
+								if typeof(ex)!="shell" then continue
+                e=Exploit.tryShellEX(ex,true)
+                if not e or e isa Error then continue
+                M=Builder.packCOEX(e).metaxploit
+                if not M then continue
+                c=host_computer(e)
+								for f in get_files(File(c,"/lib"))
+									l=load(M,path(f))
+									if not Exploit.haveAlready(l) then
+										Info.info("Adding "+lib_name(l)+":"+version(l))
+										Exploit.headless(l)
+                  else
+                    if Exploit.canScan(l) then Exploit.headless(l)
+									end if
+									if not LibServer.checkCache(l) then
+										Info.info("Adding "+lib_name(l)+":"+version(l)+" to the library database")
+										LibServer.saveLib(l,path(f),e)
+										push(a,lib_name(l)+":"+version(l))
+									end if
+								end for
+                Info.info("Checking|Clearing log on "+green(c.public_ip)+":"+yellow(c.local_ip),"+")
+                Log.trylogwipe(e)
+                break
+							end if
+						end for
+					else
+						for ez in Exploit._ex(Exploit.getCacheKey(m.metaLib))
+							if ez.e=="s" then
+								ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"library_database")
+								if typeof(ex)!="shell" then continue
+                e=Exploit.tryShellEX(ex,true)
+                if not e or e isa Error then continue
+                M=Builder.packCOEX(e).metaxploit
+                if not M then continue
+                c=host_computer(e)
+								for f in get_files(File(c,"/lib"))
+									l=load(M,path(f))
+									if not Exploit.haveAlready(l) then
+										Info.info("Adding "+lib_name(l)+":"+version(l))
+										Exploit.headless(l)
+                  else
+                    if Exploit.canScan(l) then Exploit.headless(l)
+									end if
+									if not LibServer.checkCache(l) then
+										Info.info("Adding "+lib_name(l)+":"+version(l)+" to the library database")
+										LibServer.saveLib(l,path(f),e)
+										push(a,lib_name(l)+":"+version(l))
+									end if
+								end for
+                Info.info("Checking|Clearing log on "+green(c.public_ip)+":"+yellow(c.local_ip),"+")
+                Log.trylogwipe(e)
+                break
+							end if
+						end for
+					end if
+				end if
+			end for
+			x-=1
+			w+=1
+			Info.info(green(str(w))+" passe(s) out of "+green(str(s))+" made...","+")
+		end while
+		if a then
+      print green("The following libraries were added to the Database:")
+			listNH(a)
+    else
+      Info.info("No new libraries were added to the library database")
+		end if
+		Info.info("Library database update complete")
+	end function
+	//Add single library to cache
+	//Parameters:
+	//  arg - Arguments array (library path)
+	//Returns: None
+	addLib=function(arg)
+		//Require library path
+		if not arg then return Man.help(["lms"])
+		p=arg[0]
+		//Make absolute path if relative
+		if indexOf(p,"/")==null then p=path(Obj.dir.current)+"/"+p
+		//Get file reference
+		l=Io._getFile(Obj,p)
+		if l isa Error then return
+		//Use session or library metaxploit
+		if S then m=Obj.packMetaxploit else m=Library.metaxploit
+		//Load library with metaxploit
+		z=load(m,path(l))
+		if not z then return Error.set("Failed to load the library")
+		//Save to cache
+		if LibServer.saveLib(z,path(l),Obj.shell) then Info.info("Library "+lib_name(z)+" version "+version(z)+" added to the library database")
+	end function
+	//Add all libraries from directory
+	//Parameters:
+	//  arg - Arguments array (directory path, optional)
+	//Returns: None
+	addLibs=function(arg)
+		//Use current directory or argument
+		if not arg then p=path(Obj.dir.current) else p=arg[0]
+		if not p then return Error.set("Invalid path")
+		//Get directory reference
+		l=Io._getFile(Obj,p)
+		if l isa Error then return
+		//Verify it's a folder
+		if not is_folder(l) then return Error.set("Failed to get the library folder")
+		//Use session or library metaxploit
+		if S then m=Obj.packMetaxploit else m=Library.metaxploit
+		//Track added libraries
+		a=[]
+		//Process each file in directory
+		for f in get_files(l);y=load(m,path(f));if not y then continue;if LibServer.saveLib(y,path(f),Obj.shell) isa number then push(a,lib_name(y)+":"+version(y));end for
+		if a then
+			Info.info("The following libraries in "+path(l)+" have been added to the library database")
+			listNH(a)
+    else
+      Info.info("No new libraries were added to the library database")
+		end if
+	end function
+	//Check if library exists in cache
+	//Parameters:
+	//  arg - Arguments array (name:version or name version)
+	//Returns: None
+	check=function(arg)
+		//Validate arguments
+		if not arg or len(arg)>2 then return Man.help(["lms"])
+		v=null
+		n=null
+		//Parse name:version format
+		if indexOf(arg[0],":") then
+			if len(arg)==1 then
+				m=split(arg[-1],":")
+				if len(m)!=2 then return Man.help(["lms"])
+        n=m[0]
+				v=m[1]
+			end if
+		else
+      //Parse name version format
+      n=arg[0]
+			v=arg[1]
+		end if
+		//Check cache
+		if hasIndex(globals.G_libraryCache,n+"XXX"+v) then return Info.info("The library "+n+" version "+v+" is in the cache")
+		Info.info("The library "+n+" version "+v+" is not in the cache")
+	end function
+	//Remove library from cache
+	//Parameters:
+	//  arg - Arguments array (name:version or name version)
+	//Returns: None
+	removeLib=function(arg)
+		v=null
+		n=null
+		p=null
+		//Parse name:version format
+		if indexOf(arg[0],":") then
+			//Single argument (name:version)
+			if len(arg)==1 then
+				m=split(arg[-1],":")
+				if len(m)!=2 then return Man.help(["lms"])
+        n=m[0]
+				v=m[1]
+				p=path(Obj.dir.current)
+			//Two arguments (name:version path)
+			else if len(arg)==2 then
+				m=split(arg[0],":")
+				if len(m)!=2 then return Man.help(["lms"])
+        n=m[0]
+				v=m[1]
+				p=arg[1]
+			else
+				return Man.help(["lms"])
+			end if
+		else
+			//Two arguments (name version)
+			if len(arg)==2 then
+        n=arg[0]
+				v=arg[1]
+				p=path(Obj.dir.current)
+			//Three arguments (name version path)
+			else if len(arg)==3 then
+        n=arg[0]
+        v=arg[1]
+				p=arg[2]
+			else 
+				return Man.help(["lms"])
+			end if
+		end if
+		//Remove from cache
+		if LibServer.removeLib(n,v) then Info.info("Library "+n+" version "+v+" removed from the cache")
+	end function
+	//Get library from cache
+	//Parameters:
+	//  arg - Arguments array (name:version or name version, path optional)
+	//Returns: None
+	getLib=function(arg)
+		//Require arguments
+		if not arg then return Man.help(["lms"])
+		v=null
+		n=null
+		p=null
+		//Parse name:version format
+		if indexOf(arg[0],":") then
+			//Single argument (name:version)
+			if len(arg)==1 then
+				m=split(arg[-1],":")
+				if len(m)!=2 then return Man.help(["lms"])
+        n=m[0]
+				v=m[1]
+				p=path(Obj.dir.current)
+			//Two arguments (path name:version)
+			else if len(arg)==2 then
+				m=split(arg[-1],":")
+				if len(m)!=2 then return Man.help(["lms"])
+        p=arg[0]
+        n=m[0]
+				v=m[1]
+			else
+				return Man.help(["lms"])
+			end if
+		else
+			//Two arguments (name version)
+			if len(arg)==2 then
+        n=arg[0]
+				v=arg[1]
+				p=path(Obj.dir.current)
+			//Three arguments (name version path)
+			else if len(arg)==3 then
+        n=arg[0]
+        v=arg[1]
+				p=arg[2]
+			else 
+				return Man.help(["lms"])
+			end if
+		end if
+		//Retrieve library from cache
+		LibServer.getLib(n,v,p,Obj.shell)
+	end function
+  //List libraries by version count
+  //Parameters:
+  //  arg - Arguments array (none)
+  //Returns: None
+  listLibsCount=function(arg)
+    //Check if cache has entries
+    if len(globals.G_libraryCache) then Info.info("Library database listing by count:") else return Info.info("The library database is empty")
+    //Count versions per library
+    d={}
+    for l in sort(globals.G_libraryCache.indexes)
+      t=split(l,"XXX")
+      if len(t)!=2 then continue
+      a=t[0]
+      b=t[1]
+      if not hasIndex(d,a) then d[a]=1 else d[a]+=1
+    end for
+    //Build formatted output
+    s=[]
+    for r in d;push(s,ljust(blue(r.key),43)+yellow(" - ")+green(str(r.value))+white(" version(s)|library(s)"));end for
+    listNH(s)
+  end function
+	//List all libraries with versions
+	//Parameters:
+	//  arg - Arguments array (none)
+	//Returns: None
+	listLibs=function(arg)
+    //Check if cache has entries
+    if len(globals.G_libraryCache) then Info.info("Library database listing:") else return Info.info("The library database is empty")
+    //Track current library name
+    c=""
+		//Batch versions for display (5 per line)
+		p=[]
+		//Process each cache entry
+		for l in sort(globals.G_libraryCache.indexes)
+			//Parse nameXXXversion format
+			t=split(l,"XXX")
+			if len(t)!=2 then continue
+      a=t[0]
+			b=t[1]
+			//Print first library header
+			if __l_idx==0 then
+				print bold(blue(a)+yellow(" -"))
+				c=a
+			end if
+			//New library detected
+			if a!=c then
+				c=a
+				//Flush pending versions
+				if len(p) then
+					print join(p,green(" - "))
+					p=[]
+					print bold(blue(c)+yellow(" -"))
+				else
+					print bold(blue(c)+yellow(" -"))
+				end if
+			end if
+			//Add version to batch
+			if not p then push(p,white("  "+a+" "+b)) else push(p,white(a+" "+b))
+			//Flush when batch reaches 5 versions
+			if len(p)==5 then
+				print join(p,green(" - "))
+				p=[]
+			end if
+		end for
+		//Flush remaining versions
+		if len(p) then print join(p,green(" - "))
+	end function
+	updatePO=function(arg)
+		if globals.G_errors.pobject isa Error then return Error.set("PObjects are in an error state, please check the log")
+    _p=ArgumentParser.init
+    _p.addArgument("last",true,"flag")
+    arg=_p.parseArgs("lms",arg)
+    if arg isa Error then return arg
+    if len(get_files(File(globals.G_libServer.computer,"/lib")))>10 then rfc([])
+    d=get_folders(globals.G_libServer.dir.libs)
+    if not d then return Info.info("LMS server is empty, try to run 'lms -p'")
+    Exploit.purgePObjects
+		Info.info("Updating exploit database pobjects...")
+		process=function(l,p)
+			putBack=function(p)
+        Info.info("Restoring files to "+p+"...")
+        c=0
+        for f in get_files(File(globals.G_libServer.computer,"/lib"));if indexOf(name(f),"XXX")==null then continue;move(f,p,name(f));c+=1;end for
+        Info.info("restored "+c+" librarys")
+			end function
+			Info.info("Processing "+p+"...")
+      for f in l;move(f,"/lib",name(f));end for
+      c=0
+			for f in get_files(File(globals.G_libServer.computer,"/lib"))
+        if indexOf(name(f),"XXX")==null then continue
+        c+=1
+				e=load(get_custom_object.packMetaxploit,path(f))
+				if not e then continue
+        Info.info("Processing file "+name(f)+"...")
+				Info.info("Processing "+yellow(lib_name(e)+blue(":")+version(e))+"...")
+        if is_patched(e) then
+          Info.info(lib_name(e)+":"+version(e)+":> Library is already patched to : "+is_patched(e,true))
+          continue
+        end if
+				g=PartialObject.loadDebugger(e)
+				if g isa Error then
+					putBack(p)
+					return g
+				end if
+        u=PartialObject.trySolve(g,e)
+				if u isa Error then
+					putBack(p)
+					return u
+				end if
+        if not hasIndex(u,"result") then return Error.set("","",true)
+				if u.result=="No potential issues have been found" then continue
+				t=PartialObject.getPData(u.result,e)
+				if t isa Error then
+          putBack(p)
+          return t
+        end if
+				o=payload(g,t.memory,path(f))
+				if o isa list then
+					if o[2].lib_name==null then continue
+					PartialObject.saveToDatabase(e,t)
+				end if
+			end for
+      Info.info("Processed "+str(c)+" library(s) in "+p)
+			putBack(p)
+		end function
+    if not hasIndex(get_custom_object,"packMetaxploit") then
+      if Builder.packCOEX(globals.G_libServer.shell) isa Error then return
+    end if
+    if arg.last then
+      process(get_files(d[-1]),path(d[-1]))
+    else
+      for f in d
+        _gf=get_files(f);if _gf then
+          r=process(_gf,path(f))
+          if r isa Error then return
+        end if
+      end for
+    end if
+		Info.info("Updating exploit database pobjects complete")
+	end function
+	//Update exploit database from cached libraries
+	//Parameters:
+	//  arg - Arguments array (--last flag optional)
+	//Returns: None
+	updateEX=function(arg)
+    //Parse --last flag (process only last folder)
+    _p=ArgumentParser.init
+    _p.addArgument("last",true,"flag")
+    arg=_p.parseArgs("lms",arg)
+    if arg isa Error then return arg
+    //Clean up /lib if too many files
+    if len(get_files(File(globals.G_libServer.computer,"/lib")))>10 then rfc([])
+		//Get all library folders
+		d=get_folders(globals.G_libServer.dir.libs)
+    if not d then return Info.info("LMS server is empty, try to run 'lms -p'")
+		Info.info("Updating exploit database...")
+		//Process folder of libraries
+		process=function(l,p)
+			Info.info("Processing directory"+p+"...")
+			//Move libraries to /lib temporarily
+			for m in l;move(m,"/lib",name(m));end for
+			//Scan each library for exploits
+			for f in get_files(File(globals.G_libServer.computer,"/lib"))
+				//Load library with metaxploit
+				y=load(get_custom_object.packMetaxploit,path(f))
+				if not y then continue
+				Info.info("Processing "+lib_name(y)+":"+version(y)+"...")
+				//Add to exploit database if new or scannable
+				if not Exploit.haveAlready(y) or Exploit.canScan(y) then Exploit.headless(y)
+			end for
+			//Move libraries back to cache folder
+			for m in l;move(m,p,name(m));end for
+		end function
+    if not hasIndex(get_custom_object,"packMetaxploit") then
+      if Builder.packCOEX(globals.G_libServer.shell) isa Error then return
+    end if
+    //Process last folder only or all folders
+    if arg.last then
+      process(get_files(d[-1]),path(d[-1]))
+    else
+      for f in d
+        _gf=get_files(f);if _gf then
+          r=process(_gf,path(f))
+          if r isa Error then return
+        end if
+      end for
+    end if
+		Info.info("Updating exploit database complete")
+	end function
+	//Remove all versions of library
+	//Parameters:
+	//  arg - Arguments array (library name)
+	//Returns: None
+	removeAll=function(arg)
+		//Require library name
+		if arg then r=arg[0] else return Error.set("Please specify a library to remove")
+		Info.info("Removing all "+r+" libraries from the cache...")
+		//Remove all versions
+		LibServer.removeAllLib(r)
+		Info.info("Library cache cleared")
+	end function
+	//Show filesystem statistics
+	//Parameters:
+	//  arg - Arguments array (none)
+	//Returns: None
+	stats=function(arg)
+		//Display file count statistics
+		Io.count(File(globals.G_libServer.computer,"/"),false,"lms")
+	end function
+	//Refresh cache from disk
+	//Parameters:
+	//  arg - Arguments array (none)
+	//Returns: None
+	refresh=function(arg)
+		//Reload cache
+		LibServer.refresh
+	end function
+	//Recover libraries from /lib to cache
+	//Parameters:
+	//  arg - Arguments array (none)
+	//Returns: None
+	rfc=function(arg)
+		c=globals.G_libServer.computer
+		//Find first empty folder
+		t=null
+		for d in get_folders(globals.G_libServer.dir.libs)
+			if not get_files(d) then
+				t=d
+				break
+			end if
+		end for
+		if not t then return Info.info("Recovery not necessary")
+		Info.info("Recovering libraries...")
+		//Move XXX format files from /lib to cache folder
+		for l in get_files(File(c,"/lib"));if indexOf(name(l),"XXX")!=null then move(l,path(t),name(l));end for
+		Info.info("Recovery complete")
+	end function
+  //Remove duplicates and optimize folder distribution
+  //Parameters:
+  //  arg - Arguments array (none)
+  //Returns: None
+  dups=function(arg)
+    //Get all library folders
+    d=get_folders(globals.G_libServer.dir.libs)
+    if len(d)==1 then return Info.info("No duplicates to remove")
+    if not d then return Info.info("LMS server is empty, try to run 'lms -p'")
+    //Track seen filenames
+    s={}
+    //Remove duplicates
+    for f in d
+      for m in get_files(f)
+        n=name(m)
+        if hasIndex(s,n) then
+          Info.warning("Duplicate found: "+n+" in "+path(f,"-"))
+          delete(m)
+        else
+          s[n]=1
+        end if
+      end for
+    end for
+    //Optimize folder distribution (max 240 files each)
+    z=d[-1]
+    _len=len(d)
+    i=0
+    while i<_len
+      if name(d[i])==name(z) then break
+      //Fill folders with less than 240 files
+      _dFiles=get_files(d[i])
+      if len(_dFiles)<240 then
+        t=240-len(_dFiles)
+        if t<0 then
+          i+=1
+          continue
+        end if
+        t=str(t)
+        Info.warning("Moving "+t+" files from "+path(z,"-")+" to "+path(d[i]))
+        //Move files from last folder
+        for f in get_files(z);_dFiles=get_files(d[i]);if len(_dFiles)==240 then break;move(f,path(d[i]),name(f));end for
+        //Delete empty last folder
+        if not get_files(z) then
+          delete(z)
+          z=d[-1]
+        end if
+      end if
+      i+=1
+    end while
+    Info.info("Duplicate removal complete")
+  end function
+  //Watch directory and auto-update cache
+  //Parameters:
+  //  arg - Arguments array (-w wait time, -d directory)
+  //Returns: None
+  watch=function(arg)
+    _p=ArgumentParser.init
+    _p.addArgument("w",false,"storeNumber")
+    _p.addArgument("d",false,"store")
+    arg=_p.parseArgs("lms",arg)
+    if arg isa Error then return arg
+    //Default wait time 300 seconds
+    if not arg.w then arg.w=300
+    //Default directory /lib
+    if not arg.d then arg.d="/lib"
+    //Launch run utility if needed
+    //Watch loop
+    while poll_input!="q"
+      Info.info("Waiting "+str(arg.w)+" seconds before next update...")
+      wait arg.w
+      Info.info("Running system update...")
+      //Run apt upgrade on directory
+      Command.pacman(Obj,["-Su","-p",arg.d,"-y"])
+      //Add new libraries to cache
+      addLibs([arg.d])
+    end while
+  end function
+  //Process single library for 0day exploit
+  //Parameters:
+  //  arg - Arguments array (name:version or name version)
+  //Returns: None
+  target=function(arg)
+    co=get_custom_object
+		//Validate arguments
+		if not arg or len(arg)>2 then return Man.help(["lms"])
+		v=null
+		n=null
+		//Parse name:version format
+		if indexOf(arg[0],":") then
+			if len(arg)==1 then
+				m=split(arg[-1],":")
+				if len(m)!=2 then return Man.help(["lms"])
+        n=m[0]
+				v=m[1]
+			end if
+		else
+      //Parse name version format
+      n=arg[0]
+			v=arg[1]
+		end if
+    if not hasIndex(co,"packMetaxploit") then
+      if Builder.packCOEX(globals.G_libServer.shell) isa Error then return
+    end if
+    //Build cache key
+    z=n+"XXX"+v
+    wait 0.01
+		//Check cache
+		if not hasIndex(globals.G_libraryCache,z) then return Info.info("The library "+n+" version "+v+" is not in the cache")
+    Info.info("Targeting library "+n+" version "+v)
+    //Copy library to /lib
+    r=copy(globals.G_libraryCache[z].file,"/lib",name(globals.G_libraryCache[z].file))
+    if r isa string then Info.error(r)
+    //Get file reference
+    f=File(globals.G_libServer.computer,"/lib/"+z)
+    if not f then return Error.set("Failed to copy the library to /lib")
+    //Load library with metaxploit
+    e=load(co.packMetaxploit,path(f))
+    if not e then return Error.set("Failed to load the library")
+    Info.info("Processing file "+name(f)+"...")
+		Info.info("Processing "+yellow(lib_name(e)+blue(":")+version(e))+"...")
+    //Check if already patched
+    if is_patched(e) then
+      Info.info(lib_name(e)+":"+version(e)+":> Library is patched to : "+is_patched(e,true))
+      delete(f)
+      return
+    end if
+		//Load debugger
+		g=PartialObject.loadDebugger(e)
+		if g isa Error then
+			delete(f)
+			return g
+		end if
+    //Solve vulnerabilities
+    u=PartialObject.trySolve(g,e)
+		if u isa Error then
+			delete(f)
+			return u
+		end if
+    if not hasIndex(u,"result") then return Error.set("","",true)
+		//No vulnerabilities found
+		if u.result=="No potential issues have been found" then return delete(f)
+		//Get payload data
+		t=PartialObject.getPData(u.result,e)
+		if t isa Error then
+      delete(f)
+      return t
+    end if
+		//Create payload
+		o=payload(g,t.memory,path(f))
+		if o isa list then
+			if o[2].lib_name==null then return delete(f)
+			//Save to database
+			PartialObject.saveToDatabase(e,t)
+		end if
+    //Cleanup
+    delete(f)
+    Info.info("Finished processing "+n+":"+v+" with no errors")
+  end function
+  //Open file or directory
+  //Parameters:
+  //  arg - Arguments array (path)
+  //Returns: None
+  open=function(arg)
+    //Call Command.open
+    Command.open(globals.G_libServer,arg)
+  end function
+	//Command dispatcher map
+	cmds={
+    "-rfc":@rfc,
+    "refresh":@refresh,
+    "watch":@watch,
+    "stats":@stats,
+    "dups":@dups,
+    "target":@target,
+    "-ra":@removeAll,
+    "-o":@open,
+    "-e":@updateEX,
+    "-g":@getLib,
+    "-u":@updatePO,
+    "-c":@check,
+    "-p":@packLibs,
+    "-a":@addLib,
+    "add":@addLibs,
+    "-r":@removeLib,
+    "-l":@listLibs,
+    "-lc":@listLibsCount
+	}
+	//Execute command or show error
+	if hasIndex(cmds,Arg1) then cmds[Arg1](argv[1:]) else return Error.set("check your syntax...there is no flag [ "+Arg1+" ]")
+end function

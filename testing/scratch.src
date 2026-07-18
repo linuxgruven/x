@@ -1,0 +1,13 @@
+metaMail = mail_login(user_mail_address, "test")
+mails = metaMail.fetch
+results = []
+for mail in mails
+   segments = mail.split(char(10))
+   item = {}
+   item.mailId = segments[2][8:]
+   item.from = segments[3][6:]
+   item.subject = segments[4][9:]
+   item.preview = segments[5:]
+   results.push(item)
+end for
+print(results)

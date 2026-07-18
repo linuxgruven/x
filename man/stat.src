@@ -1,0 +1,51 @@
+// Man page for stat
+manStat="STAT(1)                          X Shell Manual                          STAT(1)
+
+<b>NAME</b>
+    stat - System statistics and information
+<b>SYNOPSIS</b>
+    <b>stat -f</b>
+    <b>stat -t</b>
+    <b>stat -w</b>
+    <b>stat -u</b>
+<b>DESCRIPTION</b>
+    Display system statistics including file counts, user information,
+    and uptime. Provides quick insights into system state.
+<b>OPTIONS</b>
+    <b>-f</b> - Total Files and Directories
+      Display combined count of all files and directories.
+
+    <b>-t</b> - Total File Count
+      Display total number of files on system.
+
+    <b>-w</b> - Who is Logged In
+      Display currently logged in users.
+
+    <b>-u</b> - Uptime
+      Display x framework uptime.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># File Statistics</color>
+    <b>stat -f</b>
+    Show total files and directories
+
+    <b>stat -t</b>
+    Show total file count only
+
+    <color=#e4ff34># User Information</color>
+    <b>stat -w</b>
+    Display logged in users
+
+    <color=#e4ff34># System Uptime</color>
+    <b>stat -u</b>
+    Show x uptime
+
+    <color=#e4ff34># Combined Usage</color>
+    <b>stat -f && stat -u</b>
+    Display files and uptime
+
+    <b>stat -w && stat -t</b>
+    Show users and file count
+
+<b>SEE ALSO</b>
+    <b>sys</b>, <b>htop</b>"

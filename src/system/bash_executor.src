@@ -1,0 +1,884 @@
+// =============================================================================
+// BASH_EXECUTOR
+// AST execution engine: control flow, loops, conditionals, assignments.
+// =============================================================================
+// AST EXECUTOR
+//Unstash remaining AST from gb.RUN (called after command returns without pivoting)
+//Returns true if stash was found and removed (no pivot occurred)
+//Returns false if stash was consumed (pivot occurred, remaining nodes already executed)
+Bash._unstash=function
+  gb=globals.G_bash
+  if not gb.RUN or len(gb.RUN)==0 then return false
+  if typeof(gb.RUN[len(gb.RUN)-1])=="map" and hasIndex(gb.RUN[len(gb.RUN)-1],"__AST__") then
+    pop(gb.RUN)
+    return true
+  end if
+  return false
+end function
+//Unstash loop continuation from gb.RUN
+Bash._unstashLoop=function
+  gb=globals.G_bash
+  if not gb.RUN or len(gb.RUN)==0 then return false
+  if typeof(gb.RUN[len(gb.RUN)-1])=="map" and hasIndex(gb.RUN[len(gb.RUN)-1],"__LOOP__") then
+    pop(gb.RUN)
+    return true
+  end if
+  return false
+end function
+//Unstash try continuation from gb.RUN
+Bash._unstashTry=function
+  gb=globals.G_bash
+  if not gb.RUN or len(gb.RUN)==0 then return false
+  if typeof(gb.RUN[len(gb.RUN)-1])=="map" and hasIndex(gb.RUN[len(gb.RUN)-1],"__TRY__") then
+    pop(gb.RUN)
+    return true
+  end if
+  return false
+end function
+//Execute AST body (list of statements)
+Bash._execBody=function(Obj,ast,isTopLevel=true)
+  gb=globals.G_bash
+  nodeCount=0
+  for node in ast
+    nodeCount+=1
+    //Validate node structure
+    if not node or typeof(node)!="map" or not hasIndex(node,"type") then
+      if gb.DEBUG then
+        print red("WARNING: Invalid node in AST - skipping")
+        print red("  Node: ")+yellow(node)
+      end if
+      continue
+    end if
+    //Debug: Show node execution details
+    if gb.DEBUG then
+      print blue("="*60)
+      print blue("Function Call->_execBody [Node "+nodeCount+" of "+len(ast)+"]")
+      print cyan("  Node Type: ")+yellow(node.type)
+      print cyan("  Call Stack Depth: ")+yellow(len(gb.CALLSTACK))
+      print cyan("  Recursion Depth: ")+yellow(gb.RECURSION+"/"+gb.RECURSION_MAX)
+      print cyan("  Active Variables: ")+yellow(gb.VARS.indexes)
+      print cyan("  Signal SIGSTOP: ")+yellow(gb.SIGSTOP)
+      print cyan("  Signal SIGBREAK: ")+yellow(gb.SIGBREAK)
+      print cyan("  Signal SIGCONT: ")+yellow(gb.SIGCONT)
+      if len(gb.CALLSTACK)>0 then print cyan("  Function Stack: ")+yellow(gb.CALLSTACK)
+    end if
+    //Check signals
+    if gb.SIGSTOP then
+      if gb.DEBUG then print red("SIGSTOP detected - breaking to process queue")
+      break  //Break from for loop to allow queue processing
+    end if
+    if gb.SIGBREAK then
+      if gb.DEBUG then print red("SIGBREAK detected - breaking from loop")
+      return
+    end if
+    if gb.SIGCONT then
+      if gb.DEBUG then print red("SIGCONT detected - continuing to next iteration")
+      gb.SIGCONT=false
+      continue
+    end if
+    //Check if return_value was called in a previous node - stop processing remaining nodes
+    if (gb.RECURSION>0 or len(gb.CALLSTACK)>0) and hasIndex(gb.VARS,"__return__") then
+      if gb.DEBUG then print yellow("  __return__ already set - skipping remaining nodes")
+      break
+    end if
+    //IF statement
+    if node.type=="if" then
+      //Stash remaining AST nodes in case IF body pivots (proxy/ssh/su)
+      stashed=false
+      if isTopLevel and nodeCount<len(ast) then
+        if not gb.RUN then gb.RUN=[]
+        push(gb.RUN,{"__AST__":true,"nodes":ast[nodeCount:]})
+        stashed=true
+      end if
+      if gb.DEBUG then
+        print green("  IF statement - executing inline")
+        print green("    Condition: ")+white(node.cond)
+      end if
+      condResult=self._evalCond(node.cond,Obj)
+      if gb.DEBUG then print cyan("    Result: ")+yellow(condResult)
+      if condResult then
+        if gb.DEBUG then print cyan("    => Executing THEN block")
+        thenAst=self._parseScript(node.thenBlock)
+        self._execBody(Obj,thenAst,false)
+      else
+        executed=false
+        elifCount=0
+        for elifBranch in node.elif
+          elifCount+=1
+          if gb.DEBUG then print cyan("    Evaluating ELIF "+elifCount)
+          elifResult=self._evalCond(elifBranch.cond,Obj)
+          if elifResult then
+            if gb.DEBUG then print cyan("      => Executing ELIF "+elifCount+" block")
+            elifAst=self._parseScript(elifBranch.body)
+            self._execBody(Obj,elifAst,false)
+            executed=true
+            break
+          end if
+        end for
+        if not executed and len(node.elseBlock)>0 then
+          if gb.DEBUG then print cyan("    => Executing ELSE block")
+          elseAst=self._parseScript(node.elseBlock)
+          self._execBody(Obj,elseAst,false)
+        end if
+      end if
+      //Propagate loop control signals (continue/break) through nested if blocks
+      if gb.SIGCONT or gb.SIGBREAK then
+        if stashed then self._unstash
+        return
+      end if
+      if stashed then
+        if not self._unstash then break
+      end if
+      continue
+    end if
+    //WHILE loop
+    if node.type=="while" then
+      //Collect after-loop nodes for pivot recovery
+      afterNodes=null
+      if isTopLevel and nodeCount<len(ast) then afterNodes=ast[nodeCount:]
+      if gb.DEBUG then
+        print green("  Starting WHILE loop")
+        print green("    Condition: ")+white(node.cond)
+        print green("    Body: ")+yellow(len(node.body)+" lines")
+      end if
+      whileIter=0
+      whileAst=self._parseScript(node.body)
+      pivoted=false
+      while self._evalCond(node.cond,Obj)
+        whileIter+=1
+        if gb.DEBUG then
+          print green("    WHILE Iteration "+whileIter)
+          print green("      Condition still TRUE, executing body")
+        end if
+        if gb.SIGSTOP then
+          if gb.DEBUG then print red("    SIGSTOP in WHILE loop - exiting")
+          break
+        end if
+        if gb.SIGBREAK then
+          if gb.DEBUG then print red("    SIGBREAK in WHILE loop - breaking")
+          gb.SIGBREAK=false
+          break
+        end if
+        //Push loop continuation for pivot recovery
+        if not gb.RUN then gb.RUN=[]
+        push(gb.RUN,{"__LOOP__":true,"type":"while","cond":node.cond,"body":node.body,"after":afterNodes,"tryDepth":gb.IN_TRY})
+        self._execBody(Obj,whileAst,true)
+        //Check if pivot consumed the loop continuation
+        if not self._unstashLoop then
+          pivoted=true
+          break
+        end if
+        //Check if return_value was called during function execution - break loop immediately
+        if (gb.RECURSION>0 or len(gb.CALLSTACK)>0) and hasIndex(gb.VARS,"__return__") then
+          if gb.DEBUG then print yellow("    return_value set in WHILE body - breaking loop")
+          break
+        end if
+        //Check if return was called
+        if gb.SIGSTOP then
+          if gb.DEBUG then print red("    SIGSTOP in WHILE loop body - breaking to process queue")
+          break
+        end if
+        if gb.SIGCONT then
+          if gb.DEBUG then print yellow("    SIGCONT - continuing to next iteration")
+          gb.SIGCONT=false
+        end if
+      end while
+      if gb.DEBUG then
+        print green("  WHILE loop completed")
+        print green("    Total iterations: ")+yellow(whileIter)
+        print green("    Condition now FALSE")
+      end if
+      if pivoted then break
+      continue
+    end if
+    //UNTIL loop (runs while condition is false)
+    if node.type=="until" then
+      //Collect after-loop nodes for pivot recovery
+      afterNodes=null
+      if isTopLevel and nodeCount<len(ast) then afterNodes=ast[nodeCount:]
+      if gb.DEBUG then
+        print green("  Starting UNTIL loop")
+        print green("    Condition: ")+white(node.cond)
+        print green("    Body: ")+yellow(len(node.body)+" lines")
+      end if
+      untilIter=0
+      untilAst=self._parseScript(node.body)
+      pivoted=false
+      while not self._evalCond(node.cond,Obj)
+        untilIter+=1
+        if gb.DEBUG then
+          print green("    UNTIL Iteration "+untilIter)
+          print green("      Condition still FALSE, executing body")
+        end if
+        if gb.SIGSTOP then
+          if gb.DEBUG then print red("    SIGSTOP in UNTIL loop - exiting")
+          break
+        end if
+        if gb.SIGBREAK then
+          if gb.DEBUG then print red("    SIGBREAK in UNTIL loop - breaking")
+          gb.SIGBREAK=false
+          break
+        end if
+        //Push loop continuation for pivot recovery
+        if not gb.RUN then gb.RUN=[]
+        push(gb.RUN,{"__LOOP__":true,"type":"until","cond":node.cond,"body":node.body,"after":afterNodes,"tryDepth":gb.IN_TRY})
+        self._execBody(Obj,untilAst,true)
+        //Check if pivot consumed the loop continuation
+        if not self._unstashLoop then
+          pivoted=true
+          break
+        end if
+        //Check if return_value was called during function execution - break loop immediately
+        if (gb.RECURSION>0 or len(gb.CALLSTACK)>0) and hasIndex(gb.VARS,"__return__") then
+          if gb.DEBUG then print yellow("    return_value set in UNTIL body - breaking loop")
+          break
+        end if
+        if gb.SIGSTOP then
+          if gb.DEBUG then print red("    SIGSTOP in UNTIL loop body - breaking to process queue")
+          break
+        end if
+        if gb.SIGCONT then
+          if gb.DEBUG then print yellow("    SIGCONT - continuing to next iteration")
+          gb.SIGCONT=false
+        end if
+      end while
+      if gb.DEBUG then
+        print green("  UNTIL loop completed")
+        print green("    Total iterations: ")+yellow(untilIter)
+        print green("    Condition now TRUE")
+      end if
+      if pivoted then break
+      continue
+    end if
+    //FOR loop
+    if node.type=="for" then
+      if gb.DEBUG then
+        print green("  Starting FOR loop")
+        print green("    Variable: ")+white(node.var)
+        print green("    List Expression: ")+white(node.list)
+        print green("    Body: ")+yellow(len(node.body)+" lines")
+      end if
+      //Get list to iterate
+      listExpr=node.list
+      list=[]
+      if indexOf(listExpr,"[")!=null then
+        list=self._listLiteralToList(listExpr)
+        if gb.DEBUG then print yellow("  Converted list literal: ")+cyan(listExpr)+" -> "+yellow(list)
+      //Check if it's get_var - extract variable name directly to preserve list type
+      else if indexOf(listExpr,"_getvar(")==0 then
+        //Extract variable name from _getvar(varname)
+        parenStart=indexOf(listExpr,"(")+1
+        parenEnd=indexOf(listExpr,")")
+        if parenEnd!=null and parenEnd>parenStart then
+          varName=listExpr[parenStart:parenEnd]
+          if hasIndex(gb.VARS,varName) then
+            list=gb.VARS[varName]
+            //Ensure we have a list
+            if list==null then
+              list=[]
+            else if typeof(list)!="list" then
+              list=[list]
+            end if
+          else
+            list=[]
+          end if
+        else
+          list=[]
+        end if
+      //Check if it's a variable
+      else if hasIndex(gb.VARS,listExpr) then
+        list=gb.VARS[listExpr]
+        //Only wrap if it's truly not a list (but allow empty lists)
+        if list==null then
+          list=[]
+        else if typeof(list)!="list" then
+          list=[list]
+        end if
+      //Try range notation: range(1,10)
+      else if indexOf(listExpr,"range(")!=null then
+        //Extract range parameters using string slicing - need to find MATCHING closing paren
+        startIdx=indexOf(listExpr,"(")+1
+        //Find matching closing paren by counting depth
+        endIdx=null
+        depth=1
+        _len=len(listExpr)
+        i=startIdx
+        while i<_len
+          if listExpr[i]=="(" then depth+=1
+          if listExpr[i]==")" then
+            depth-=1
+            if depth==0 then
+              endIdx=i
+              break
+            end if
+          end if
+          i+=1
+        end while
+        if endIdx==null then endIdx=len(listExpr)
+        rangeStr=listExpr[startIdx:endIdx]
+        rangeParts=split(rangeStr,",")
+        if len(rangeParts)==2 then
+          //Process each parameter - substitute variables first, then evaluate arithmetic
+          startExpr=self.process(trim(rangeParts[0]),Obj)
+          endExpr=self.process(trim(rangeParts[1]),Obj)
+          if gb.DEBUG then
+            print cyan("    Range expressions after process:")
+            print cyan("      Start expr: ")+yellow(startExpr)+cyan(" (type: ")+yellow(typeof(startExpr))+cyan(")")
+            print cyan("      End expr: ")+yellow(endExpr)+cyan(" (type: ")+yellow(typeof(endExpr))+cyan(")")
+          end if
+          //Evaluate arithmetic expressions (handles operations like "20 - 1")
+          startParam=self._evalArithmetic(startExpr,Obj)
+          endParam=self._evalArithmetic(endExpr,Obj)
+          if gb.DEBUG then
+            print cyan("    Range param evaluation:")
+            print cyan("      Start param: ")+yellow(startParam)+cyan(" (type: ")+yellow(typeof(startParam))+cyan(")")
+            print cyan("      End param: ")+yellow(endParam)+cyan(" (type: ")+yellow(typeof(endParam))+cyan(")")
+          end if
+          //Convert to integers - if already a number, use directly; if string, convert
+          if startParam==null then
+            start=0
+          else if typeof(startParam)=="number" then
+            start=floor(startParam)
+          else
+            start=to_int(startParam)
+          end if
+          if endParam==null then
+            endVal=0
+          else if typeof(endParam)=="number" then
+            endVal=floor(endParam)
+          else
+            endVal=to_int(endParam)
+          end if
+          if gb.DEBUG then
+            print cyan("      Final start: ")+yellow(start)
+            print cyan("      Final endVal: ")+yellow(endVal)
+          end if
+          list=range(start,endVal)
+        else
+          list=[]
+        end if
+      else
+        list=[]
+      end if
+      if gb.DEBUG then
+        print green("    Resolved List: ")+yellow(list)
+        print green("    List Length: ")+yellow(len(list))
+      end if
+      //Collect after-loop nodes for pivot recovery
+      afterNodes=null
+      if isTopLevel and nodeCount<len(ast) then afterNodes=ast[nodeCount:]
+      //Iterate through list
+      forIter=0
+      forAst=self._parseScript(node.body)
+      pivoted=false
+      for item in list
+        forIter+=1
+        if gb.DEBUG then
+          print green("    FOR Iteration "+forIter+" of "+len(list))
+          print green("      Setting "+node.var+" = ")+white(item)
+        end if
+        if gb.SIGSTOP then return
+        if gb.SIGBREAK then
+          gb.SIGBREAK=false
+          break
+        end if
+        //Set loop variable
+        gb.VARS[node.var]=item
+        //Push loop continuation for pivot recovery
+        if not gb.RUN then gb.RUN=[]
+        push(gb.RUN,{"__LOOP__":true,"type":"for","var":node.var,"list":list[forIter:],"body":node.body,"after":afterNodes,"tryDepth":gb.IN_TRY})
+        //Execute body
+        self._execBody(Obj,forAst,true)
+        //Check if pivot consumed the loop continuation
+        if not self._unstashLoop then
+          pivoted=true
+          break
+        end if
+        //Check if return_value was called during function execution - break loop immediately
+        if (gb.RECURSION>0 or len(gb.CALLSTACK)>0) and hasIndex(gb.VARS,"__return__") then
+          if gb.DEBUG then print yellow("      return_value set in FOR body - breaking loop")
+          break
+        end if
+        //Check if return was called
+        if gb.SIGSTOP then
+          if gb.DEBUG then print red("      SIGSTOP in FOR loop body - breaking to process queue")
+          break
+        end if
+        if gb.SIGCONT then
+          if gb.DEBUG then print yellow("      SIGCONT - continuing to next iteration")
+          gb.SIGCONT=false
+        end if
+      end for
+      if gb.DEBUG then
+        print green("  FOR loop completed")
+        print green("    Total iterations: ")+yellow(forIter)
+      end if
+      if pivoted then break
+      continue
+    end if
+    //SWITCH/CASE statement
+    if node.type=="switch" then
+      //Stash remaining AST nodes in case SWITCH body pivots
+      stashed=false
+      if isTopLevel and nodeCount<len(ast) then
+        if not gb.RUN then gb.RUN=[]
+        push(gb.RUN,{"__AST__":true,"nodes":ast[nodeCount:]})
+        stashed=true
+      end if
+      if gb.DEBUG then
+        print green("  Evaluating SWITCH statement")
+        print green("    Variable: ")+white(node.var)
+        print green("    Cases: ")+yellow(len(node.cases))
+      end if
+      //Get switch variable value
+      switchValue=self._getVal(self.process(node.var))
+      if gb.DEBUG then print green("    Value: ")+white(switchValue)
+      //Check each case
+      matched=false
+      for caseNode in node.cases
+        caseValue=self._getVal(self.process(caseNode.value))
+        if gb.DEBUG then print green("    Checking case: ")+white(caseValue)
+        if switchValue==caseValue then
+          if gb.DEBUG then print green("      => Match! Executing case body")
+          caseAst=self._parseScript(caseNode.body)
+          self._execBody(Obj,caseAst,false)
+          if gb.SIGSTOP then
+            if gb.DEBUG then print red("      SIGSTOP in CASE block - breaking to process queue")
+            break
+          end if
+          matched=true
+          break
+        end if
+      end for
+      //Execute default if no match
+      if not matched and len(node.default)>0 then
+        if gb.DEBUG then print green("    => No match, executing DEFAULT block")
+        defaultAst=self._parseScript(node.default)
+        self._execBody(Obj,defaultAst,false)
+        if gb.SIGSTOP then
+          if gb.DEBUG then print red("    SIGSTOP in DEFAULT block - breaking to process queue")
+          break
+        end if
+      else if not matched then
+        if gb.DEBUG then print green("    => No match, no DEFAULT block")
+      end if
+      if stashed then
+        if not self._unstash then break
+      end if
+      continue
+    end if
+    //FUNCTION definition
+    if node.type=="func" then
+      if gb.DEBUG then
+        print green("  Defining function: ")+white(node.name)
+        print green("    Parameters: ")+yellow(node.params)
+        print green("    Body: ")+yellow(len(node.body)+" lines")
+      end if
+      gb.FUNCS[node.name]={"params":node.params,"body":node.body}
+      if gb.DEBUG then
+        print green("  Function stored successfully")
+        print green("  Available functions: ")+yellow(gb.FUNCS.indexes)
+      end if
+      continue
+    end if
+    //TRY/CATCH
+    if node.type=="try" then
+      //Push try continuation for pivot recovery
+      afterNodes=null
+      if isTopLevel and nodeCount<len(ast) then
+        afterNodes=ast[nodeCount:]
+      end if
+      if not gb.RUN then gb.RUN=[]
+      push(gb.RUN,{"__TRY__":true,"catchVar":node.catchVar,"catch":node.catch,"after":afterNodes,"tryDepth":gb.IN_TRY})
+      if gb.DEBUG then print green("  TRY block - executing inline")
+      gb.IN_TRY=gb.IN_TRY+1
+      tryAst=self._parseScript(node.body)
+      self._execBody(Obj,tryAst,true)
+      //Check if pivot consumed the try continuation
+      if not self._unstashTry then
+        gb.IN_TRY=gb.IN_TRY-1
+        break
+      end if
+      gb.IN_TRY=gb.IN_TRY-1
+      //Check if an error stopped the try body
+      if gb.SIGSTOP and gb.LAST_ERROR then
+        if gb.DEBUG then print red("  TRY caught error: "+gb.LAST_ERROR)
+        gb.SIGSTOP=false
+        gb.SIGBREAK=false
+        if node.catchVar then gb.VARS[node.catchVar]=gb.LAST_ERROR
+        gb.LAST_ERROR=""
+        if len(node.catch)>0 then
+          if gb.DEBUG then print cyan("  => Executing CATCH block")
+          catchAst=self._parseScript(node.catch)
+          self._execBody(Obj,catchAst,false)
+        end if
+      end if
+      gb.LAST_ERROR=""
+      continue
+    end if
+    //BREAK
+    if node.type=="break" then
+      if gb.DEBUG then
+        print yellow("  BREAK statement executed")
+        print yellow("    Setting SIGBREAK flag")
+      end if
+      gb.SIGBREAK=true
+      return
+    end if
+    //CONTINUE
+    if node.type=="continue" then
+      if gb.DEBUG then
+        print yellow("  CONTINUE statement executed")
+        print yellow("    Setting SIGCONT flag")
+      end if
+      gb.SIGCONT=true
+      return
+    end if
+    //RETURN
+    if node.type=="return" then
+      if gb.DEBUG then
+        print yellow("  RETURN statement executed")
+        if node.msg then print yellow("    Message/Command: ")+white(node.msg)
+        print yellow("    Setting SIGSTOP flag")
+      end if
+      //Check if message is a command or function to execute
+      if node.msg then
+        msg=node.msg
+        //Check if it looks like a command
+        isCommand=false
+        //First check if it starts with a known command (_print, _fs_write, etc.)
+        msgLower=lower(trim(msg))
+        cmdNames=self._cmdNames
+        startsWithCommand=false
+        for cmdName in cmdNames
+          if indexOf(msgLower,cmdName)==0 then
+            startsWithCommand=true
+            break
+          end if
+        end for
+        //If it starts with a command name OR contains no color functions at start, treat as command
+        hasColorFunc=false
+        if not startsWithCommand then
+          //Only check for color functions if it doesn't start with a command
+          colorFuncs=self._colorFuncsP
+          for cf in colorFuncs
+            if indexOf(msg,cf)==0 then
+              //Color function is at the START - this is a message, not a command
+              hasColorFunc=true
+              break
+            end if
+          end for
+        end if
+        //If it starts with a command name OR has no color function at start, try to queue as command
+        if startsWithCommand or not hasColorFunc then
+          processedCmd=self.process(msg,Obj)
+          if processedCmd and not (processedCmd isa Error) then
+            if gb.DEBUG then print green("    Executing return command: ")+white(processedCmd)
+            self._exec(Obj,processedCmd,true)
+            isCommand=true
+          end if
+        end if
+        if not isCommand then
+          //Process color functions: blue(text), red(text), etc.
+          for colorFunc in colorFuncs
+            funcName=colorFunc[:len(colorFunc)-1]
+            while indexOf(msg,colorFunc)!=null
+              startIdx=indexOf(msg,colorFunc)
+              if startIdx==null then break
+              parenStart=startIdx+len(colorFunc)
+              //Check if parenStart is within bounds
+              _len=len(msg)
+              if parenStart>=_len then break
+              //Find matching closing paren
+              depth=1
+            closeIdx=null
+            i=parenStart
+            while i<_len
+              if msg[i]=="(" then depth+=1
+              if msg[i]==")" then
+                depth-=1
+                if depth==0 then
+                  closeIdx=i
+                  break
+                end if
+              end if
+              i+=1
+            end while
+            if closeIdx!=null then
+              //Extract text inside function call
+              innerText=msg[parenStart:closeIdx]
+              //Apply color function - funcName already has the name without parenthesis
+              coloredText=innerText
+              if funcName=="orange" then
+                coloredText=innerText.orange
+              else if funcName=="cyan" then
+                coloredText=innerText.cyan
+              else if funcName=="magenta" then
+                coloredText=innerText.magenta
+              else if funcName=="lime" then
+                coloredText=innerText.lime
+              else if funcName=="bred" then
+                coloredText=innerText.bred
+              else if funcName=="green" then
+                coloredText=innerText.green
+              else if funcName=="password" then
+                coloredText=innerText.password
+              else if funcName=="blue" then
+                coloredText=innerText.blue
+              else if funcName=="liteblue" then
+                coloredText=innerText.liteblue
+              else if funcName=="yellow" then
+                coloredText=innerText.yellow
+              else if funcName=="white" then
+                coloredText=innerText.white
+              else if funcName=="purple" then
+                coloredText=innerText.purple
+              else if funcName=="iyellow" then
+                coloredText=innerText.iyellow
+              else if funcName=="liteGrey" then
+                coloredText=innerText.liteGrey
+              else if funcName=="error" then
+                coloredText=innerText.error
+              else if funcName=="red" then
+                coloredText=innerText.red
+              else if funcName=="grey" then
+                coloredText=innerText.grey
+              else if funcName=="black" then
+                coloredText=innerText.black
+              else if funcName=="bold" then
+                coloredText=innerText.bold
+              end if
+              //Replace function call with colored text
+              msg=msg[:startIdx]+coloredText+msg[closeIdx+1:]
+            else
+              break
+            end if
+          end while
+        end for
+        print msg
+        end if
+      end if
+      //Set SIGSTOP to halt execution of further nodes, but continue to queue processing
+      gb.SIGSTOP=true
+      continue  //Skip to next node (which will be skipped due to SIGSTOP check, eventually reaching queue processing)
+    end if
+    //RETURN_VALUE (sets function return value without exiting)
+    if node.type=="return_value" then
+      if gb.DEBUG then
+        print yellow("  RETURN_VALUE statement executed")
+        print yellow("    Value: ")+white(node.value)
+      end if
+      //Process the value expression and evaluate it
+      //First check if the value is a bare _getvar(name) - preserve type directly
+      processedValue=null
+      if indexOf(node.value,"_getvar(")==0 then
+        gvEnd=indexOf(node.value,")")
+        if gvEnd!=null and gvEnd+1>=len(node.value) then
+          gvName=node.value[8:gvEnd]
+          gvVal=self._getVar(gvName)
+          if gvVal!=null then processedValue=gvVal
+        end if
+      end if
+      if processedValue==null then processedValue=self.process(node.value,Obj)
+      if processedValue isa Error then
+        gb.VARS["__return__"]=null
+      else
+        //Check if processed value is a user-defined function call
+        if typeof(processedValue)=="string" and indexOf(processedValue,"(")!=null then
+          rvParenIdx=indexOf(processedValue,"(")
+          rvFuncName=trim(processedValue[:rvParenIdx])
+          if hasIndex(gb.FUNCS,rvFuncName) then
+            //Extract arguments
+            rvDepth=0
+            rvCloseIdx=null
+            _len=len(processedValue)
+            rvi=rvParenIdx
+            while rvi<_len
+              if processedValue[rvi]=="(" then rvDepth+=1
+              if processedValue[rvi]==")" then
+                rvDepth-=1
+                if rvDepth==0 then
+                  rvCloseIdx=rvi
+                  break
+                end if
+              end if
+              rvi+=1
+            end while
+            if rvCloseIdx!=null then
+              rvArgStr=processedValue[rvParenIdx+1:rvCloseIdx]
+              rvFuncArgs=[]
+              if rvArgStr then
+                //Smart split by comma respecting parentheses and brackets
+                rvCurrent=""
+                rvPDepth=0
+                rvBDepth=0
+                _len=len(rvArgStr)
+                rvI=0
+                while rvI<_len
+                  rvC=rvArgStr[rvI]
+                  if rvC=="(" then rvPDepth+=1
+                  if rvC==")" then rvPDepth-=1
+                  if rvC=="[" then rvBDepth+=1
+                  if rvC=="]" then rvBDepth-=1
+                  if rvC=="," and rvPDepth==0 and rvBDepth==0 then
+                    push(rvFuncArgs,trim(rvCurrent))
+                    rvCurrent=""
+                  else
+                    rvCurrent=rvCurrent+rvC
+                  end if
+                  rvI+=1
+                end while
+                if rvCurrent then push(rvFuncArgs,trim(rvCurrent))
+              end if
+              callResult=self._callFunc(Obj,rvFuncName,rvFuncArgs)
+              //If the function call is the entire expression, return result directly
+              //Otherwise, substitute result back into the expression and continue evaluation
+              if rvCloseIdx+1>=len(processedValue) and rvParenIdx==len(rvFuncName) then
+                gb.VARS["__return__"]=callResult
+                if gb.DEBUG then print green("    return_value resolved user func ")+yellow(rvFuncName)+green(" to: ")+yellow(callResult)
+                return
+              else
+                //Replace function call with result and continue to arithmetic evaluation
+                rvFuncStart=indexOf(processedValue,rvFuncName)
+                processedValue=processedValue[:rvFuncStart]+str(callResult)+processedValue[rvCloseIdx+1:]
+                if gb.DEBUG then print green("    return_value replaced user func ")+yellow(rvFuncName)+green(" -> ")+yellow(processedValue)
+              end if
+            end if
+          end if
+        end if
+        //Try arithmetic evaluation first (handles get_var, operator precedence, etc.)
+        //else Use _getVal to get the actual value (handles variables, numbers, etc)
+        //Only use arithmetic if the expression looks purely numeric (no letters)
+        rvUseArith=false
+        if typeof(processedValue)=="string" and (indexOf(processedValue,"+")!=null or indexOf(processedValue,"-")!=null or indexOf(processedValue,"*")!=null or indexOf(processedValue,"/")!=null or indexOf(processedValue,"%")!=null or indexOf(processedValue,"**")!=null) then
+          rvUseArith=true
+          _len=len(processedValue)
+          rvCI=0
+          while rvCI<_len
+            rvC=processedValue[rvCI]
+            if (rvC>="a" and rvC<="z") or (rvC>="A" and rvC<="Z") or rvC=="_" then
+              rvUseArith=false
+              break
+            end if
+            rvCI+=1
+          end while
+        end if
+        if rvUseArith then
+          actualValue=self._evalArithmetic(processedValue,Obj)
+        else
+          //Don't use _getVal - it resolves variable names, but process already did that.
+          //Just do numeric conversion for pure number strings.
+          if typeof(processedValue)=="string" then
+            rvNumVal=val(processedValue)
+            if str(rvNumVal)==trim(processedValue) then actualValue=rvNumVal else actualValue=processedValue
+          else
+            actualValue=processedValue
+          end if
+        end if
+        gb.VARS["__return__"]=actualValue
+        if gb.DEBUG then print green("    Stored return value: ")+yellow(actualValue)
+      end if
+      //CRITICAL FIX: return_value should exit the function immediately
+      //This prevents subsequent return_value statements from overwriting the value
+      return
+    end if
+    //COMMAND execution
+    if node.type=="cmd" then
+      if gb.DEBUG then print green("  Processing command: ")+white(node.line)
+      //At top level, stash remaining AST nodes in case command pivots (proxy/ssh/su)
+      //If no pivot occurs, we unstash after execution returns
+      stashed=false
+      if isTopLevel and nodeCount<len(ast) then
+        if not gb.RUN then gb.RUN=[]
+        push(gb.RUN,{"__AST__":true,"nodes":ast[nodeCount:]})
+        stashed=true
+      end if
+      hasChainOps=(indexOf(node.line,"&&")!=null or indexOf(node.line,";")!=null)
+      if hasChainOps then
+        //Chain commands: pass raw so _exec splits and processes each segment
+        self._exec(Obj,node.line)
+      else
+        processedCmd=self.process(node.line,Obj)
+        if processedCmd isa Error then
+          if stashed then self._unstash
+          gb.SIGSTOP=true
+          break
+        end if
+        //Check if this is a user-defined function call
+        cmdName=trim(split(processedCmd," ")[0])
+        funcCallMatch=false
+        funcArgs=[]
+        if indexOf(cmdName,"(")!=null then
+          baseName=cmdName[:indexOf(cmdName,"(")]
+          if hasIndex(gb.FUNCS,baseName) then
+            funcCallMatch=true
+            //Extract arguments
+            argStart=indexOf(processedCmd,"(")+1
+            argDepth2=1
+            argEnd=null
+            _len=len(processedCmd)
+            ai2=argStart
+            while ai2<_len
+              if processedCmd[ai2]=="(" then argDepth2+=1
+              if processedCmd[ai2]==")" then
+                argDepth2-=1
+                if argDepth2==0 then
+                  argEnd=ai2
+                  break
+                end if
+              end if
+              ai2+=1
+            end while
+            if argEnd!=null and argEnd>argStart then
+              argStr=processedCmd[argStart:argEnd]
+              if argStr then
+                efCurrent=""
+                efPDepth=0
+                efBDepth=0
+                _len=len(argStr)
+                efI=0
+                while efI<_len
+                  efC=argStr[efI]
+                  if efC=="(" then efPDepth+=1
+                  if efC==")" then efPDepth-=1
+                  if efC=="[" then efBDepth+=1
+                  if efC=="]" then efBDepth-=1
+                  if efC=="," and efPDepth==0 and efBDepth==0 then
+                    push(funcArgs,trim(efCurrent))
+                    efCurrent=""
+                  else
+                    efCurrent=efCurrent+efC
+                  end if
+                  efI+=1
+                end while
+                if efCurrent then push(funcArgs,trim(efCurrent))
+              end if
+            end if
+            cmdName=baseName
+          end if
+        end if
+        if hasIndex(gb.FUNCS,cmdName) or funcCallMatch then
+          //User function call - execute inline
+          if gb.DEBUG then print green("  Calling function: ")+white(cmdName)+" with args: "+yellow(funcArgs)
+          result=self._callFunc(Obj,cmdName,funcArgs)
+          if result!=null then gb.VARS["__last_return__"]=result
+        else
+          //Regular command - execute via _exec
+          if gb.DEBUG then print green("  Executing command: ")+white(processedCmd)
+          self._exec(Obj,processedCmd,true)
+        end if
+      end if
+      //Unstash: if stash was consumed by pivot, remaining nodes already ran - stop
+      if stashed then
+        if not self._unstash then break
+      end if
+      continue
+    end if
+    //CRITICAL FIX: After processing each node, check if we're in a function and return_value was called
+    //If so, break out of the node processing loop to prevent subsequent statements from executing
+    if (gb.RECURSION>0 or len(gb.CALLSTACK)>0) and hasIndex(gb.VARS,"__return__") then
+      if gb.DEBUG then print yellow("  Function return detected - stopping node execution")
+      break  //Exit the for loop to return from function immediately
+    end if
+  end for
+end function

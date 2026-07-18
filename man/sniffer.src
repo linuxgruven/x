@@ -1,0 +1,46 @@
+// Man page for sniffer
+manSniffer="SNIFFER(1)                         X Shell Manual                         SNIFFER(1)
+
+<b>NAME</b>
+    sniffer - Network packet capture and analysis
+<b>SYNOPSIS</b>
+    <b>sniffer</b> (--save|--deploy)
+<b>DESCRIPTION</b>
+    Network packet analyzer for monitoring and capturing traffic. Intercepts
+    data packets traveling across network for analysis. Essential for
+    credential harvesting, traffic analysis, and network reconnaissance.
+    Use --save to capture to file or --deploy for standalone operation.
+    Only one flag can be used at a time.
+<b>OPTIONS</b>
+    <b>sniffer</b>
+    Launch integrated packet sniffer
+    Real-time traffic monitoring
+
+    <b>sniffer --save</b>
+    Capture packets and save encode.src
+    Downloads encryption source to current directory
+
+    <b>sniffer --deploy</b>
+    Deploy standalone sniffer
+    Background packet capture
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Real-Time Sniffing</color>
+    <b>sniffer</b>
+    Start live packet capture
+
+    <color=#e4ff34># Save Encryption Source</color>
+    <b>sniffer --save</b>
+    Capture and save encode.src to current directory
+
+    <color=#e4ff34># Deployment</color>
+    <b>sniffer --deploy</b>
+    Deploy persistent sniffer
+
+    <color=#e4ff34># Credential Harvesting</color>
+    <b>sniffer</b>
+    Monitor for plaintext credentials
+
+    <b>sniffer --save</b>
+    Save encode.src for offline analysis
+<b>SEE ALSO</b>
+    <b>scan</b>"

@@ -1,0 +1,49 @@
+// Man page for chog
+// XFIX1.0: -r walks per-node via Io.walkApply and reports child denials
+manChog="CHOG(1)                          X Shell Manual                          CHOG(1)
+
+<b>NAME</b>
+    chog - change the owner and group of a file|directory
+<b>SYNOPSIS</b>
+    <b>chog</b> [<b>-r|-R</b>] <b>USER|GROUP </b><b>FILE</b> [FILE...]
+    <b>find</b> PATTERN | <b>chog</b> <b>USER|GROUP</b>
+<b>DESCRIPTION</b>
+    Change owner and group simultaneously. Also sets full permissions: urwx grwx.
+    Use -r for recursive. Interactive help mode available.
+    Supports glob patterns: <b>chog admin *.dat</b>, <b>chog user payload/*/bin</b>
+    Accepts filenames from stdin via pipe — user/group is passed as the argument.
+<b>OPTIONS</b>
+    <b>-r, -R</b>
+    Recursive mode
+    Apply to directory tree
+
+    <b>USER|GROUP</b>
+    New owner or group
+    Sets both attributes
+
+    <b>FILE</b>
+    Target file or directory
+    Path to modify
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Single File</color>
+    <b>chog user document.txt</b>
+    Set owner and group
+
+    <b>chog tux config.dat</b>
+    Change to tux user
+
+    <color=#e4ff34># Recursive</color>
+    <b>chog -r admin /var/log</b>
+    Recursive modification
+
+    <b>chog -R guest /root/share</b>
+    Change directory tree
+
+    <color=#e4ff34># Pipe Support</color>
+    <b>find *.src | chog root</b>
+    Set owner, group, and full perms on all matched files
+
+    <b>find /home/victim *.cfg | chog admin</b>
+    Batch take ownership of config files
+<b>SEE ALSO</b>
+    <b>chown</b>, <b>chmod</b>, <b>groups</b>"

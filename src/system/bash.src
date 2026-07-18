@@ -1,0 +1,803 @@
+// =============================================================================
+// BASH
+// Bash script execution engine; structured control flow, functions, loops, arrays, and variable substitution.
+// =============================================================================
+Bash={}
+Bash._funcNamesP=["map_save(","map_load(","map_len(","map_set(","map_del(","map_has(","map_get(","map_keys(","map_values(","map(","json_parse(","json(","len(","_in(","typeof_val(","contains(","join(","menu(","_fs_glob(","_format_columns("]
+Bash._funcNames=["map_save","map_load","map_len","map_set","map_get","map_del","map_keys","map_values","map_has","json_parse","len","upper","lower","substr","contains","_in","random","timestamp","date","floor","ceil","abs","file_exists","is_folder","is_binary","round","replace","join","menu","split_str","trim_str","min","max","file_read","typeof_val","get_permissions","_fs_canwrite","_fs_canexec","get_user","get_home","get_shell_type","get_computer_lan_ip","get_computer_public_ip","get_type","get_layer","to_yesno","to_truefalse","get_root","_fs_read","get_lanIP","get_publicIP","concat","to_int","to_float","to_string","_fs_glob","map","json","_format_columns"]
+Bash._bashCmds=["_net_random","_fs_pwd","_sys_whoami","_sys_whatami","_lan","_wifi"]
+Bash._bashCmds3=["_sys_whoami","_sys_whatami","_fs_pwd","_holduser"]
+Bash._colorFuncs=["orange","cyan","magenta","lime","bred","green","password","liteblue","blue","white","purple","iyellow","yellow","liteGrey","error","red","grey","black","bold"]
+Bash._colorFuncsP=["orange(","cyan(","magenta(","lime(","bred(","green(","password(","liteblue(","blue(","white(","purple(","iyellow(","yellow(","liteGrey(","error(","red(","grey(","black(","bold("]
+Bash._ops=["==","!=","<=",">=","<",">"]
+Bash._varCmds=["_setvar","_push","_pop","_pull","_len"]
+Bash._commonPorts=[0,21,22,25,80,3306,3307,8080]
+Bash._cmdNames=["_print","_printnow","_fs_read","_fs_view","_fs_write","_fs_mkdir","_fs_cd","_fs_pwd","_sys_whoami","_sys_whatami","_net_ports","_net_devices","_net_router","_net_devports","_net_fwrules","_sleep","_exit","_setvar","_push","_pop","_pull","_len","_in","_net_ping","_net_port","_net_random","_sys_procs","_sys_kill","_home","_fs_put","_fs_get","_fs_find","_fs_canwrite","_fs_canexec","_hold","_dig","_scan","_lan","_wifi","_shell","_computer","_file","_firewall","_rootpass","_userpass","_bounce","_netbounce","_local","_holduser","_pause"]
+// INPUT PROMPT FUNCTIONS
+//Prompt user for string input with optional custom message
+Bash._getString=function(msg=null);if msg then return user_input(green(msg)) else return user_input(green("Enter string: "));end function
+//Prompt user for decimal input with val casting and optional custom message
+Bash._getDecimal=function(msg=null);if msg then inp=user_input(green(msg)) else inp=user_input(green("Enter decimal: "));return val(inp);end function
+//Prompt user for integer input with to_int casting and optional custom message
+Bash._getInteger=function(msg=null);if msg then inp=user_input(green(msg)) else inp=user_input(green("Enter integer: "));return to_int(inp);end function
+//Dynamic get_any - prompts user for input with optional custom message
+Bash._getAny=function(msg=null);if msg then return user_input(green(msg)) else return user_input(green("Enter value: "));end function
+//Prompt user for yes/no input with validation and optional custom message
+Bash._getYesNo=function(msg=null)
+  while true
+    if msg then inp=user_input(green(msg+" (yes/no): ")) else inp=user_input(green("Enter yes or no: "))
+    inp=lower(trim(inp))
+    if inp=="yes" or inp=="y" then return 1
+    if inp=="" or inp=="no" or inp=="n" then return 0
+    print red("Please enter 'yes' or 'no'")
+  end while
+end function
+//Wait for user to press Enter key
+Bash.pause=function;return user_input(green("Press [Enter] to continue..."));end function
+// VARIABLE MANAGEMENT
+//Retrieve variable value by key from VARS map
+Bash._getVar=function(k=null)
+  if k==null then return ""
+  if not globals.G_bash.VARS then return ""
+  if hasIndex(globals.G_bash.VARS,k) then return globals.G_bash.VARS[k]
+  // Fall back to G_bash.FLAGS (e.g. scan_ok)
+  if hasIndex(globals.G_bash.FLAGS,k) then return globals.G_bash.FLAGS[k]
+  return ""
+end function
+//Store variable key-value pair in VARS map
+Bash._setVar=function(k=null,v=null)
+  if k==null then return ""
+  if v==null then return ""
+  //Store numbers as strings so get_var prints correctly (e.g. 0 renders as "0" not blank)
+  if typeof(v)=="number" then v=str(v)
+  globals.G_bash.VARS[k]=v
+end function
+// BUILT-IN FUNCTIONS
+Bash.currentDate=function;return current_date;end function
+//Convert date string to Unix timestamp
+Bash.unixTime=function
+    _month=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+    dt=current_date.split(" ")
+    dates=dt[0].split("/");times=dt[2].split(":")
+    d=dates[0].to_int;m=_month.indexOf(dates[1])+1;y=dates[2].to_int
+    y=y-(m <= 2)
+    era=y;if y<0 then era=y-399;era=floor(era/400)
+    yoe=floor(y-era*400)
+    if m>2 then t=m-3 else t=m+9
+    doy=floor((153*t+2)/5+d-1)
+    doe=floor(yoe*365+yoe/4-yoe/100+doy)
+    epoch_days=era*146097+doe-719468+1
+    result=(epoch_days*24+times[0].to_int)*3600+times[1].to_int*60
+    return result
+  end function
+//List all available bash scripts
+Bash.listScripts=function
+  b=Io.getFileObj(globals.G_main,path(globals.G_main.dir.bash))
+  if b isa Error then return Info.info("You have not created any bash script's yet")
+  f=get_files(b)
+  Info.info("You have the following bash script's:")
+  for i in f;print white(name(i));end for
+end function
+//Handle errors and warnings with signal flags
+Bash.errorHandle=function(e=null)
+  if e isa Error then
+    if globals.G_bash.CANCONT then return
+    globals.G_bash.SIGSTOP=true
+  else if e isa Warning then
+    if globals.G_bash.CANBREAK then
+      globals.G_bash.SIGBREAK=true
+    else if globals.G_bash.CANCONT then
+      globals.G_bash.SIGCONT=true
+    end if
+  else
+    self.clear
+  end if
+end function
+//Replace searchStr with replaceStr in content, skipping single-quoted regions
+//Prevents $1-$9 from being substituted inside awk/sed scripts like '{print $2}'
+Bash._replaceParam=function(content, searchStr, replaceStr)
+  //Fast path: skip expensive character scan if searchStr not in content at all
+  if indexOf(content,searchStr)==null then return content
+  result=""
+  inSingle=false
+  i=0
+  sLen=len(searchStr)
+  _len=len(content)
+  while i<_len
+    c=content[i]
+    if c=="'" then
+      inSingle=not inSingle
+      result=result+c
+      i+=1
+    else if not inSingle and i+sLen<=_len and content[i:i+sLen]==searchStr then
+      result=result+replaceStr
+      i=i+sLen
+    else
+      result=result+c
+      i+=1
+    end if
+  end while
+  return result
+end function
+//Reset bash runtime state (defaults defined in globals.src)
+Bash.start=function
+  gb=globals.G_bash
+  gb.VARS={}
+  gb.RUN=[]
+  gb.command=""
+  gb.IGNORE=false
+  gb.SIGSTOP=false
+  gb.SIGBREAK=false
+  gb.CANBREAK=false
+  gb.CANCONT=false
+  gb.SIGCONT=false
+  gb.ACTIVE=false
+  gb.DEBUG=false
+  gb.ONERROR=""
+  gb.LAST_ERROR=""
+  gb.IN_TRY=0
+  gb.FUNCS={}
+  gb.CALLSTACK=[]
+  gb.RECURSION=0
+  gb.ALLOWABS=false
+  gb.SESSION_STACK={}
+  if not hasIndex(gb,"FLAGS") or not gb.FLAGS then gb.FLAGS={"OBJ":{}}
+  if not hasIndex(gb.FLAGS,"OBJ") then gb.FLAGS["OBJ"]={}
+end function
+//Reset bash state to default values
+Bash.clear=function;self.start;end function
+//Remove parentheses from string, handling nested parentheses
+Bash.clean=function(s)
+  //Use string slicing to extract content between parentheses
+  startIdx=indexOf(s,"(")
+  if startIdx==null then return s
+  //Find matching closing parenthesis
+  depth=0
+  endIdx=null
+  _len=len(s)
+  i=startIdx
+  while i<_len
+    if s[i]=="(" then depth+=1
+    if s[i]==")" then
+      depth-=1
+      if depth==0 then
+        endIdx=i
+        break
+      end if
+    end if
+    i+=1
+  end while
+  if endIdx!=null then return s[startIdx+1:endIdx]
+  return s
+end function
+Bash.run=function(Obj,argv)
+  //Reset signals
+  if globals.G_bash.SIGBREAK then globals.G_bash.SIGBREAK=false
+  //Process flags
+  if hasIndex(argv,"reset") and argv.reset then
+    globals.G_bash.FLAGS={"OBJ":{}}
+    return
+  end if
+  if argv.DEBUG then globals.G_bash.DEBUG=true
+  if argv.SIGBREAK then globals.G_bash.CANBREAK=true
+  if argv.SIGCONT then globals.G_bash.CANCONT=true
+  if argv.ONERROR then globals.G_bash.ONERROR=argv.ONERROR
+  if argv.ALLOWABS then globals.G_bash.ALLOWABS=true
+  if hasIndex(argv,"STARTOVER") and argv.STARTOVER then globals.G_bash.STARTOVER=true else globals.G_bash.STARTOVER=false
+  //Expose session objects as bash variables (null if unavailable)
+  if hasIndex(Obj,"computer") and Obj.computer then globals.G_bash.VARS.COMPUTER=Obj.computer else globals.G_bash.VARS.COMPUTER=null
+  if hasIndex(Obj,"shell") and Obj.shell then globals.G_bash.VARS.SHELL=Obj.shell else globals.G_bash.VARS.SHELL=null
+  if hasIndex(Obj,"root") and Obj.root then globals.G_bash.VARS.ROOT=Obj.root else globals.G_bash.VARS.ROOT=null
+  //Get script name
+  if argv.rest then Arg1=argv.rest.pull.replace("@","") else Arg1=null
+  //Initialize script file object
+  s=null
+  //No script name provided
+  if not Arg1 then
+    s=Io.file(globals.G_main,globals.G_main.dir.current,"Select a bash script to run:")
+    if s isa Warning then return Man.help(["run"])
+  //Script name provided
+  else
+    //Quick pre-check: if script exists and contains --ALLOWABS, enable it before path validation
+    if not globals.G_bash.ALLOWABS then
+      tempFile=null
+      if indexOf(Arg1,"/")!=null then tempFile=Io.getFileObj(globals.G_main,Arg1) else tempFile=File(globals.G_main.computer,path(globals.G_main.dir.bash)+"/"+Arg1)
+      if tempFile and not (tempFile isa Error) and not is_binary(tempFile) and not is_folder(tempFile) then
+        tempContent=get_content(tempFile)
+        if tempContent and indexOf(tempContent,"--ALLOWABS")!=null then globals.G_bash.ALLOWABS=true
+      end if
+    end if
+    //Check for path traversal if ALLOWABS not set
+    if not globals.G_bash.ALLOWABS then
+      if indexOf(Arg1,"..")!=null then return Error.set("Path traversal not allowed: "+Arg1)
+      if indexOf(Arg1,"/")!=null and Arg1[0]=="/" then return Error.set("Absolute paths not allowed: "+Arg1)
+    end if
+    //Full path or bash directory file
+    if indexOf(Arg1,"/")!=null then s=Io.getFileObj(globals.G_main,Arg1) else s=File(globals.G_main.computer,path(globals.G_main.dir.bash)+"/"+Arg1)
+  end if
+  //Script file not found
+  if not s then
+    self.clear
+    return Error.set("Unable to find bash script: "+Arg1)
+  end if
+  //File object is Error
+  if s isa Error then
+    Info.error("Bash: "+Arg1+" does not exist")
+    return self.clear
+  //File is binary
+  else if is_binary(s) then
+    Info.error(name(s)+" is a binary")
+    return self.clear
+  //File is folder
+  else if is_folder(s) then
+    Info.error(name(s)+" is a folder")
+    return self.clear
+  end if
+  //Load script content
+  content=get_content(s)
+  //Check for flags in script content
+  if indexOf(content,"--DEBUG")!=null then
+    globals.G_bash.DEBUG=true
+    content=content.replace("--DEBUG","")
+  end if
+  if indexOf(content,"--ALLOWABS")!=null then
+    globals.G_bash.ALLOWABS=true
+    content=content.replace("--ALLOWABS","")
+  end if
+  if indexOf(content,"--SIGBREAK")!=null then
+    globals.G_bash.CANBREAK=true
+    content=content.replace("--SIGBREAK","")
+  end if
+  if indexOf(content,"--SIGCONT")!=null then
+    globals.G_bash.CANCONT=true
+    content=content.replace("--SIGCONT","")
+  end if
+  if indexOf(content,"--ONERROR:")!=null then
+    globals.G_bash.CANCONT=true
+    content=content.replace("--ONERROR:","")
+    if indexOf(content,":")!=null then
+      p=content[indexOf(content,":"):]
+      globals.G_bash.ONERROR=p.replace(":","")
+      content=content.replace(p,"")
+    end if
+  end if
+  //Replace $STDIN with piped input or interactive user_input if $STDIN used in script
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinVal=str(globals.G_pipe.stdin)
+    //Only split into positional args if stdin is a single line
+    if indexOf(stdinVal,char(10))==null then
+      stdinTokens=split(trim(stdinVal)," ")
+      if argv.rest then argv.rest=stdinTokens+argv.rest else argv.rest=stdinTokens
+    end if
+  else if indexOf(content,"$STDIN")!=null then
+    stdinVal=user_input("STDIN: ")
+  else
+    stdinVal=null
+  end if
+  if stdinVal!=null then content=self._replaceParam(content,"$STDIN",stdinVal)
+  //Replace $1, $2, etc with arguments
+  if argv.rest then
+    if globals.G_bash.DEBUG then print green("Processing args: ")+argv.rest
+    if globals.G_bash.DEBUG then print green("Before command builder: ")+content
+    _len=len(argv.rest)+1
+    r=1
+    while r<_len
+      searchStr="$"+str(r)
+      if globals.G_bash.DEBUG then print cyan("  Looking for: ")+yellow(searchStr)+" in content"
+      if indexOf(content,searchStr)!=null then
+        if globals.G_bash.DEBUG then print cyan("  Replacing with: ")+yellow(argv.rest[r-1])
+        content=self._replaceParam(content,searchStr,argv.rest[r-1])
+        if globals.G_bash.DEBUG then print cyan("  After replacement: ")+white(content)
+      else
+        if globals.G_bash.DEBUG then print red("  Not found in content")
+      end if
+      r+=1
+    end while
+    if globals.G_bash.DEBUG then print green("After command builder: ")+content
+  end if
+  //Clear any unused $N placeholders (up to $9) — expand to empty string
+  r=1
+  while r<=9
+    searchStr="$"+str(r)
+    content=self._replaceParam(content,searchStr,"")
+    r+=1
+  end while
+  //Clear unused $STDIN placeholder if no pipe input and script had no $STDIN usage
+  content=self._replaceParam(content,"$STDIN","")
+  //Tokenize with comment support
+  tokens=self._tokenizeStructured(content)
+  //Parse into AST
+  ast=self._parseScript(tokens)
+  //Syntax validation (basic check)
+  if not ast then return Error.set("Failed to parse script: "+Arg1)
+  //Initialize SESSION_STACK and track the initial shell
+  if not hasIndex(globals.G_bash,"SESSION_STACK") then globals.G_bash.SESSION_STACK={}
+  if Obj and hasIndex(Obj,"id") and (Obj.layer=="shell" or Obj.layer=="computer" or Obj.layer=="file") then
+    globals.G_bash.SESSION_STACK[Obj.id]=Obj
+    if globals.G_bash.DEBUG then
+      print cyan("  Initial session tracked: ")+yellow(Obj.layer)+cyan(" (")+yellow(Obj.id)+cyan(")")
+      if hasIndex(Obj,"user") and Obj.user then
+        if hasIndex(Obj.user,"raw") then print cyan("    user.raw: ")+yellow(Obj.user.raw)
+        if hasIndex(Obj.user,"name") then print cyan("    user.name: ")+yellow(Obj.user.name)
+      end if
+    end if
+  end if
+  //Execute AST (with STARTOVER retry loop)
+  _startover=globals.G_bash.STARTOVER
+  while true
+    globals.G_bash.ACTIVE=true
+    self._execBody(Obj,ast)
+    globals.G_bash.ACTIVE=false
+    //Check for SIGSTOP and execute ONERROR/STARTOVER
+    if globals.G_bash.SIGSTOP then
+      if _startover then
+        //Re-run the script from the top
+        globals.G_bash.SIGSTOP=false
+        globals.G_bash.VARS={}
+        continue
+      end if
+      if globals.G_bash.ONERROR then
+        if hasIndex(Obj.commands,lower(globals.G_bash.ONERROR)) then
+          _fn=Obj.commands[lower(globals.G_bash.ONERROR)]
+          _fn([])
+        else
+          return self.clear
+        end if
+      else
+        return self.clear
+      end if
+    end if
+    break
+  end while
+  //Clear state after execution (only if RUN queue has content to process)
+  if globals.G_bash.RUN and len(globals.G_bash.RUN)>0 then
+    //Queue has commands, don't clear - let continueMacro handle them
+  else
+    //No pending commands, safe to clear
+    self.clear
+  end if
+end function
+// COMMAND CHAINING (Legacy Support)
+//Execute semicolon-delimited command chain (legacy support)
+Bash.chain=function(Obj,argv)
+  //Convert chain to script and execute
+  //Split each argument by semicolons and &&, then reconstruct as separate commands
+  commands=[]
+  currentCmd=[]
+  for arg in argv
+    //Check if this argument contains semicolons or && (quote-aware via lexer)
+    if self._hasChain(str(arg)) then
+      chainParts=self._splitChain(str(arg))
+      _len=len(chainParts)
+      if _len==0 then
+        if len(currentCmd)>0 then
+          push(commands,join(currentCmd," "))
+          currentCmd=[]
+        end if
+      end if
+      i=0
+      while i<_len
+        part=trim(chainParts[i].cmd)
+        if part then
+          push(currentCmd,part)
+          if i<len(chainParts)-1 then
+            //End of command, save it
+            if len(currentCmd)>0 then
+              push(commands,join(currentCmd," "))
+              currentCmd=[]
+            end if
+          end if
+        end if
+        i+=1
+      end while
+    else
+      push(currentCmd,arg)
+    end if
+  end for
+  //Add final command
+  if len(currentCmd)>0 then push(commands,join(currentCmd," "))
+  //Execute each command (join with semicolons to preserve chain logic)
+  chainStr=join(commands,";")
+  tokens=self._tokenizeStructured(chainStr)
+  ast=self._parseScript(tokens)
+  self._execBody(Obj,ast)
+  if not globals.G_bash.RUN or len(globals.G_bash.RUN)==0 then self.clear
+end function
+//Execute commands in a loop (legacy support)
+Bash.do=function(Obj,argv)
+  c=null
+  isWhile=false
+  isSuccess=false
+  matchPat=null
+  interval=0
+  i=0
+  _len=len(argv)
+  while i<_len
+    a=argv[i]
+    if a=="-c" then
+      i=i+1
+      if i>=_len then return Error.set("No parameter for flag: '-c'")
+      c=val(argv[i])
+      if not c isa number then return Error.set("Invalid parameter (number) for flag: '-c'")
+    else if a=="--while" then
+      isWhile=true
+    else if a=="--success" then
+      isSuccess=true
+    else if a=="--match" then
+      i=i+1
+      if i>=_len then return Error.set("No parameter for flag: '--match'")
+      matchPat=argv[i]
+    else if a=="-n" then
+      i=i+1
+      if i>=_len then return Error.set("No parameter for flag: '-n'")
+      interval=val(argv[i])
+      if not interval isa number or interval<0.01 or interval>300 then return Error.set("Invalid parameter for flag: '-n' (must be 0.01-300)")
+    else
+      break
+    end if
+    i=i+1
+  end while
+  rest=argv[i:]
+  if not rest then return Man.help(["do"])
+  modeCount=0
+  if c then modeCount=modeCount+1
+  if isWhile then modeCount=modeCount+1
+  if isSuccess then modeCount=modeCount+1
+  if matchPat then modeCount=modeCount+1
+  if modeCount>1 then return Error.set("Cannot combine -c, --while, --success, and --match flags")
+  if not c and not isWhile and not isSuccess and not matchPat then c=1
+  cmdStr=join(rest," ")
+  //--success: retry until command runs without error
+  if isSuccess then
+    print yellow("Retrying until success: ")+cmdStr+"  — press 'q' to stop"
+    while poll_input!="q"
+      gb=globals.G_bash
+      if gb.SIGBREAK then return self.clear
+      gb.SIGSTOP=false
+      gb.LAST_ERROR=""
+      tokens=self._tokenizeStructured(cmdStr)
+      ast=self._parseScript(tokens)
+      self._execBody(Obj,ast)
+      gb=globals.G_bash
+      if gb.SIGBREAK then return self.clear
+      if not gb.SIGSTOP then break
+      gb.SIGSTOP=false
+      if interval>0 then wait(interval)
+    end while
+    return self.clear
+  end if
+  //--match: retry until any output line matches PATTERN
+  if matchPat then
+    print yellow("Running until output matches '")+matchPat+yellow("': ")+cmdStr+"  — press 'q' to stop"
+    while poll_input!="q"
+      gb=globals.G_bash
+      if gb.SIGBREAK then
+        globals.G_pipe.PIPE_MODE=false
+        return self.clear
+      end if
+      globals.G_pipe.PIPE_MODE=true
+      globals.G_pipe.stdout=[]
+      gb.SIGSTOP=false
+      gb.LAST_ERROR=""
+      tokens=self._tokenizeStructured(cmdStr)
+      ast=self._parseScript(tokens)
+      self._execBody(Obj,ast)
+      gb=globals.G_bash
+      captured=globals.G_pipe.stdout
+      globals.G_pipe.PIPE_MODE=false
+      matched=false
+      _clen=len(captured)
+      _ci=0
+      while _ci<_clen
+        line=captured[_ci]
+        print line
+        if line.is_match(matchPat) then matched=true
+        _ci+=1
+      end while
+      if gb.SIGBREAK then return self.clear
+      if matched then break
+      if interval>0 then wait(interval)
+    end while
+    return self.clear
+  end if
+  argv={"c":c,"while":isWhile,"interval":interval,"rest":rest}
+  //Build loop script
+  loopScript=""
+  if argv.c then
+    if argv.interval>0 then
+      loopScript="for _i in range(1,"+argv.c+")"+char(10)
+      loopScript=loopScript+join(argv.rest," ")+char(10)
+      loopScript=loopScript+"_sleep "+argv.interval+char(10)
+      loopScript=loopScript+"endfor"
+    else
+      loopScript="for _i in range(1,"+argv.c+")"+char(10)
+      loopScript=loopScript+join(argv.rest," ")+char(10)
+      loopScript=loopScript+"endfor"
+    end if
+  else if argv["while"] then
+    //While loop with external condition (requires poll_input!="q")
+    print yellow("Every "+argv.interval+"s: ")+join(argv.rest," ")+"  — press 'q' to stop"
+    while poll_input!="q"
+      if globals.G_bash.SIGSTOP then return self.clear
+      tokens=self._tokenizeStructured(join(argv.rest," "))
+      ast=self._parseScript(tokens)
+      self._execBody(Obj,ast)
+      if argv.interval>0 then wait(argv.interval)
+    end while
+    return self.clear
+  end if
+  //Execute loop script
+  tokens=self._tokenizeStructured(loopScript)
+  ast=self._parseScript(tokens)
+  self._execBody(Obj,ast)
+  if not globals.G_bash.RUN or len(globals.G_bash.RUN)==0 then self.clear
+end function
+//Continue executing queued commands (legacy - now handled by _execBody)
+Bash.continueMacro=function(Obj)
+  gb=globals.G_bash
+  //Check SIGSTOP first - if _home was called, exit immediately
+  //Also clear the queue so object "while gb.RUN" guards go false and don't loop forever
+  if gb.SIGSTOP then
+    if gb.DEBUG then print cyan("  SIGSTOP detected in continueMacro - skipping queue processing")
+    gb.RUN=null
+    //Unwind all tracked sessions so script exits back to home automatically
+    if hasIndex(gb,"SESSION_STACK") and gb.SESSION_STACK then
+      for sessionId in gb.SESSION_STACK.indexes
+        sessionObj=gb.SESSION_STACK[sessionId]
+        if hasIndex(sessionObj,"commands") and hasIndex(sessionObj.commands,"exit") then
+          _fn=sessionObj.commands["exit"]
+          _fn([])
+        end if
+      end for
+      gb.SESSION_STACK={}
+    end if
+    //Signal proxy/pivot to consume the back flag and stay running
+    if globals.G_hasPivoted then globals.G_attributes.home=true
+    return
+  end if
+  if gb.DEBUG then
+    print blue("="*60)
+    print blue("Function Call->continueMacro")
+    print cyan("  Calling Object: ")+yellow(typeof(Obj))
+    if Obj then
+      if hasIndex(Obj,"id") then print cyan("  Object ID: ")+yellow(Obj.id)
+      if hasIndex(Obj,"name") then print cyan("  Object Name: ")+yellow(Obj.name)
+      if hasIndex(Obj,"type") then print cyan("  Object Type: ")+yellow(Obj.type)
+    end if
+    if hasIndex(globals,"G_IPC") then
+      print cyan("  G_IPC property exists: ")+yellow("true")
+      print cyan("  G_IPC type: ")+yellow(typeof(globals.G_IPC))
+      if typeof(globals.G_IPC)=="map" then
+        print cyan("  G_IPC registered processes: ")+yellow(len(globals.G_IPC.indexes))
+        if len(globals.G_IPC.indexes)==0 then print cyan("    ")+red("(no processes registered - empty map)") else print cyan("    Process IDs: ")+yellow(globals.G_IPC.indexes)
+      end if
+    else
+      print cyan("  G_IPC property exists: ")+red("false - not initialized!")
+    end if
+    if globals.G_main then
+      if hasIndex(globals.G_main,"computer") then
+        comp=globals.G_main.computer
+        if comp then
+          if hasIndex(comp,"local_ip") then print cyan("  Local IP: ")+yellow(comp.local_ip)
+          if hasIndex(comp,"public_ip") then print cyan("  Public IP: ")+yellow(comp.public_ip)
+        end if
+      end if
+    end if
+    if gb.RUN then print cyan("  Queue Length: ")+yellow(len(gb.RUN)) else print cyan("  Queue: ")+yellow("empty")
+  end if
+  //Track session objects (only shell, computer, and file)
+  if Obj.layer=="shell" or Obj.layer=="computer" or Obj.layer=="file" then
+    gb.SESSION_STACK[Obj.id]=Obj
+    if gb.DEBUG then
+      print cyan("  Tracked session: ")+yellow(Obj.layer)+cyan(" (")+yellow(Obj.id)+cyan(")")
+      if hasIndex(Obj,"user") and Obj.user then
+        if hasIndex(Obj.user,"raw") then print cyan("    user.raw: ")+yellow(Obj.user.raw)
+        if hasIndex(Obj.user,"name") then print cyan("    user.name: ")+yellow(Obj.user.name)
+      end if
+    end if
+  end if
+  //Update session objects after pivot (null if unavailable)
+  if hasIndex(Obj,"computer") and Obj.computer then gb.VARS.COMPUTER=Obj.computer else gb.VARS.COMPUTER=null
+  if hasIndex(Obj,"shell") and Obj.shell then gb.VARS.SHELL=Obj.shell else gb.VARS.SHELL=null
+  if hasIndex(Obj,"root") and Obj.root then gb.VARS.ROOT=Obj.root else gb.VARS.ROOT=null
+  //Legacy support - if RUN queue exists, process it
+  if gb.RUN then
+    cmdCount=0
+    totalCommands=len(gb.RUN)
+    while gb.RUN and len(gb.RUN)>0
+      cmdCount+=1
+      if gb.DEBUG then
+        print green("  Processing command "+cmdCount+" of "+totalCommands)
+        print green("    Remaining in queue: ")+yellow(len(gb.RUN))
+      end if
+      //Check SIGSTOP first - if set, exit immediately without error messages
+      //Clear queue so object "while gb.RUN" guards go false and don't loop forever
+      if gb.SIGSTOP then
+        if gb.DEBUG then print cyan("  SIGSTOP detected - _home called, exiting cleanly")
+        gb.RUN=null
+        //Unwind all tracked sessions so script exits back to home automatically
+        if hasIndex(gb,"SESSION_STACK") and gb.SESSION_STACK then
+          for sessionId in gb.SESSION_STACK.indexes
+            sessionObj=gb.SESSION_STACK[sessionId]
+            if hasIndex(sessionObj,"commands") and hasIndex(sessionObj.commands,"exit") then
+              _fn=sessionObj.commands["exit"]
+              _fn([])
+            end if
+          end for
+          gb.SESSION_STACK={}
+        end if
+        //Signal proxy/pivot to consume the back flag and stay running
+        if globals.G_hasPivoted then globals.G_attributes.home=true
+        break
+      end if
+      //Check SIGBREAK - used for early termination
+      if gb.SIGBREAK then
+        if gb.DEBUG then print red("  SIGBREAK detected - halting queue processing and clearing queue")
+        gb.SIGBREAK=false
+        gb.RUN=[]
+        break
+      end if
+      cmd=pop(gb.RUN)
+      if gb.DEBUG then print green("    Command: ")+white(cmd)
+      //Check if this is a stashed AST block (from pivot stashing in _execBody)
+      if typeof(cmd)=="map" and hasIndex(cmd,"__AST__") and cmd["__AST__"]==true then
+        if gb.DEBUG then print cyan("  Processing stashed AST nodes: ")+yellow(len(cmd.nodes))+" nodes"
+        Bash._execBody(Obj,cmd.nodes)
+        continue
+      end if
+      //Check if this is a loop continuation (from pivot inside loop body)
+      if typeof(cmd)=="map" and hasIndex(cmd,"__LOOP__") and cmd["__LOOP__"]==true then
+        if gb.DEBUG then print cyan("  Processing loop continuation: ")+yellow(cmd.type)
+        //Restore try depth
+        gb.IN_TRY=cmd.tryDepth
+        if cmd.type=="for" then
+          forAst=Bash._parseScript(cmd.body)
+          forPivoted=false
+          for item in cmd.list
+            if gb.SIGSTOP or gb.SIGBREAK then break
+            gb.VARS[cmd.var]=item
+            //Push continuation for remaining iterations
+            remaining=cmd.list[__item_idx+1:]
+            if not gb.RUN then gb.RUN=[]
+            push(gb.RUN,{"__LOOP__":true,"type":"for","var":cmd.var,"list":remaining,"body":cmd.body,"after":cmd.after,"tryDepth":cmd.tryDepth})
+            Bash._execBody(Obj,forAst,true)
+            if not Bash._unstashLoop then
+              forPivoted=true
+              break
+            end if
+            if gb.SIGCONT then gb.SIGCONT=false
+          end for
+          if gb.SIGBREAK then gb.SIGBREAK=false
+          //Execute after-loop nodes if loop completed normally
+          if not forPivoted and cmd.after then Bash._execBody(Obj,cmd.after,true)
+        else if cmd.type=="while" then
+          whileAst=Bash._parseScript(cmd.body)
+          whilePivoted=false
+          while Bash._evalCond(cmd.cond,Obj)
+            if gb.SIGSTOP or gb.SIGBREAK then break
+            if not gb.RUN then gb.RUN=[]
+            push(gb.RUN,{"__LOOP__":true,"type":"while","cond":cmd.cond,"body":cmd.body,"after":cmd.after,"tryDepth":cmd.tryDepth})
+            Bash._execBody(Obj,whileAst,true)
+            if not Bash._unstashLoop then
+              whilePivoted=true
+              break
+            end if
+            if gb.SIGCONT then gb.SIGCONT=false
+          end while
+          if gb.SIGBREAK then gb.SIGBREAK=false
+          if not whilePivoted and cmd.after then Bash._execBody(Obj,cmd.after,true)
+        else if cmd.type=="until" then
+          untilAst=Bash._parseScript(cmd.body)
+          untilPivoted=false
+          while not Bash._evalCond(cmd.cond,Obj)
+            if gb.SIGSTOP or gb.SIGBREAK then break
+            if not gb.RUN then gb.RUN=[]
+            push(gb.RUN,{"__LOOP__":true,"type":"until","cond":cmd.cond,"body":cmd.body,"after":cmd.after,"tryDepth":cmd.tryDepth})
+            Bash._execBody(Obj,untilAst,true)
+            if not Bash._unstashLoop then
+              untilPivoted=true
+              break
+            end if
+            if gb.SIGCONT then gb.SIGCONT=false
+          end while
+          if gb.SIGBREAK then gb.SIGBREAK=false
+          if not untilPivoted and cmd.after then Bash._execBody(Obj,cmd.after,true)
+        end if
+        continue
+      end if
+      //Check if this is a try continuation (from pivot inside try body)
+      if typeof(cmd)=="map" and hasIndex(cmd,"__TRY__") and cmd["__TRY__"]==true then
+        if gb.DEBUG then print cyan("  Processing try continuation")
+        gb.IN_TRY=cmd.tryDepth
+        //Try body already executed via __AST__; handle error state
+        if gb.SIGSTOP and gb.LAST_ERROR then
+          if gb.DEBUG then print red("  TRY caught error in pivot context: "+gb.LAST_ERROR)
+          gb.SIGSTOP=false
+          gb.SIGBREAK=false
+          if cmd.catchVar then gb.VARS[cmd.catchVar]=gb.LAST_ERROR
+          gb.LAST_ERROR=""
+          if cmd.catch and len(cmd.catch)>0 then
+            catchAst=Bash._parseScript(cmd.catch)
+            Bash._execBody(Obj,catchAst,false)
+          end if
+        end if
+        gb.LAST_ERROR=""
+        //Execute after-try nodes
+        if cmd.after then Bash._execBody(Obj,cmd.after,true)
+        continue
+      end if
+      //Check if this is a queued IF statement (special map marker)
+      if typeof(cmd)=="map" and hasIndex(cmd,"__IF__") and cmd["__IF__"]==true then
+        if gb.DEBUG then
+          print cyan("  Processing queued IF statement")
+          print cyan("    Condition: ")+white(cmd.cond)
+        end if
+        //Save remaining queue so IF body commands run before subsequent commands
+        savedQueue=[]
+        while len(gb.RUN)>0;push(savedQueue,pull(gb.RUN));end while
+        //Evaluate condition with current shell context
+        condResult=Bash._evalCond(cmd.cond,Obj)
+        if gb.DEBUG then print cyan("    Result: ")+yellow(condResult)
+        if condResult then
+          if gb.DEBUG then print cyan("    => Executing THEN block")
+          thenAst=Bash._parseScript(cmd.thenBlock)
+          Bash._execBody(Obj,thenAst,false)
+        else
+          //Check elif branches
+          executed=false
+          elifCount=0
+          for elifBranch in cmd.elif
+            elifCount+=1
+            if gb.DEBUG then print cyan("    Evaluating ELIF "+elifCount)
+            elifResult=Bash._evalCond(elifBranch.cond,Obj)
+            if gb.DEBUG then print cyan("      Result: ")+yellow(elifResult)
+            if elifResult then
+              if gb.DEBUG then print cyan("      => Executing ELIF "+elifCount+" block")
+              elifAst=Bash._parseScript(elifBranch.body)
+              Bash._execBody(Obj,elifAst,false)
+              executed=true
+              break
+            end if
+          end for
+          if not executed and len(cmd.elseBlock)>0 then
+            if gb.DEBUG then print cyan("    => Executing ELSE block")
+            elseAst=Bash._parseScript(cmd.elseBlock)
+            Bash._execBody(Obj,elseAst,false)
+          end if
+        end if
+        //Restore saved queue after IF body commands for correct ordering
+        for savedItem in savedQueue;push(gb.RUN,savedItem);end for
+        continue
+      end if
+      //Check if this is a queued function call (structured map from _execBody top-level)
+      if typeof(cmd)=="map" and hasIndex(cmd,"__FUNC__") and cmd["__FUNC__"]==true then
+        if gb.DEBUG then
+          print cyan("  Processing queued function call")
+          print cyan("    Name: ")+white(cmd.name)
+          print cyan("    Args: ")+yellow(cmd.args)
+        end if
+        result=Bash._callFunc(Obj,cmd.name,cmd.args)
+        if result!=null then gb.VARS["__last_return__"]=result
+        continue
+      end if
+      //Check if command has prompts OR undefined variables - if so, it needs processing during execution
+      cmdLower=lower(trim(cmd))
+      needsProcessing=false
+      if indexOf(cmdLower,"_setvar")==0 then
+        if indexOf(cmdLower,"get_string")!=null or indexOf(cmdLower,"get_integer")!=null or indexOf(cmdLower,"get_decimal")!=null or indexOf(cmdLower,"get_any")!=null or indexOf(cmdLower,"get_yesno")!=null then needsProcessing=true
+      end if
+      //Also check if it has get_var references (means it was queued unprocessed due to undefined variables)
+      if indexOf(cmd,"_getvar(")!=null then needsProcessing=true
+      //Process if needed, skip if already processed
+      self._exec(Obj,cmd,not needsProcessing)
+      //Don't check SIGSTOP here - process all queued commands
+      //SIGSTOP will take effect after the entire queue is processed
+    end while
+    if gb.DEBUG then
+      print green("  Queue processing complete")
+      print green("    Total commands processed: ")+yellow(cmdCount)
+    end if
+  end if
+  //Don't clear here - variables need to persist for subsequent commands
+  //Clearing will happen when the script finishes execution
+end function

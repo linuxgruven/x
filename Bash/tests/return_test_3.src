@@ -1,0 +1,239 @@
+// Return Test Part 3 - Sections 11-14
+
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>[PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>[FAIL]</color> _getvar(label) <color=#ffff00> expected:</color>_getvar(expected) <color=#ffff00> got:</color>_getvar(actual)
+  endif
+endfunc
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     RETURN TESTS PART 3 (Sections 11-14)</color>
+_print <color=#eb0cc6>============================================</color>
+_print
+
+// ===================================================================
+// SECTION 11 - CONTEXT BUILTINS
+// ===================================================================
+_print <color=#00bfff>--- Section 11: Context Builtins ---</color>
+
+// get_user returns a non-empty string
+_setvar(r, get_user())
+_setvar(check, len(_getvar(r)))
+if _getvar(check) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(get_user returns non-empty string, _getvar(pass), 1)
+
+// get_home returns a non-empty path
+_setvar(r, get_home())
+_setvar(check, len(_getvar(r)))
+if _getvar(check) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(get_home returns non-empty path, _getvar(pass), 1)
+
+// get_shell_type returns a string
+_setvar(r, get_shell_type())
+_setvar(check, len(_getvar(r)))
+if _getvar(check) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(get_shell_type returns non-empty, _getvar(pass), 1)
+
+// _fs_pwd returns a path
+_setvar(r, _fs_pwd)
+_setvar(check, contains(_getvar(r), /))
+assert(_fs_pwd contains slash, _getvar(check), 1)
+
+// _sys_whoami returns a string
+_setvar(r, _sys_whoami)
+_setvar(check, len(_getvar(r)))
+if _getvar(check) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(_sys_whoami returns non-empty, _getvar(pass), 1)
+
+// timestamp returns a number
+_setvar(r, timestamp())
+if _getvar(r) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(timestamp returns positive number, _getvar(pass), 1)
+
+// date returns a non-empty string
+_setvar(r, date())
+_setvar(check, len(_getvar(r)))
+if _getvar(check) > 0
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(date returns non-empty string, _getvar(pass), 1)
+
+_print
+
+// ===================================================================
+// SECTION 12 - BUILTIN CHAINING IN EXPRESSIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 12: Builtin Chaining ---</color>
+
+// len inside arithmetic
+_setvar(r, len(hello) + 1)
+assert(len hello + 1 is 6, _getvar(r), 6)
+
+// nested builtins: upper of substr
+_setvar(r, upper(substr(hello, 0, 3)))
+assert(upper of substr hel is HEL, _getvar(r), HEL)
+
+// lower of upper roundtrip
+_setvar(r, lower(upper(hello)))
+assert(lower of upper hello is hello, _getvar(r), hello)
+
+// concat with to_string
+_setvar(r, concat(val:, to_string(42)))
+assert(concat with to_string, _getvar(r), val:42)
+
+// len of concat
+_setvar(r, len(concat(abc, def)))
+assert(len of concat abcdef is 6, _getvar(r), 6)
+
+// floor of random (type check - should be whole number)
+_setvar(val, random(1, 100))
+_setvar(floored, floor(_getvar(val)))
+if _getvar(floored) == _getvar(val)
+  _setvar(pass, 1)
+else
+  _setvar(pass, 0)
+endif
+assert(random returns integer so floor is same, _getvar(pass), 1)
+
+// min and max together
+_setvar(r, max(min(10, 5), 3))
+assert(max of min 10 5 and 3 is 5, _getvar(r), 5)
+
+// abs in expression
+_setvar(r, abs(-7) + abs(3))
+assert(abs -7 + abs 3 is 10, _getvar(r), 10)
+
+_print
+
+// ===================================================================
+// SECTION 13 - SWITCH RETURN PATTERNS
+// ===================================================================
+_print <color=#00bfff>--- Section 13: Switch Return Patterns ---</color>
+
+// Switch sets variable based on match
+func classify(n)
+  _setvar(r, unknown)
+  switch _getvar(n)
+    case 1
+      _setvar(r, one)
+    case 2
+      _setvar(r, two)
+    case 3
+      _setvar(r, three)
+    default
+      _setvar(r, other)
+  endswitch
+  _return _getvar(r)
+endfunc
+_setvar(r, classify(1))
+assert(switch classify 1 is one, _getvar(r), one)
+_setvar(r, classify(2))
+assert(switch classify 2 is two, _getvar(r), two)
+_setvar(r, classify(99))
+assert(switch classify 99 is other, _getvar(r), other)
+
+// Switch with expression in case body
+func mathOp(op, a, b)
+  _setvar(r, 0)
+  switch _getvar(op)
+    case add
+      _setvar(r, _getvar(a) + _getvar(b))
+    case sub
+      _setvar(r, _getvar(a) - _getvar(b))
+    case mul
+      _setvar(r, _getvar(a) * _getvar(b))
+    default
+      _setvar(r, -1)
+  endswitch
+  _return _getvar(r)
+endfunc
+_setvar(r, mathOp(add, 3, 4))
+assert(switch add 3 4 is 7, _getvar(r), 7)
+_setvar(r, mathOp(sub, 10, 3))
+assert(switch sub 10 3 is 7, _getvar(r), 7)
+_setvar(r, mathOp(mul, 5, 6))
+assert(switch mul 5 6 is 30, _getvar(r), 30)
+_setvar(r, mathOp(div, 1, 1))
+assert(switch unknown op is -1, _getvar(r), -1)
+
+_print
+
+// ===================================================================
+// SECTION 14 - EDGE CASES
+// ===================================================================
+_print <color=#00bfff>--- Section 14: Edge Cases ---</color>
+
+// Zero in expressions
+_setvar(r, 0 + 0)
+assert(0 + 0 is 0, _getvar(r), 0)
+
+// Negative in expressions
+_setvar(r, -3 + -2)
+assert(-3 + -2 is -5, _getvar(r), -5)
+
+// Large number
+_setvar(r, 999999 + 1)
+assert(999999 + 1 is 1000000, _getvar(r), 1000000)
+
+// String with numbers treated as string in contains
+_setvar(r, contains(test123, 123))
+assert(contains test123 has 123, _getvar(r), 1)
+
+// len of number converted to string
+_setvar(r, len(to_string(12345)))
+assert(len of 12345 as string is 5, _getvar(r), 5)
+
+// Multiple operations chain
+_setvar(r, floor(abs(-7) + ceil(2.1)))
+assert(floor abs-7 + ceil 2.1 is 10, _getvar(r), 10)
+
+// Variable overwrite
+_setvar(x, first)
+_setvar(x, second)
+assert(overwrite first with second, _getvar(x), second)
+
+// Empty list operations
+_setvar(arr, [])
+_setvar(r, len(_getvar(arr)))
+assert(empty list has len 0, _getvar(r), 0)
+
+// Single item list
+_setvar(arr, [solo])
+_setvar(r, len(_getvar(arr)))
+assert(single item list len is 1, _getvar(r), 1)
+
+// Deeply nested math
+_setvar(r, max(min(abs(-10), 7), floor(3.9)))
+assert(max min abs-10 7 floor3.9 is 7, _getvar(r), 7)
+
+_print
+
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     PART 3 COMPLETE (Sections 11-14)</color>
+_print <color=#eb0cc6>============================================</color>
+_print

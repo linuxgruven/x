@@ -1,0 +1,319 @@
+// =============================================================================
+// AGENT_NLP
+// Natural language processing: intent parsing, command suggestion, risk assessment
+// =============================================================================
+//Universal parameter extraction with intelligent reasoning
+AgentCore._extractParameters=function(query,commandName,knowledge)
+  debug=globals.G_agent.config.debug
+  if not query or not commandName then return ""
+  queryLower=lower(query)
+  cmdLower=lower(commandName)
+  if debug then print green("[DEBUG] _extractParameters: query='"+query+"' cmd='"+commandName+"'")
+  //Remove command name from query
+  queryLower=queryLower.replace(cmdLower,"")
+  //Extract meaningful words (using shared stop word + action word maps for O(1) lookup)
+  sw=self._STOP_WORDS
+  aw=self._ACTION_WORDS
+  words=split(trim(queryLower)," ")
+  params=[]
+  for word in words;if not hasIndex(sw,word) and not hasIndex(aw,word) and len(word)>0 then push(params,word);end for
+  //AI reasoning: interpret parameters based on command context
+  if len(params)==0 then return ""
+  //Use man page knowledge to understand what command expects
+  handlesFiles=hasIndex(knowledge,"handlesFiles") and knowledge.handlesFiles
+  handlesSystem=hasIndex(knowledge,"handlesSystem") and knowledge.handlesSystem
+  //Intelligent path resolution for file/directory commands
+  if handlesFiles or handlesSystem then
+    interpreted=[]
+    for param in params
+      //Already a path
+      if param[0]=="/" or param=="~" then
+        push(interpreted,param)
+      else
+        //AI reasoning: does this word refer to a location?
+        //Check common Unix directory names and infer full paths
+        resolvedPath=globals.G_agent._resolvePathIntent(param,queryLower)
+        push(interpreted,resolvedPath)
+      end if
+    end for
+    result=join(interpreted," ")
+    if debug then print green("[DEBUG] _extractParameters: returning '"+result+"'")
+    return result
+  end if
+  //For non-file commands, pass through as-is
+  result=join(params," ")
+  if debug then print green("[DEBUG] _extractParameters: returning '"+result+"' (pass-through)")
+  return result
+end function
+//AI reasoning: resolve user intent for path-like words
+AgentCore._resolvePathIntent=function(word,fullQuery)
+  //AI reasoning: "my X" or "user X" patterns usually mean home directory
+  if indexOf(fullQuery,"my "+word)!=null or indexOf(fullQuery,"user "+word)!=null then
+    if word=="home" or word=="directory" then return "~"
+  end if
+  //Special case: "home" alone typically means user's home, not /home directory
+  if word=="home" then return "~"
+  //AI reasoning: common Unix directory names -> infer full paths
+  //These are learned patterns from Grey Hack filesystem, not generic Unix
+  commonDirs=self._COMMON_DIRS
+  //Check if word is a known directory name
+  //AI reasoning: user likely means the absolute path
+  if hasIndex(commonDirs,word) then return commonDirs[word]
+  //Not a known pattern - return as-is and let command interpret it
+  return word
+end function
+//Discover command for a specific intent using same logic as user queries
+//This allows workflows to find commands dynamically without hard-coding
+AgentCore._discoverCommand=function(Obj,intentQuery)
+  //Use the same parsing and planning logic to build a command
+  if not hasIndex(globals.G_agent,"commandKnowledgeCache") then return null
+  if len(globals.G_agent.commandKnowledgeCache.indexes)==0 then globals.G_agent.loadKnowledge
+  //Parse the intent query
+  tempParsed=globals.G_agent._parseCommand(Obj,intentQuery,true)
+  if not hasIndex(tempParsed,"action") then return null
+  //Build a mini plan to get the command string
+  tempPlan={"steps":[]}
+  tempPlan=globals.G_agent._buildPlan(Obj,tempParsed,tempPlan)
+  //Extract the command from first step
+  if len(tempPlan.steps)>0 and hasIndex(tempPlan.steps[0],"command") then return tempPlan.steps[0].command
+  return null
+end function
+//Suggest best command for a given goal by consulting man pages
+//Example: globals.G_agent.suggestCommand("list files") -> "ls"
+//         globals.G_agent.suggestCommand("show accounts") -> "list"
+AgentCore.suggestCommand=function(goal)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  if not goal or typeof(goal)!="string" then return null
+  goalLower=lower(goal).trim
+  //Try knowledge-based selection first
+  emptyContext={}
+  knowledgeCmd=globals.G_agent._chooseBestCommand(goal,emptyContext)
+  if knowledgeCmd then
+    if outLvl>=2 then print yellow("[VERBOSE] Agent: Using cached knowledge to suggest '"+knowledgeCmd+"' for '"+goal+"'")
+    return knowledgeCmd
+  end if
+  //Fallback to static mappings
+  suggestions=self._SUGGESTIONS
+  //Find matching command
+  for suggestion in suggestions
+    for keyword in suggestion.keywords
+      if indexOf(goalLower,keyword)!=null then
+        cmd=suggestion.command
+        //Get man page info for verification
+        if debug then
+          help=globals.G_agent.getCommandInfo(cmd)
+          if help then print skyblue("Agent: Suggested '"+cmd+"' for goal '"+goal+"'")
+        end if
+        return cmd
+      end if
+    end for
+  end for
+  return null
+end function
+// Intelligent Flag Selection - Build commands from natural language intent
+//Build a command intelligently based on user intent and command knowledge
+//Example: "show all files recursively with sizes" + list command -> "list -a -R -s"
+AgentCore.buildIntelligentCommand=function(baseCommand,userIntent,cmdKnowledge=null)
+  debug=globals.G_agent.config.debug
+  if not cmdKnowledge then cmdKnowledge=globals.G_agent.getCommandInfo(baseCommand)
+  //No knowledge available - return base command
+  if not cmdKnowledge or not hasIndex(cmdKnowledge,"flags") then return baseCommand
+  intentLower=lower(userIntent)
+  selectedFlags=[]
+  //Intent keyword mappings to flag patterns
+  intentMappings=self._INTENT_MAPPINGS
+  //Scan intent for matching keywords
+  for mapping in intentMappings
+    matched=false
+    for keyword in mapping.keywords
+      if indexOf(intentLower,keyword)!=null then
+        matched=true
+        break
+      end if
+    end for
+    if matched then
+      //Try to find matching flag in command knowledge
+      for flagPattern in mapping.flagPatterns
+        for knownFlag in indexes(cmdKnowledge.flags)
+          //Check if flag matches pattern (e.g., "-a" matches pattern "a")
+          if len(knownFlag)>=2 and knownFlag[0]=="-" then
+            flagChar=knownFlag[1]
+            if flagChar==flagPattern then
+              //Verify flag description matches intent
+              flagDesc=lower(cmdKnowledge.flags[knownFlag])
+              //Basic relevance check
+              isRelevant=false
+              for keyword in mapping.keywords
+                if indexOf(flagDesc,keyword)!=null then
+                  isRelevant=true
+                  break
+                end if
+              end for
+              //Also accept if description contains related terms
+              if not isRelevant then
+                relatedTerms={"a":["all","hidden"],"R":["recursive","subdirect"],"r":["recursive","reverse"],"s":["size","sort","stealth","save"],"l":["long","list","lan"],"v":["verbose"],"f":["fast","file","filter"],"d":["director","dictionary"],"b":["brute"],"o":["overflow","output","owner"],"i":["inject"],"h":["human"],"p":["port","permission","proxy"],"t":["time","sort"],"q":["quiet"]}
+                if hasIndex(relatedTerms,flagChar) then
+                  for term in relatedTerms[flagChar]
+                    if indexOf(flagDesc,term)!=null then
+                      isRelevant=true
+                      break
+                    end if
+                  end for
+                end if
+              end if
+              if isRelevant and selectedFlags.indexOf(knownFlag)==null then
+                push(selectedFlags,knownFlag)
+                if debug then print green("[DEBUG]   Intent '"+mapping.desc+"' -> flag "+knownFlag)
+                break
+              end if
+            end if
+          end if
+        end for
+      end for
+    end if
+  end for
+  //Build final command
+  if len(selectedFlags)==0 then return baseCommand
+  result=baseCommand
+  for flag in selectedFlags;result+=" "+flag;end for
+  if debug then print green("[DEBUG] Agent: Built intelligent command: "+result)
+  return result
+end function
+//Parse user intent to determine which command to use and what flags
+//Returns: {"command": "list", "flags": ["-a", "-s"], "args": ["path"]}
+AgentCore.parseIntent=function(userIntent)
+  intentLower=lower(userIntent)
+  result={"command":"","flags":[],"args":[]}
+  //Command detection from intent
+  commandMappings=self._COMMAND_MAPPINGS
+  //Find matching command
+  for mapping in commandMappings
+    for keyword in mapping.keywords
+      if indexOf(intentLower,keyword)!=null then
+        result.command=mapping.command
+        break
+      end if
+    end for
+    if len(result.command)>0 then break
+  end for
+  //No command detected
+  if len(result.command)==0 then return null
+  //Get command knowledge
+  cmdKnowledge=globals.G_agent.getCommandInfo(result.command)
+  if not cmdKnowledge then return result
+  //Build intelligent command
+  fullCmd=globals.G_agent.buildIntelligentCommand(result.command,userIntent,cmdKnowledge)
+  //Parse out flags from built command
+  parts=split(fullCmd," ")
+  _len=len(parts)
+  if _len>1 then
+    i=1;while i<_len;part=parts[i];if len(part)>=2 and part[0]=="-" then push(result.flags,part) else push(result.args,part);i+=1;end while
+  end if
+  return result
+end function
+// Strategic Knowledge Usage Functions
+//Choose best command based on cached knowledge and goal
+AgentCore._chooseBestCommand=function(goal,context)
+  debug=globals.G_agent.config.debug
+  if not goal then return null
+  goalLower=lower(goal)
+  bestMatch=null
+  bestScore=0
+  //Blacklist commands that should never be used for certain goals
+  escalationBlacklist=self._ESCALATION_BLACKLIST
+  //Check all cached commands
+  if hasIndex(self,"commandKnowledgeCache") then
+    for cmdName in indexes(globals.G_agent.commandKnowledgeCache)
+      knowledge=globals.G_agent.commandKnowledgeCache[cmdName]
+      score=0
+      //Skip blacklisted commands for escalation/root goals
+      if (indexOf(goalLower,"escalate")!=null or indexOf(goalLower,"root")!=null or indexOf(goalLower,"privilege")!=null) then
+        isBlacklisted=false
+        for blacklisted in escalationBlacklist
+          if cmdName==blacklisted then
+            isBlacklisted=true
+            break
+          end if
+        end for
+        if isBlacklisted then continue
+      end if
+      //Match purpose to goal
+      if indexOf(goalLower,cmdName)!=null then score+=20
+      if hasIndex(knowledge,"purpose") and indexOf(goalLower,knowledge.purpose)!=null then score+=15
+      //Boost for capability matches
+      if indexOf(goalLower,"stealth")!=null and hasIndex(knowledge,"supportsStealth") and knowledge.supportsStealth then score+=10
+      if indexOf(goalLower,"escalate")!=null and hasIndex(knowledge,"canEscalate") and knowledge.canEscalate then score+=10
+      if indexOf(goalLower,"password")!=null and hasIndex(knowledge,"cracksPasswords") and knowledge.cracksPasswords then score+=10
+      if indexOf(goalLower,"root")!=null and hasIndex(knowledge,"escalatesToRoot") and knowledge.escalatesToRoot then score+=10
+      if indexOf(goalLower,"port")!=null and hasIndex(knowledge,"scansPorts") and knowledge.scansPorts then score+=10
+      //Check context requirements
+      if hasIndex(context,"needsStealth") and hasIndex(knowledge,"supportsStealth") and knowledge.supportsStealth then score+=5
+      if hasIndex(context,"needsEscalation") and hasIndex(knowledge,"canEscalate") and knowledge.canEscalate then score+=5
+      if score>bestScore then
+        bestScore=score
+        bestMatch=cmdName
+      end if
+    end for
+  end if
+  if bestMatch and debug then print green("[DEBUG] Agent: Knowledge-based command selection: "+bestMatch+" (score: "+bestScore+")")
+  return bestMatch
+end function
+// Risk Assessment - Warn about dangerous operations
+AgentCore.assessRisk=function(command,context)
+  risks=[]
+  score=0
+  cmdLower=lower(command)
+  //Destructive operations
+  if indexOf(cmdLower,"rm ")!=null or indexOf(cmdLower,"remove")!=null or indexOf(cmdLower,"delete")!=null then
+    push(risks,"File deletion")
+    score+=50
+  end if
+  if indexOf(cmdLower,"wipe")!=null or indexOf(cmdLower,"clean")!=null then
+    push(risks,"System wipe")
+    score+=100
+  end if
+  if indexOf(cmdLower,"format")!=null then
+    push(risks,"Format operation")
+    score+=80
+  end if
+  if indexOf(cmdLower,"bomb")!=null then
+    push(risks,"File bomb attack")
+    score+=90
+  end if
+  //Root operations
+  if indexOf(cmdLower,"root")!=null and indexOf(cmdLower,"change")!=null then
+    push(risks,"Root password modification")
+    score+=70
+  else if indexOf(cmdLower,"root")!=null and (indexOf(cmdLower,"password")!=null or indexOf(cmdLower,"crack")!=null or indexOf(cmdLower,"get")!=null) then
+    push(risks,"Root password cracking")
+    score+=70
+  end if
+  if indexOf(cmdLower,"chmod 777")!=null or indexOf(cmdLower,"chmod -R 777")!=null then
+    push(risks,"Insecure permissions")
+    score+=40
+  end if
+  //Network operations
+  if indexOf(cmdLower,"backdoor")!=null or indexOf(cmdLower,"tux")!=null then
+    push(risks,"Backdoor installation")
+    score+=60
+  end if
+  if indexOf(cmdLower,"encrypt")!=null and indexOf(cmdLower,"system")!=null then
+    push(risks,"System encryption")
+    score+=80
+  end if
+  //Critical systems
+  if context and hasIndex(context,"target") then
+    target=context.target
+    if indexOf(target,"localhost")!=null or indexOf(target,"127.0.0.1")!=null then
+      push(risks,"Local system modification")
+      score+=50
+    end if
+  end if
+  //Determine risk level
+  level="low"
+  if score>=80 then level="critical"
+  if score>=50 and score<80 then level="high"
+  if score>=20 and score<50 then level="medium"
+  return {"level":level,"score":score,"factors":risks}
+end function

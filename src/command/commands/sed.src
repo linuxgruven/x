@@ -1,0 +1,57 @@
+// =============================================================================
+// SED
+// In-place find-and-replace across all lines of a file or stdin.
+// =============================================================================
+Command.sed=function(Obj,argv)
+  // Check for piped stdin (check for null, not truthiness - empty string is valid)
+  usePipedInput=false
+  stdinContent=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinContent=globals.G_pipe.stdin
+    usePipedInput=true
+  end if
+  _p=ArgumentParser.init
+  _p.addArgument("i",false,"flag")  // Write changes back in-place
+  _p.addArgument("in-place",true,"flag")  // Long flag: --in-place (same as -i)
+  argv=_p.parseArgs("sed",argv)
+  if argv isa Error then return
+  if (argv.i or argv["in-place"]) and usePipedInput then return Error.set("Cannot use -i with piped input: no file to write back to")
+  argCount=len(argv.rest)
+  if not usePipedInput and argCount!=3 then return Man.help(["sed"])
+  if usePipedInput and argCount<2 then return Man.help(["sed"])
+  if not usePipedInput then
+    argv=_p.parsePath(Obj,argv)
+    if argv isa Error then return
+  end if
+  pattern=argv.rest[0]
+  replacement=argv.rest[1]
+  filePath=null
+  if not usePipedInput then filePath=argv.rest[2]
+  pattern=clean(pattern)
+  replacement=clean(replacement)
+  content=null
+  file=null
+  if usePipedInput then
+    content=stdinContent
+    if typeof(content)!="string" then content=str(content)
+  else
+    file=Io._getFile(Obj,filePath)
+    if file isa Error then return file
+    content=get_content(file)
+    if not content then content=""
+  end if
+  // Escape pattern for literal matching (handles regex special characters)
+  escapedPattern=escape(pattern)
+  lines=[]
+  for line in content.split(char(10));push(lines,line.replace(escapedPattern,replacement));end for
+  if usePipedInput then
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+      for line in lines;push(globals.G_pipe.stdout,line);end for
+    else
+      for line in lines;print white(line);end for
+    end if
+  else
+    set_content(file,lines.join(char(10)))
+    Info.info("Completed")
+  end if
+end function

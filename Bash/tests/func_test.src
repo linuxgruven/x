@@ -1,0 +1,1223 @@
+// Bash Function Stress Test
+// Comprehensive coverage of func/endfunc, _return, params,
+// nesting, recursion, scope, side effects, edge cases.
+
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>[PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>[FAIL]</color> _getvar(label) <color=#ffff00> expected:</color>_getvar(expected) <color=#ffff00> got:</color>_getvar(actual)
+  endif
+endfunc
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     BASH FUNCTION STRESS TESTS</color>
+_print <color=#eb0cc6>============================================</color>
+_print
+
+// ===================================================================
+// SECTION 1 - BASIC DEFINITIONS & CALLS
+// ===================================================================
+_print <color=#00bfff>--- Section 1: Basic Definitions & Calls ---</color>
+
+// No-return void function (standalone call)
+func sayHello()
+  _setvar(__side, done)
+endfunc
+_setvar(__side, before)
+sayHello()
+assert(void func scope isolated, _getvar(__side), before)
+
+// Function with _return
+func five()
+  _return 5
+endfunc
+_setvar(r, five())
+assert(no-param func returns 5, _getvar(r), 5)
+
+// Function returning string
+func hello()
+  _return hello
+endfunc
+_setvar(r, hello())
+assert(func returns string hello, _getvar(r), hello)
+
+// Function returning empty string
+func empty()
+  _return
+endfunc
+_setvar(r, empty())
+assert(func returning empty gives empty, _getvar(r), )
+
+// 1-param function
+func double(n)
+  _return _getvar(n) * 2
+endfunc
+_setvar(r, double(7))
+assert(double 7 is 14, _getvar(r), 14)
+
+// 2-param function
+func add(a, b)
+  _return _getvar(a) + _getvar(b)
+endfunc
+_setvar(r, add(3, 8))
+assert(add 3 8 is 11, _getvar(r), 11)
+
+// 3-param function
+func clamp(v, lo, hi)
+  if _getvar(v) < _getvar(lo)
+    _return _getvar(lo)
+  elif _getvar(v) > _getvar(hi)
+    _return _getvar(hi)
+  else
+    _return _getvar(v)
+  endif
+endfunc
+_setvar(r, clamp(50, 0, 10))
+assert(clamp 50 to 0-10 is 10, _getvar(r), 10)
+_setvar(r, clamp(-5, 0, 10))
+assert(clamp -5 to 0-10 is 0, _getvar(r), 0)
+_setvar(r, clamp(5, 0, 10))
+assert(clamp 5 to 0-10 is 5, _getvar(r), 5)
+
+// 4-param function
+func calc(a, b, c, d)
+  _return _getvar(a) + _getvar(b) + _getvar(c) + _getvar(d)
+endfunc
+_setvar(r, calc(1, 2, 3, 4))
+assert(4-param calc 1+2+3+4 is 10, _getvar(r), 10)
+
+// 5-param function
+func sum5(a, b, c, d, e)
+  _return _getvar(a) + _getvar(b) + _getvar(c) + _getvar(d) + _getvar(e)
+endfunc
+_setvar(r, sum5(10, 20, 30, 40, 50))
+assert(5-param sum 10-50 is 150, _getvar(r), 150)
+
+_print
+
+// ===================================================================
+// SECTION 2 - SCOPE ISOLATION
+// ===================================================================
+_print <color=#00bfff>--- Section 2: Scope Isolation ---</color>
+
+// Outer var unchanged after func sets same name
+_setvar(x, outer)
+func setX()
+  _setvar(x, inner)
+endfunc
+setX()
+assert(outer x unchanged after func sets x, _getvar(x), outer)
+
+// Param name shadows outer var
+_setvar(y, original)
+func shadow(y)
+  _return _getvar(y)
+endfunc
+_setvar(r, shadow(replaced))
+assert(param shadows outer y, _getvar(r), replaced)
+assert(outer y unchanged after shadow, _getvar(y), original)
+
+// Var created in func does not leak
+_setvar(leak, )
+func makeLocal()
+  _setvar(leak, leaked_value)
+  _setvar(secret, 42)
+  _return ok
+endfunc
+_setvar(tmp, makeLocal())
+assert(leak var not polluted by func, _getvar(leak), )
+assert(secret var does not leak from func, _getvar(secret), )
+
+// Multiple calls to same func are isolated
+func bump(n)
+  _setvar(local, _getvar(n) + 100)
+  _return _getvar(local)
+endfunc
+_setvar(a, bump(1))
+_setvar(b, bump(2))
+_setvar(c, bump(3))
+assert(bump 1 gives 101, _getvar(a), 101)
+assert(bump 2 gives 102, _getvar(b), 102)
+assert(bump 3 gives 103, _getvar(c), 103)
+
+// Func does not see vars set by a previous call to same func
+func accumTest()
+  _setvar(accum, _getvar(accum) + 1)
+  _return _getvar(accum)
+endfunc
+_setvar(accum, 0)
+_setvar(r1, accumTest())
+_setvar(r2, accumTest())
+assert(first accumTest returns 1, _getvar(r1), 1)
+assert(second accumTest also returns 1 (isolated), _getvar(r2), 1)
+
+_print
+
+// ===================================================================
+// SECTION 3 - FUNCTIONS CALLING FUNCTIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 3: Functions Calling Functions ---</color>
+
+// 2-level chain
+func addOne(n)
+  _return _getvar(n) + 1
+endfunc
+func addTwo(n)
+  _setvar(tmp, addOne(_getvar(n)))
+  _return addOne(_getvar(tmp))
+endfunc
+_setvar(r, addTwo(10))
+assert(addTwo 10 via two addOne calls is 12, _getvar(r), 12)
+
+// 3-level chain via intermediate vars
+func tripleStep(n)
+  _setvar(s1, addOne(_getvar(n)))
+  _setvar(s2, addTwo(_getvar(s1)))
+  _return _getvar(s2)
+endfunc
+_setvar(r, tripleStep(5))
+assert(tripleStep 5 is 5+1+2=8, _getvar(r), 8)
+
+// 4-level chain
+func quadStep(n)
+  _setvar(s1, addOne(_getvar(n)))
+  _setvar(s2, addOne(_getvar(s1)))
+  _setvar(s3, addOne(_getvar(s2)))
+  _setvar(s4, addOne(_getvar(s3)))
+  _return _getvar(s4)
+endfunc
+_setvar(r, quadStep(0))
+assert(quadStep 0 via 4 addOne calls is 4, _getvar(r), 4)
+
+// Function calling a different function that also calls another
+func mul2(n)
+  _return _getvar(n) * 2
+endfunc
+func mul2add1(n)
+  _setvar(d, mul2(_getvar(n)))
+  _return addOne(_getvar(d))
+endfunc
+_setvar(r, mul2add1(5))
+assert(mul2add1 5 is 5*2+1=11, _getvar(r), 11)
+
+// Cross-calling: uses double and add
+func combine(a, b)
+  _setvar(da, double(_getvar(a)))
+  _setvar(ab, add(_getvar(da), _getvar(b)))
+  _return _getvar(ab)
+endfunc
+_setvar(r, combine(3, 7))
+assert(combine double(3)+7 is 13, _getvar(r), 13)
+
+_print
+
+// ===================================================================
+// SECTION 4 - RECURSION
+// ===================================================================
+_print <color=#00bfff>--- Section 4: Recursion ---</color>
+
+// Factorial (classic recursion)
+func factorial(n)
+  if _getvar(n) <= 1
+    _return 1
+  else
+    _setvar(prev, factorial(_getvar(n) - 1))
+    _return _getvar(n) * _getvar(prev)
+  endif
+endfunc
+_setvar(r, factorial(1))
+assert(factorial 1 is 1, _getvar(r), 1)
+_setvar(r, factorial(5))
+assert(factorial 5 is 120, _getvar(r), 120)
+_setvar(r, factorial(7))
+assert(factorial 7 is 5040, _getvar(r), 5040)
+
+// Recursive countdown
+func countdown(n)
+  if _getvar(n) <= 0
+    _return 0
+  else
+    _return countdown(_getvar(n) - 1)
+  endif
+endfunc
+_setvar(r, countdown(8))
+assert(countdown 8 reaches 0, _getvar(r), 0)
+
+// Recursive fibonacci (limited by depth)
+func fib(n)
+  if _getvar(n) <= 1
+    _return _getvar(n)
+  else
+    _setvar(a, fib(_getvar(n) - 1))
+    _setvar(b, fib(_getvar(n) - 2))
+    _return _getvar(a) + _getvar(b)
+  endif
+endfunc
+_setvar(r, fib(0))
+assert(fib 0 is 0, _getvar(r), 0)
+_setvar(r, fib(1))
+assert(fib 1 is 1, _getvar(r), 1)
+_setvar(r, fib(5))
+assert(fib 5 is 5, _getvar(r), 5)
+_setvar(r, fib(7))
+assert(fib 7 is 13, _getvar(r), 13)
+
+// Recursive sum 1..n
+func recSum(n)
+  if _getvar(n) <= 0
+    _return 0
+  else
+    _setvar(rest, recSum(_getvar(n) - 1))
+    _return _getvar(n) + _getvar(rest)
+  endif
+endfunc
+_setvar(r, recSum(5))
+assert(recSum 5 is 15, _getvar(r), 15)
+
+// Recursive power
+func power(base, exp)
+  if _getvar(exp) <= 0
+    _return 1
+  else
+    _setvar(rest, power(_getvar(base), _getvar(exp) - 1))
+    _return _getvar(base) * _getvar(rest)
+  endif
+endfunc
+_setvar(r, power(2, 0))
+assert(power 2^0 is 1, _getvar(r), 1)
+_setvar(r, power(2, 5))
+assert(power 2^5 is 32, _getvar(r), 32)
+_setvar(r, power(3, 3))
+assert(power 3^3 is 27, _getvar(r), 27)
+
+_print
+
+// ===================================================================
+// SECTION 5 - RETURN_VALUE EDGE CASES
+// ===================================================================
+_print <color=#00bfff>--- Section 5: _return Edge Cases ---</color>
+
+// _return 0 (falsy but valid)
+func retZero()
+  _return 0
+endfunc
+_setvar(r, retZero())
+assert(func returning 0 gives 0, _getvar(r), 0)
+
+// _return negative
+func retNeg()
+  _return -42
+endfunc
+_setvar(r, retNeg())
+assert(func returning -42 gives -42, _getvar(r), -42)
+
+// _return float
+func retFloat()
+  _return 3.14
+endfunc
+_setvar(r, retFloat())
+assert(func returning 3.14 gives 3.14, _getvar(r), 3.14)
+
+// _return from variable
+func retFromVar()
+  _setvar(v, 99)
+  _return _getvar(v)
+endfunc
+_setvar(r, retFromVar())
+assert(func returning var value gives 99, _getvar(r), 99)
+
+// _return from arithmetic
+func retArith()
+  _return 7 * 8
+endfunc
+_setvar(r, retArith())
+assert(func returning 7*8 gives 56, _getvar(r), 56)
+
+// _return from builtin
+func retLen()
+  _return len(hello)
+endfunc
+_setvar(r, retLen())
+assert(retLen returns 5 from len of hello, _getvar(r), 5)
+
+// _return from concat
+func retConcat(a, b)
+  _return concat(_getvar(a), _getvar(b))
+endfunc
+_setvar(r, retConcat(foo, bar))
+assert(func returning concat gives foobar, _getvar(r), foobar)
+
+// _return inside if branch
+func absVal(n)
+  if _getvar(n) < 0
+    _return _getvar(n) * -1
+  else
+    _return _getvar(n)
+  endif
+endfunc
+_setvar(r, absVal(-7))
+assert(absVal -7 returns 7, _getvar(r), 7)
+_setvar(r, absVal(3))
+assert(absVal 3 returns 3, _getvar(r), 3)
+_setvar(r, absVal(0))
+assert(absVal 0 returns 0, _getvar(r), 0)
+
+// _return inside while loop
+func firstOver(threshold)
+  _setvar(i, 1)
+  while _getvar(i) <= 100
+    if _getvar(i) > _getvar(threshold)
+      _return _getvar(i)
+    endif
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return -1
+endfunc
+_setvar(r, firstOver(10))
+assert(firstOver 10 returns 11, _getvar(r), 11)
+_setvar(r, firstOver(0))
+assert(firstOver 0 returns 1, _getvar(r), 1)
+
+// _return inside for loop
+func sumRange(lo, hi)
+  _setvar(total, 0)
+  for i in range(_getvar(lo), _getvar(hi))
+    _setvar(total, _getvar(total) + _getvar(i))
+  endfor
+  _return _getvar(total)
+endfunc
+_setvar(r, sumRange(1, 5))
+assert(sumRange 1 to 5 is 15, _getvar(r), 15)
+_setvar(r, sumRange(1, 10))
+assert(sumRange 1 to 10 is 55, _getvar(r), 55)
+
+_print
+
+// ===================================================================
+// SECTION 6 - FUNCTIONS WITH CONTROL FLOW
+// ===================================================================
+_print <color=#00bfff>--- Section 6: Functions with Control Flow ---</color>
+
+// if/elif/else inside function
+func classify(n)
+  if _getvar(n) > 0
+    _return positive
+  elif _getvar(n) < 0
+    _return negative
+  else
+    _return zero
+  endif
+endfunc
+_setvar(r, classify(5))
+assert(classify 5 is positive, _getvar(r), positive)
+_setvar(r, classify(-3))
+assert(classify -3 is negative, _getvar(r), negative)
+_setvar(r, classify(0))
+assert(classify 0 is zero, _getvar(r), zero)
+
+// while loop inside function
+func countTo(n)
+  _setvar(i, 0)
+  while _getvar(i) < _getvar(n)
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return _getvar(i)
+endfunc
+_setvar(r, countTo(7))
+assert(countTo 7 returns 7, _getvar(r), 7)
+
+// for loop inside function
+func sumList(lst)
+  _setvar(total, 0)
+  for item in _getvar(lst)
+    _setvar(total, _getvar(total) + _getvar(item))
+  endfor
+  _return _getvar(total)
+endfunc
+_setvar(arr, [10, 20, 30, 40])
+_setvar(r, sumList(_getvar(arr)))
+assert(sumList of [10 20 30 40] is 100, _getvar(r), 100)
+
+// switch inside function
+func dayType(day)
+  _setvar(result, unknown)
+  switch _getvar(day)
+    case monday
+      _setvar(result, weekday)
+    case saturday
+      _setvar(result, weekend)
+    case sunday
+      _setvar(result, weekend)
+    default
+      _setvar(result, weekday)
+  endswitch
+  _return _getvar(result)
+endfunc
+_setvar(r, dayType(monday))
+assert(dayType monday is weekday, _getvar(r), weekday)
+_setvar(r, dayType(saturday))
+assert(dayType saturday is weekend, _getvar(r), weekend)
+_setvar(r, dayType(tuesday))
+assert(dayType tuesday default is weekday, _getvar(r), weekday)
+
+// Nested if inside for inside function
+func findFirst(lst, target)
+  _setvar(idx, 0)
+  for item in _getvar(lst)
+    if _getvar(item) == _getvar(target)
+      _return _getvar(idx)
+    endif
+    _setvar(idx, _getvar(idx) + 1)
+  endfor
+  _return -1
+endfunc
+_setvar(arr, [apple, banana, cherry, date])
+_setvar(r, findFirst(_getvar(arr), cherry))
+assert(findFirst cherry in list is 2, _getvar(r), 2)
+_setvar(r, findFirst(_getvar(arr), apple))
+assert(findFirst apple in list is 0, _getvar(r), 0)
+_setvar(r, findFirst(_getvar(arr), grape))
+assert(findFirst grape not in list is -1, _getvar(r), -1)
+
+_print
+
+// ===================================================================
+// SECTION 7 - FUNCTION CALLED IN VARIOUS CONTEXTS
+// ===================================================================
+_print <color=#00bfff>--- Section 7: Functions in Various Contexts ---</color>
+
+// Function result in condition (via intermediate var)
+func isPositive(n)
+  if _getvar(n) > 0
+    _return 1
+  else
+    _return 0
+  endif
+endfunc
+_setvar(check, isPositive(5))
+_setvar(r, no)
+if _getvar(check) == 1
+  _setvar(r, yes)
+endif
+assert(isPositive 5 used in condition, _getvar(r), yes)
+
+_setvar(check, isPositive(-3))
+_setvar(r, no)
+if _getvar(check) == 1
+  _setvar(r, yes)
+endif
+assert(isPositive -3 used in condition, _getvar(r), no)
+
+// Function called in loop body
+func square(n)
+  _return _getvar(n) * _getvar(n)
+endfunc
+_setvar(total, 0)
+for i in range(1, 5)
+  _setvar(sq, square(_getvar(i)))
+  _setvar(total, _getvar(total) + _getvar(sq))
+endfor
+assert(sum of squares 1-5 is 55, _getvar(total), 55)
+
+// Function called many times in rapid succession
+func inc(n)
+  _return _getvar(n) + 1
+endfunc
+_setvar(v, 0)
+_setvar(v, inc(_getvar(v)))
+_setvar(v, inc(_getvar(v)))
+_setvar(v, inc(_getvar(v)))
+_setvar(v, inc(_getvar(v)))
+_setvar(v, inc(_getvar(v)))
+_setvar(v, inc(_getvar(v)))
+_setvar(v, inc(_getvar(v)))
+_setvar(v, inc(_getvar(v)))
+_setvar(v, inc(_getvar(v)))
+_setvar(v, inc(_getvar(v)))
+assert(10 sequential inc calls from 0 gives 10, _getvar(v), 10)
+
+// Function inside while loop
+func isEven(n)
+  if _getvar(n) % 2 == 0
+    _return 1
+  else
+    _return 0
+  endif
+endfunc
+_setvar(evens, 0)
+_setvar(i, 1)
+while _getvar(i) <= 10
+  _setvar(check, isEven(_getvar(i)))
+  if _getvar(check) == 1
+    _setvar(evens, _getvar(evens) + 1)
+  endif
+  _setvar(i, _getvar(i) + 1)
+endwhile
+assert(count evens 1 to 10 is 5, _getvar(evens), 5)
+
+// Function called on each element of array
+func doubleStr(s)
+  _return concat(_getvar(s), _getvar(s))
+endfunc
+_setvar(arr, [ha, bo, ok])
+_setvar(results, )
+for item in _getvar(arr)
+  _setvar(d, doubleStr(_getvar(item)))
+  _setvar(results, concat(_getvar(results), _getvar(d)))
+endfor
+assert(doubleStr on array gives hahabobookok, _getvar(results), hahabobookok)
+
+_print
+
+// ===================================================================
+// SECTION 8 - FUNCTION REDEFINITION
+// ===================================================================
+_print <color=#00bfff>--- Section 8: Function Redefinition ---</color>
+
+// Redefining function replaces it
+func myFunc()
+  _return first
+endfunc
+_setvar(r, myFunc())
+assert(first definition returns first, _getvar(r), first)
+
+func myFunc()
+  _return second
+endfunc
+_setvar(r, myFunc())
+assert(redefined func returns second, _getvar(r), second)
+
+func myFunc()
+  _return third
+endfunc
+_setvar(r, myFunc())
+assert(re-redefined func returns third, _getvar(r), third)
+
+// Redefining with different param count
+func flex(a)
+  _return _getvar(a)
+endfunc
+_setvar(r, flex(10))
+assert(flex with 1 param returns 10, _getvar(r), 10)
+
+func flex(a, b)
+  _return _getvar(a) + _getvar(b)
+endfunc
+_setvar(r, flex(10, 20))
+assert(redefined flex with 2 params returns 30, _getvar(r), 30)
+
+_print
+
+// ===================================================================
+// SECTION 9 - EMPTY AND MINIMAL FUNCTIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 9: Empty & Minimal Functions ---</color>
+
+// Empty function body (no statements)
+func noop()
+endfunc
+_setvar(r, noop())
+assert(empty func returns null/empty, _getvar(r), )
+
+// Function with only a comment (no statements)
+func commented()
+  // this is a comment
+endfunc
+_setvar(r, commented())
+assert(comment-only func returns empty, _getvar(r), )
+
+// Function that just sets a local var (no return)
+func justSet()
+  _setvar(tmp, 42)
+endfunc
+_setvar(r, justSet())
+assert(justSet no-return func gives empty, _getvar(r), )
+
+// Function returning literal 0
+func retLitZero()
+  _return 0
+endfunc
+_setvar(r, retLitZero())
+assert(func returning literal 0, _getvar(r), 0)
+
+// Function returning literal 1
+func retLitOne()
+  _return 1
+endfunc
+_setvar(r, retLitOne())
+assert(func returning literal 1, _getvar(r), 1)
+
+_print
+
+// ===================================================================
+// SECTION 10 - PARAM EDGE CASES
+// ===================================================================
+_print <color=#00bfff>--- Section 10: Param Edge Cases ---</color>
+
+// Passing 0 as argument
+func echo_val(v)
+  _return _getvar(v)
+endfunc
+_setvar(r, echo_val(0))
+assert(passing 0 as arg works, _getvar(r), 0)
+
+// Passing negative number
+_setvar(r, echo_val(-999))
+assert(passing -999 as arg works, _getvar(r), -999)
+
+// Passing float
+_setvar(r, echo_val(1.5))
+assert(passing 1.5 as arg works, _getvar(r), 1.5)
+
+// Passing string with spaces via variable
+_setvar(spacey, hello world)
+_setvar(r, echo_val(_getvar(spacey)))
+assert(passing spaced string via var works, _getvar(r), hello world)
+
+// Passing empty string
+_setvar(mt, )
+_setvar(r, echo_val(_getvar(mt)))
+assert(passing empty string as arg, _getvar(r), )
+
+// Passing result of arithmetic as arg
+_setvar(r, echo_val(3 + 4))
+assert(passing arithmetic 3+4 as arg gives 7, _getvar(r), 7)
+
+// Passing result of builtin as arg via var
+_setvar(u, upper(abc))
+_setvar(r, echo_val(_getvar(u)))
+assert(passing upper result as arg gives ABC, _getvar(r), ABC)
+
+// Too few args (missing param gets null)
+func needTwo(a, b)
+  if _getvar(b)
+    _return _getvar(a) + _getvar(b)
+  else
+    _return _getvar(a)
+  endif
+endfunc
+_setvar(r, needTwo(42))
+assert(too few args missing b returns a only, _getvar(r), 42)
+
+_print
+
+// ===================================================================
+// SECTION 11 - COMPLEX CALL CHAINS
+// ===================================================================
+_print <color=#00bfff>--- Section 11: Complex Call Chains ---</color>
+
+// Function A calls B, B calls C (linear chain)
+func stepC(n)
+  _return _getvar(n) + 1
+endfunc
+func stepB(n)
+  _setvar(tmp, stepC(_getvar(n)))
+  _return _getvar(tmp) * 2
+endfunc
+func stepA(n)
+  _setvar(tmp, stepB(_getvar(n)))
+  _return _getvar(tmp) + 10
+endfunc
+// stepA(5) -> stepB(5) -> stepC(5)=6 -> 6*2=12 -> 12+10=22
+_setvar(r, stepA(5))
+assert(stepA-B-C chain 5 gives 22, _getvar(r), 22)
+
+// Function using multiple other functions in one body
+func pipeline(n)
+  _setvar(s1, addOne(_getvar(n)))
+  _setvar(s2, double(_getvar(s1)))
+  _setvar(s3, square(_getvar(s2)))
+  _return _getvar(s3)
+endfunc
+// pipeline(3) -> addOne(3)=4 -> double(4)=8 -> square(8)=64
+_setvar(r, pipeline(3))
+assert(pipeline 3 via addOne+double+square is 64, _getvar(r), 64)
+
+// Diamond pattern: D calls B and C, both call A
+func baseFunc(n)
+  _return _getvar(n) + 10
+endfunc
+func leftPath(n)
+  _setvar(tmp, baseFunc(_getvar(n)))
+  _return _getvar(tmp) * 2
+endfunc
+func rightPath(n)
+  _setvar(tmp, baseFunc(_getvar(n)))
+  _return _getvar(tmp) * 3
+endfunc
+func diamond(n)
+  _setvar(l, leftPath(_getvar(n)))
+  _setvar(rr, rightPath(_getvar(n)))
+  _return _getvar(l) + _getvar(rr)
+endfunc
+// diamond(5): leftPath(5)=baseFunc(5)=15*2=30, rightPath(5)=15*3=45, 30+45=75
+_setvar(r, diamond(5))
+assert(diamond pattern 5 gives 75, _getvar(r), 75)
+
+_print
+
+// ===================================================================
+// SECTION 12 - FUNCTIONS WITH ARRAYS
+// ===================================================================
+_print <color=#00bfff>--- Section 12: Functions with Arrays ---</color>
+
+// Function that counts elements
+func countItems(lst)
+  _return len(_getvar(lst))
+endfunc
+_setvar(arr, [a, b, c, d, e])
+_setvar(r, countItems(_getvar(arr)))
+assert(countItems of 5 element list is 5, _getvar(r), 5)
+
+// Function that checks membership
+func hasItem(lst, target)
+  _return _in(_getvar(lst), _getvar(target))
+endfunc
+_setvar(arr, [red, green, blue])
+_setvar(r, hasItem(_getvar(arr), green))
+assert(hasItem green in rgb list is 1, _getvar(r), 1)
+_setvar(r, hasItem(_getvar(arr), yellow))
+assert(hasItem yellow not in rgb list is 0, _getvar(r), 0)
+
+// Function that joins array
+func joinArr(lst, sep)
+  _return join(_getvar(lst), _getvar(sep))
+endfunc
+_setvar(arr, [a, b, c])
+_setvar(r, joinArr(_getvar(arr), -))
+assert(joinArr a-b-c with dash, _getvar(r), a-b-c)
+
+_print
+
+// ===================================================================
+// SECTION 13 - ITERATIVE ALGORITHMS
+// ===================================================================
+_print <color=#00bfff>--- Section 13: Iterative Algorithms ---</color>
+
+// Iterative factorial
+func factIter(n)
+  _setvar(result, 1)
+  _setvar(i, 1)
+  while _getvar(i) <= _getvar(n)
+    _setvar(result, _getvar(result) * _getvar(i))
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return _getvar(result)
+endfunc
+_setvar(r, factIter(5))
+assert(iterative factorial 5 is 120, _getvar(r), 120)
+_setvar(r, factIter(7))
+assert(iterative factorial 7 is 5040, _getvar(r), 5040)
+
+// Iterative fibonacci
+func fibIter(n)
+  if _getvar(n) <= 0
+    _return 0
+  endif
+  if _getvar(n) == 1
+    _return 1
+  endif
+  _setvar(a, 0)
+  _setvar(b, 1)
+  _setvar(i, 2)
+  while _getvar(i) <= _getvar(n)
+    _setvar(t, _getvar(b))
+    _setvar(b, _getvar(a) + _getvar(b))
+    _setvar(a, _getvar(t))
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return _getvar(b)
+endfunc
+_setvar(r, fibIter(0))
+assert(fibIter 0 is 0, _getvar(r), 0)
+_setvar(r, fibIter(1))
+assert(fibIter 1 is 1, _getvar(r), 1)
+_setvar(r, fibIter(10))
+assert(fibIter 10 is 55, _getvar(r), 55)
+_setvar(r, fibIter(20))
+assert(fibIter 20 is 6765, _getvar(r), 6765)
+
+// Iterative power
+func powIter(base, exp)
+  _setvar(result, 1)
+  _setvar(i, 0)
+  while _getvar(i) < _getvar(exp)
+    _setvar(result, _getvar(result) * _getvar(base))
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return _getvar(result)
+endfunc
+_setvar(r, powIter(2, 10))
+assert(powIter 2^10 is 1024, _getvar(r), 1024)
+_setvar(r, powIter(3, 5))
+assert(powIter 3^5 is 243, _getvar(r), 243)
+
+// GCD iterative (Euclidean)
+func gcd(a, b)
+  while _getvar(b) != 0
+    _setvar(t, _getvar(b))
+    _setvar(b, _getvar(a) % _getvar(b))
+    _setvar(a, _getvar(t))
+  endwhile
+  _return _getvar(a)
+endfunc
+_setvar(r, gcd(48, 18))
+assert(gcd 48 18 is 6, _getvar(r), 6)
+_setvar(r, gcd(100, 75))
+assert(gcd 100 75 is 25, _getvar(r), 25)
+_setvar(r, gcd(7, 13))
+assert(gcd 7 13 (coprime) is 1, _getvar(r), 1)
+
+_print
+
+// ===================================================================
+// SECTION 14 - HIGHER-ORDER PATTERNS
+// ===================================================================
+_print <color=#00bfff>--- Section 14: Higher-Order Patterns ---</color>
+
+// Apply function to each element of range (map pattern)
+func applySquare(n)
+  _setvar(total, 0)
+  for i in range(1, _getvar(n))
+    _setvar(sq, square(_getvar(i)))
+    _setvar(total, _getvar(total) + _getvar(sq))
+  endfor
+  _return _getvar(total)
+endfunc
+// 1+4+9+16+25 = 55
+_setvar(r, applySquare(5))
+assert(applySquare 1-5 sum of squares is 55, _getvar(r), 55)
+
+// Filter pattern (count matching)
+func countAbove(lst, threshold)
+  _setvar(cnt, 0)
+  for item in _getvar(lst)
+    if _getvar(item) > _getvar(threshold)
+      _setvar(cnt, _getvar(cnt) + 1)
+    endif
+  endfor
+  _return _getvar(cnt)
+endfunc
+_setvar(arr, [1, 5, 3, 8, 2, 9, 4])
+_setvar(r, countAbove(_getvar(arr), 4))
+assert(countAbove 4 in list is 3, _getvar(r), 3)
+
+// Reduce pattern (product of list)
+func productList(lst)
+  _setvar(result, 1)
+  for item in _getvar(lst)
+    _setvar(result, _getvar(result) * _getvar(item))
+  endfor
+  _return _getvar(result)
+endfunc
+_setvar(arr, [2, 3, 4, 5])
+_setvar(r, productList(_getvar(arr)))
+assert(productList 2*3*4*5 is 120, _getvar(r), 120)
+
+// Compose: run two functions in sequence as a pipeline
+func composeDblInc(n)
+  _setvar(tmp, double(_getvar(n)))
+  _return inc(_getvar(tmp))
+endfunc
+_setvar(r, composeDblInc(6))
+assert(compose double then inc on 6 is 13, _getvar(r), 13)
+
+_print
+
+// ===================================================================
+// SECTION 15 - STRESS & VOLUME
+// ===================================================================
+_print <color=#00bfff>--- Section 15: Stress & Volume ---</color>
+
+// 20 calls to same function in a loop
+func triple(n)
+  _return _getvar(n) * 3
+endfunc
+_setvar(total, 0)
+for i in range(1, 20)
+  _setvar(t, triple(_getvar(i)))
+  _setvar(total, _getvar(total) + _getvar(t))
+endfor
+// sum of 3*1 + 3*2 + ... + 3*20 = 3 * 210 = 630
+_setvar(r, _getvar(total))
+assert(20 triple calls sum is 630, _getvar(r), 630)
+
+// Nested while+func combo: Collatz sequence
+func collatz(n)
+  _setvar(steps, 0)
+  while _getvar(n) != 1
+    if _getvar(n) % 2 == 0
+      _setvar(n, _getvar(n) / 2)
+    else
+      _setvar(n, _getvar(n) * 3 + 1)
+    endif
+    _setvar(steps, _getvar(steps) + 1)
+  endwhile
+  _return _getvar(steps)
+endfunc
+_setvar(r, collatz(1))
+assert(collatz 1 is 0 steps, _getvar(r), 0)
+_setvar(r, collatz(2))
+assert(collatz 2 is 1 step, _getvar(r), 1)
+_setvar(r, collatz(6))
+assert(collatz 6 is 8 steps, _getvar(r), 8)
+_setvar(r, collatz(27))
+assert(collatz 27 is 111 steps, _getvar(r), 111)
+
+// Function result feeding into another function via var chaining
+_setvar(v, 1)
+_setvar(v, double(_getvar(v)))
+_setvar(v, double(_getvar(v)))
+_setvar(v, double(_getvar(v)))
+_setvar(v, double(_getvar(v)))
+_setvar(v, double(_getvar(v)))
+assert(5 chained doubles of 1 is 32, _getvar(v), 32)
+
+// Multiple different functions in sequence
+_setvar(v, 10)
+_setvar(v, addOne(_getvar(v)))
+_setvar(v, double(_getvar(v)))
+_setvar(v, square(_getvar(v)))
+_setvar(v, addOne(_getvar(v)))
+// 10 -> 11 -> 22 -> 484 -> 485
+assert(pipeline addOne+double+square+addOne on 10 is 485, _getvar(v), 485)
+
+_print
+
+// ===================================================================
+// SECTION 16 - STRING PROCESSING FUNCTIONS
+// ===================================================================
+_print <color=#00bfff>--- Section 16: String Processing ---</color>
+
+// Function to reverse a string (iterative)
+func strRev(s)
+  _setvar(result, )
+  _setvar(i, len(_getvar(s)) - 1)
+  while _getvar(i) >= 0
+    _setvar(ch, substr(_getvar(s), _getvar(i), _getvar(i) + 1))
+    _setvar(result, concat(_getvar(result), _getvar(ch)))
+    _setvar(i, _getvar(i) - 1)
+  endwhile
+  _return _getvar(result)
+endfunc
+_setvar(r, strRev(hello))
+assert(strRev hello is olleh, _getvar(r), olleh)
+_setvar(r, strRev(z))
+assert(strRev single char z, _getvar(r), z)
+_setvar(r, strRev(zf))
+assert(strRev zf is fz, _getvar(r), fz)
+
+// Function to check palindrome
+func isPalindrome(s)
+  _setvar(rev, strRev(_getvar(s)))
+  if _getvar(rev) == _getvar(s)
+    _return 1
+  else
+    _return 0
+  endif
+endfunc
+_setvar(r, isPalindrome(elle))
+assert(elle is palindrome, _getvar(r), 1)
+_setvar(r, isPalindrome(hello))
+assert(hello is not palindrome, _getvar(r), 0)
+_setvar(r, isPalindrome(efe))
+assert(efe is palindrome, _getvar(r), 1)
+
+// Function to repeat string n times
+func strRepeat(s, n)
+  _setvar(result, )
+  _setvar(i, 0)
+  while _getvar(i) < _getvar(n)
+    _setvar(result, concat(_getvar(result), _getvar(s)))
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return _getvar(result)
+endfunc
+_setvar(r, strRepeat(ab, 3))
+assert(strRepeat ab 3 times is ababab, _getvar(r), ababab)
+_setvar(r, strRepeat(zz, 5))
+assert(strRepeat zz 5 times is zzzzzzzzzz, _getvar(r), zzzzzzzzzz)
+
+// String length checker function
+func isLongerThan(s, n)
+  if len(_getvar(s)) > _getvar(n)
+    _return 1
+  else
+    _return 0
+  endif
+endfunc
+_setvar(r, isLongerThan(hello, 3))
+assert(hello longer than 3, _getvar(r), 1)
+_setvar(r, isLongerThan(hi, 5))
+assert(hi not longer than 5, _getvar(r), 0)
+
+_print
+
+// ===================================================================
+// SECTION 17 - PRACTICAL ALGORITHMS
+// ===================================================================
+_print <color=#00bfff>--- Section 17: Practical Algorithms ---</color>
+
+// Min of list
+func minList(lst)
+  _setvar(best, 999999)
+  for item in _getvar(lst)
+    if _getvar(item) < _getvar(best)
+      _setvar(best, _getvar(item))
+    endif
+  endfor
+  _return _getvar(best)
+endfunc
+_setvar(arr, [5, 3, 8, 1, 9])
+_setvar(r, minList(_getvar(arr)))
+assert(minList finds 1, _getvar(r), 1)
+
+// Max of list
+func maxList(lst)
+  _setvar(best, -999999)
+  for item in _getvar(lst)
+    if _getvar(item) > _getvar(best)
+      _setvar(best, _getvar(item))
+    endif
+  endfor
+  _return _getvar(best)
+endfunc
+_setvar(arr, [5, 3, 8, 1, 9])
+_setvar(r, maxList(_getvar(arr)))
+assert(maxList finds 9, _getvar(r), 9)
+
+// Average (integer)
+func avgList(lst)
+  _setvar(total, 0)
+  _setvar(cnt, 0)
+  for item in _getvar(lst)
+    _setvar(total, _getvar(total) + _getvar(item))
+    _setvar(cnt, _getvar(cnt) + 1)
+  endfor
+  _return _getvar(total) / _getvar(cnt)
+endfunc
+_setvar(arr, [10, 20, 30])
+_setvar(r, avgList(_getvar(arr)))
+assert(avgList of 10 20 30 is 20, _getvar(r), 20)
+
+// LCM via GCD
+func lcm(a, b)
+  _setvar(g, gcd(_getvar(a), _getvar(b)))
+  _return _getvar(a) * _getvar(b) / _getvar(g)
+endfunc
+_setvar(r, lcm(4, 6))
+assert(lcm 4 6 is 12, _getvar(r), 12)
+_setvar(r, lcm(3, 7))
+assert(lcm 3 7 is 21, _getvar(r), 21)
+_setvar(r, lcm(12, 18))
+assert(lcm 12 18 is 36, _getvar(r), 36)
+
+// Is prime check
+func isPrime(n)
+  if _getvar(n) < 2
+    _return 0
+  endif
+  _setvar(i, 2)
+  while _getvar(i) * _getvar(i) <= _getvar(n)
+    if _getvar(n) % _getvar(i) == 0
+      _return 0
+    endif
+    _setvar(i, _getvar(i) + 1)
+  endwhile
+  _return 1
+endfunc
+_setvar(r, isPrime(1))
+assert(isPrime 1 is 0, _getvar(r), 0)
+_setvar(r, isPrime(2))
+assert(isPrime 2 is 1, _getvar(r), 1)
+_setvar(r, isPrime(7))
+assert(isPrime 7 is 1, _getvar(r), 1)
+_setvar(r, isPrime(9))
+assert(isPrime 9 is 0, _getvar(r), 0)
+_setvar(r, isPrime(13))
+assert(isPrime 13 is 1, _getvar(r), 1)
+_setvar(r, isPrime(100))
+assert(isPrime 100 is 0, _getvar(r), 0)
+
+// Count primes in range
+func countPrimes(hi)
+  _setvar(cnt, 0)
+  for i in range(2, _getvar(hi))
+    _setvar(p, isPrime(_getvar(i)))
+    if _getvar(p) == 1
+      _setvar(cnt, _getvar(cnt) + 1)
+    endif
+  endfor
+  _return _getvar(cnt)
+endfunc
+_setvar(r, countPrimes(10))
+assert(primes up to 10 is 4, _getvar(r), 4)
+_setvar(r, countPrimes(20))
+assert(primes up to 20 is 8, _getvar(r), 8)
+
+_print
+
+// ===================================================================
+// SECTION 18 - FINAL INTEGRATION
+// ===================================================================
+_print <color=#00bfff>--- Section 18: Final Integration ---</color>
+
+// Complex: function using multiple other functions
+func analyze(lst)
+  _setvar(mn, minList(_getvar(lst)))
+  _setvar(mx, maxList(_getvar(lst)))
+  _setvar(av, avgList(_getvar(lst)))
+  _setvar(cnt, countItems(_getvar(lst)))
+  _setvar(rng, _getvar(mx) - _getvar(mn))
+  _return _getvar(rng)
+endfunc
+_setvar(arr, [10, 20, 30, 40, 50])
+_setvar(r, analyze(_getvar(arr)))
+assert(analyze range of 10-50 is 40, _getvar(r), 40)
+
+// Chain: isPrime in loop
+_setvar(primeCount, 0)
+for i in range(1, 30)
+  _setvar(p, isPrime(_getvar(i)))
+  if _getvar(p) == 1
+    _setvar(primeCount, _getvar(primeCount) + 1)
+  endif
+endfor
+assert(primes 1-30 is 10, _getvar(primeCount), 10)
+
+// Fibonacci and factorial combined
+_setvar(fib10, fibIter(10))
+_setvar(fact5, factIter(5))
+_setvar(r, _getvar(fib10) + _getvar(fact5))
+assert(fib(10)+fact(5) is 55+120=175, _getvar(r), 175)
+
+// GCD chain
+_setvar(g1, gcd(24, 36))
+_setvar(g2, gcd(_getvar(g1), 18))
+assert(gcd(gcd(24 36) 18) is 6, _getvar(g2), 6)
+
+// strRev on concat result
+_setvar(s, concat(zfg, hkl))
+_setvar(r, strRev(_getvar(s)))
+assert(strRev of zfghkl is lkhgfz, _getvar(r), lkhgfz)
+
+// Collatz on prime number
+_setvar(r, collatz(17))
+assert(collatz 17 is 12 steps, _getvar(r), 12)
+
+// Final mega chain: build value through many functions
+_setvar(v, 2)
+_setvar(v, powIter(_getvar(v), 3))
+_setvar(v, addOne(_getvar(v)))
+_setvar(v, double(_getvar(v)))
+_setvar(v, addOne(_getvar(v)))
+// 2 -> 8 -> 9 -> 18 -> 19
+assert(mega chain 2^3+1*2+1 is 19, _getvar(v), 19)
+
+_print
+_print <color=#eb0cc6>============================================</color>
+_print <color=#eb0cc6>     FUNCTION STRESS TESTS COMPLETE</color>
+_print <color=#eb0cc6>============================================</color>
+_print

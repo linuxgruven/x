@@ -1,0 +1,46 @@
+binMv="Basename=function(p)
+	if p==""/"" then return ""/""
+	if p.len>1 and p[p.len-1:p.len]==""/"" then p=p[0:p.len-1]
+	parts=p.split(""/"")
+	return parts[parts.len-1]
+end function
+if len(params)!=2 then exit(command_info(""mv_usage""))
+origFile=get_abs_path(params[0])
+destFolder=get_abs_path(params[1])
+computer=host_computer(get_shell)
+file=File(computer,origFile)
+if not file then exit(""mv: can't find ""+origFile)
+newName=""""
+folder=File(computer,destFolder)
+if not folder then
+	pathParent=parent_path(destFolder)
+	if pathParent==destFolder then
+		newName=destFolder
+		destFolder=path(parent(file))
+		move(file,destFolder,newName)
+		exit
+	end if
+	folder=File(computer,pathParent)
+	newName=Basename(destFolder)
+	if not folder then exit(""mv: can't copy file. ""+destFolder+"" doesn't exist."")
+end if
+if folder then
+	if parent(folder)!=null and path(parent(file))==path(parent(folder)) and name(file)==name(folder) then exit
+	finalDest=path(folder)
+	if len(newName)==0 then newName=name(file)
+	if not is_folder(folder) then
+		finalDest=path(parent(file))
+		newName=name(folder)
+	end if
+	fileParentPath=""none""
+	folderParentPath=""none""
+	if parent(file)!=null then fileParentPath=path(parent(file))
+	if parent(folder)!=null then folderParentPath=path(parent(folder))
+	if fileParentPath==folderParentPath and finalDest==folderParentPath and newName!=name(file) then
+		output=rename(file,newName)
+		if output and output!=1 then print(output)
+	else
+		output=move(file,finalDest,newName)
+		if output and output!=1 then print(output)
+	end if
+end if"

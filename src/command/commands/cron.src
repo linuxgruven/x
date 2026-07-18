@@ -1,0 +1,139 @@
+// =============================================================================
+// CRON
+// Schedule X shell commands/macros from a crontab file. Supports any builtin,
+// alias, macro, or external binary because each job runs through Bash._exec.
+// =============================================================================
+Command.cron=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("f",false,"store")
+  argv=_p.parse("cron",argv,Obj)
+  if argv isa Error then return
+  cronFile=null
+  if argv.f then cronFile=argv.f
+  if not cronFile and argv.rest and len(argv.rest)>0 then cronFile=argv.rest[0]
+  if not cronFile then
+    home=path(Obj.user.home)
+    cronFile=home+"/Config/crontab"
+  end if
+  file=Io._getFile(Obj,cronFile,true)
+  if file isa Error then
+    parts=split(cronFile,"/")
+    fname=parts[-1]
+    parent=parts[:-1].join("/")
+    if parent=="" then parent="/"
+    pf=File(Obj.computer,parent)
+    if not pf or not has_permission(pf,"w") then return Error.set("cron: cannot create "+cronFile)
+    r=touch(Obj.computer,parent,fname)
+    if r isa string then return Error.set("cron: "+r)
+    file=File(Obj.computer,cronFile)
+    if file then set_content(file,"# m h dom mon dow command [args...]"+char(10))
+  end if
+  if not file or file isa Error then return Error.set("cron: cannot open "+cronFile)
+  match=function(field,value)
+    if field=="*" then return 1
+    if indexOf(field,"/")!=null then
+      parts=split(field,"/")
+      step=val(parts[1])
+      if step>0 and (val(value) % step)==0 then return 1
+      return 0
+    end if
+    if indexOf(field,",")!=null then
+      for v in split(field,",");if trim(v)==value then return 1;end for
+      return 0
+    end if
+    if indexOf(field,"-")!=null then
+      parts=split(field,"-")
+      lo=val(parts[0])
+      hi=val(parts[1])
+      v=val(value)
+      if v>=lo and v<=hi then return 1
+      return 0
+    end if
+    if field==value then return 1
+    if val(field)==val(value) then return 1
+    return 0
+  end function
+  parseJobs=function(content)
+    out=[]
+    for line in split(content,char(10))
+      line=trim(line)
+      if not line or line[0]=="#" then continue
+      parts=split(line," ")
+      clean=[]
+      for p in parts;if p!="" then push(clean,p);end for
+      if len(clean)<6 then continue
+      push(out,{"m":clean[0],"h":clean[1],"d":clean[2],"mo":clean[3],"dw":clean[4],"cmd":clean[5:].join(" "),"last":""})
+    end for
+    return out
+  end function
+  content=get_content(file)
+  mtime=content
+  jobs=parseJobs(content)
+  Info.info("cron started with "+len(jobs)+" job(s) from "+cronFile+" (q=stop, r=reload)")
+  Utility.pressQ
+  nextCheck=0
+  while 1
+    k=poll_input
+    if k=="q" then
+      Info.info("cron stopped")
+      return
+    end if
+    if k=="r" then nextCheck=0
+    t=time
+    if t<nextCheck then
+      wait(0.25)
+      continue
+    end if
+    nextCheck=t+2
+    cur=File(Obj.computer,cronFile)
+    if cur then
+      fresh=get_content(cur)
+      if fresh!=mtime then
+        mtime=fresh
+        jobs=parseJobs(fresh)
+        Info.info("cron reloaded; "+len(jobs)+" job(s)")
+      end if
+    end if
+    dt=split(current_date," ")
+    dpart=split(dt[0],"/")
+    tpart=split(dt[2],":")
+    nowKey=dt[0]+" "+tpart[0]+":"+tpart[1]
+    nowM=tpart[1]
+    nowH=tpart[0]
+    nowD=dpart[0]
+    nowMo=dpart[1]
+    for j in jobs
+      if j.last==nowKey then continue
+      if not match(j.m,nowM) then continue
+      if not match(j.h,nowH) then continue
+      if not match(j.d,nowD) then continue
+      if not match(j.mo,nowMo) then continue
+      j.last=nowKey
+      cmd=j.cmd
+      // First-token rules:
+      // - @name / @path        => bash script via `run` (Bash.run)
+      // - absolute binary path => launch() directly (e.g. /bin/rm)
+      // - anything else        => Bash._exec (builtin/alias/macro/chain)
+      parts=split(cmd," ")
+      first=parts[0]
+      Info.info("cron "+current_date+" => "+cmd)
+      if first and first[0]=="@" then
+        scriptArg=first[1:]
+        rest=""
+        if len(parts)>1 then rest=" "+parts[1:].join(" ")
+        Bash._exec(Obj,"run "+scriptArg+rest)
+      else if first and indexOf(first,"/")!=null then
+        sf=Io.getFileObj(Obj,first)
+        if sf and not (sf isa Error) and not is_folder(sf) and is_binary(sf) then
+          argstr=""
+          if len(parts)>1 then argstr=parts[1:].join(" ")
+          if hasIndex(Obj,"shell") and Obj.shell then launch(Obj.shell,path(sf),argstr) else launch(get_shell,path(sf),argstr)
+        else
+          Bash._exec(Obj,cmd)
+        end if
+      else
+        Bash._exec(Obj,cmd)
+      end if
+    end for
+  end while
+end function

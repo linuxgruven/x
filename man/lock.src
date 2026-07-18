@@ -1,0 +1,37 @@
+// Man page for lock
+manLock="LOCK(1)                          X Shell Manual                          LOCK(1)
+
+<b>NAME</b>
+    lock - Lock configuration files
+<b>SYNOPSIS</b>
+    <b>lock -b</b> [USERNAME]
+    <b>lock -e</b> [USERNAME]
+    <b>lock -w</b> [USERNAME]
+    <b>lock -a</b> [USERNAME]
+<b>DESCRIPTION</b>
+    Lock configuration files to prevent data saves. Optionally change
+    owner and group to root by running as root with USERNAME parameter.
+    If running X as root, use scrub command instead.
+<b>OPTIONS</b>
+    <b>-b</b> [USERNAME] - Lock Bank Config
+      Lock bank configuration file. Optional USERNAME for root ownership.
+
+    <b>-e</b> [USERNAME] - Lock Email Config
+      Lock email/mail configuration file.
+
+    <b>-w</b> [USERNAME] - Lock Browser Config
+      Lock browser configuration file.
+
+    <b>-a</b> [USERNAME] - Lock All Configs
+      Lock all configuration files: bank, email, and browser.
+<b>EXAMPLE:</b>
+    <b>lock -b</b>
+    Lock bank config
+
+    <b>lock -e myuser</b>
+    Lock email config with root ownership
+
+    <b>lock -a</b>
+    Lock all config files
+<b>SEE ALSO</b>
+    <b>scrub</b>"

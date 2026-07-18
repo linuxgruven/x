@@ -1,0 +1,228 @@
+// Man page for bc
+manBc="BC(1)                            X Shell Manual                            BC(1)
+
+<b>NAME</b>
+    bc - Mathematical calculator with 20 functions
+<b>SYNOPSIS</b>
+    <b>bc</b> <b>-i</b>
+    <b>bc</b> NUMBER ^ NUMBER
+    <b>bc</b> NUMBER % NUMBER
+    <b>bc ip</b> [[HOWMANY]]
+    <b>bc abs</b> NUMBER
+    <b>bc acos</b> NUMBER
+    <b>bc asin</b> NUMBER
+    <b>bc atan</b> NUMBER
+    <b>bc tan</b> NUMBER
+    <b>bc cos</b> NUMBER
+    <b>bc sin</b> NUMBER
+    <b>bc sum</b> NUMBER, NUMBER, ...
+    <b>bc char</b> NUMBER
+    <b>bc code</b> STRING
+    <b>bc floor</b> NUMBER
+    <b>bc range</b> START END ([INC])
+    <b>bc round</b> NUMBER
+    <b>bc rnd</b> [[SEED]]
+    <b>bc sign</b> NUMBER
+    <b>bc sqrt</b> NUMBER
+    <b>bc ceil</b> NUMBER
+<b>DESCRIPTION</b>
+    Advanced calculator with 20 mathematical functions including trigonometry,
+    random number generation, and IP address creation. Supports equation chaining
+    with comma separation and interactive mode (-i) for continuous calculations.
+    
+    Interactive mode provides a REPL environment where you can enter expressions,
+    use any of the 20 functions, perform calculations with operators, and chain
+    operations by using operators alone to apply to the previous result.
+    
+    Case sensitive function names. Includes power, modulo, absolute value, 
+    rounding, range generation, and character encoding operations.
+<b>OPTIONS</b>
+    <b>-i</b>
+    Interactive mode
+    Starts interactive calculator with continuous input. Enter expressions and
+    see immediate results. Maintains last result for sequential operations.
+    
+    Features:
+    • All 20 functions available (sqrt, abs, sin, cos, etc.)
+    • Basic arithmetic operators: + - * / ^ %
+    • Pi constant support
+    • Operator-only input applies to previous result
+      Example: After '10', entering '- 4' gives 6
+    • Function-only input applies to previous result
+      Example: After '100', entering 'sqrt' gives 10
+    • Exit commands: 'exit', 'quit', or 'q'
+
+    <b>NUMBER ^ NUMBER</b>
+    Power operation
+    Raise first to power of second
+
+    <b>NUMBER % NUMBER</b>
+    Modulo operation
+    Remainder after division
+
+    <b>ip ([HOWMANY])</b>
+    Generate random IP addresses
+    Optional count parameter
+
+    <b>abs NUMBER</b>
+    Absolute value
+    Remove negative sign
+
+    <b>acos NUMBER</b>
+    Arccosine in radians
+    Inverse cosine function
+
+    <b>asin NUMBER</b>
+    Arcsine in radians
+    Inverse sine function
+
+    <b>atan NUMBER</b>
+    Arctangent in radians
+    Inverse tangent function
+
+    <b>tan NUMBER</b>
+    Tangent function
+    Trigonometric tangent
+
+    <b>cos NUMBER</b>
+    Cosine function
+    Trigonometric cosine
+
+    <b>sin NUMBER</b>
+    Sine function
+    Trigonometric sine
+
+    <b>sum NUMBER, NUMBER, ...</b>
+    Sum multiple numbers
+    Add all values together
+
+    <b>char NUMBER</b>
+    Unicode character
+    Number to character
+
+    <b>code STRING</b>
+    Unicode code point
+    Character to number
+
+    <b>floor NUMBER</b>
+    Floor function
+    Round down to integer
+
+    <b>range START END ([INC])</b>
+    Generate number list
+    From START to END by [INC]
+
+    <b>round NUMBER</b>
+    Round to decimal
+    Nearest integer
+
+    <b>rnd ([SEED])</b>
+    Random float 0-1
+    Optional seed for deterministic
+
+    <b>sign NUMBER</b>
+    Sign of number
+    Returns -1, 0, or 1
+
+    <b>sqrt NUMBER</b>
+    Square root
+    Root of number
+
+    <b>ceil NUMBER</b>
+    Ceiling function
+    Round up to integer
+<b>COMMON ERRORS</b>
+    Missing or invalid arguments. Verify syntax with <b>man bc</b>.
+
+    In pipelines, place options/operands after the command:
+    echo data | <b>bc</b> [OPTIONS] ...
+
+    Quote patterns or delimiters that contain spaces or special characters.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Operations</color>
+    <b>bc 2 ^ 10</b>
+    Power: 1024
+
+    <b>bc 17 % 5</b>
+    Modulo: 2
+
+    <b>bc abs -42</b>
+    Absolute: 42
+
+    <color=#e4ff34># Trigonometry</color>
+    <b>bc sin 0</b>
+    Sine of 0: 0
+
+    <b>bc cos 0</b>
+    Cosine of 0: 1
+
+    <b>bc tan 0</b>
+    Tangent of 0: 0
+
+    <color=#e4ff34># Rounding</color>
+    <b>bc floor 3.7</b>
+    Floor: 3
+
+    <b>bc ceil 3.2</b>
+    Ceiling: 4
+
+    <b>bc round 3.5</b>
+    Round: 4
+
+    <color=#e4ff34># Advanced</color>
+    <b>bc sqrt 144</b>
+    Square root: 12
+
+    <b>bc sum 1, 2, 3, 4, 5</b>
+    Sum: 15
+
+    <b>bc range 0 10 2</b>
+    List: 0,2,4,6,8,10
+
+    <color=#e4ff34># Characters</color>
+    <b>bc char 65</b>
+    Character: A
+
+    <b>bc code A</b>
+    Code: 65
+
+    <color=#e4ff34># Random</color>
+    <b>bc ip</b>
+    Random IP address
+
+    <b>bc ip 5</b>
+    Five random IPs
+
+    <b>bc rnd</b>
+    Random 0-1
+
+    <color=#e4ff34># Chained Operations</color>
+    <b>bc 5 * 5 , - 20 , * 10</b>
+    Result: 50
+
+    <color=#e4ff34># Interactive Mode</color>
+    <b>bc -i</b>
+    bc> 5+5              # Basic arithmetic
+    10
+    bc> - 4              # Apply operator to last result (10 - 4)
+    6
+    bc> * 2              # Multiply last result (6 * 2)
+    12
+    bc> sqrt             # Apply function to last result (sqrt 12)
+    3.464102
+    bc> 100 / 10         # New expression
+    10
+    bc> sqrt 144         # Use functions
+    12
+    bc> abs -42          # Absolute value
+    42
+    bc> 2 ^ 8            # Power
+    256
+    bc> floor 3.7        # Rounding functions
+    3
+    bc> pi * 2           # Pi constant
+    6.283186
+    bc> exit             # Exit interactive mode
+<b>SEE ALSO</b>
+    <b>randix</b>, <b>pwgen</b>"

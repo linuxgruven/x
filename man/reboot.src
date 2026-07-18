@@ -1,0 +1,41 @@
+// Man page for reboot
+manReboot="REBOOT(8)                        X Shell Manual                        REBOOT(8)
+
+<b>NAME</b>
+    reboot - restart the system
+<b>SYNOPSIS</b>
+    <b>reboot</b>
+    <b>reboot -s</b>
+<b>DESCRIPTION</b>
+    <b>reboot</b> is used to restart the system. Permissions play no part
+    when calling <b>reboot</b>, so a guest computer or shell object can reboot
+    the system. If you reboot a system X will automatically send you back to your
+    main, pivot, or proxy session. Avoid the public network otherwise you will get
+    a network error, unless you relaunch X.
+
+    <color=#e4ff34>*** Rebooting a pivot or proxy session will ***</color>
+    <color=#e4ff34>*** cause X to become unstable and shut down ***</color>
+<b>OPTIONS</b>
+    <b>reboot</b>
+      Restart the system normally.
+
+    <b>-s</b>
+      Reboot the system in safe mode.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Reboot</color>
+    <b>reboot</b>
+    Restart the system
+
+    <color=#e4ff34># Safe Mode</color>
+    <b>reboot -s</b>
+    Restart in safe mode
+
+    <color=#e4ff34># Usage Scenarios</color>
+    <b>reboot</b>
+    Apply system updates and restart
+
+    <b>reboot -s</b>
+    Troubleshoot system issues in safe mode
+
+    <b>reboot</b>
+    Clear system cache and restart services"

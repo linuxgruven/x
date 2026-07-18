@@ -1,0 +1,71 @@
+// =============================================================================
+// ZAP
+// Remove a specific line from a file; -c clears; GUI for interactive removal.
+// =============================================================================
+Command.zap=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("l",false,"store")  // Line number(s) to remove (comma-separated)
+  _p.addArgument("c",false,"flag")  // Clear entire file
+  argv=_p.parseArgs("zap",argv)
+  if argv isa Error then return
+  argv=_p.parsePath(Obj,argv)
+  if argv isa Error then return
+  if hasIndex(argv,"useAI") then
+    fileObj=Io.file(Obj,Obj.dir.current,"Select a file for editing:")
+    if fileObj isa Warning then return fileObj
+    if not has_permission(fileObj,"r") then return Error.set(Info.message.NOR)
+    if not has_permission(fileObj,"w") then return Error.set(Info.message.NOW)
+    lines=split(get_content(fileObj),char(10))
+    while true
+      for line in lines;print orange("Line # ("+yellow(str(__line_idx+1))+") ")+white(line);end for
+      lineNum=Gui.inputInt({"text":"Enter line number to remove"})
+      if not lineNum isa number then return
+      if lineNum<0 or lineNum>len(lines)-1 then continue
+      lines.remove(lineNum-1)
+      return set_content(fileObj,join(lines,char(10)))
+    end while
+  end if
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and argv.c then
+    for _line in globals.G_pipe.stdin.split(char(10))
+      _line=trim(_line)
+      if not _line then continue
+      _f=Io._getFile(Obj,_line)
+      if _f isa Error then Error.set(_f.message);continue
+      if not has_permission(_f,"w") then Error.set(Info.message.NOW);continue
+      if set_content(_f,"") then Info.info("Cleared: "+name(_f)) else Error.set("Failed to clear "+name(_f))
+    end for
+    globals.G_pipe.stdin=null
+    return
+  end if
+  if not argv.l and not argv.c then return Man.help(["zap"])
+  if argv.c then
+    if not argv.rest then return Man.help(["zap"])
+    fileObj=Io._getFile(Obj,argv.rest[0])
+    if fileObj isa Error then return fileObj
+    if not has_permission(fileObj,"r") then return Error.set(Info.message.NOR)
+    if not has_permission(fileObj,"w") then return Error.set(Info.message.NOW)
+    if set_content(fileObj,"") then return Info.info(name(fileObj)+" cleared successfully") else return Error.set("Failed to clear "+name(fileObj))
+  end if
+  if not argv.rest then return Man.help(["zap"])
+  // Parse comma-separated line numbers
+  lineNums=[]
+  for part in argv.l.split(",")
+    n=to_int(trim(part))
+    if not n isa number then return Error.set("Invalid line number: "+part)
+    push(lineNums,n)
+  end for
+  fileObj=Io._getFile(Obj,argv.rest[0])
+  if fileObj isa Error then return fileObj
+  if not has_permission(fileObj,"r") then return Error.set(Info.message.NOR)
+  if not has_permission(fileObj,"w") then return Error.set(Info.message.NOW)
+  lines=split(get_content(fileObj),char(10))
+  // Validate all line numbers first
+  for n in lineNums;if n<1 or n>len(lines) then return Error.set("Invalid line number: "+str(n));end for
+  // Sort descending so removing higher indices doesn't shift lower ones
+  lineNums.sort
+  lineNums.reverse
+  removed=[]
+  for n in lineNums;push(removed,str(n)+": "+lines[n-1]);lines.remove(n-1);end for
+  set_content(fileObj,join(lines,char(10)))
+  for r in removed;print green("Removed line "+yellow(r));end for
+end function

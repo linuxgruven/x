@@ -1,0 +1,84 @@
+// =============================================================================
+// TREEWIDE
+// Display directory tree in wide columnar format with permission color coding.
+// =============================================================================
+Command.treeWide=function(Obj,rootDir,_p=null,argv=null)
+  indent="    "
+  output=[]
+  counts={"dirs":0,"files":0}
+  // Color-code a file entry by permission state
+  colorFile=function(file)
+    hasRead=has_permission(file,"r")
+    hasWrite=has_permission(file,"w")
+    dot=red("•")
+    if hasRead and hasWrite then
+      dot=green("•")
+    else if hasRead then
+      dot=yellow("•")
+    else if hasWrite then
+      dot=blue("•")
+    end if
+    return indent+dot+ljust(name(file),25)
+  end function
+  // Print one directory block
+  printDir=function(dir)
+    dirLine="  "+path(dir)+"/"
+    push(output,dirLine)
+    if not _p or not _p.write then print "  "+blue("<b>"+path(dir)+"/</b>")
+    files=get_files(dir)
+    folders=get_folders(dir)
+    counts.dirs=counts.dirs+len(folders)
+    counts.files=counts.files+len(files)
+    if not len(files) then
+      push(output,"")
+      if not _p or not _p.write then print ""
+      return
+    end if
+    entries=[]
+    plainEntries=[]
+    for f in files;push(entries,colorFile(f));push(plainEntries,"    "+name(f));end for
+    // Print 4 entries per row
+    row=""
+    plainRow=""
+    _len=len(entries)
+    i=0
+    while i<_len
+      row=row+entries[i]
+      plainRow=plainRow+ljust(plainEntries[i],30)
+      if (i+1)%4==0 then
+        push(output,plainRow)
+        if not _p or not _p.write then print row
+        row=""
+        plainRow=""
+      end if
+    i+=1
+    end while
+    if len(row)>0 then
+      push(output,plainRow)
+      if not _p or not _p.write then print row
+    end if
+    push(output,"")
+    if not _p or not _p.write then print ""
+  end function
+  // Recursively collect all subdirectories
+  allDirs=[]
+  collectDirs=function(folder);for sub in get_folders(folder);push(allDirs,sub);collectDirs(sub);end for;end function
+  collectDirs(rootDir)
+  // Print root then all subdirs
+  printDir(rootDir)
+  for dir in allDirs;printDir(dir);end for
+  // Summary
+  dc=counts.dirs
+  fc=counts.files
+  if dc==1 then ds="directory" else ds="directories"
+  if fc==1 then fs="file" else fs="files"
+  summary=str(dc)+" "+ds+", "+str(fc)+" "+fs
+  push(output,"")
+  push(output,summary)
+  if _p and _p.write then
+    argv["data"]=output
+    return _p.out(Obj,argv)
+  end if
+  print ""
+  print summary
+end function

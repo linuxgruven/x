@@ -1,0 +1,68 @@
+// =============================================================================
+// TOUCH
+// Create empty files; -s silent, -o overwrite, -b batch with prefix path.
+// =============================================================================
+Command.touch=function(Obj,argv,returnFile=true)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
+  if not argv and not hasPipeInput then return Man.help(["touch"])
+  argv=ArgumentParser.check(argv)
+  _p=ArgumentParser.init
+  _p.addArgument("x",false,"flag")  // Return existing file without overwriting
+  _p.addArgument("y",false,"flag")  // Overwrite existing file (delete and recreate)
+  _p.addArgument("l",false,"flag")  // Batch mode (process multiple filenames)
+  _p.addArgument("p",false,"store")  // Prefix path for all created files
+  argv=_p.parseArgs("touch",argv)
+  if argv isa Error then return
+  if argv.p then
+    if argv.p[-1]!="/" then argv.p=argv.p+"/"
+  end if
+  if argv.l then
+    prefix=argv.p
+    for filename in argv.rest;if prefix then self.touch(Obj,[prefix+filename],false) else self.touch(Obj,[filename],false);end for
+    return
+  end if
+  argv=_p.parsePath(Obj,argv)
+  if argv isa Error then return
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin then
+    if not argv.rest then argv.rest=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then push(argv.rest,line);end for
+  end if
+  fileList=[]
+  if argv.hasIndex("files") and argv.files and len(argv.files)>0 then
+    for f in argv.files;push(fileList,path(f));end for
+  else if argv.rest then
+    fileList=argv.rest
+  end if
+  while fileList
+    filename=pull(fileList)
+    if indexOf(filename,"/")==null then filename=path(Obj.dir.current)+"/"+filename
+    pathInfo=parsePath(filename)
+    // Validate filename length (128 char maximum)
+    if len(pathInfo.name)>128 then return Error.set("Filename too long (max 128 characters)")
+    // Special handling for file object types (template-based creation)
+    if Obj.type=="file" then
+      template=FileHelper.useFile(Obj)
+      if template isa Error then return template
+      copy(template,pathInfo.path,pathInfo.name)
+      newFile=Io.getFileObj(Obj,pathInfo.fullPath)
+      if newFile isa Error then return newFile
+      set_content(newFile,"")
+      set_owner(newFile,Obj.user.name)
+      set_group(newFile,Obj.user.name)
+      return newFile
+    end if
+    existingFile=File(Obj.computer,pathInfo.fullPath)
+    if existingFile then
+      if argv.y then
+        self.qrm(Obj,[existingFile])
+      else if argv.x then
+        return existingFile
+      end if
+    end if
+    parentDir=File(Obj.computer,pathInfo.path)
+    if not parentDir then return Error.set("Can't create file. "+pathInfo.path+" does not exist.")
+    result=touch(Obj.computer,pathInfo.path,pathInfo.name)
+    if result isa string then return Error.set(result)
+    if returnFile then return Io.getFileObj(Obj,pathInfo.fullPath)
+  end while
+end function

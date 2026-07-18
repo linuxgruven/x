@@ -1,0 +1,107 @@
+// Man page for rainbow
+manRainbow="RAINBOW(1)                       X Shell Manual                       RAINBOW(1)
+
+<b>NAME</b>
+    rainbow - Rainbow table password management
+<b>SYNOPSIS</b>
+    <b>rainbow</b> <b>-l</b>
+    <b>rainbow</b> <b>-r</b>
+    <b>rainbow</b> <b>-n</b>
+    <b>rainbow</b> <b>-q</b>
+    <b>rainbow</b> <b>-m</b> OPTIONS [LENGTH] QUANTITY
+    <b>rainbow</b> <b>-k</b> ORDER COUNT
+    <b>rainbow</b> <b>-x</b>
+<b>DESCRIPTION</b>
+    Rainbow table manager for password hash cracking. Maintains precomputed
+    password databases for accelerated attacks. Initialize with -n flag to
+    specify list locations. Tables automatically load when needed. All password
+    files must start with list and reside in single directory.
+
+    <b>Generation Options (-m):</b>
+      u = Include uppercase letters
+      l = Include lowercase letters
+      n = Include numbers
+      s = Include special characters
+      R = Use random lengths
+<b>OPTIONS</b>
+    <b>-l</b>
+    Load rainbow tables
+    Into memory (auto-loads)
+
+    <b>-r</b>
+    Rebuild rainbow tables
+    Regenerate from lists
+
+    <b>-n</b>
+    Initialize tables from lists
+    Clears any existing tables first
+    Prompts for list location
+
+    <b>-q</b>
+    Quick add temporary files
+    Cleared on restart
+
+    <b>-m OPTIONS [LENGTH] QUANTITY</b>
+    Generate passwords in memory
+    Temporary, cleared on restart
+
+    <b>-k ORDER COUNT [-s]</b>
+    Markov chain password generation
+    Learns character patterns from existing lists and
+    generates statistically similar passwords.
+    ORDER (1-3) controls how many previous characters
+    are used to predict the next:
+      1 = looks at 1 char, more variety, less realistic
+      2 = looks at 2 chars, balanced (recommended)
+      3 = looks at 3 chars, most realistic, needs large lists
+    COUNT is the number of passwords to generate.
+    Generated passwords are added to the in-memory
+    rainbow table immediately for cracking.
+    -s also saves passwords to list directory so they
+    persist after running 'rainbow -n'.
+
+    <b>-x</b>
+    Clear all rainbow tables
+    Reset database
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Initial Setup</color>
+    <b>rainbow -n</b>
+    Create tables from lists
+
+    <color=#e4ff34># Table Management</color>
+    <b>rainbow -r</b>
+    Rebuild from modified lists
+
+    <b>rainbow -l</b>
+    Manual load into memory
+
+    <color=#e4ff34># Generation</color>
+    <b>rainbow -m ulnR 15 100000</b>
+    Generate 100k passwords
+    Upper, lower, numbers, random 1-15 length
+
+    <b>rainbow -m uln 8 50000</b>
+    Generate 50k 8-char passwords
+
+    <color=#e4ff34># Markov Chain</color>
+    <b>rainbow -k 2 50000</b>
+    Generate 50k passwords using order-2 Markov chain
+
+    <b>rainbow -k 1 100000</b>
+    Generate 100k passwords with order-1 (more variety, less realistic)
+
+    <b>rainbow -k 3 25000</b>
+    Generate 25k passwords with order-3 (most realistic, needs large lists)
+
+    <b>rainbow -k 2 50000 -s</b>
+    Generate and save to list directory (run 'rainbow -n' to make permanent)
+
+    <color=#e4ff34># Temporary Addition</color>
+    <b>rainbow -q</b>
+    Add temporary password files
+
+    <color=#e4ff34># Reset</color>
+    <b>rainbow -x</b>
+    Clear all tables
+<b>SEE ALSO</b>
+    <b>addpass</b>, <b>hc</b>, <b>decipher</b>"

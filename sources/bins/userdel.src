@@ -1,0 +1,10 @@
+binUserdel="if not len(params) or (len(params)==1 and params[0]==""-r"") or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""userdel_usage""))
+del=0
+if params[0]==""-r"" then
+	del=1
+	pull(params)
+end if
+output=delete_user(host_computer(get_shell),params[0],del)
+if output==true then exit(""user ""+params[0]+"" deleted."")
+if output then exit(output)
+print(""Error: user not deleted."")"

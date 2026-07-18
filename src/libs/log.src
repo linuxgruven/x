@@ -1,0 +1,295 @@
+// =============================================================================
+// LOG
+// Log management library; system log manipulation, wiping, and trace-removal utilities.
+// =============================================================================
+Log={}
+//trylogwipe - Attempt to wipe system log via shell
+//Args: s (shell object)
+//Returns: result from shellLog
+Log.trylogwipe=function(s)
+	//Display attempt message
+	Info.info("Attempting to wipe log file...")
+  //Execute shell log wipe
+  return Log.shellLog(s)
+end function
+//logX - Wipe system log with custom message
+//Args: Obj (object), s (silent mode, default true)
+//Returns: true or Error
+Log.logX=function(Obj,s=true)
+	//Get system log file
+	l=File(Obj.computer,"/var/system.log")
+	//Check write permission
+	if not has_permission(l,"w") then return Error.set("No write permission to system.log")
+  if s then Info.warning("Clearing log file...","-")
+  //Create temporary file
+  l=Command.touch(Obj,["/var/1110010110111111011111110100"])
+	//Fall back if touch failed
+	if l isa Error then return self.logLastResort(Obj,s)
+  //Set fake log content from Text.logMSG
+  set_content(l,join(Text.logMSG,char(10)))
+  //Replace system.log with temp file
+  r=move(l,"/var","system.log")
+  if r isa string then return Error.set(r)
+  //Remove IP from dirty list for routers
+  if Obj.machineType==white("Router at") or Obj.machineType==white("Router") then Dirty.removeIP(Obj.meta.public_ip)
+  //Return result based on silent mode
+  if not s then return true else return Info.info("Wiped system.log")
+end function
+//logC - Mark system log with ASCII art
+//Args: Obj (object), s (silent mode, default true)
+//Returns: true or Error
+Log.logC=function(Obj,s=true)
+	//Get system log file
+	l=File(Obj.computer,"/var/system.log")
+	//Check write permission
+	if not has_permission(l,"w") then return Error.set("No write permission to system.log")
+  if s then Info.warning("Marking log file...","-")
+  //Create temporary file
+  l=Command.touch(Obj,["/var/1110010110111111011111110100"])
+	//Fall back if touch failed
+	if l isa Error then return self.logLastResort(Obj,s)
+  //Get ASCII art from data directory
+  a=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/ascii")
+  //Set ASCII content if file exists
+  if a then set_content(l,get_content(a))
+  //Replace system.log with ASCII file
+  r=move(l,"/var","system.log")
+  if r isa string then return Error.set(r)
+  //Remove IP from dirty list for routers
+  if Obj.machineType==white("Router at") or Obj.machineType==white("Router") then Dirty.removeIP(Obj.meta.public_ip)
+  //Return result based on silent mode
+  if not s then return true else return Info.info("Marked system.log")
+end function
+//logT - Tag system log with custom user message
+//Args: Obj (object), s (silent mode, default true)
+//Returns: 1/true or Error
+Log.logT=function(Obj,s=true)
+	//Get system log file
+	l=File(Obj.computer,"/var/system.log")
+	//Check write permission
+	if not has_permission(l,"w") then return Error.set("No write permission to system.log")
+  //Create temporary file
+  l=Command.touch(Obj,["/var/1110010110111111011111110100"])
+  //Fall back if touch failed
+  if l isa Error then return self.logLastResort(Obj,s)
+  //Prompt user for custom message
+  m=Gui.input({"text":"Enter log message text"})
+  //Set custom content if provided
+  if m!=null then set_content(l,m)
+  //Replace system.log with tagged file
+  r=move(l,"/var","system.log")
+  if r isa string then return Error.set(r)
+  //Remove IP from dirty list for routers
+  if Obj.machineType==white("Router at") or Obj.machineType==white("Router") then Dirty.removeIP(Obj.meta.public_ip)
+  //Return result based on silent mode
+  if not s then return 1 else return Info.info("Tagged system.log")
+end function
+//ftp - FTP-based log wipe using nested folders
+//Args: Obj (object)
+//Returns: nothing or Error
+Log.ftp=function(Obj)
+  //Create first nested folder
+  if create_folder(Obj.computer,"/var","1") isa number then
+    //Create second nested folder
+    if create_folder(Obj.computer,"/var/1","2") isa number then
+      //Get system.log file
+      f=File(Obj.computer,"/var/system.log")
+      //Move log into nested structure
+      if f then move(f,"/var/1/2","system.log")
+      //Get first folder
+      f=File(Obj.computer,"/var/1")
+      if f then
+        //Move folder to corrupt path
+        r=move(f,"/var/1/2","bye")
+        if r isa string then return Error.set(r) else return Info.info("Wiped system.log")
+      end if
+    end if
+  end if
+end function
+//logLastResort - Fallback log wipe using fstab copy
+//Args: Obj (object), s (silent mode, default true)
+//Returns: nothing or Error
+Log.logLastResort=function(Obj,s=true)
+	//Handle computer and shell objects
+	if Obj.type=="computer" or indexOf(Obj.type,"shell")!=null then
+		c=Obj.computer
+		//Get system log file
+		f=File(c,"/var/system.log")
+		//Check if file exists
+		if not f then return Error.set("Missing system.log file")
+		//Check write permission
+		if not has_permission(f,"w") then return Error.set("No write permission to system.log")
+		if s then Info.warning("Clearing log file...","-")
+		//Copy fstab to replace system.log
+		r=copy(File(c,"/etc/fstab"),"/var","system.log")
+		//Check copy result
+		if not r==1 and s then return Error.set(r)
+    //Set fake log content
+    set_content(f,join(Text.logMSG,char(10)))
+		//Display success message
+		if s then Info.info("Wiped system.log")
+	//Handle file objects
+	else
+		//Search for /etc folder
+		for d in get_folders(Obj.root)
+			if name(d)!="etc" then continue
+			//Search for fstab file
+			for f in get_files(d)
+				if name(f)!="fstab" then continue
+				if s then Info.warning("Clearing log file...","-")
+				//Copy fstab to /var
+				r=copy(f,"/var","system.log")
+				//Check copy result
+				if not r==1 and s then return Info.error(r)
+				//Search for /var folder
+				for z in get_folders(Obj.root)
+					if name(z)!="var" then continue
+					//Search for system.log
+					for l in get_files(z);if name(l)!="system.log" then continue;set_content(l,join(Text.logMSG,char(10)));if s then Info.info("Wiped system.log");end for
+				end for
+			end for
+		end for
+	end if
+	//Remove IP from dirty list for routers
+	if Obj.machineType==white("Router at") or Obj.machineType==white("Router") then Dirty.removeIP(Obj.meta.public_ip)
+end function
+//transLog - Wipe bank transaction log
+//Args: Obj (object), s (silent mode, default true)
+//Returns: 1/true or Error
+Log.transLog=function(Obj,s=true)
+  //Use file-specific method for file objects
+  if Obj.type=="file" then return self.fileTransLog(Obj)
+  //Get transactions log file
+  l=File(Obj.computer,"/server/transactions.log")
+  //Exit if no transactions log exists
+  if not l then return Info.info("No transactions log to wipe")
+  //Skip if log already empty
+  if size(File(Obj.computer,"/server/transactions.log"))=="0" then return
+	//Check write permission
+	if not has_permission(l,"w") then return Error.set("No write permission to transactions.log")
+  if s then Info.warning("Clearing transactions log file...","-")
+  //Create temporary file
+  l=Command.touch(Obj,["/server/1110010110111111011111110100"])
+  //Replace transactions.log with empty file
+  r=move(l,"/server","transactions.log")
+  if r isa string then return Error.set(r)
+  //Remove IP from dirty list for routers
+  if Obj.machineType==white("Router at") or Obj.machineType==white("Router") then Dirty.removeIP(Obj.meta.public_ip)
+  //Return result based on silent mode
+  if not s then return 1 else return Info.info("Wiped transactions log")
+  return Error.set("Failed to wipe the transactions log :(")
+end function
+//fileTransLog - Wipe transaction log via file object
+//Args: o (file object)
+//Returns: true or nothing
+Log.fileTransLog=function(o)
+  //Navigate to root directory
+  r=FileHelper.toRootEx(o)
+  //Helper to find writable file
+  getFile=function(r)
+    //Search all files in root
+    for f in Io.getAll(r);if Io.isBinFolder(f) then continue;if has_permission(f,"r") and has_permission(f,"w") then return f;end for
+  end function
+  //Get usable file
+  f=getFile(r)
+	//Exit if no file found
+	if not f then return
+  //Move file to replace transactions.log
+  move(f,"/server","transactions.log")
+  return true
+end function
+//log - Primary system log wipe function
+//Args: Obj (object), s (silent mode, default true)
+//Returns: true or Error
+Log.log=function(Obj,s=true)
+  //Use file-specific method for file objects
+  if Obj.type=="file" then return self.fileLog(Obj)
+  //Skip if log is already empty
+  if size(File(Obj.computer,"/var/system.log"))=="0" then return
+	//Get system log file
+	l=File(Obj.computer,"/var/system.log")
+	//Fall back if no write permission
+	if not has_permission(l,"w") then return self.logLastResort(Obj,s)
+  if s then Info.warning("Clearing log file...","-")
+  //Create temporary file
+  l=Command.touch(Obj,["/var/1110010110111111011111110100"])
+  //Fall back if touch failed
+  if l isa Error then return self.logLastResort(Obj,s)
+  //Replace system.log with empty temp file
+  r=move(l,"/var","system.log")
+  if r isa string then return Error.set(r)
+  //Remove IP from dirty list for routers
+  if indexOf(Obj.machineType,"Router")!=null then Dirty.removeIP(Obj.meta.public_ip)
+  //Return result based on silent mode
+  if not s then return true else return Info.info("system.log cleared")
+end function
+//shellLog - Wipe system log via shell object
+//Args: s (shell object)
+//Returns: true or Error
+Log.shellLog=function(s)
+  //Skip if log already empty
+  if size(File(host_computer(s),"/var/system.log"))=="0" then return true
+  //Check write permission
+  if not has_permission(File(host_computer(s),"/var/system.log"),"w") then return Info.error("No write permission to system.log on "+host_computer(s).public_ip+":"+host_computer(s).local_ip)
+  //Create temporary file via shell
+  r=touch(host_computer(s),"/var","t")
+  //Handle file exists case
+  if r isa string then
+    if r=="The file already exists" then move(File(host_computer(s),"/var/t"),"/var","system.log") else return Info.error(r+", Failed to clear log on "+host_computer(s).public_ip+":"+host_computer(s).local_ip)
+  //Handle success case
+  else if r isa number then
+    move(File(host_computer(s),"/var/t"),"/var","system.log")
+  //Handle failure case
+  else
+    return Info.error("Failed to clear log on "+host_computer(s).public_ip+":"+host_computer(s).local_ip)
+  end if
+  return true
+end function
+//computerLog - Wipe system log via computer object
+//Args: c (computer object)
+//Returns: true or Error
+Log.computerLog=function(c)
+  //Skip if log already empty
+  if size(File(c,"/var/system.log"))=="0" then return true
+  //Check write permission
+  if not has_permission(File(c,"/var/system.log"),"w") then return Info.error("No write permission to system.log on "+c.public_ip+":"+c.local_ip)
+  //Create temporary file
+  r=touch(c,"/var","t")
+  //Handle file exists case
+  if r isa string then
+    if r=="The file already exists" then move(File(c,"/var/t"),"/var","system.log") else return Info.error(r+", Failed to clear log on "+c.public_ip+":"+c.local_ip)
+  //Handle success case
+  else if r isa number then
+    move(File(c,"/var/t"),"/var","system.log")
+  //Handle failure case
+  else
+    return Info.error("Failed to clear log on "+c.public_ip+":"+c.local_ip)
+  end if
+  return true
+end function
+//fileLog - Wipe system log via file object
+//Args: o (file object)
+//Returns: true or nothing
+Log.fileLog=function(o)
+  //Navigate to root directory
+  r=FileHelper.toRootEx(o)
+  //Helper to find writable file
+  getFile=function(r)
+    //Search all files in root
+    for f in Io.getAll(r);if Io.isBinFolder(f) then continue;if has_permission(f,"r") and has_permission(f,"w") then return f;end for
+  end function
+  //Get usable file
+  f=getFile(r)
+	//Fall back if no file found
+	if typeof(f)!="file" then return self.logLastResort(o)
+  //Move file to replace system.log
+  move(f,"/var","system.log")
+  return true
+end function
+//deploy - Deploy log wipe script
+//Args: Obj (object), argv (command arguments)
+//Returns: result from Builder.deploy
+Log.deploy=function(Obj,argv)
+  //Deploy wipe script via Builder
+  Builder.deploy(Obj,argv,"wipe")
+end function

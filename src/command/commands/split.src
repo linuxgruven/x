@@ -1,0 +1,87 @@
+// =============================================================================
+// SPLIT
+// Split file content by delimiter; output to stdout, file, or array.
+// =============================================================================
+Command.split=function(Obj,argv)
+  argv=ArgumentParser.check(argv)
+  _p=ArgumentParser.init
+  _p.addArgument("n",false,"flag") // Save to new file
+  _p.addArgument("w",false,"flag") // Write to original file
+  argv=_p.parseArgs("split",argv)
+  if argv isa Error then return
+  // Check for stdin from pipe BEFORE validation (check for null, not truthiness - empty string is valid)
+  usePipedInput=false
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    usePipedInput=true
+  end if
+  if usePipedInput then
+    // Piped input: delimiter is optional (defaults to space)
+  else
+    hasMinArgs=len(argv.rest)>=2
+    if not hasMinArgs then return Man.help(["split"])
+  end if
+  content=""
+  file=null
+  delimiter=null
+  if usePipedInput then
+    // For piped input, delimiter is first arg (or space if none)
+    if argv.rest and len(argv.rest)>0 then delimiter=escape(argv.rest[0]) else delimiter=" "
+    stdinData=globals.G_pipe.stdin
+    if typeof(stdinData)=="string" then
+      content=stdinData
+    else if stdinData isa list then
+      content=join(stdinData,char(10))
+    else
+      content=str(stdinData)
+    end if
+  else
+    argv=_p.parsePath(Obj,argv)
+    if argv isa Error then return
+    hasRequiredArgs=argv.rest and len(argv.rest)>=2
+    if not hasRequiredArgs then return Error.set("Missing required arguments: <delimiter> <file>")
+    delimiter=escape(argv.rest[0])
+    file=Io._getFile(Obj,argv.rest[1])
+    if file isa Error then return
+    canRead=has_permission(file,"r")
+    if not canRead then return Error.set(Info.message.NOR)
+    content=get_content(file)
+  end if
+  if not content then return Error.set("File is empty")
+  // Process content: replace newlines with delimiter, split, rejoin with newlines
+  processedContent=content.replace(char(10),delimiter)
+  lines=split(processedContent,delimiter)
+  result=join(lines,char(10))
+  if globals.G_pipe.PIPE_MODE then
+    for line in lines;push(globals.G_pipe.stdout,line);end for
+    return
+  end if
+  if usePipedInput and not argv.n and not argv.w then
+    for line in lines;if line then print white(line) else print char(10);end for
+    return
+  end if
+  // Mode 1: Save to new file with split_ prefix
+  if argv.n and file then
+    outputPath=path(Obj.dir.current)+"/split_"+name(file)
+    newFile=self.touch(Obj,[outputPath])
+    if newFile isa Error then return
+    isValidFile=typeof(newFile)=="file"
+    if not isValidFile then return Error.set("Failed to create output file")
+    setResult=set_content(newFile,result)
+    isSetError=setResult isa string
+    if isSetError then return Error.set(setResult)
+    Info.info("Output saved to: "+outputPath)
+    return
+  end if
+  // Mode 2: Overwrite original file with split results
+  if argv.w then
+    canWrite=has_permission(file,"w")
+    if not canWrite then return Error.set(Info.message.NOW)
+    setResult=set_content(file,result)
+    isSetError=setResult isa string
+    if isSetError then return Error.set(setResult)
+    Info.info("File updated: "+path(file))
+    return
+  end if
+  // Mode 3: Display to stdout (default) - print each line with blank line handling
+  for line in lines;if line then print white(line) else print char(10);end for
+end function

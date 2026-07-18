@@ -1,0 +1,34 @@
+// Man page for exit
+manExit="EXIT(1)                          X Shell Manual                          EXIT(1)
+
+<b>NAME</b>
+    exit - Exit framework or active session
+<b>SYNOPSIS</b>
+    <b>exit</b> [<b>-y</b>|<b>-n</b>]
+<b>DESCRIPTION</b>
+    Terminates the current session. On main session, prompts if active
+    sessions exist. On proxy, prompts for confirmation (use -y to skip,
+    -n to also skip). On pivot/shell sessions, exits immediately.
+    Aliases: x
+<b>OPTIONS</b>
+    <b>exit</b>
+    Exit current session (may prompt for confirmation)
+
+    <b>exit -y</b>
+    Skip confirmation prompt (proxy sessions)
+
+    <b>exit -n</b>
+    Skip confirmation prompt (proxy sessions)
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Standard Exit</color>
+    <b>exit</b>
+    Exit with prompt
+
+    <b>x</b>
+    Quick exit alias
+
+    <color=#e4ff34># Proxy Session</color>
+    <b>exit -y</b>
+    Exit proxy without confirmation
+<b>SEE ALSO</b>
+    <b>close</b>, <b>home</b>, <b>x</b>"

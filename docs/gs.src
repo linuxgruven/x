@@ -1,0 +1,3538 @@
+aptClient
+
+A aptClient object can be obtained by using include_lib. The classID used for this object is "aptclientLib".
+
+    add_repo(repository: string, port: number = 1542
+    ):
+
+    stringornull
+    copy
+
+    Inserts a repository address into the "/etc/apt/sources.txt" file. If any of the provided parameters have a type that deviates from the defined signature, the method will return null. On success, it will return an empty string. In case of failure, it will return a string with an error message.
+
+    aptClient = include_lib("/lib/aptclient.so")
+    result = aptClient.add_repo("177.202.15.132")
+    if result == "" then
+        print "Addition successful!"
+    else
+        print "Error while adding: " + result
+    end if
+
+    check_upgrade(filepath: string
+    ):
+
+    stringornumberornull
+    copy
+
+    Checks if there is a newer version of the program or library in the repository. If the provided filepath value is anything other than a string, this method will return null. On success, it will return a number, which can be either zero or one. Zero indicates that there is no new version, while one indicates that there is a new version available. In case of failure, it will return a string containing an error message.
+
+    aptClient = include_lib("/lib/aptclient.so")
+    result = aptClient.check_upgrade("/bin/rshell_interface")
+    if result == 0 then
+        print "Program doesnt need an update!"
+    else if result == 1 then
+        print "Program does need an update!"
+    else
+        print "Error while checking version: " + result
+    end if
+
+    del_repo(repository: string
+    ):
+
+    stringornull
+    copy
+
+    Deletes a repository address from the "/etc/apt/sources.txt" file. If the provided repository value is anything other than a string, this method will return null. On success, it will return an empty string. In case of failure, it will return a string with an error message.
+
+    aptClient = include_lib("/lib/aptclient.so")
+    result = aptClient.del_repo("177.202.15.132")
+    if result == "" then
+        print "Deletion successful!"
+    else
+        print "Error while deleting: " + result
+    end if
+
+    install(package: string, customPath: string = ""
+    ):
+
+    stringornumberornull
+    copy
+
+    Installs a program or library from a remote repository listed in "/etc/apt/sources.txt". If no path is specified, the program installs in "/lib" if it is a library or in "/bin" otherwise. If any of the provided parameters have a type that deviates from the defined signature, the method will return null. On success, this method will return a number with the value one. In case of failure, it will return a string containing an error message.
+
+    aptClient = include_lib("/lib/aptclient.so")
+    result = aptClient.install("rshell_interface")
+    if result == 1 then
+        print "Installed program successful!"
+    else
+        print "Error while installing: " + result
+    end if
+
+    search(search: string
+    ):
+
+    stringornull
+    copy
+
+    Search specifically looks for a package in any of the repositories listed in "/etc/apt/sources.txt". If the provided search value is anything other than a string, this method will return null. On success, it will return a string containing all packages that partially match the provided search value. On failure, it will return a string with various error messages.
+
+    aptClient = include_lib("/lib/aptclient.so")
+    packages = aptClient.search(".so")
+    packageList = packages.split(char(10) + char(10))
+    for packageItem in packageList
+        entry = packageItem.split(char(10))
+        if entry.len != 2 then
+            print "something wrong in: " + entry
+            continue
+        end if
+        packageName = entry[0]
+        packageDescription = entry[1]
+        print "Title: <b>" + packageName + "</b>"
+        print "Description: <i>" + packageDescription + "</i>"
+        print "----------------------------"
+    end for
+
+    show(repository: string
+    ):
+
+    stringornull
+    copy
+
+    Show displays all the packages available in a repository. The repository must be listed in the "/etc/apt/sources.txt" file. If the provided repository value is anything other than a string, this method will return null. If it cannot find a repository, it will return various error messages. On success, it will return a string containing all packages and their descriptions, with each entry separated by a newline.
+
+    aptClient = include_lib("/lib/aptclient.so")
+    packages = aptClient.show("177.202.15.132")
+    packageList = packages.split(char(10) + char(10))
+    packageList.pop // remove last empty item
+    for packageItem in packageList
+        entry = packageItem.split(char(10))
+        packageName = entry[0]
+        packageDescription = entry[1]
+        print "Title: <b>" + packageName + "</b>"
+        print "Description: <i>" + packageDescription + "</i>"
+        print "----------------------------"
+    end for
+
+    update():
+
+    stringornumber
+    copy
+
+    Update refreshes the list of available packages after adding a new repository in "/etc/apt/sources.txt", or if the remote repository has updated its information in "/server/conf/repod.conf". If the update is successful, an empty string will be returned. In case of failure, a string with an error message will be returned. If for some reason the "/etc/apt/sources.txt" is malformed this method will return a number with the value zero.
+
+    aptClient = include_lib("/lib/aptclient.so")
+    result = aptClient.update
+    if result == "" then
+        print "Update successful!"
+    else
+        print "Error while updating: " + result
+    end if
+
+blockchain
+
+A blockchain object can be obtained by using include_lib. The classID used for this object is "blockchainLib".
+
+    amount_mined(coinName: string
+    ):
+
+    stringornumberornull
+    copy
+
+    Returns a number representing the total amount of mined coins. In case of an error, it will return a string with the details. If the provided coinName is anything other than a string, the method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    mined = blockchain.amount_mined("test")
+    if typeof(mined) == "string" then
+        exit "Couldnt get amount mined due to: " + mined
+    end if
+    print "Your mined amount is " + mined
+
+    coin_price(coinName: string
+    ):
+
+    nullorstringornumber
+    copy
+
+    Returns a number representing the current unit value of the cryptocurrency. In case of an error, a string with the error details will be returned. If the provided coinName is anything other than a string, the method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    price = blockchain.coin_price("test")
+    if typeof(price) == "string" then
+        exit "Couldnt get coin price due to: " + price
+    end if
+    print "Your coin price is " + price
+
+    create_wallet(user: string, password: string
+    ):
+
+    stringorwalletornull
+    copy
+
+    Creates a wallet and returns a wallet object on success, which can be used to manage cryptocurrencies. In case of an error, it will return a string with the details. If any of the provided parameters have a type that deviates from the defined signature, the method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = blockchain.create_wallet("test", "test")
+    if typeof(wallet) == "string" then
+      print "Wallet creation failed due to: " + wallet
+    else
+      print "Wallet creation was successful!"
+    end if
+
+    delete_coin(coinName: string, user: string, password: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Removes a cryptocurrency from the world. The credentials used in the creation of the cryptocurrency are required. On success, it will return a number with the value one. On failure, it will return a string containing details. If any of the provided parameters have a type that deviates from the defined signature, the method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    result = blockchain.delete_coin("test", "test", "test")
+    if typeof(result) == "string" then
+        exit "Couldnt delete coin due to: " + result
+    end if
+    print "Coin got deleted"
+
+    get_coin(coinName: string, user: string, password: string
+    ):
+
+    stringorcoinornull
+    copy
+
+    Returns a coin object used to manage the currency. In case of an error, it will return a string with the details. If any of the provided parameters deviate from the defined signature, the method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    if typeof(coin) != "coin" then
+        exit "Couldnt get coin object due to: " + coin
+    end if
+    print "Your coin address is " + coin.get_address
+
+    get_coin_name(user: string, password: string
+    ):
+
+    stringornull
+    copy
+
+    Returns a string with the name of the coin owned by the player. In case of an error, it returns a string with details. If any provided parameters deviate from the defined signature, this method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coinName = blockchain.get_coin_name("test", "test")
+    if not coinName.matches("^[A-Z]+$") then
+        exit "Couldnt get coin name due to: " + coinName
+    end if
+    print "The name of the coin you're owning is " + coinName
+
+    login_wallet(user: string, password: string
+    ):
+
+    stringorwalletornull
+    copy
+
+    Returns a wallet object on success. In case of an error, it will return a string indicating the reason. If any of the provided parameters have a type that deviates from the defined signature, the method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = blockchain.login_wallet("test", "test")
+    if typeof(wallet) == "string" then
+      print "Login failed due to: " + wallet
+    else
+      print "Login was successful!"
+    end if
+
+    show_history(coinName: string
+    ):
+
+    map<number,list<any>>orstringornull
+    copy
+
+    Returns a map with the latest changes in the value of a specific cryptocurrency. The key of the map is an index represented by a number. The value is a list, where index 0 is the historical price of the coin and index 1 is the date when the price change occurred. If the provided coinName is anything other than a string or if no coin exists with this name, the method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    history = blockchain.show_history("test")
+    if typeof(history) == "string" then
+        exit "Couldnt fetch history due to: " + history
+    else if history == null then
+        exit "There doesnt seem to be a coin"
+    end if
+    for entry in history.values
+        price = entry[0]
+        date = entry[1]
+        print "The price on " + date + " was " + price
+    end for
+
+class
+
+A class or object is a map with a special __isa entry that points to the parent. This is set automatically when you use the new operator.
+
+Shape = { "sides": 0 }
+Square = new Shape
+Square.sides = 4
+x = new Square
+print(x.sides) // 4
+
+coin
+
+A coin object can be obtained by using get_coin. The classID used for this object is "coin".
+
+    create_subwallet(walletID: string, pin: string, subWalletUser: string, subWalletPass: string
+    ):
+
+    stringornumberornull
+    copy
+
+    Registers a new account in the coin that can be used to manage services such as stores. It is necessary to provide the PIN of the owner's wallet that wants to register. In case of success, the method will return a number with the value one. If any of the provided parameters have a type that deviates from the defined signature, the method will return null. In case of an error, a string with the details is returned.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    wallet = blockchain.login_wallet("test", "test")
+    result = coin.create_subwallet("test", wallet.get_pin, "test", "test")
+    if typeof(result) == "string" then
+        exit "Failed to create subwallet due to: " + result
+    end if
+    print "Successfully created subwallet!"
+
+    get_address():
+
+    string
+    copy
+
+    Returns the configured address that will be shown to users who do not have the currency, indicating where they have to register. In case of an error, it returns a string with details.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    result = coin.get_address
+    if not is_valid_ip(result) then
+        exit "Failed to get address due to: " + result
+    end if
+    print "address: " + result
+
+    get_cycle_mining():
+
+    stringornumber
+    copy
+
+    Returns a number representing the defined interval in which each user receives a coin reward when mining. In case of failure, the method will return a string with details.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    result = coin.get_cycle_mining
+    if typeof(result) == "string" then
+        exit "Failed getting cyclic mining value due to: " + result
+    end if
+    print "cyclic mining value: " + result
+
+    get_mined_coins():
+
+    stringornumber
+    copy
+
+    Returns a number representing the amount of coins that have been mined so far. In case of an error, it returns a string with details.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    result = coin.get_mined_coins
+    if typeof(result) == "string" then
+        exit "Failed to get mined coins due to: " + result
+    end if
+    print "mined coins: " + result
+
+    get_reward():
+
+    stringornumber
+    copy
+
+    Returns a number representing the amount of coins that will be received as a reward after each mining cycle. In case of failure, the method will return a string with details.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    result = coin.get_reward
+    if typeof(result) == "string" then
+        exit "Failed getting reward value due to: " + result
+    end if
+    print "reward value: " + result
+
+    get_subwallet(subWalletUser: string
+    ):
+
+    stringorsubWalletornull
+    copy
+
+    Returns a subWallet object on success. In case of error, it returns a string with the details. If the provided subWalletUser is not a string, this method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    result = coin.get_subwallet("test")
+    if typeof(result) == "string" then
+        exit "Failed to get subwallet due to: " + result
+    end if
+    print "Successfully received subwallet!"
+
+    get_subwallets():
+
+    stringorlist<subWallet>
+    copy
+
+    Returns a list where each item is a subWallet object, including all the accounts registered in the cryptocurrency. In case of error, it returns a string with the details.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    result = coin.get_subwallets
+    if typeof(result) == "string" then
+        exit "Failed to get subwallets due to: " + result
+    end if
+    for subwallet in result
+        print subwallet.get_user + " has " + subwallet.get_balance + " coins"
+    end for
+
+    reset_password(newPassword: string
+    ):
+
+    numberorstring
+    copy
+
+    Resets the password of the coin. It returns a number with the value one if resetting was successful; otherwise, it will return a string.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    result = coin.reset_password("test")
+    if typeof(result) == "string" then
+        exit "Failed to reset password due to: " + result
+    end if
+    print "Successfully reset password"
+
+    set_address(address: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Configures a valid address that will be shown to users who do not have the currency, indicating where to register. In case of an error, it returns a string with the details. In case of success, a number with a value of one will be returned. If the provided address is not a string, this method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    result = coin.set_address("12.12.12.12")
+    if typeof(result) == "string" then
+        exit "Failed to set address due to: " + result
+    end if
+    print "Successfully set address!"
+
+    set_cycle_mining(rateHours: number = 3
+    ):
+
+    stringornumberornull
+    copy
+
+    Defines the interval (in-game hours) in which each user receives a coin reward when mining. The interval cannot be lower than 1 and not higher than 2160. If the provided rateHours is not a number, this method will return null. On success, it will return a number with the value one. In case of failure, the method will return a string with details.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    result = coin.set_cycle_mining(20)
+    if result == 1 then
+        print "Successful updated mining interval"
+    else
+        print "Failed updating mining interval"
+    end if
+
+    set_reward(coinAmount: number = 1
+    ):
+
+    numberorstringornull
+    copy
+
+    Assigns the reward that miners will receive after each mining cycle. The reward value has to be above one. If the provided coinAmount is not a number, this method will return null. On success, it will return a number with the value one. In case of failure, the method will return a string with details.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    result = coin.set_reward(-1)
+    if typeof(result) == "string" then
+        exit "Failed setting reward due to: " + result
+    end if
+    print "Successfully set reward!"
+
+    transaction(subWalletOrig: string, subWalletDest: string, valAmount: number
+    ):
+
+    stringornumberornull
+    copy
+
+    Facilitates a transaction of the currency between the indicated subwallets. In case of an error, a string with the details is returned. In case of success, a number with a value of one will be returned. If any of the provided parameters have a type that deviates from the defined signature, the method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    result = coin.transaction("test", "test2", 20)
+    if typeof(result) == "string" then
+        exit "Failed transaction due to: " + result
+    end if
+    print "Successfully transfered!"
+
+computer
+
+A computer object can be obtained by either using host_computer or overflow. The classID used for this object is "computer".
+
+    File(path: string
+    ):
+
+    fileornull
+    copy
+
+    Returns a file located at the path provided in the arguments. The path can be either relative or absolute. It's important to note that any file object can represent a folder as well. If the provided path cannot be resolved, meaning that no file or folder exists, this method will return null. Providing any other type than string or an empty value for the path will result in an error, interrupting the script execution.
+
+    filePath = "/etc/passwd"
+    file = get_shell.host_computer.File(filePath)
+    if file != null then
+       print(file.get_content)
+    else
+       print("File at given path " + filePath + " does not exist.")
+    end if
+
+    active_net_card():
+
+    string
+    copy
+
+    Returns a string which contains either the keyword "WIFI" or "ETHERNET" depending on the connection type your computer is currently using.
+
+    hostComputer = get_shell.host_computer
+    netCard = hostComputer.active_net_card
+    print("Connected by: " + netCard)
+
+    change_password(username: string, password: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Changes the password of an existing user on the computer. Root access is necessary to successfully change the password. Passwords can only include alphanumeric characters and cannot exceed 15 characters. If the password change fails, this method will return a string containing information on why it failed. If the change succeeds, it will return a number with the value one. If the provided username is empty, an error will be thrown, preventing any further script execution. If any of the provided parameters have a type that deviates from the defined signature, the method will return null.
+
+    hostComputer = get_shell("root", "test").host_computer
+    changeResult = hostComputer.change_password("test", "newPassword")
+    if typeof(changeResult) == "string" then
+       print("There was an error when changing the password: " + changeResult)
+    else
+       print("Password got successfully changed.")
+    end if
+
+    close_program(pid: number
+    ):
+
+    numberorstringornull
+    copy
+
+    Closes a program associated with the provided PID. You can see the list of active programs by either using show_procs or typing ps into your terminal. To close a program, you need to either be the owner of the running process or root. If closing the program fails, this method will return a string containing details. On success, it will return a number with the value one. If there is no process with the provided PID, this method will return a number with the value zero. If the provided PID is anything other than a number, this method will return null.
+
+    hostComputer = get_shell("root", "test").host_computer
+    processes = hostComputer.show_procs.split(char(10))[1:]
+    pid = processes[1].split(" ")[1]
+    closeResult = hostComputer.close_program(pid.to_int)
+    if typeof(closeResult) == "string" then
+       print("There was an error when closing a program: " + closeResult)
+    else
+       print("Program with pid " + pid + " got successfully closed.")
+    end if
+
+    connect_ethernet(netDevice: string, address: string, gateway: string
+    ):
+
+    stringornull
+    copy
+
+    Sets up a new IP address on the computer through the Ethernet connection. It's not possible to set up a new IP address while being logged in as a guest. On failure, this method will either return a string with details or null. On success, it will return an empty string. If any of the provided parameters have a type that deviates from the defined signature or the computer is not connected to the internet, an error will be thrown, preventing any further script execution.
+
+    hostComputer = get_shell.host_computer
+    connectionResult = hostComputer.connect_ethernet("eth0", "192.168.0.4", get_router.local_ip)
+    if typeof(connectionResult) == "string" then
+       print("There was an error while connecting: " + connectionResult)
+    else
+       print("Connected successfully.")
+    end if
+
+    connect_wifi(netDevice: string, bssid: string, essid: string, password: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Connects to the indicated Wi-Fi network. It's not possible to connect to a new Wi-Fi while being logged in as a guest. If connecting to a new Wi-Fi fails, this method will return a string containing details. On success, it will return a number with the value one. Wi-Fi networks can be found via wifi_networks or by typing iwlist as a command in the terminal. If any of the provided parameters have a type that deviates from the defined signature, the method will return null.
+
+    hostComputer = get_shell.host_computer
+    networks = hostComputer.wifi_networks
+    firstNetwork = networks[0].split(" ")
+    BSSID = firstNetwork[0]
+    ESSID = firstNetwork[2]
+    connectionResult = hostComputer.connect_wifi("wlan0", BSSID, ESSID, "wifi-password")
+    if typeof(connectionResult) == "string" then
+       print("There was an error while connecting to new Wifi: " + connectionResult)
+    else
+       print("Connected to new Wifi successfully.")
+    end if
+
+    create_folder(path: string, folder: string = "newFolder"
+    ):
+
+    stringornumber
+    copy
+
+    Creates a folder at the path provided in the arguments. There are certain limitations to creating a folder: the folder name has to be alphanumeric and below 128 characters. Creation will fail if there is already a folder in place or if there are lacking permissions. Additionally, there is a folder limit of about 250 in each folder and 3125 folders in the computer overall. In case the folder creation fails, the method will return a string with details. In case of success, it will return a number with the value one. Providing any type that deviates from the signature or using this method in an SSH encryption process will cause an error to be thrown, aborting further script execution.
+
+    path = "/home/" + active_user + "/Desktop"
+    hostComputer = get_shell.host_computer
+    createResult = hostComputer.create_folder(path, "myfolder")
+    if typeof(createResult) == "string" then
+       print("There was an error when creating the folder: " + createResult)
+    else
+       print("Folder got created at given path " + path)
+    end if
+
+    create_group(username: string, group: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Creates a new group associated with an existing user on the computer. Root access is necessary to successfully create a group. There are limitations when creating a group, such as a character limit of 15 and that the group name may only contain alphanumeric characters. If the group creation fails, this method will return a string containing the cause of failure. On success, it will return a number with the value one. If the provided arguments are empty or the username exceeds 15 characters, an error will be thrown, interrupting further script execution. If any of the provided parameters have a type that deviates from the defined signature, the method will return null.
+
+    hostComputer = get_shell("root", "test").host_computer
+    creationResult = hostComputer.create_group("test", "staff")
+    if typeof(creationResult) == "string" then
+       print("There was an error when creating a group: " + creationResult)
+    else
+       print("Group got successfully created.")
+    end if
+
+    create_user(usename: string, password: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Creates a user on the computer with the specified name and password. Root access is necessary to successfully create a user. Both the username and password cannot exceed more than 15 characters and must be alphanumeric. There cannot be more than 15 users created on the same computer. If the creation fails, this method will return a string containing the reason for the failure. On success, it will return a number with the value one. If the provided username is empty or either of the values exceeds 15 characters, an error will be thrown, interrupting further script execution. If any of the provided parameters have a type that deviates from the defined signature, the method will return null.
+
+    hostComputer = get_shell("root", "test").host_computer
+    creationResult = hostComputer.create_user("newUser", "123")
+    if typeof(creationResult) == "string" then
+       print("There was an error when creating an user: " + creationResult)
+    else
+       print("User got successfully created.")
+    end if
+
+    delete_group(username: string, group: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Deletes an existing group associated with an existing user on the computer. Root access is necessary to successfully delete a group. If the group deletion fails, this method will return a string containing the cause of failure. On success, it will return a number with the value one. If either of the provided values is empty, an error will be thrown, preventing further script execution. If any of the provided parameters have a type that deviates from the defined signature, the method will return null.
+
+    hostComputer = get_shell("root", "test").host_computer
+    deletionResult = hostComputer.delete_group("test", "staff")
+    if typeof(deletionResult) == "string" then
+       print("There was an error when deleting a group: " + deletionResult)
+    else
+       print("Group got successfully deleted.")
+    end if
+
+    delete_user(username: string, removeHome: number = 0
+    ):
+
+    numberorstringornull
+    copy
+
+    Deletes the indicated user from the computer. It can optionally delete the user's home folder as well, although by default the home folder will not be deleted. Root access is necessary to successfully delete a user. Keep in mind that you cannot delete the root user. If the deletion fails, this method will return a string containing the cause of failure. On success, it will return a number with the value one. If the provided username is empty, an error will be thrown, interrupting further script execution. If any of the provided parameters have a type that deviates from the defined signature, the method will return null.
+
+    hostComputer = get_shell("root", "test").host_computer
+    deletionResult = hostComputer.delete_user("test", true)
+    if typeof(deletionResult) == "string" then
+       print("There was an error when deleting an user: " + deletionResult)
+    else
+       print("User got successfully deleted.")
+    end if
+
+    get_name():
+
+    string
+    copy
+
+    Returns the hostname of the machine.
+
+    computerName = get_shell.host_computer.get_name
+    print("The name of your machine is " + computerName)
+
+    get_ports():
+
+    list<port>
+    copy
+
+    Returns a list of ports on the computer that are active.
+
+    router = get_router
+    ports = get_shell.host_computer.get_ports
+    for port in ports
+        print("Info: " + router.port_info(port))
+    end for
+
+    groups(username: string
+    ):
+
+    stringornull
+    copy
+
+    Returns a string containing groups associated with an existing user on the computer. If the user does not exist, a string with an error message will be returned. If the provided username is empty, an error will be thrown, preventing further script execution. If the provided username is anything other than a string, this method will return null.
+
+    hostComputer = get_shell("root", "test").host_computer
+    hostComputer.create_group("root", "staff")
+    groups = hostComputer.groups("root")
+    listOfGroups = groups.split(char(10))
+    print(listOfGroups)
+
+    is_network_active():
+
+    number
+    copy
+
+    Returns a number with either the value one or zero. If the computer has internet access, the value will be one. If there is no internet access, it will return zero instead.
+
+    hostComputer = get_shell.host_computer
+    if hostComputer.is_network_active then
+       print("You're connected.")
+    else
+       print("You're not connected.")
+    end if
+
+    local_ip():
+
+    string
+    copy
+
+    Returns a string with the local IP address of the computer.
+
+    localIp = get_shell.host_computer.local_ip
+    print("Local ip:" + localIp)
+
+    network_devices():
+
+    string
+    copy
+
+    Returns a string containing information about all network devices available on the computer. Each item includes details about the interface name, chipset, and whether monitoring support is enabled.
+
+    hostComputer = get_shell.host_computer
+    devices = hostComputer.network_devices
+    deviceList = devices.split(char(10))
+    for item in deviceList
+       print(item)
+    end for
+
+    network_gateway():
+
+    string
+    copy
+
+    Returns a string with the gateway IP address configured on the computer.
+
+    hostComputer = get_shell.host_computer
+    gatewayIp = hostComputer.network_gateway
+    print("Gateway IP: " + gatewayIp)
+
+    public_ip():
+
+    string
+    copy
+
+    Returns a string with the public IP address of the computer.
+
+    publicIp = get_shell.host_computer.public_ip
+    print("Public ip:" + publicIp)
+
+    reboot(safeMode: number = 0
+    ):
+
+    numberorstringornull
+    copy
+
+    Reboots the computer. By default, it reboots in standard mode. If the optional safeMode parameter is provided and evaluates to a truthy value, the system will reboot in safe mode instead. On success, the method returns a number with the value one. If the reboot fails, a descriptive error message is returned as a string. If the argument type deviates from the expected signature, the method returns null. Calling this method in an SSH encryption process will trigger an error, halting further script execution.
+
+    hostComputer = get_shell.host_computer
+    signal = hostComputer.reboot(true)
+    if signal == 1 then
+       print("Reboot signal emitted successfully.")
+    else
+       print("There was an error when rebooting the computer: " + signal)
+    end if
+
+    show_procs():
+
+    string
+    copy
+
+    Returns a string with an overview of all active processes on the computer, including information about the user, PID, CPU, memory, and command. Using this method in an SSH encryption process will cause an error to be thrown, preventing any further script execution.
+
+    hostComputer = get_shell.host_computer
+    procs = hostComputer.show_procs
+    list = procs.split(char(10))[1:]
+    processes = []
+    for item in list
+       parsedItem = item.split(" ")
+       process = {}
+       process.user = parsedItem[0]
+       process.pid = parsedItem[1]
+       process.cpu = parsedItem[2]
+       process.mem = parsedItem[3]
+       process.command = parsedItem[4]
+       processes.push(process)
+    end for
+    print(processes)
+
+    touch(path: string, fileName: string
+    ):
+
+    numberorstring
+    copy
+
+    Creates an empty text file at the provided path. Certain limitations apply to file creation: the file name must be alphanumeric and below 128 characters. Creation will fail if there is already a file in place or if permissions are lacking. Additionally, there is a file limit of about 250 in each folder and 3125 files in the computer overall. In case of success, it returns a number with the value one. In case of failure, it returns a string with details. Using this method in an SSH encryption process will cause an error to be thrown, preventing any further script execution.
+
+    path = "/home/" + active_user + "/Desktop"
+    hostComputer = get_shell.host_computer
+    createResult = hostComputer.touch(path, "myFile.txt")
+    if typeof(createResult) == "string" then
+       print("There was an error when creating the file: " + createResult)
+    else
+       print("File got created at given path " + path)
+    end if
+
+    wifi_networks(netDevice: string
+    ):
+
+    list<string>ornull
+    copy
+
+    Returns a list of the Wi-Fi networks that are available for the provided interface. Each item in the list is a string containing information on the BSSID, PWR, and ESSID. If no matching netDevice can be found, this method will return null. If the active network card is not a Wi-Fi card, an error will be thrown, preventing any further script execution.
+
+    hostComputer = get_shell("root", "test").host_computer
+    networks = hostComputer.wifi_networks("wlan0")
+    result = []
+    for network in networks
+       parsedItem = network.split(" ")
+       item = {}
+       item.BSSID = parsedItem[0]
+       item.PWR = parsedItem[1]
+       item.ESSID = parsedItem[2]
+       result.push(item)
+    end for
+    print(result)
+
+crypto
+
+A crypto object can be obtained by using include_lib. The classID used for this object is "cryptoLib".
+
+    aircrack(path: string
+    ):
+
+    stringornull
+    copy
+
+    Returns a string containing the password based on the file which was generated via aireplay. In case of failure, it will return null instead. If the provided path is empty, an error will be thrown, interrupting the script execution.
+
+    crypto = include_lib("/lib/crypto.so")
+    networks = get_shell.host_computer.wifi_networks("wlan0")
+    firstNetwork = networks[1].split(" ")
+    bssid = firstNetwork[0]
+    pwr = firstNetwork[1][:-1].to_int
+    essid = firstNetwork[2]
+    aireplayResult = crypto.aireplay(bssid, essid, 300000 / pwr)
+    if (aireplayResult == null) then
+       result = crypto.aircrack(home_dir + "/file.cap")
+       print(result)
+    end if
+
+    aireplay(bssid: string, essid: string, maxAcks: number = -1
+    ):
+
+    stringornull
+    copy
+
+    Used to inject frames on wireless interfaces. Once the command with "Control+C" is stopped, it will save the captured information in a text file called "file.cap" in the path where the terminal is currently located. Alternatively, a maximum of captured acks can be specified for the command to stop automatically, saving the "file.cap" file as described above. To figure out how many ACKs are required, you can use the following formula: "300000 / (Power + 15)". If there is an error, a string will be returned with the message indicating the problem. On success, it will return null, it is advised though to verify that the capture file actually exists. In case any of the provided values deviate from the signature types or bssid/essid is empty, an error will be thrown preventing any further script execution.
+
+    crypto = include_lib("/lib/crypto.so")
+    networks = get_shell.host_computer.wifi_networks("wlan0")
+    for index in range(0, networks.len - 1)
+       print(index + ".) " + networks[index])
+    end for
+    selectedIndex = user_input("Select Wifi: ").to_int
+    if (typeof(selectedIndex) == "string" or selectedIndex < 0 or selectedIndex > networks.len - 1) then
+       exit("Wrong index!")
+    end if
+    parsed = networks[selectedIndex].split(" ")
+    bssid = parsed[0]
+    pwr = parsed[1][:-1].to_int
+    essid = parsed[2]
+    potentialAcks = 300000 / (pwr + 15)
+    crypto.aireplay(bssid, essid, potentialAcks)
+    wifiPassword = crypto.aircrack("/home/" + active_user + "/file.cap")
+    print("Wifi password for " + essid + " is " + wifiPassword)
+
+    airmon(option: string, device: string
+    ):
+
+    numberorstring
+    copy
+
+    Enables or disables the monitor mode of a network device. The options parameter can only be "start" or "stop". Monitor mode can only be enabled on Wifi cards. If it wasn't possible to enable or disable the monitor mode, this method will return either a number with the value zero or a string with details. In case of success, it will return a number with the value one.
+
+    crypto = include_lib("/lib/crypto.so")
+    airmonResult = crypto.airmon("start", "wlan0")
+    if typeof(airmonResult) == "string" then
+       print("There was an error while switching monitoring mode: " + airmonResult)
+    else
+       print("Monitoring mode switched successfully.")
+    end if
+
+    decipher(encPass: string
+    ):
+
+    stringornull
+    copy
+
+    Returns a decrypted password via the provided password MD5 hash. Keep in mind that this method is not decrypting a password but rather checking for existing passwords within the game world with a matching MD5 hash. So in case a password does not exist in the game world, the decryption will fail. On failure, this method will return null. Using this method in an SSH encryption process will cause an error to be thrown, aborting further script execution.
+
+    crypto = include_lib("/lib/crypto.so")
+    hostComputer = get_shell("root", "test").host_computer
+    passwdContent = hostComputer.File("/etc/passwd").get_content
+    firstAccount = passwdContent.split(char(10))[0]
+    parsed = firstAccount.split(":")
+    username = parsed[0]
+    passwordHash = parsed[1]
+    password = crypto.decipher(passwordHash)
+    print("User: " + username)
+    print("Password: " + password)
+
+    decrypt(filePath: string, password: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Decrypts the specified file using the provided key. On success, the method returns a number with the value one. If decryption fails, a descriptive error message is returned as a string. If any arguments deviate from the expected types defined in the method signature, the method returns null.
+
+    crypto = include_lib("/lib/crypto.so")
+    decryptionResult = crypto.decrypt("/etc/passwd", "mySecretKey")
+    if decryptionResult == 1 then
+        print("File got decrypted!")
+    else
+        print("Failed to decrypt file due to: " + decryptionResult)
+    end if
+
+    encrypt(filePath: string, password: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Encrypts the specified file using the provided key. On success, the method returns a number with the value one. If encryption fails, a descriptive error message is returned as a string. If any arguments deviate from the expected types defined in the method signature, the method returns null.
+
+    crypto = include_lib("/lib/crypto.so")
+    encryptionResult = crypto.encrypt("/etc/passwd", "mySecretKey")
+    if encryptionResult == 1 then
+        print("File got encrypted!")
+    else
+        print("Failed to encrypt file due to: " + encryptionResult)
+    end if
+
+    is_encrypted(filePath: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Checks whether the specified file is encrypted. Returns a number with the value one if the file is encrypted, or zero if it is not. If the check fails (e.g., due to a missing or unreadable file), a descriptive error message is returned as a string. If the argument does not match the expected type, the method returns null.
+
+    crypto = include_lib("/lib/crypto.so")
+    isEncrypted = is_encrypted(crypto, "/etc/passwd")
+    if isEncrypted == 1 then
+        print("File is encrypted!")
+    else
+        print("File is not encrypted!")
+    end if
+
+    smtp_user_list(ip: string, port: number
+    ):
+
+    list<string>orstringornull
+    copy
+
+    Returns a list of the existing users on the computer where the SMTP service is running. If these users also have an email account registered on the SMTP server, it will be indicated in the list. SMTP services are usually running on port 25. In case of failure, this method will return a string containing the cause. If any of the provided values deviate from the signature types, this method will return null.
+
+    crypto = include_lib("/lib/crypto.so")
+    print(crypto.smtp_user_list("192.168.0.4", 25))
+
+ctfEvent
+
+A ctfEvent object can be obtained by using get_ctf. The classID used for this object is "ctfEvent".
+
+    get_creator_name():
+
+    string
+    copy
+
+    Returns string with the name of the CTF event creator.
+    get_description():
+
+    string
+    copy
+
+    Returns string with the CTF event description.
+    get_mail_content():
+
+    string
+    copy
+
+    Returns string with the mail content of the CTF event.
+    get_template():
+
+    string
+    copy
+
+    Returns string with the CTF event template.
+    player_success():
+
+    number
+    copy
+
+    Returns number with the value one if the CTF event got completed successfully. Otherwise this method will return a number with the value zero.
+
+debugLibrary
+
+A debugLibrary object can be acquired by using debug_tools. The classID used for this object is "debugLibrary".
+
+    apply_patch(path: string
+    ):
+
+    stringornull
+    copy
+
+    Applies a patch containing corrected code to the specified text file at the provided path. Returns a string with the result of the operation. If the path argument is not a string this method will return null.
+
+    metax = include_lib("/lib/metaxploit.so")
+    metaLib = metax.load("/lib/init.so")
+    debugLib = metaLib.debug_tools("test", "test")
+    print("Path result: " + debugLib.apply_patch("/etc/passwd"))
+
+    payload(memZone: string, pathFile: string = ""
+    ):
+
+    stringorlist<map<any,any>>ornull
+    copy
+
+    Returns a list containing a single partial computer object if zero-day vulnerabilities are detected within the specified memory zone. If a file path is provided, a partial file object associated with this path will also be included in the list. Additionally, if this file is a library, its corresponding metaLib object is added to the returned list. In case of an error, a string with details is returned. Providing arguments that deviate from the defined signature will result in null.
+
+    metax = include_lib("/lib/metaxploit.so")
+    metaLib = metax.load("/lib/init.so")
+    debugLib = metaLib.debug_tools("test", "test")
+    result = debugLib.payload("0x7A69F4C3")
+    if typeof(result) == "list" and result.len > 0 then
+       print("Successfully executed payload!")
+    end if
+
+    scan():
+
+    string
+    copy
+
+    Scans the library in debug mode to identify potential code errors that may lead to vulnerabilities. If issues are detected, the relevant code snippets are printed. In case of an error, a string containing the error message is returned.
+
+    metax = include_lib("/lib/metaxploit.so")
+    metaLib = metax.load("/lib/init.so")
+    debugLib = metaLib.debug_tools("test", "test")
+    print("Debug Library result: " + debugLib.scan)
+
+    unit_testing(errorLines: list<number>
+    ):
+
+    stringornull
+    copy
+
+    Conducts automated tests on the specified lines of code. If potential vulnerabilities are detected due to errors in these lines, this method will print partial objects that could be obtained by exploiting the vulnerability, along with the affected memory zone and detailed vulnerability information. In case of failure, this function returns a string with an error message. If the error lines argument is not a list, the method will return null.
+
+    metax = include_lib("/lib/metaxploit.so")
+    metaLib = metax.load("/lib/init.so")
+    debugLib = metaLib.debug_tools("test", "test")
+    print("Unit test results: " + debugLib.unit_testing([1, 2, 3]))
+
+file
+
+A file object can be acquired by either using File or overflow. The classID used for this object is "file".
+
+    allow_import():
+
+    number
+    copy
+
+    Returns a number. If the file is binary and can be imported by other scripts, the value will be one; otherwise, the value will be zero. In case the file gets deleted, this method will cause a crash.
+
+    hostComputer = get_shell.host_computer
+    lsBinary = hostComputer.File("/bin/ls")
+    print("File can be imported: " + lsBinary.allow_import)
+
+    chmod(perms: string = "", isRecursive: number = 0
+    ):
+
+    string
+    copy
+
+    Modifies the file permissions. Optionally, these permissions can also be applied recursively. The format for applying permissions is as follows: "[references][operator][modes]". The references type is defined through three possible types: user "u", group "g", and other "o". The operator is used to define if permissions get added "+" or removed "-". There are three different modes that can be modified: read "r", write "w", and execute "x". So, for example, "o-wrx" would remove all possible permissions for others. To add all permissions for others again, "o+wrx" would be used. In case the modification fails, this method will return a string containing information about the reason. Otherwise, an empty string is returned. In case any type other than number is used for the isRecursive parameter, an error will be thrown preventing further script execution.
+
+    hostComputer = get_shell("root", "test").host_computer
+    rootFolder = hostComputer.File("/bin")
+    oldPermissions = rootFolder.permissions
+    rootFolder.chmod("o-wrx", true)
+    newPermissions = rootFolder.permissions
+    print("Old permissions: " + oldPermissions)
+    print("New permissions: " + newPermissions)
+
+    copy(path: string = "", name: string = ""
+    ):
+
+    stringornumberornull
+    copy
+
+    Copies the file to the provided path. Files can only be copied if the user has read and write permissions or is root. The new filename has to be below 128 characters and alphanumeric. After success, this method will return a number with the value one. Otherwise, it will return a string containing information about the reason for failure. If any of the parameter types deviate from the method signature, this method is used within an SSH encryption process, the new name exceeds 128 characters, or the path is too long, an error will be thrown, causing an interruption of script execution. In case the current file gets deleted, this method will return null.
+
+    hostComputer = get_shell("root", "test").host_computer
+    passwdFile = hostComputer.File("/etc/passwd")
+    copyResult = passwdFile.copy("/etc/", "duplicate")
+    if typeof(copyResult) == "string" then
+       print("There was an error while copying file: " + copyResult)
+    else
+       print("File got copied successfully.")
+    end if
+
+    delete():
+
+    string
+    copy
+
+    Delete the current file. To delete files, write permissions are required or being root. In case of failure, a string with details will be returned. Otherwise, an empty string gets returned. Please note that deleting a file will leave a log entry.
+
+    hostComputer = get_shell.host_computer
+    lsBinary = hostComputer.File("/bin/ls")
+    deletionResult = lsBinary.delete
+    if typeof(deletionResult) == "string" and deletionResult.len > 0 then
+       print("There was an error while deleting a file: " + deletionResult)
+    else
+       print("File got deleted successfully.")
+    end if
+
+    get_content():
+
+    stringornull
+    copy
+
+    Returns a string representing the content of the file. To read a file, the user requires read access or being root. Note that you cannot read a binary file. In case of failure, null will be returned. If this method is used within an SSH encryption process, an error will be thrown, preventing any further script execution.
+
+    hostComputer = get_shell("root", "test").host_computer
+    passwdFile = hostComputer.File("/etc/passwd")
+    print("File content: " + passwdFile.get_content)
+
+    get_files():
+
+    list<file>ornull
+    copy
+
+    Returns a list of files. In case the current entity is a file instead of a folder this method will return null, so it is advisable to first use the is_folder function before calling this method. In case the current folder gets deleted this method will return null as well.
+
+    hostComputer = get_shell.host_computer
+    binFolder = hostComputer.File("/bin")
+    files = binFolder.get_files
+    for file in files
+       print(file.path)
+    end for
+
+    get_folders():
+
+    list<file>ornull
+    copy
+
+    Returns a list of folders. In case the current entity is a file instead of a folder this method will return null, so it is advisable to first use the is_folder function before calling this method. In case the current folder gets deleted this method will return null as well.
+
+    hostComputer = get_shell.host_computer
+    binFolder = hostComputer.File("/home")
+    folders = binFolder.get_folders
+    for folder in folders
+       print(folder.path)
+    end for
+
+    group():
+
+    stringornull
+    copy
+
+    Returns a string with the name of the group to which this file belongs. Group permissions get applied to whoever is the owner of a file. In case the current file gets deleted, this method will return null.
+
+    hostComputer = get_shell.host_computer
+    lsBinary = hostComputer.File("/bin/ls")
+    print("File is related to following group: " + lsBinary.group)
+
+    has_permission(perms: string = ""
+    ):
+
+    numberornull
+    copy
+
+    Returns a number indicating if the user who launched the script has the requested permissions. One will indicate that the user has the correct permissions. In case permissions are lacking, the value will be zero. There are three different permission types: read "r", write "w", and execute "x". In case the file gets deleted, this method will return null instead.
+
+    hostComputer = get_shell.host_computer
+    lsBinary = hostComputer.File("/bin/ls")
+    print("Is able to execute ls: " + lsBinary.has_permission("x"))
+
+    is_binary():
+
+    numberornull
+    copy
+
+    Returns a number. If the file is a binary, the value will be one; otherwise, it will be zero. In case the file gets deleted, this method will return null instead.
+
+    hostComputer = get_shell.host_computer
+    lsBinary = hostComputer.File("/bin/ls")
+    print("File is a binary: " + lsBinary.is_binary)
+
+    is_folder():
+
+    numberornull
+    copy
+
+    Returns a number. The value is one if the file is a folder, zero otherwise. In case the file gets deleted this method will return null instead.
+
+    hostComputer = get_shell.host_computer
+    etcFolder = hostComputer.File("/etc")
+    print("Is a folder: " + etcFolder.is_folder)
+
+    is_symlink():
+
+    numberornull
+    copy
+
+    Returns a number. If the file is a symlink, the value will be one; otherwise, it will be zero. In case the file gets deleted, this method will return null instead.
+
+    hostComputer = get_shell.host_computer
+    lsBinary = hostComputer.File("/bin/ls")
+    print("File is a symlink: " + lsBinary.is_symlink)
+
+    move(path: string = "", fileName: string = ""
+    ):
+
+    stringornumberornull
+    copy
+
+    Moves the file to the provided path. Files can only be moved if the user has read and write permissions or is root. The new filename has to be below 128 characters and alphanumeric. After success, this method will return a number with the value one. Otherwise, this method will return a string with details. If any of the parameter types deviate from the method signature, this method is used within an SSH encryption process, the new name exceeds 128 characters, or the path is too long, an error will be thrown, causing an interruption of script execution. In case the current file gets deleted, this method will return null.
+
+    hostComputer = get_shell("root", "test").host_computer
+    passwdFile = hostComputer.File("/etc/passwd")
+    moveResult = passwdFile.move("/root/", "newFileName")
+    if typeof(moveResult) == "string" then
+       print("There was an error while moving file: " + moveResult)
+    else
+       print("File got moved successfully.")
+    end if
+
+    name():
+
+    stringornull
+    copy
+
+    Returns a string with the name of the file. In case the file gets deleted this method will return null instead.
+
+    hostComputer = get_shell.host_computer
+    passwdFile = hostComputer.File("/etc/passwd")
+    print("Filename: " + passwdFile.name)
+
+    owner():
+
+    stringornull
+    copy
+
+    Returns a string with the name of the file owner. User permissions get applied to whoever is the owner of a file. In case the current file gets deleted, this method will return null.
+
+    hostComputer = get_shell.host_computer
+    lsBinary = hostComputer.File("/bin/ls")
+    print("Owner of ls is: " + lsBinary.owner)
+
+    parent():
+
+    fileornull
+    copy
+
+    Returns the parent folder of the current file or folder. In case there is no parent folder null will be returned instead. In case the file gets deleted this method will return null as well.
+
+    hostComputer = get_shell.host_computer
+    etcFolder = hostComputer.File("/etc")
+    print("Parent path: " + etcFolder.parent.path)
+
+    path(symlinkOrigPath: number = 0
+    ):
+
+    string
+    copy
+
+    Returns a string containing the file path. If the file is a symlink, the optional symlinkOrigPath argument can be set to return the original path of the linked file instead. If the file has been deleted, this method will still return the path it had prior to deletion.
+
+    hostComputer = get_shell.host_computer
+    passwdFile = hostComputer.File("/etc/passwd")
+    print("File location: " + passwdFile.path)
+
+    permissions():
+
+    stringornull
+    copy
+
+    Returns a string with the current file permissions. In case the current file gets deleted, this method will return null. The format for this permissions string is as follows: "[fileType][wrx](u)[wrx](g)[wrx](o)". The file type is either "d" in case it's a directory or "-". The user type gets defined through three possible types: user "u", group "g", and other "o". There are three different permission types: read "r", write "w", and execute "x". An example of a string returned by this method would be "-rwxr-xr-x". Taking the latter as an example, the following things become clear:
+        The provided file is not a directory.
+        The user has full access.
+        The group and others have almost all permissions besides writing.
+
+    hostComputer = get_shell.host_computer
+    binFolder = hostComputer.File("/bin")
+    permissions = binFolder.permissions
+    fileType = permissions[0]
+    permissionsForUser = permissions[1:4]
+    permissionsForGroup = permissions[4:7]
+    permissionsForOther = permissions[7:10]
+    print("File type: " + fileType)
+    print("User permissions: " + permissionsForUser)
+    print("Group permissions: " + permissionsForGroup)
+    print("Other permissions: " + permissionsForOther)
+
+    rename(name: string = ""
+    ):
+
+    stringornumber
+    copy
+
+    Rename the file with the name provided. Files can only be renamed if the user has write permissions or is root. The new filename has to be below 128 characters and alphanumeric. On failure, this method will return a string with details. Otherwise, this method will return an empty string. If this method is used within an SSH encryption process, an error will be thrown, causing the script execution to be interrupted. In case the provided name is null, this method will return a number with the value zero.
+
+    hostComputer = get_shell("root", "test").host_computer
+    passwdFile = hostComputer.File("/etc/passwd")
+    renameResult = passwdFile.rename("renamed")
+    if typeof(renameResult) == "string" then
+       print("There was an error while renaming file: " + renameResult)
+    else
+       print("File got renamed successfully.")
+    end if
+
+    set_content(content: string = ""
+    ):
+
+    stringornumberornull
+    copy
+
+    Saves text into a file. The content will not get appended to the file; therefore, existing content will be overridden. To set new content, the user requires write permissions or being root. Keep in mind that text files cannot exceed the character limit of 160,000. In case setting the content was successful, a number with the value one will be returned. Otherwise, a string with details will be returned. If this method is used within an SSH encryption process, an error will be thrown, preventing any further script execution. If the provided content is null or permissions are lacking, this method will return a number with the value zero. In case the file gets deleted this method will return null.
+
+    hostComputer = get_shell("root", "test").host_computer
+    passwdFile = hostComputer.File("/etc/passwd")
+    setResult = passwdFile.set_content("moo")
+    if typeof(setResult) == "string" then
+       print("There was an error while setting file content: " + setResult)
+    else if setResult == 0 then
+       print("Unable to set content of file!")
+    else
+       print("File content got changed successfully.")
+    end if
+
+    set_group(group: string = "", recursive: number = 0
+    ):
+
+    stringornull
+    copy
+
+    Change the group related to this file. Optionally the group can get applied recursively. The group name cannot exceed 15 characters. Additionally either write permissions or being root is required. In case of failure, a string with details. On success, an empty string gets returned. In case the current file gets deleted or the passed group is not a string, this method will return null. If the passed group value is empty, the group value is longer than 15 characters, or the passed recursive value deviates from its original type, an error will be thrown, preventing further script execution.
+
+    hostComputer = get_shell.host_computer
+    lsBinary = hostComputer.File("/bin/ls")
+    ownerResult = lsBinary.set_group("root")
+    if typeof(ownerResult) == "string" then
+       print("There was an error while changing group: " + ownerResult)
+    else
+       print("File group changed successfully.")
+    end if
+
+    set_owner(owner: string = "", recursive: number = 0
+    ):
+
+    stringornull
+    copy
+
+    Change the owner of this file. Optionally the owner can get applied recursively. The owner's name cannot exceed 15 characters. Additionally either write permissions or being root is required. In case of failure a string gets returned containing the cause. Otherwise an empty string gets returned. In case the current file gets deleted or the passed owner value is not a string, this method will return null. If the passed owner value is empty, the owner value is longer than 15 characters, or the passed recursive value deviates from its original type, an error will be thrown, interrupting further script execution.
+
+    hostComputer = get_shell.host_computer
+    lsBinary = hostComputer.File("/bin/ls")
+    ownerResult = lsBinary.set_owner("root")
+    if typeof(ownerResult) == "string" then
+       print("There was an error while changing owner: " + ownerResult)
+    else
+       print("File owner changed successfully.")
+    end if
+
+    size():
+
+    stringornull
+    copy
+
+    Returns a string with the size of the file in bytes. There is no correlation between file size and actual file content. Instead, the file size is depending on the name of the file. In case the current file gets deleted, this method will return null.
+    // XFIX1.0: On Grey Hack 1.0, built script binaries size ≈ 0.65 * source length (name trick / Io.bestSize obsolete).
+
+    hostComputer = get_shell.host_computer
+    lsBinary = hostComputer.File("/bin/ls")
+    size = lsBinary.size
+    if size.to_int > 1000 then
+       print("File size is bigger than 1000 bytes.")
+    else
+       print("File size is below 1000 bytes.")
+    end if
+
+    symlink(path: string = "", newName: string = ""
+    ):
+
+    stringornumberornull
+    copy
+
+    Creates a symlink to the specified path. Symlinks can only be created if the user has write permissions or is root. The new filename must be alphanumeric and under 128 characters. Upon success, this method returns a number with the value one. On failure, it returns a string with details. If any parameters deviate from the method signature, if used within an SSH encryption process, if the new name exceeds 128 characters, or if the path is too long, an error will be thrown, interrupting script execution. If the current file is deleted, this method will return null.
+
+    hostComputer = get_shell("root", "test").host_computer
+    lsFile = hostComputer.File("/bin/ls")
+    symResult = lsFile.symlink("/bin", "alternativeLS")
+    if typeof(symResult) == "string" then
+       print("There was an error while creating symlink: " + symResult)
+    else
+       print("Symlink got created successfully.")
+    end if
+
+ftpComputer
+
+A ftpComputer object can be obtained by using host_computer. The classID used for this object is "ftpComputer".
+
+    File(path: string
+    ):
+
+    ftpFileornull
+    copy
+
+    Returns a ftpFile located at the path provided in the arguments. The path can be either relative or absolute. It's important to note that any ftpFile object can represent a folder as well. If the provided path cannot be resolved, meaning that no file or folder exists, this method will return null. Providing any other type than string or an empty value for the path will result in an error, interrupting the script execution.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    file = ftpComputer.File("/etc/passwd")
+    if file.has_permission("r") then
+       ftpShell.scp("/etc/passwd", "/home/test/Desktop", shell)
+    else
+       print("No permissions to read passwd file.")
+    end if
+
+    create_folder(path: string, folder: string = "newFolder"
+    ):
+
+    stringornumber
+    copy
+
+    Creates a folder at the path provided in the arguments. There are certain limitations to creating a folder: the folder name has to be alphanumeric and below 128 characters. Creation will fail if there is already a folder in place or if there are lacking permissions. Additionally, there is a folder limit of about 250 in each folder and 3125 folders in the computer overall. In case the folder creation fails, the method will return a string with details. In case of success, it will return a number with the value one. Providing any type that deviates from the signature or using this method in an SSH encryption process will cause an error to be thrown, aborting further script execution.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    createResult = ftpComputer.create_folder(path, "myfolder")
+    if typeof(createResult) == "string" then
+       print("There was an error when creating the folder: " + createResult)
+    else
+       print("Folder got created at given path " + path)
+    end if
+
+    get_name():
+
+    string
+    copy
+
+    Returns the hostname of the machine.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    ftpComputerName = ftpComputer.get_name
+    print("The name of the ftp server is " + ftpComputerName)
+
+ftpFile
+
+A ftpFile object can be acquired by using File. The classID used for this object is "ftpFile".
+
+    copy(path: string = "", name: string = ""
+    ):
+
+    stringornumberornull
+    copy
+
+    Copies the file to the provided path. Files can only be copied if the user has read and write permissions or is root. The new filename has to be below 128 characters and alphanumeric. After success, this method will return a number with the value one. Otherwise, it will return a string containing information about the reason for failure. If any of the parameter types deviate from the method signature, this method is used within an SSH encryption process, the new name exceeds 128 characters, or the path is too long, an error will be thrown, causing an interruption of script execution. In case the current file gets deleted, this method will return null.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    passwdFile = ftpComputer.File("/etc/passwd")
+    copyResult = passwdFile.copy("/etc/", "duplicate")
+    if typeof(copyResult) == "string" then
+       print("There was an error while copying file: " + copyResult)
+    else
+       print("File got copied successfully.")
+    end if
+
+    delete():
+
+    string
+    copy
+
+    Delete the current file. To delete files, write permissions are required or being root. In case of failure, a string with details will be returned. Otherwise, an empty string gets returned. Please note that deleting a file will leave a log entry.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    lsBinary = ftpComputer.File("/bin/ls")
+    deletionResult = lsBinary.delete
+    if typeof(deletionResult) == "string" and deletionResult.len > 0 then
+       print("There was an error while deleting a file: " + deletionResult)
+    else
+       print("File got deleted successfully.")
+    end if
+
+    get_files():
+
+    list<ftpFile>ornull
+    copy
+
+    Returns a list of files. In case the current entity is a file instead of a folder this method will return null, so it is advisable to first use the is_folder function before calling this method. In case the current folder gets deleted this method will return null as well.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    binFolder = ftpComputer.File("/bin")
+    files = binFolder.get_files
+    for file in files
+       print(file.path)
+    end for
+
+    get_folders():
+
+    list<ftpFile>ornull
+    copy
+
+    Returns a list of folders. In case the current entity is a file instead of a folder this method will return null, so it is advisable to first use the is_folder function before calling this method. In case the current folder gets deleted this method will return null as well.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    binFolder = ftpComputer.File("/home")
+    folders = binFolder.get_folders
+    for folder in folders
+       print(folder.path)
+    end for
+
+    group():
+
+    stringornull
+    copy
+
+    Returns a string with the name of the group to which this file belongs. Group permissions get applied to whoever is the owner of a file. In case the current file gets deleted, this method will return null.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    lsBinary = ftpComputer.File("/bin/ls")
+    print("File is related to following group: " + lsBinary.group)
+
+    has_permission(perms: string = ""
+    ):
+
+    numberornull
+    copy
+
+    Returns a number indicating if the user who launched the script has the requested permissions. One will indicate that the user has the correct permissions. In case permissions are lacking, the value will be zero. There are three different permission types: read "r", write "w", and execute "x". In case the file gets deleted, this method will return null instead.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    lsBinary = ftpComputer.File("/bin/ls")
+    print("Is able to execute ls: " + lsBinary.has_permission("x"))
+
+    is_binary():
+
+    numberornull
+    copy
+
+    Returns a number. If the file is a binary, the value will be one; otherwise, it will be zero. In case the file gets deleted, this method will return null instead.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    lsBinary = ftpComputer.File("/bin/ls")
+    print("File is a binary: " + lsBinary.is_binary)
+
+    is_folder():
+
+    numberornull
+    copy
+
+    Returns a number. The value is one if the file is a folder, zero otherwise. In case the file gets deleted this method will return null instead.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    etcFolder = ftpComputer.File("/etc")
+    print("Is a folder: " + etcFolder.is_folder)
+
+    is_symlink():
+
+    numberornull
+    copy
+
+    Returns a number. If the file is a symlink, the value will be one; otherwise, it will be zero. In case the file gets deleted, this method will return null instead.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    lsBinary = ftpComputer.File("/bin/ls")
+    print("File is a symlink: " + lsBinary.is_symlink)
+
+    move(path: string = "", fileName: string = ""
+    ):
+
+    stringornumberornull
+    copy
+
+    Moves the file to the provided path. Files can only be moved if the user has read and write permissions or is root. The new filename has to be below 128 characters and alphanumeric. After success, this method will return a number with the value one. Otherwise, this method will return a string with details. If any of the parameter types deviate from the method signature, this method is used within an SSH encryption process, the new name exceeds 128 characters, or the path is too long, an error will be thrown, causing an interruption of script execution. In case the current file gets deleted, this method will return null.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    passwdFile = ftpComputer.File("/etc/passwd")
+    moveResult = passwdFile.move("/root/", "newFileName")
+    if typeof(moveResult) == "string" then
+       print("There was an error while moving file: " + moveResult)
+    else
+       print("File got moved successfully.")
+    end if
+
+    name():
+
+    stringornull
+    copy
+
+    Returns a string with the name of the file. In case the file gets deleted this method will return null instead.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    passwdFile = ftpComputer.File("/etc/passwd")
+    print("Filename: " + passwdFile.name)
+
+    owner():
+
+    stringornull
+    copy
+
+    Returns a string with the name of the file owner. User permissions get applied to whoever is the owner of a file. In case the current file gets deleted, this method will return null.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    lsBinary = ftpComputer.File("/bin/ls")
+    print("Owner of ls is: " + lsBinary.owner)
+
+    parent():
+
+    ftpFileornull
+    copy
+
+    Returns the parent folder of the current file or folder. In case there is no parent folder null will be returned instead. In case the file gets deleted this method will return null as well.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    etcFolder = ftpComputer.File("/etc")
+    print("Parent path: " + etcFolder.parent.path)
+
+    path(symlinkOrigPath: number = 0
+    ):
+
+    string
+    copy
+
+    Returns a string containing the file path. If the file is a symlink, the optional symlinkOrigPath argument can be set to return the original path of the linked file instead. If the file has been deleted, this method will still return the path it had prior to deletion.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    passwdFile = ftpComputer.File("/etc/passwd")
+    print("File location: " + passwdFile.path)
+
+    permissions():
+
+    stringornull
+    copy
+
+    Returns a string with the current file permissions. In case the current file gets deleted, this method will return null. The format for this permissions string is as follows: "[fileType][wrx](u)[wrx](g)[wrx](o)". The file type is either "d" in case it's a directory or "-". The user type gets defined through three possible types: user "u", group "g", and other "o". There are three different permission types: read "r", write "w", and execute "x". An example of a string returned by this method would be "-rwxr-xr-x". Taking the latter as an example, the following things become clear:
+        The provided file is not a directory.
+        The user has full access.
+        The group and others have almost all permissions besides writing.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    binFolder = ftpComputer.File("/bin")
+    permissions = binFolder.permissions
+    fileType = permissions[0]
+    permissionsForUser = permissions[1:4]
+    permissionsForGroup = permissions[4:7]
+    permissionsForOther = permissions[7:10]
+    print("File type: " + fileType)
+    print("User permissions: " + permissionsForUser)
+    print("Group permissions: " + permissionsForGroup)
+    print("Other permissions: " + permissionsForOther)
+
+    rename(name: string = ""
+    ):
+
+    stringornumber
+    copy
+
+    Rename the file with the name provided. Files can only be renamed if the user has write permissions or is root. The new filename has to be below 128 characters and alphanumeric. On failure, this method will return a string with details. Otherwise, this method will return an empty string. If this method is used within an SSH encryption process, an error will be thrown, causing the script execution to be interrupted. In case the provided name is null, this method will return a number with the value zero.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    passwdFile = ftpComputer.File("/etc/passwd")
+    renameResult = passwdFile.rename("renamed")
+    if typeof(renameResult) == "string" then
+       print("There was an error while renaming file: " + renameResult)
+    else
+       print("File got renamed successfully.")
+    end if
+
+    size():
+
+    stringornull
+    copy
+
+    Returns a string with the size of the file in bytes. There is no correlation between file size and actual file content. Instead, the file size is depending on the name of the file. In case the current file gets deleted, this method will return null.
+    // XFIX1.0: On Grey Hack 1.0, built script binaries size ≈ 0.65 * source length (name trick / Io.bestSize obsolete).
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    lsBinary = ftpComputer.File("/bin/ls")
+    size = lsBinary.size
+    if size.to_int > 1000 then
+       print("File size is bigger than 1000 bytes.")
+    else
+       print("File size is below 1000 bytes.")
+    end if
+
+ftpShell
+
+The FTP ftpShell behaves just like the ssh shell and can be acquired by using connect_service and using the service type "ftp". The classID used for this object is "ftpshell". The port used for FTP is usually 21.
+
+    host_computer():
+
+    ftpComputer
+    copy
+
+    Returns a computer related to the shell.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    ftpComputer = ftpShell.host_computer
+    print("FTP public ip: " + ftpComputer.public_ip)
+
+    scp(sourceFile: string, destinationFolder: string, remoteShell: shell, isUpload: number = 0
+    ):
+
+    numberorstringornull
+    copy
+
+    Send a file to the computer related to the provided shell. You require permission to read the file on the computer from which you are uploading and write permissions in the folder of the computer you are trying to upload to. Via the optional isUpload parameter you can define the direction. In case of failure, this method will return a string with the cause. Otherwise, a number with the value one gets returned. If any of the passed arguments deviates from the types of the method signature, null will be returned. In case the string for sourceFile or destinationFolder is empty, an error will be thrown, preventing further script execution. Utilizing this method in an SSH encryption process will trigger an error, halting further script execution.
+
+    shell = get_shell
+    ftpShell = shell.connect_service("172.8.0.5", 21, "test", "test", "ftp")
+    putResult = ftpShell.scp("/bin/ls", "/etc/", shell)
+    if typeof(putResult) == "string" then
+       print("There was an error while sending file: " + putResult)
+    else
+       print("File got sent successfully.")
+    end if
+
+function
+
+Create a function with "function()", including parameters with optional default values. Assign the result to a variable. Invoke by using that variable. Use @ to reference a function without invoking.
+
+triple = function(n=1)
+   return n * 3
+end function
+print triple // 3
+print triple(5) // 15
+f = @triple
+print f(5)
+
+general
+
+Use if blocks to do different things depending on some condition. Include zero or more else if blocks and one optional else block. Use a while block to loop as long as a condition is true. A for loop can loop over any list, including ones easily created with the range function. The break statement jumps out of a while or for loop. The continue statement jumps to the top of the loop, skipping the rest of the current iteration.
+
+// if block
+if 2+2 == 4 then
+   print "math works!"
+else if pi > 3 then
+   print "pi is tasty"
+else if "a" < "b" then
+   print "I can sort"
+else
+   print "last chance"
+end if
+
+// while loop
+s = "Spam"
+while s.len < 50
+   s = s + ", spam"
+end while
+print s + " and spam!"
+
+// for loop
+for i in range(10, 1)
+   print i + "..."
+end for
+print "Liftoff!"
+
+list
+
+Create a list with square brackets. Then iterate over the list with for, or pull out individual items with a 0-based index in square brackets. A negative index counts from the end. Get a slice (subset) of a list with two indices, separated by a colon.
+
+x = [2, 4, 6, 8]
+print(x[0]) // get first item from list
+print(x[-1]) // get last item from list
+print(x[1:3]) // slice items from index 1 to 3
+x[2] = 5 // set item at index 2 to 5
+print(x)
+print(x + [42]) // concatenate two lists
+
+    hasIndex(index: number
+    ):
+
+    number
+    copy
+
+    Returns a number. If the provided index is available in the list, the value will be one. Otherwise, the value will be zero.
+
+    myList = [42, 1, 3]
+    containsIndex = myList.hasIndex(1)
+    if containsIndex then
+       print("List contains index of 1.")
+    else
+       print("List does not contain index of 1.")
+    end if
+
+    indexOf(value: any, offset?: number
+    ):
+
+    numberornull
+    copy
+
+    Returns a number which indicates the first matching index of the provided value inside the list. Optionally a start index can be provided. In case the value does not exist inside the list a null gets returned.
+
+    myList = [42, 1, 3]
+    index = myList.indexOf(42)
+    if index != null then
+       print("The answer for everything is at the following index: " + index)
+    else
+       print("No answer for everything found.")
+    end if
+
+    indexes():
+
+    list<number>
+    copy
+
+    Returns a list containing all available indexes.
+
+    myList = [42, 1, 3]
+    for i in myList.indexes
+       print(myList[i])
+    end for
+
+    insert(index: number, value: any
+    ):
+
+    list<any>
+    copy
+
+    Inserts a value into the list at the index provided. Due to the insertion the list will get mutated. Returns the mutated list. If the passed index is not a number, this method throws an error, preventing further script execution.
+
+    myList = [1, 3]
+    myList.insert(1, 42)
+    print("This list does contain the answer to everything: " + myList.join(", "))
+
+    join(delimiter: string
+    ):
+
+    string
+    copy
+
+    Returns a concatenated string containing all stringified values inside the list. These values will be separated via the provided separator. In case the list exceeds 16777215L items or the delimiter exceeds 128 characters, this method will throw an error, interrupting further script execution.
+
+    myList = [42, 1, 3]
+    print(myList.join(" .-*'*-. "))
+
+    len():
+
+    number
+    copy
+
+    Returns a number representing the count of values inside the list.
+
+    myList = [42, 1, 3]
+    print("myList contains " + myList.len + " items")
+
+    pop():
+
+    any
+    copy
+
+    Returns and removes the last item in the list. This operation will mutate the list. If the map is empty, this method will return null.
+
+    myList = [1, 3, 42]
+    answer = myList.pop
+    print("Answer to everything: " + answer)
+
+    pull():
+
+    any
+    copy
+
+    Returns and removes the first item in the list. This operation will mutate the list. If the map is empty, this method will return null.
+
+    myList = [42, 1, 3]
+    answer = myList.pull
+    print("Answer to everything: " + answer)
+
+    push(value: any
+    ):
+
+    list<any>
+    copy
+
+    Appends a value to the end of the list. This operation will mutate the list. Additionally, this method will return the updated list. However, it throws an error if you attempt to push a value into itself or into a map-like object such as a file, halting further script execution.
+
+    myList = [1, 3]
+    myList.push(42)
+    print("This list does contain the answer to everything: " + myList.join(", "))
+
+    remove(index: number
+    ):
+
+    null
+    copy
+
+    Removes an item from the list with the provided index. Due to the removal the list will get mutated. If the passed index is null this method will throw an error preventing further script execution.
+
+    myList = [1, 42, 3]
+    myList.remove(1)
+    print("This list does not contain the answer to everything: " + myList.join(", "))
+
+    replace(oldVal: any, newVal: any, maxCount?: number
+    ):
+
+    list<any>
+    copy
+
+    Returns updated list where each value matching with the provided replace argument gets replaced. This operation will mutate the list.
+
+    myList = [1, 2, 2, 7]
+    myList.replace(2, 3)
+    print(myList.join(""))
+
+    reverse():
+
+    null
+    copy
+
+    Reverses the order of all values in the list. This operation will mutate the list.
+
+    myList = [42, 1, 3]
+    myList.reverse
+    print("Reversed list: " + myList.join(", "))
+
+    shuffle():
+
+    null
+    copy
+
+    Shuffles all values in the list. This operation will mutate the list.
+
+    myList = [42, 1, 3]
+    myList.shuffle
+    print("New list order: " + myList.join(", "))
+
+    sort(key: any, ascending: number = 1
+    ):
+
+    list<any>
+    copy
+
+    Sorts the values of a list alphanumerically. This operation mutates the original list. Optionally, a key can be provided, which is used if the items are maps or lists. Finally, this method returns the updated list.
+
+    myList = [{ "key": 42 }, { "key": 2 }, { "key": 1 }]
+    myList.sort("key")
+    print(myList)
+
+    sum():
+
+    number
+    copy
+
+    Returns sum of all values inside the list. Any non-numeric values will be considered a zero.
+
+    myList = [42, 1, 3]
+    sum = myList.sum
+    print("Sum of all items in list: " + sum)
+
+    values():
+
+    list<any>
+    copy
+
+    Returns a list containing all available values. Note that this will not create a copy of the original list. The returned instance will the same as original list, so any mutations made to the returned list will also affect the original one.
+
+    myList = [42, 1, 3]
+    for v in myList.values
+       print(v)
+    end for
+
+map
+
+A map is a set of values associated with unique keys. Create a map with curly braces; get or set a single value with square brackets. Keys and values may be any type.
+
+x = { "test": 123 }
+x.foo = 42 // set property foo to 42
+print(x.foo) // get value of property foo
+print(x + { "bar": 2 }) // concatenate two maps
+
+    hasIndex(key: any
+    ):
+
+    number
+    copy
+
+    Returns a number. If the provided key is available in the map, the value will be one. Otherwise, the value will be zero.
+
+    myMap = { "answer": 42, "bar": 23, "foo": "moo" }
+    containsIndex = myList.hasIndex("answer")
+    if containsIndex then
+       print("Map contains the answer.")
+    else
+       print("Map does not contain the answer.")
+    end if
+
+    indexOf(value: any
+    ):
+
+    any
+    copy
+
+    Returns a value which can be of any type since map keys can be of any type. In case the value does not exist inside the map, null is returned.
+
+    myMap = { "answer": 42, "bar": 23, "foo": "moo" }
+    key = myList.indexOf(42)
+    if key != null then
+       print("Map contains the answer.")
+    else
+       print("Map does not contain the answer.")
+    end if
+
+    indexes():
+
+    list<any>
+    copy
+
+    Returns a list containing all available keys. Keys can be of any type.
+
+    myMap = { "answer": 42, "bar": 23, "foo": "moo" }
+    for key in myMap.indexes
+       print(myMap[key])
+    end for
+
+    len():
+
+    number
+    copy
+
+    Returns a number representing the count of items inside the map.
+
+    myMap = { "answer": 42, "bar": 23, "foo": "moo" }
+    print("myMap contains " + myMap.len + " items")
+
+    pop():
+
+    any
+    copy
+
+    Returns and removes the first item in the map. This operation will mutate the map. Passing a map-like object such as file or computer will result in an error, interrupting further script execution. If the map is empty, this method will return null.
+
+    myMap = { "answer": 42, "bar": 23, "foo": "moo" }
+    print(myMap.pop)
+
+    pull():
+
+    any
+    copy
+
+    Returns and removes the first item in the map. This operation will mutate the map. Passing a map-like object such as file or computer will result in an error, interrupting further script execution. If the map is empty, this method will return null.
+
+    myMap = { "answer": 42, "bar": 23, "foo": "moo" }
+    print(myMap.pull)
+
+    push(key: any
+    ):
+
+    map<any,any>
+    copy
+
+    Adds the value 1 to the provided key. This operation will mutate the map. The updated map will be returned. However, it throws an error if you attempt to push a value into itself or into a map-like object such as a file, halting further script execution. If the passed key is null an error will be thrown as well.
+
+    myMap = { "answer": 42, "bar": 23, "foo": "moo" }
+    myMap.push("answer")
+    print(myMap.answer)
+
+    remove(key: string
+    ):
+
+    number
+    copy
+
+    Removes an item from the map with the provided key. Due to the removal, the map will get mutated. If the value is removed successfully, this method will return a number with the value one. If the removal fails, the value will be zero. Passing any map-like object, such as a file or computer, will cause an error to be thrown, stopping further script execution.
+
+    myMap = { "answer": 42, "bar": 23, "foo": "moo" }
+    myMap.remove("answer")
+    print(myMap)
+
+    replace(oldVal: any, newVal: any, maxCount?: number
+    ):
+
+    map<any,any>
+    copy
+
+    Returns updated map where each value matching with the provided replace argument gets replaced. This operation will mutate the map. In case this method gets used on a map-like object such as file this method will throw a runtime error.
+
+    myObject = { "answer": 45 }
+    myObject.replace(45, 42)
+    print(myObject.answer)
+
+    shuffle():
+
+    null
+    copy
+
+    Shuffles all values in the map. This operation will mutate the map.
+
+    myMap = { "answer": 42, "bar": 23, "foo": "moo" }
+    myMap.shuffle
+    print(myMap)
+
+    sum():
+
+    number
+    copy
+
+    Returns sum of all values inside the map. Any non-numeric values will be considered a zero.
+
+    myMap = { "answer": 42, "bar": 23, "foo": "moo" }
+    sum = myMap.sum
+    print("Sum of all items in map: " + sum)
+
+    values():
+
+    list<any>
+    copy
+
+    Returns a list containing all available values within map.
+
+    myMap = { "answer": 42, "bar": 23, "foo": "moo" }
+    for value in myMap.values
+       print(value)
+    end for
+
+metaLib
+
+A metaLib object can be obtained by either using load or dump_lib. The classID used for this object is "MetaLib".
+
+    debug_tools(user: string, password: string
+    ):
+
+    stringordebugLibraryornull
+    copy
+
+    Returns a library in debug mode as a debugLibrary object. A valid Neurobox engineer's username and password are required to access this mode. If successful, the debugLibrary object is returned; in case of an error, a string with details is provided. Passing values that deviate from the defined signature will result in null.
+
+    metax = include_lib("/lib/metaxploit.so")
+    metaLib = metax.load("/lib/init.so")
+    debugLib = metaLib.debug_tools("test", "test")
+    if typeof(debugLib) == "debugLibrary" then
+       print("Received debug libary object!")
+    end if
+
+    is_patched(getdate: number
+    ):
+
+    numberorstringornull
+    copy
+
+    Returns by default a number indicating whether the library has been patched. A value of one indicates that the library has been patched, while zero indicates that it has not. If the getdate parameter is set to true, the function will return a string containing the date of the last patch. The data format is as follows: "dd/MM/yyyy". Additionally if there is any error the return value will be a string. Providing values that deviate from the defined signature will cause null to be returned.
+
+    metax = include_lib("/lib/metaxploit.so")
+    metaLib = metax.load("/lib/init.so")
+    isPatchedResult = metaLib.is_patched
+    if isPatchedResult == 1 then
+       print("init.so has been patched!")
+    end if
+
+    lib_name():
+
+    string
+    copy
+
+    Returns a string containing the name of the library. An example of a name would be "init.so".
+
+    metax = include_lib("/lib/metaxploit.so")
+    metaLib = metax.load("/lib/init.so")
+    print("Name for library is: " + metaLib.lib_name)
+
+    overflow(memoryAddress: string, unsecZone: string, optArgs: string = ""
+    ):
+
+    stringornumberorshellorcomputerorfileornull
+    copy
+
+    Exploits vulnerabilities in target systems by executing various attack vectors against libraries located in the "/lib" folder. The function requires a memory address, vulnerability identifier, and optional arguments that are mandatory for password changes (new password) and computer exploits (LAN IP address). Invalid argument types will cause a runtime exception to be thrown immediately. The system validates that the target library exists and is properly located in the "/lib" directory before proceeding otherwise it will return null. If the network where the library is located is disabled, the function returns a string indicating the network status. The exploit will fail and return null if the target is behind a firewall or if any of the specific vulnerability requirements aren't met, such as insufficient registered users, missing required libraries with correct versions, inadequate port forwards, absence of required user types like active guests or root users, or invalid file paths. If the target vulnerability is identified as a zero-day exploit, the system will load the appropriate zero-day vulnerability before execution. During execution, if a super admin intercepts the exploit attempt, user privileges are automatically lowered to guest level. Shell exploits, once all requirements are met, always return a shell object. Random folder exploits return a file object if the specified path exists or null if the folder cannot be found. Password change exploits return 1 for successful password modification or 0 for failure due to guest user restrictions, invalid alphanumeric format, or exceeding the 15-character limit. Settings override exploits work only on smart appliances like fridges or microwaves and return 1 for success or 0 for failure. Traffic light exploits require targets on the police station's network and return 1 for success or 0 for failure. Firewall exploits need router targets and return 1 for success or 0 for failure. Computer exploits return a computer object when successful or 0 if the LAN IP is invalid, the computer doesn't exist, or no non-root user is available. Using typeof to verify return value types is essential before processing results due to the variety of possible return types. To get a detailed overview you can also take a look at the following flowchart: Flowchart link
+
+    metax = include_lib("/lib/metaxploit.so")
+    metaLib = metax.load("/lib/init.so")
+    scanResult = metax.scan(metaLib)
+    target = scanResult[0]
+    scanAddress = metax.scan_address(metaLib, target)
+    segments = scanAddress.split("Unsafe check: ")
+    exploit = null
+     for segment in segments
+       hasRequirement = segment.indexOf("*") != null
+       if (not hasRequirement) then
+          labelStart = segment.indexOf("<b>")
+          labelEnd = segment.indexOf("</b>")
+          exploit = segment[labelStart + 3: labelEnd]
+       end if
+    end for
+    if (exploit) then
+       print("Exploiting... " + target + ":" + exploit)
+       print(metaLib.overflow(target, exploit))
+    else
+       print("No exploit found with zero requirements")
+    end if
+
+    version():
+
+    string
+    copy
+
+    Returns a string containing the version number of the library. An example of a version number would be "1.0.0".
+
+    metax = include_lib("/lib/metaxploit.so")
+    metaLib = metax.load("/lib/init.so")
+    print("Init.so version: " + metaLib.version)
+
+metaMail
+
+A MetaMail object can be obtained by using mail_login. The classID used for this object is "MetaMail".
+
+    delete(mailId: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Delete the email corresponding to the provided email ID. Returns a number with the value one if the email removal was successful. Otherwise, a string with an error message will be returned. If the provided mailId is anything other than a string this method will return null.
+
+    metaMail = mail_login(user_mail_address, "test")
+    mails = metaMail.fetch
+    results = []
+    for mail in mails
+       segments = mail.split(char(10))
+       mailId = segments[2][8:]
+       print(metaMail.delete(mailId))
+    end for
+    print("Deleted every mail!")
+
+    fetch():
+
+    list<string>orstring
+    copy
+
+    Returns a list where each item is a string containing mail id, from, subject and a small preview of the content consisting of the first 125 characters. If there is any issue a string will be returned with details.
+
+    metaMail = mail_login(user_mail_address, "test")
+    mails = metaMail.fetch
+    results = []
+    for mail in mails
+       segments = mail.split(char(10))
+       item = {}
+       item.mailId = segments[2][8:]
+       item.from = segments[3][6:]
+       item.subject = segments[4][9:]
+       item.preview = segments[5:]
+       results.push(item)
+    end for
+    print(results)
+
+    read(mailId: string
+    ):
+
+    stringornull
+    copy
+
+    Returns a string containing the content of a mail related to the provided mail id. The mail id argument can be obtained with fetch. In case the mail cannot be found this method will return "Mail not found". If the provided mailId is not a string, this method will return null.
+
+    metaMail = mail_login(user_mail_address, "test")
+    mails = metaMail.fetch
+    results = []
+    for mail in mails
+       segments = mail.split(char(10))
+       mailId = segments[2][8:]
+       print(metaMail.read(mailId))
+    end for
+
+    send(emailAddress: string, subject: string, message: string
+    ):
+
+    stringornumberornull
+    copy
+
+    Send a new mail to the provided email address. Keep in mind that the subject can not exceed 128 characters and the message size should not exceed 2500 characters. Returns a number with the value one if the mail has been sent correctly, otherwise returns a string with an error. If any of the provided values deviate from the method signature, it will return null.
+
+    metaMail = mail_login(user_mail_address, "test")
+    result = metaMail.send(user_mail_address, "test subject", "test message")
+    if typeof(result) == "string" then
+       print("There was an error while sending mail: " + result)
+    else
+       print("Mail got send successfully.")
+    end if
+
+metaxploit
+
+A metaxploit object can be obtained by using include_lib. The classID used for this object is "MetaxploitLib".
+
+    load(path: string
+    ):
+
+    metaLibornull
+    copy
+
+    Returns a metaLib object for the provided path to the library binary. Keep in mind that this can only be used on library files. On failure, this method will return null. If the provided path is empty, this method will throw a runtime exception, preventing further script execution.
+
+    metax = include_lib("/lib/metaxploit.so")
+    libFolder = get_shell.host_computer.File("/lib")
+    for file in libFolder.get_files
+       metaLib = metax.load(file.path)
+       print("Library: " + metaLib.lib_name + " - " + metaLib.version)
+    end for
+
+    net_use(ip: string, port: number = 0
+    ):
+
+    netSessionornull
+    copy
+
+    Returns a netSession object for the provided IP address and port. Note that if the port is set to zero, it will return a netSession related to the kernel router. The main purpose of this method is to gain a netSession and then use dump_lib to receive a metaLib object to exploit vulnerabilities. In case of failure, this method will return null. If this method is used within an SSH encryption process or with disabled internet, or if an invalid target IP is provided, this method will throw a runtime exception.
+
+    metax = include_lib("/lib/metaxploit.so")
+    ports = get_router("1.1.1.1").used_ports
+    for port in ports
+       netSession = metax.net_use("1.1.1.1", port.port_number)
+       metaLib = netSession.dump_lib
+       print("Library: " + metaLib.lib_name + " - " + metaLib.version + " on port " + port.port_number)
+    end for
+
+    rshell_client(ip: string, port: number = 1222, processName: string = "rshell_client"
+    ):
+
+    stringornumberornull
+    copy
+
+    Launches a process on the victim's computer, silently attempting to continuously connect in the background to the specified address and port. For the reverse shell to run successfully, the rshell service must be installed, and the port forward must be configured correctly on the machine where the server is waiting for the victim's connection. If the launch was successful, a number with the value one will be returned. In case of failure, a string with details will be returned.
+
+    metax = include_lib("/lib/metaxploit.so")
+    metax.rshell_client("1.1.1.1", 1222, "bgprocess")
+
+    rshell_server():
+
+    stringorlist<shell>
+    copy
+
+    This method returns a list of shell objects that have been reverse shell connected to this computer. To manage the connections received, the rshell service must be installed on the machine that receives the victims' connections. In case of failure a string will be returned with details.
+
+    metax = include_lib("/lib/metaxploit.so")
+    shells = metax.rshell_server
+    firstShell = shells[0]
+    firstShell.host_computer.File("/").chmod("o-wrx", true)
+
+    scan(metaLib: metaLib
+    ):
+
+    list<string>ornull
+    copy
+
+    Returns a list where each item is a string representing a memory area which has vulnerabilities related to the provided library. These memory areas can be used to make further scans via scan_address. In case of failure, this method returns null instead. An example of a memory area would be "0x7BFC1EAA". Using this method within a SSH encryption process will throw a runtime exception.
+
+    metax = include_lib("/lib/metaxploit.so")
+    metaLib = metax.load("/lib/init.so")
+    scanResult = metax.scan(metaLib)
+    for area in scanResult
+       print("Memory area containg vulnerability: " + area)
+    end for
+
+    scan_address(metaLib: metaLib, memoryAddress: string
+    ):
+
+    stringornull
+    copy
+
+    Returns a string containing information about each vulnerability in the provided library and memory area. In case the scanning fails this method will return null. Using this method within a SSH encryption process will throw a runtime exception.
+
+    metax = include_lib("/lib/metaxploit.so")
+    metaLib = metax.load("/lib/init.so")
+    scanResult = metax.scan(metaLib)
+    scanAddress = metax.scan_address(metaLib, scanResult[0])
+    segments = scanAddress.split("Unsafe check: ")[1:]
+    exploits = []
+    for segment in segments
+       labelStart = segment.indexOf("<b>")
+       labelEnd = segment.indexOf("</b>")
+       exploits.push(segment[labelStart + 3: labelEnd])
+    end for
+    print("Available vulnerabilities: " + exploits.join(", "))
+
+    sniffer(saveEncSource: number = 0
+    ):
+
+    stringornull
+    copy
+
+    The terminal listens to the network packets of any connection that passes through the computer. When any connection information gets captured, it will print a string with the obtained data. In case saving of encryption source is enabled it will download the source code of the script responsible for encryption. In case the operation fails this method will return null. Using this method within a SSH encryption process will throw a runtime exception.
+
+    metax = include_lib("/lib/metaxploit.so")
+    result = metax.sniffer
+    print(result)
+
+netSession
+
+A netSession object can be obtained by using net_use. The classID used for this object is "NetSession".
+
+    dump_lib():
+
+    metaLib
+    copy
+
+    Returns the metaLib associated with the remote service. For example if the metaxpoit method net_use was used on a ssh port it will return the metaLib related to the ssh service. In case the port was zero is will return a metaLib related to the kernel router.
+
+    metax = include_lib("/lib/metaxploit.so")
+    ports = get_router("1.1.1.1").used_ports
+    netSession = metax.net_use("1.1.1.1", ports[0].port_number)
+    metaLib = netSession.dump_lib
+    print("Library: " + metaLib.lib_name + " - " + metaLib.version + " on port " + ports[0].port_number)
+
+    flood_connection():
+
+    null
+    copy
+
+    Initiates a DDoS attack targeting the computer associated with the currently active netSession object. To successfully force a reboot, there must be at least 4 concurrent flood_connection calls for every 1 unit of net speed on the target computer. Keep in mind that these calls need to come from different IPs. So for example PackS would require 12 active flood_connection calls. If the threshold is met, the target computer will be forced to reboot, and the terminal will output: "remote connection interrupted". This method always returns null and only prints a message upon a successful attack.
+
+    metax = include_lib("/lib/metaxploit.so")
+    ports = get_router("1.1.1.1").used_ports
+    netSession = metax.net_use("1.1.1.1", ports[0].port_number)
+    netSession.flood_connection
+
+    get_num_conn_gateway():
+
+    number
+    copy
+
+    Returns the number of devices using this router as a gateway. If you obtained your netSession from a computer, it will fetch and return the value from its gateway router.
+
+    metax = include_lib("/lib/metaxploit.so")
+    ports = get_router("1.1.1.1").used_ports
+    netSession = metax.net_use("1.1.1.1", ports[0].port_number)
+    print("Gateway clients: " + netSession.get_num_conn_gateway)
+
+    get_num_portforward():
+
+    number
+    copy
+
+    Returns the number of ports forwarded by this router. If you obtained your netSession from a computer, it will fetch and return the value from its gateway router.
+
+    metax = include_lib("/lib/metaxploit.so")
+    ports = get_router("1.1.1.1").used_ports
+    netSession = metax.net_use("1.1.1.1", ports[0].port_number)
+    print("Port forwards: " + netSession.get_num_portforward)
+
+    get_num_users():
+
+    number
+    copy
+
+    Returns the number of user accounts on the system.
+
+    metax = include_lib("/lib/metaxploit.so")
+    ports = get_router("1.1.1.1").used_ports
+    netSession = metax.net_use("1.1.1.1", ports[0].port_number)
+    print("User accounts: " + netSession.get_num_users)
+
+    is_any_active_user():
+
+    number
+    copy
+
+    Returns a number. If there is an active user on the system it will be one. Otherwise, it will be zero.
+
+    metax = include_lib("/lib/metaxploit.so")
+    ports = get_router("1.1.1.1").used_ports
+    netSession = metax.net_use("1.1.1.1", ports[0].port_number)
+    print("User Active?: " + netSession.is_any_active_user)
+
+    is_root_active_user():
+
+    number
+    copy
+
+    Returns a number. If there is an active root on the system it will be one. Otherwise, it will be zero.
+
+    metax = include_lib("/lib/metaxploit.so")
+    ports = get_router("1.1.1.1").used_ports
+    netSession = metax.net_use("1.1.1.1", ports[0].port_number)
+    print("Root Active?: " + netSession.is_root_active_user)
+
+number
+
+All numbers are stored in full-precision format. Numbers also represent true == 1 and false == 0.
+
+a = 20
+b = 22
+print(a + b) // addition
+print(a - b) // substraction
+print(a / b) // division
+print(a * b) // multiply
+print(a % b) // modulo
+print(a - b) // substraction
+print(a ^ b) // power
+print(a and b) // logical and
+print(a or b) // logical or
+print(not a) // logical not
+print(a == b) // comparison equal
+print(a != b) // comparison unequal
+print(a > b) // comparison greater than
+print(a < b) // comparison lower than
+print(a >= b) // comparison greater equal than
+print(a <= b) // comparison lower equal than
+
+port
+
+A port object can be obtained by using get_ports, ping_port, used_ports or device_ports. The classID used for this object is "port". Generally there are no restrictions in regards to which service runs on which port but there are some default ports for each service. List of the most common ports: 21 (FTP), 22 (SSH), 25 (SMTP), 80 (HTTP), 141 (SQL), 8080 (HTTP), 1222 (RSHELL), 1542 (Repository), 3306 (SQL), 3307 (SQL), 3308 (SQL), 6667 (Chat), 37777 (CCTV)
+
+    get_lan_ip():
+
+    string
+    copy
+
+    Returns a string containing the local IP address of the computer to which the port is pointing.
+
+    router = get_router
+    ports = router.used_ports
+    for port in ports
+       print("Port " + port.port_number + " is pointed to " + port.get_lan_ip + "!")
+    end for
+
+    is_closed():
+
+    number
+    copy
+
+    Returns a number, where one indicates that the specified port is closed and zero indicates that the port is open.
+
+    router = get_router
+    ports = router.used_ports
+    for port in ports
+       state = "open"
+       if (port.is_closed) then state = "closed"
+       print("Port " + port.port_number + " is " + state + "!")
+    end for
+
+    port_number():
+
+    number
+    copy
+
+    Returns the number which is used for the port.
+
+    router = get_router
+    ports = router.used_ports
+    for port in ports
+       print("Port " + port.port_number + " is in use!")
+    end for
+
+router
+
+A router object can be obtained by either using get_router or get_switch. The classID used for this object is "router".
+
+    bssid_name():
+
+    string
+    copy
+
+    Returns a string with the BSSID value of the router.
+
+    router = get_router
+    bssid = router.bssid_name
+    print("BSSID: " + bssid)
+
+    device_ports(ip: string
+    ):
+
+    stringorlist<port>ornull
+    copy
+
+    Returns a list where each item is an open port related to the device of the provided LAN IP address. The device needs to be within the network of the router. In case of failure, this method will return null or a string with details. In case an empty ip is provided this method will throw a runtime exception.
+
+    router = get_router
+    devices = router.devices_lan_ip
+    for ip in devices
+       ports = router.device_ports(ip)
+       openPorts = []
+       for port in ports
+          if port.is_closed then continue
+          openPorts.push(port)
+       end for
+
+       if (openPorts.len == 0) then
+          print(ip + " has no open ports")
+       else
+          print(ip + " contains following open ports:")
+          for port in openPorts
+             print("|-" +  port.port_number)
+          end for
+       end if
+    end for
+
+    devices_lan_ip():
+
+    list<string>
+    copy
+
+    Returns a list where each item is a string representing a LAN IP address. All devices are within the network of the router and can be reached by using the ping method. Some of the devices might be behind a firewall.
+
+    router = get_router
+    devices = router.devices_lan_ip
+    for ip in devices
+       print(ip + " found!")
+    end for
+
+    essid_name():
+
+    string
+    copy
+
+    Returns a string with the ESSID value of the router.
+
+    router = get_router
+    essid = router.essid_name
+    print("ESSID: " + essid)
+
+    firewall_rules():
+
+    list<string>
+    copy
+
+    Returns a list where each item is a string containing a firewall rule.
+
+    router = get_router
+    rules = router.firewall_rules
+    print("Firewall rules: " + rules.join(", "))
+
+    kernel_version():
+
+    string
+    copy
+
+    Returns a string with the version of the kernel_router.so library.
+
+    router = get_router
+    version = router.kernel_version
+    print("Kernel router version: " + version)
+
+    local_ip():
+
+    string
+    copy
+
+    Returns a string with the local IP address of the router.
+
+    router = get_router
+    localIp = router.local_ip
+    print("Local IP: " + localIp)
+
+    ping_port(port: number
+    ):
+
+    portornull
+    copy
+
+    Returns a port that is behind the port number provided. In case the port does not exist null gets returned.
+
+    router = get_router
+    ports = router.used_ports
+    for port in ports
+       pingedPort = router.ping_port(port.port_number)
+       if (pingedPort == null) then continue
+       print("Pinged " + pingedPort.port_number)
+    end for
+
+    port_info(port: port
+    ):
+
+    stringornull
+    copy
+
+    Returns a string with information about the provided port, including details about the running service and its version. For example, the output could be "http 1.0.0". If the operation fails, null will be returned.
+
+    router = get_router
+    ports = router.used_ports
+    for port in ports
+       info = router.port_info(port)
+       print(info)
+    end for
+
+    public_ip():
+
+    string
+    copy
+
+    Returns a string with the public IP address of the router.
+
+    router = get_router
+    publicIp = router.public_ip
+    print("Public IP: " + publicIp)
+
+    used_ports():
+
+    list<port>
+    copy
+
+    Returns a list where each item is a port used inside the router.
+
+    router = get_router
+    ports = router.used_ports
+    for port in ports
+       print("Port " + port.port_number + " is available!")
+    end for
+
+service
+
+The service object can be obtained by using include_lib. The classID used for this object is "service". List of all installable services: "FTP", "SSH", "HTTP", "Repository", "Chat"
+
+    install_service():
+
+    numberorstring
+    copy
+
+    Installs the necessary files for the correct functioning of the service and starts it. If the installation is completed successfully, it returns a number with the value one. In case of an error, it returns a string with details.
+
+    service = include_lib("/lib/libhttp.so")
+    result = service.install_service
+    if result == 1 then
+        print "Successfully installed service"
+    else
+        print "Service installation failed: " + result
+    end if
+
+    start_service():
+
+    numberorstring
+    copy
+
+    Starts the service and opens its associated port on the local machine. The service requires a port forwarded to the router to be accessible from the outside. If the service starts correctly, it returns a number with the value one. In case of an error, it returns a string with details.
+
+    service = include_lib("/lib/libhttp.so")
+    result = service.start_service
+    if result == 1 then
+        print "Successfully started service"
+    else
+        print "Starting service failed: " + result
+    end if
+
+    stop_service():
+
+    numberorstring
+    copy
+
+    Stops the service and closes its associated port on the local machine. If the service is stopped successfully, it returns a number with the value one. If an error occurs during the process, it returns a string with details. In some cases, the returned number might be zero, indicating that the service removal failed.
+
+    service = include_lib("/lib/libhttp.so")
+    result = service.stop_service
+    if result == 1 then
+        print "Successfully stopped service"
+    else
+        print "Stopping service failed: " + result
+    end if
+
+shell
+
+A shell object can be acquired by either using get_shell, connect_service or overflow. The classID used for this object is "shell". In case you want to use connect_service to connect to a SSH port it will be usually at port 22.
+
+    build(pathSource: string, pathBinary: string, allowImport: number = 0
+    ):
+
+    string
+    copy
+
+    Compiles a plain code file provided in the arguments to a binary. On success, the new binary will be available under the provided build folder. The binary name will be the same as the source file just without the file extension. Optionally, an allowImport flag can be set which enables the use of import_code on the binary. All provided paths must be absolute. Returns an empty string on success. On failure, it will return a string containing details about the reason for failure. In case any provided values deviate from the defined signature a runtime exception will be thrown.
+
+    shell = get_shell
+    computer = shell.host_computer
+    computer.touch(home_dir, "test.src")
+    computer.File(home_dir + "/test.src").set_content("print(""hello world"")")
+    buildResult = shell.build(home_dir + "/test.src", home_dir + "/Desktop")
+    if buildResult != "" then
+       print("There was an error while compiling: " + buildResult)
+    else
+       print("File has been compiled.")
+    end if
+
+    connect_service(ip: string, port: number, user: string, password: string, service: string = "ssh"
+    ):
+
+    shellorftpShellorstringornull
+    copy
+
+    Returns a shell if the connection attempt to the provided IP was successful. This method can only connect to ports running an SSH or FTP service. SSH services usually run on port 22 and FTP services usually on port 21. Keep in mind to pass the right service value depending on which service is going to be used. By default, it will use SSH as the service. Please note that connecting will leave a log entry. In case of failure, a string is returned containing details. If any provided arguments deviate from the method signature, if this method is run in an SSH encryption process, or if the computer is not connected to the internet, a runtime exception will be thrown.
+
+    shell = get_shell
+    connectionResult = shell.connect_service("1.1.1.1", 22, "test", "test")
+    if typeof(connectionResult) != "shell" then
+       print("There was an error while connecting: " + connectionResult)
+    else
+       print("Connected!")
+    end if
+
+    host_computer():
+
+    computer
+    copy
+
+    Returns a computer related to the shell.
+
+    shell = get_shell
+    computer = shell.host_computer
+    print("Computer public IP is: " + computer.public_ip)
+
+    launch(program: string, params: string = ""
+    ):
+
+    stringornumber
+    copy
+
+    Launches the binary located at the provided path. Optionally, parameters can be passed. Returns a number. If the launch was successful, the value will be one; otherwise, it will be zero. In some cases, a string will be returned containing an error message. If you need to share variables between a launched script and the current process, consider using get_custom_object. Note that launching a script is not asynchronous, meaning that the current script will pause its execution until the launched script finishes. If any provided values deviate from the method signature or it is used within an SSH encryption process, a runtime exception will be thrown. There is a cooldown of 2 seconds between launches to prevent abuse. If you attempt to launch a script during this cooldown period, the method will return zero.
+
+    shell = get_shell("root", "test")
+    shell.launch("/bin/cat", "/etc/passwd")
+
+    ping(ip: string
+    ):
+
+    stringornumber
+    copy
+
+    Returns a number. If the remote address could be reached the value will be one, zero otherwise. Firewalls do not block ping requests. Passing an invalid ip will cause the method to return a string with an error message. If any provided arguments deviate from the method signature a runtime exception will be thrown.
+
+    shell = get_shell
+    isPingable = shell.ping("1.1.1.1")
+    if isPingable then
+       print("Ping was successful!")
+    else
+       print("Ping failed!")
+    end if
+
+    scp(file: string, folder: string, remoteShell: shell, isUpload: number = 0
+    ):
+
+    numberorstringornull
+    copy
+
+    Send a file to the computer related to the provided shell. You require permission to read the file on the computer from which you are uploading and write permissions in the folder of the computer you are trying to upload to. Via the optional isUpload parameter you can define the direction. In case of failure, this method will return a string with the cause. Otherwise, a number with the value one gets returned. If any of the passed arguments deviates from the types of the method signature, null will be returned. In case the string for sourceFile or destinationFolder is empty, an error will be thrown, preventing further script execution. Utilizing this method in an SSH encryption process will trigger an error, halting further script execution.
+
+    shell = get_shell
+    remoteShell = shell.connect_service("1.1.1.1", 22, "test", "test")
+    result = remoteShell.scp("/bin/ls", "/etc/", shell)
+    if typeof(result) == "string" then
+       print("There was an error while sending file: " + result)
+    else
+       print("File got sent successfully.")
+    end if
+
+    start_terminal():
+
+    null
+    copy
+
+    Launches an active terminal. The terminal's color will change, displaying the IP of the connected shell. Script execution will be stopped upon starting a new terminal, unless this is called from another script that was executed via shell.launch. In that case, you will enter the shell after closing your root-level script within that terminal window. Using this method within an SSH encryption process will cause an error to be thrown, preventing further script execution.
+
+    shell = get_shell
+    shell.start_terminal
+
+smartAppliance
+
+A smartAppliance object can be obtained by using include_lib. The classID used for this object is "SmartAppliance".
+
+    model():
+
+    string
+    copy
+
+    Returns a string with the appliance model ID.
+
+    libSmartapp = include_lib("/lib/libsmartappliance.so")
+    modelResult = libSmartapp.model
+    if modelResult.matches("^[A-Z]+$") then
+        print("Model is: " + modelResult)
+    else
+        print("Model couldn't be determined due to: " + modelResult)
+    end if
+
+    override_settings(power: number, temperature: number
+    ):
+
+    stringornumberornull
+    copy
+
+    Overrides the power and temperature settings of the appliance. If successful, it returns a number with the value one; otherwise, it returns a string detailing the error. If any arguments deviate from the defined signature, this method will return null.
+
+    libSmartapp = include_lib("/lib/libsmartappliance.so")
+    overrideResult = libSmartapp.override_settings(1000, 20)
+    if overrideResult == 1 then
+        print("Override was successful!")
+    else
+        print("Override failed due to: " + overrideResult)
+    end if
+
+    set_alarm(enable: number
+    ):
+
+    stringornumberornull
+    copy
+
+    Activates or deactivates the sound alarm indicating any appliance malfunction. If the operation is successful, a number with the value one is returned; otherwise, a string containing error details is returned. If the enable argument deviates from the defined signature, the method will return null.
+
+    libSmartapp = include_lib("/lib/libsmartappliance.so")
+    setAlarmResult = libSmartapp.set_alarm(false)
+    if setAlarmResult == 1 then
+        print("Alarm was disabled successfully!")
+    else
+        print("Disabling alarm failed due to: " + setAlarmResult)
+    end if
+
+string
+
+Text is stored in strings of Unicode characters. Write strings by surrounding them with quotes. If you need to include a quotation mark in the string, write it twice.
+
+a = "hello"
+b = "world"
+print(a + b) // concatinate a and b
+print(a * 10) // repeat hello ten times
+print(a[0]) // prints h
+print(a[1:3]) // prints ell
+
+    code():
+
+    number
+    copy
+
+    Returns a number representing the Unicode code of the first character of the string.
+
+    myString = "HELLO WORLD"
+    print(myString.code)
+
+    hasIndex(index: number
+    ):
+
+    number
+    copy
+
+    Returns a number. If the provided index is available in the string, the value will be one. Otherwise, the value will be zero.
+
+    myString = "42 as an answer is wrong"
+    containsIndex = myString.hasIndex(1)
+    if containsIndex then
+       print("String contains index of 1.")
+    else
+       print("String does not contain index of 1.")
+    end if
+
+    indexOf(value: string, offset?: number
+    ):
+
+    numberornull
+    copy
+
+    Returns a number which indicates the first matching index of the provided value inside the list. Optionally a start index can be provided. In case the value does not exist inside the string a null gets returned.
+
+    myString = "42 as an answer is wrong"
+    index = myString.indexOf("wrong")
+    if index != null then
+       print("Invalid information spotted at: " + index)
+    else
+       print("Information seems valid.")
+    end if
+
+    indexes():
+
+    list<number>
+    copy
+
+    Returns a list where each item is a number representing all available indexes in the string.
+
+    myString = "42"
+    print(myString.indexes)
+
+    insert(index: number, value: string
+    ):
+
+    string
+    copy
+
+    Returns a string with the newly inserted string at the provided index. If the passed index is not a number, this method throws an error, preventing further script execution.
+
+    myString = "42 as an answer is wrong"
+    index = myString.lastIndexOf("w") - 1
+    newString = myString.insert(index, "not ")
+    print(newString)
+
+    is_match(pattern: string, regexOptions: string = "none"
+    ):
+
+    number
+    copy
+
+    Uses regular expression to check if a string matches a certain pattern. If it matches, it will return a number with the value one. If it does not match, the value of the number will be zero. If any provided arguments deviate from the method signature types, if the pattern is empty, if the provided regexOptions are invalid, or if the regular expression times out, an error will be thrown, preventing further script execution.
+
+    myString = "42 as an answer is wrong"
+    hasWordAtTheEnd = myString.is_match("\w+$")
+    print(hasWordAtTheEnd)
+
+    lastIndexOf(searchStr: string
+    ):
+
+    number
+    copy
+
+    Returns a number which indicates the last matching index of the provided value inside the list. In case the value does not exist inside the string a -1 gets returned. If the provided searchStr is not a string, this method will return null.
+
+    myString = "42 as an answer is wrong"
+    index = myString.lastIndexOf("wrong")
+    if index != -1 then
+       print("Invalid information spotted at: " + index)
+    else
+       print("Information seems valid.")
+    end if
+
+    len():
+
+    number
+    copy
+
+    Returns a number representing the length of the string.
+
+    myString = "HELLO WORLD"
+    print("Size of string is: " + myString.len)
+
+    lower():
+
+    string
+    copy
+
+    Returns a new string in which all characters are transformed into lowercase.
+
+    myString = "HELLO WORLD"
+    print(myString.lower)
+
+    matches(pattern: string, regexOptions: string = "none"
+    ):
+
+    map<number,string>
+    copy
+
+    Returns a map with all search results for the provided regular expression. Each key contains the index and the value contains the matching string. If any provided arguments deviate from the method signature types, if the pattern is empty, if the provided regexOptions are invalid, or if the regular expression times out, an error will be thrown, preventing further script execution.
+
+    myString = "42 as an answer is wrong"
+    result = myString.matches("w")
+    print(result)
+
+    remove(value: string
+    ):
+
+    string
+    copy
+
+    Returns a new string with the provided value removed. Any value other than null can be passed, but note that it will be cast to a string. If null is passed, this method will throw an error, preventing further script execution.
+
+    myString = "42 as an answer is wrong"
+    newString = myString.remove("wrong")
+    print(newString + "right")
+
+    replace(pattern: string, newValue: string, regexOptions: string = "none"
+    ):
+
+    string
+    copy
+
+    Returns a string with the replaced content by using regular expressions. If any provided arguments deviate from the method signature types, if the pattern is empty, if the provided regexOptions are invalid or if the regular expression times out, an error will be thrown, preventing further script execution.
+
+    myString = "42 as an answer is wrong"
+    newString = myString.replace("wrong", "right")
+    print(newString)
+
+    split(pattern: string, regexOptions: string = "none"
+    ):
+
+    list<string>ornull
+    copy
+
+    Returns a list where each item is a segment of the string, separated by the provided separator string. This method uses regular expressions for matching, so remember to escape special characters such as dots. If any of the provided arguments deviate from the method signature types, this method will return null. In case the pattern is empty, the provided regexOptions are invalid, or the regular expression times out, an error will be thrown, preventing further script execution.
+
+    myString = "42 as an answer is wrong"
+    segments = myString.split(" ")
+    if segments[0] != "42" then
+       print("Invalid information spotted!")
+    else
+       print("Information seems valid!")
+    end if
+
+    to_int():
+
+    stringornumber
+    copy
+
+    Returns a number which is parsed from the string as an integer. In case the string is not numeric it will return the original string.
+
+    myString = "1"
+    print(myString.to_int + 41)
+
+    trim():
+
+    string
+    copy
+
+    Returns a new string stripped of any spacing at the beginning and ending.
+
+    myString = "    42   "
+    print(myString.trim)
+
+    upper():
+
+    string
+    copy
+
+    Returns a new string in which all characters are transformed into uppercase.
+
+    myString = "hello world"
+    print(myString.upper)
+
+    val():
+
+    number
+    copy
+
+    Returns a number which is parsed from the string. In case the string is not numeric it will return a zero.
+
+    myString = "1.25"
+    print(myString.val + 40.75)
+
+    values():
+
+    list<string>
+    copy
+
+    Returns a list where each item is a string representing all available characters in the string. Could be compared to using split but without any separator.
+
+    myString = "hello world"
+    print(myString.values)
+
+subWallet
+
+A subWallet object can be obtained by either using get_subwallet or get_subwallets. The classID used for this object is "subwallet".
+
+    check_password(password: string
+    ):
+
+    numberorstring
+    copy
+
+    Returns a number with the value one if the credentials are correct, otherwise, the value is zero. For some cases, this method will return a string with an error message.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = get_coin(blockchain, "test", "test", "test")
+    subWallet = get_subwallet(coin, "test")
+    password = user_input("SubWallet password:", true)
+    if check_password(subWallet, password) == 1 then
+        print "Password is correct!"
+    end if
+
+    delete():
+
+    stringornumber
+    copy
+
+    Deletes the account registered in the cryptocurrency. Returns a number where one indicates successful deletion and zero indicates failure. In case of certain failures, this method may return a string with details.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = get_coin(blockchain, "test", "test", "test")
+    subWallet = get_subwallet(coin, "test")
+    result = delete_subwallet(subWallet)
+    if result == 1 then
+        print "Subwallet got deleted!"
+    end if
+
+    get_balance():
+
+    numberorstring
+    copy
+
+    Returns a number of coins of a given currency. In case of error, a string with the details is returned.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = blockchain.get_coin("test", "test", "test")
+    subWallet = coin.get_subwallet("test")
+    print "Balance: " + subWallet.get_balance
+
+    get_info():
+
+    string
+    copy
+
+    Returns a string with the information stored by the coin creator.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = get_coin(blockchain, "test", "test", "test")
+    subWallet = get_subwallet(coin, "test")
+    print "Subwallet info: " + get_info(subWallet)
+
+    get_user():
+
+    string
+    copy
+
+    Returns a string with the username associated with this subwallet. On failure, this method returns a string with an error message.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = get_coin(blockchain, "test", "test", "test")
+    subWallet = get_subwallet(coin, "test")
+    print "Subwallet user: " + get_user(subWallet)
+
+    last_transaction():
+
+    list<any>ornumberorstring
+    copy
+
+    Returns a list with the information of the last transaction. Index 0 is a string with the other subWallet. Index 1 is an integer with the amount. Index 2 is a number indicating the direction of the transaction (0 for Deposit, 1 for Withdrawal). Index 3 is a string indicating the date of the transaction. On failure, this method will either return a number with the value zero or a string with an error message.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = get_coin(blockchain, "test", "test", "test")
+    subWallet = get_subwallet(coin, "test")
+    transactionItem = last_transaction(subWallet)
+    destinationAccount = transactionItem[0]
+    amount = transactionItem[1]
+    direction = transactionItem[2]
+    completeDate = transactionItem[3]
+    if direction == 0 then
+        print "Received " + amount + " from " + destinationAccount + " got completed at the " + completeDate
+    else
+        print "Send " + amount + " to " + destinationAccount + " got completed at the " + completeDate
+    end if 
+
+    mining():
+
+    numberorstring
+    copy
+
+    Starts the process of mining the cryptocurrency. The process leaves the terminal busy until a coin is mined. On success, this method will return a number with the value one. On failure, this method will return a string with details.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = get_coin(blockchain, "test", "test", "test")
+    subWallet = get_subwallet(coin, "test")
+    while mining(subWallet) == 1
+        print "Mining...", true
+        print "Balance " + get_balance_subwallet(subWallet)
+    end while
+
+    set_info(info: string
+    ):
+
+    numberorstring
+    copy
+
+    Stores optional information in the Subwallet for any use. Upon success, a number with the value one will be returned. In case of failure, a string with details will be returned.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = get_coin(blockchain, "test", "test", "test")
+    subWallet = get_subwallet(coin, "test")
+    result = set_info(subWallet, "test")
+    if result == 1 then
+        print "Subwallet info got set!"
+    end if
+
+    wallet_username():
+
+    string
+    copy
+
+    Returns a string with the name of the wallet to which this subwallet belongs.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    coin = get_coin(blockchain, "test", "test", "test")
+    subWallet = get_subwallet(coin, "test")
+    print "SubWallet username: " + wallet_username(subWallet)
+
+trafficNet
+
+A trafficNet object can be obtained by using include_lib. The classID used for this object is "TrafficNet".
+
+    camera_link_system():
+
+    numberorstring
+    copy
+
+    Accesses the traffic camera system, opening a window with controls to switch between different cameras. If the window opens successfully, this method returns a number with the value one. In case of an error, it returns a string with details.
+
+    libTraffic = include_lib("/lib/libtrafficnet.so")
+    linkSystemResult = libTraffic.camera_link_system
+    if linkSystemResult == 1 then
+        print("Initiated camera broadcast!")
+    end if
+
+    get_credentials_info():
+
+    string
+    copy
+
+    Returns string which contains job and name of a NPC. If an error occurs, a string with details is returned.
+
+    libTraffic = include_lib("/lib/libtrafficnet.so")
+    print(libTraffic.get_credentials_info)
+
+    locate_vehicle(licensePlate: string, password: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Performs a search for the specified license plate to locate the vehicle. If the vehicle is visible on any camera, the viewer will switch to the camera currently displaying it and return a number with the value one. If the vehicle cannot be located or the license plate is incorrect, a string indicating the error is returned. If any of the provided values deviates from the defined types in the method signature, this method will return null.
+
+    libTraffic = include_lib("/lib/libtrafficnet.so")
+    libTraffic.camera_link_system
+    vehicleSearchResult = libTraffic.locate_vehicle("1L2M3N", "pass")
+    if vehicleSearchResult == 1 then
+        print("Found vehicle!")
+    end if
+
+wallet
+
+A wallet object can be obtained by either using create_wallet or login_wallet. The classID used for this object is "wallet".
+
+    buy_coin(coinName: string, coinAmount: number, unitPrice: number, subwalletUser: string
+    ):
+
+    numberorstring
+    copy
+
+    Publishes a purchase offer indicating the number of coins you wish to buy and the price ($) per unit you are willing to pay. The purchase will be finalized if there is any sale offer with a price less than or equal to the one proposed in the purchase. If there is no eligible offer to sell at that time, the offer to buy will remain publicly visible until a new offer to sell satisfies the requirements. If the publication has been successful, a number with the value one is returned. In case of error, a string with the details is returned. Any deviation from the method signature will result in a runtime exception preventing further script execution.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = login_wallet(blockchain, "test", "test")
+    result = wallet.buy_coin("test", 100, 20, "test")
+    if result == 1 then
+        print "Sucessfully created purchase offer!"
+    else
+        print "Failed: " + result
+    end if
+
+    cancel_pending_trade(coinName: string
+    ):
+
+    stringornull
+    copy
+
+    Cancel any pending offer of a certain coin. On success, an empty string will be returned. On failure, a string with an error message will be returned. Any deviation from the method signature will result in null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = blockchain.login_wallet("test", "test")
+    if wallet.cancel_pending_trade("test") == "" then
+        print "Trade got canceled!"
+    end if
+
+    get_balance(coinName: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Returns a number of coins of a given currency. In case of error, a string with the details is returned. If the passed coinName is anything other than a string this method will return null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = blockchain.login_wallet("test", "test")
+    for coinName in wallet.list_coins
+        print "You have " + wallet.get_balance(coinName) + " coins of the currency """ + coinName + """"
+    end for
+
+    get_global_offers(coinName: string
+    ):
+
+    stringormap<string,list<any>>ornull
+    copy
+
+    Returns a map with all the offers made by any player of a given currency. The key of the map represents the WalletID of the player who has made the offer, and the value of the map is a list where index 0 represents the type of offer with a string (Buy/Sell), index 1 represents the amount to sell or buy, and index 2 represents the price per unit. In case of failure, this method returns a string with details. Any deviation from the method signature will result in null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = blockchain.login_wallet("test", "test")
+    for item in wallet.get_global_offers("test")
+        walletId = item.key
+        trade = item.value
+        isBuying = trade[0] == "Buy"
+        quantity = trade[1]
+        unitPrice = trade[2]
+        print "-" * 10
+        print "<b>" + walletId + "</b>"
+        if isBuying then
+            print "<color=green>Is buying</color>"
+        else
+            print "<color=yellow>Is selling</color>"
+        end if
+        print quantity + " coins with a unit price of " + unitPrice
+    end for
+
+    get_pending_trade(coinName: string
+    ):
+
+    stringorlist<any>ornull
+    copy
+
+    Returns a list with the pending sale or purchase offer of this wallet for a certain currency. Index 0 of the list represents the type of offer with a string (Buy/Sell), index 1 represents the quantity to be sold or bought, and index 2 represents the price per unit. On failure, this method will return a string with details. Any deviation from the method signature will result in a null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = blockchain.login_wallet("test", "test")
+    result = wallet.get_pending_trade("test")
+    isBuying = result[0] == "Buy"
+    quantity = result[1]
+    unitPrice = result[2]
+    currentBalance = wallet.get_balance("test")
+    if isBuying then
+        print "After buying was successful your balance will be " + (quantity * unitPrice + currentBalance)
+    else
+        print "After selling was successful your balance will be " + (currentBalance - quantity * unitPrice)
+    end if
+
+    get_pin():
+
+    string
+    copy
+
+    Returns a string with a PIN that refreshes every few minutes. This PIN is used to obtain an account in cryptocurrency services.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    myShell = get_shell
+    myComputer = myShell.host_computer
+    wallet = blockchain.login_wallet("test", "test")
+    myComputer.touch("/root", "pin_launch.src")
+    myFile = myComputer.File("/root/pin_launch.src")
+    myFile.set_content("
+        blockchain = include_lib(""/lib/blockchain.so"")
+        myShell = get_shell
+        myComputer = myShell.host_computer
+        wallet = blockchain.login_wallet(""test"", ""test"")
+        if params[0] ==  wallet.get_pin then
+            get_custom_object.secret = ""The answer is 42""
+        else
+            get_custom_object.secret = ""The answer is 10053""
+        end if
+    ")
+    myShell.build("/root/pin_launch.src", "/root")
+    myFile.delete
+    myShell.launch("/root/pin_launch", wallet.get_pin)
+    print "The secret: " + get_custom_object.secret
+
+    list_coins():
+
+    list<string>orstring
+    copy
+
+    Returns a list where each item is a string with the names of the coins available in the wallet. On failure this method returns a string with an error message.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = blockchain.login_wallet("test", "test")
+    print "My wallet is connected to: " + wallet.list_coins.join(", ")
+
+    list_global_coins():
+
+    stringorlist<string>
+    copy
+
+    Returns a list where each item is a string containing the names of all the currencies that exist. In case of failure, this method returns a string with details.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = blockchain.login_wallet("test", "test")
+    print "All existing coins: " wallet.list_global_coins.join(", ")
+
+    reset_password(newPassword: string
+    ):
+
+    numberorstringornull
+    copy
+
+    Change the password of the wallet. Only the account owner can perform this action. If the process is completed successfully, a number with the value one will be returned. In case of an error, a string with details will be returned. Any deviation from the method signature will result in null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = blockchain.login_wallet("test", "test")
+    if wallet.reset_password("test") == 1 then
+        print "You got a new password!"
+    end if
+
+    sell_coin(coinName: string, coinAmount: number, unitPrice: number, subwalletUser: string
+    ):
+
+    numberorstring
+    copy
+
+    Publishes a sale offer indicating the amount of coins you want to sell and the price ($) per unit you want to assign. The sale will be finalized if there is any purchase offer with a price greater than or equal to that proposed in the sale. If there is no existing offer to buy that matches the requirements at that time, the offer to sell will remain publicly visible until a new offer to buy satisfies the requirements. If the publication has been successful, a number with the value one is returned. In case of error, a string with the details is returned. Any deviation from the method signature will result in a runtime exception preventing further script execution.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = login_wallet(blockchain, "test", "test")
+    result = wallet.sell_coin("test", 100, 20, "test")
+    if result == 1 then
+        print "Sucessfully created sell offer!"
+    else
+        print "Failed: " + result
+    end if
+
+    show_nodes(coinName: string
+    ):
+
+    stringornumberornull
+    copy
+
+    Returns a number representing the count of devices mining a specific coin for the same wallet. In case of an error, a string with details is returned. Any deviation from the method signature will result in null.
+
+    blockchain = include_lib("/lib/blockchain.so")
+    wallet = login_wallet(blockchain, "test", "test")
+    print "Active miners: " show_nodes(wallet, "test")

@@ -1,0 +1,34 @@
+// Man page for spawn
+manSpawn="SPAWN(1)                         X Shell Manual                         SPAWN(1)
+
+<b>NAME</b>
+    spawn - Spawn new X instance
+<b>SYNOPSIS</b>
+    <b>spawn</b> [-p|--pass PASSWORD] [-u USER]
+<b>DESCRIPTION</b>
+    Spawn a new X instance for multi-session work. Use -p for root
+    with password prompt, or --pass to provide password directly.
+    Specify user with -u flag. Can only be used from MAIN session.
+<b>OPTIONS</b>
+    <b>-p</b> - Root with Prompt
+      Launch as root, prompt for password (secure).
+
+    <b>--pass PASSWORD</b> - Root with Password
+      Launch as root with password specified (less secure).
+
+    <b>-u USER</b> - Specify User
+      Launch as specific user.
+<b>EXAMPLE:</b>
+    <b>spawn</b>
+    Spawn new X instance as current user
+
+    <b>spawn -p</b>
+    Spawn as root (password prompt)
+
+    <b>spawn --pass mypassword</b>
+    Spawn as root with password
+
+    <b>spawn -u tux</b>
+    Spawn as user tux
+<b>SEE ALSO</b>
+    <b>sess</b>"

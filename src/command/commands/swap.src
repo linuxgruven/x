@@ -1,0 +1,43 @@
+// =============================================================================
+// SWAP
+// Exchange the filenames of two files in-place.
+// =============================================================================
+Command.swap=function(Obj,argv)
+  argCount=len(argv)
+  if argCount!=2 then return Man.help(["swap"])
+  file1=Io._getFile(Obj,argv[0])
+  isError1=(file1 isa Error)
+  if isError1 then return
+  file2=Io._getFile(Obj,argv[1])
+  isError2=(file2 isa Error)
+  if isError2 then return
+  name1=name(file1)
+  name2=name(file2)
+  // Step 1: Rename first file to temporary name
+  rename(file1,"111111111")
+  file1=null
+  for fileObj in Io.getAll(Obj.root)
+    hasMatchName=(name(fileObj)=="111111111")
+    if hasMatchName then
+      file1=fileObj
+      break
+    end if
+  end for
+  hasFile1=(file1!=null)
+  if not hasFile1 then return Error("Swap failed.")
+  // Step 2: Rename second file to temporary name
+  rename(file2,"111000111")
+  file2=null
+  for fileObj in Io.getAll(Obj.root)
+    hasMatchName=(name(fileObj)=="111000111")
+    if hasMatchName then
+      file2=fileObj
+      break
+    end if
+  end for
+  hasFile2=(file2!=null)
+  if not hasFile2 then return Error("Swap failed.")
+  // Step 3: Complete swap by assigning final names
+  rename(file1,name2)
+  rename(file2,name1)
+end function

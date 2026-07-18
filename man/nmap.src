@@ -1,0 +1,96 @@
+// Man page for nmap
+manNmap="NMAP(8)                          X Shell Manual                          NMAP(8)
+
+<b>NAME</b>
+    nmap - network port mapper
+<b>SYNOPSIS</b>
+    <b>nmap </b>(<b>--post</b>) (<b>-w</b>) <b>IP|DOMAIN</b>
+    <b>nmap </b>(<b>--post</b>) (<b>-w</b>) <b>-l</b>
+    <b>nmap </b>(<b>--post</b>) (<b>-w</b>) <b>-p</b>
+    <b>nmap </b>(<b>--post</b>) (<b>-w</b>) <b>-r</b>
+    <b>nmap -sn PUBLIC_IP</b>
+<b>DESCRIPTION</b>
+    Scan remote IPs and domains to discover open ports and services. Essential reconnaissance
+    tool for network mapping and security assessment. Supports localhost, public IP, random IP
+    scanning. Use redirects to save output to files without printing to terminal. Combine with
+    --post flag to pass scan results as parameters to other commands.
+<b>OPTIONS</b>
+    <b>IP|DOMAIN</b>
+    Scan specific target
+    Find open ports and services
+
+    <b>-l</b>
+    Scan localhost
+    Check local open ports
+
+    <b>-p</b>
+    Scan public IP
+    Check own public IP ports
+
+    <b>-r</b>
+    Scan random IP
+    Random target reconnaissance
+
+    <b>-w</b>
+    Show whois + recon data
+    Display whois registration, router version, and firewall rules
+
+    <b>-sn</b> <b>PUBLIC_IP</b>
+    Discover all devices on the LAN behind the router at PUBLIC_IP.
+    Automatically recurses into sub-routers.
+      [Edge Router]  the top-level router
+      [Router]       a sub-router (recursed into automatically)
+      [Device]       an end device
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Target Scanning</color>
+    <b>nmap 192.168.1.1</b>
+    Scan specific IP
+
+    <b>nmap example.com</b>
+    Scan domain
+
+    <b>nmap server.local</b>
+    Scan local server
+
+    <color=#e4ff34># Special Targets</color>
+    <b>nmap -l</b>
+    Scan localhost
+
+    <b>nmap -p</b>
+    Scan public IP
+
+    <b>nmap -r</b>
+    Scan random IP
+
+    <color=#e4ff34># Whois Lookup</color>
+    <b>nmap -w 155.236.80.20</b>
+    Scan ports + show whois data
+
+    <b>nmap -w -r</b>
+    Scan random IP with whois
+
+    <color=#e4ff34># Ping Sweep</color>
+    <b>nmap -sn 1.2.3.4</b>
+    Discover devices on the LAN behind router at 1.2.3.4
+
+    <color=#e4ff34># With Redirects</color>
+    <b>nmap 192.168.1.1 > scan.txt</b>
+    Save to file
+
+    <b>nmap --post params</b>
+    Pass as parameters
+
+    <b>nmap target >> results.txt</b>
+    Append to file
+
+    <color=#e4ff34># Pipe Examples</color>
+    <b>bc ip | tee scan_target.txt | nmap | grep open</b>
+    Scan random IP and save target to file
+
+    <b>cat targets.txt | nmap</b>
+    Scan IP from file
+
+    <b>echo 192.168.1.1 | nmap | grep -i http</b>
+    Scan and filter for HTTP ports
+<b>SEE ALSO</b>
+    <b>scan</b>, <b>nslookup</b>, <b>whois</b>, <b>tee</b>"

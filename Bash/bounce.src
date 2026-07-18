@@ -1,0 +1,15 @@
+// bounce.src
+// Usage: @bounce PUBLIC_IP LAN_IP
+// Or:    echo PUBLIC_IP LAN_IP | @bounce
+
+scan --b -p $1 -l $2
+
+if $scan_ok
+  _setvar(comp, _hold)
+  _print <color=#00ff00>We're in, executing commands</color>
+  OBJ(comp) list -sB
+  OBJ(comp) ls
+  OBJ(comp) home
+else
+  _print <color=#ff0000>Bounce failed</color>
+endif

@@ -1,0 +1,71 @@
+// Man page for gzip
+manGzip="GZIP(1)                          X Shell Manual                          GZIP(1)
+
+<b>NAME</b>
+    gzip - File and text compression utility
+<b>SYNOPSIS</b>
+    <b>gzip -c</b> [-t] [--force] [-f FILE|TEXT] [-r DIRECTORY]
+    <b>gzip -u</b> [-t] [--force] [-f FILE|TEXT] [-r DIRECTORY]
+<b>DESCRIPTION</b>
+    Compress or uncompress files and text using base64 encoding.
+    The -t flag outputs to console instead of file. By default,
+    uncompressed files must have .gz suffix. Use --force to bypass
+    this check (caution: does not verify if file is gzip archive).
+<b>OPTIONS</b>
+    <b>-c</b> - Compress
+      Compress file or string to base64 format.
+
+    <b>-u</b> - Uncompress
+      Uncompress base64 file or string.
+
+    <b>-t</b> - Output to Console
+      Print result to console instead of writing file.
+
+    <b>--force</b> - Force Operation
+      Skip .gz extension check for uncompress (use with caution).
+
+    <b>-f FILE|TEXT</b> - File or Text
+      Specify file path or text string to compress/uncompress.
+
+    <b>-r DIRECTORY</b> - Recursive Directory
+      Compress/uncompress all files in directory.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Compress Files</color>
+    <b>gzip -c -f data.txt</b>
+    Compress file to data.txt.gz
+
+    gzip -c -f secret message
+    Compress text string
+
+    <b>gzip -c -r /home/user/docs</b>
+    Compress all files in directory
+
+    <color=#e4ff34># Uncompress Files</color>
+    <b>gzip -u -f data.txt.gz</b>
+    Uncompress file
+
+    <b>gzip -u -f archive.dat --force</b>
+    Force uncompress without .gz extension
+
+    <b>gzip -u -r /home/user/backups</b>
+    Uncompress all .gz files in directory
+
+    <color=#e4ff34># Console Output</color>
+    <b>gzip -c -f data.txt -t</b>
+    Compress and print to console
+
+    <b>gzip -u -f data.txt.gz -t</b>
+    Uncompress and print to console
+
+    <color=#e4ff34># Combined Operations</color>
+    <b>gzip -c -f logs.txt</b>
+    Compress logs
+
+    <b>gzip -u -f logs.txt.gz</b>
+    Uncompress logs
+
+    <b>gzip -c -f secret.txt && rm secret.txt</b>
+    Compress and delete original
+<b>SEE ALSO</b>
+    <b>tar</b>, <b>zip</b>"

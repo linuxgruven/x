@@ -1,0 +1,55 @@
+// =============================================================================
+// WHOIS
+// Look up domain registration and IP network information.
+// =============================================================================
+Command.whois=function(argv)
+  if not argv then return Man.help(["whois"])
+  target=argv[0]
+  if target[:3]=="www" then
+    target=nslookup(target)
+    // Validate DNS resolution succeeded
+    if target=="Not found" then return Error.set("Invalid web Address")
+  end if
+  router=get_router(target)
+  if not router then return Error.set("Invalid ip: "+target)
+  info={}
+  info.BSSID=bssid_name(router)
+  info.ESSID=essid_name(router)
+  whoisData=whois(target)
+  if indexOf(whoisData,"Domain name")==null then return Error.set(whoisData)
+  whoisData=whoisData.replace("Domain name: ","")
+  whoisData=whoisData.replace("Administrative contact: ","")
+  whoisData=whoisData.replace("Email address: ","")
+  whoisData=whoisData.replace("Phone: ","")
+  lines=split(whoisData,char(10))
+  info.web=lines[0]
+  info.ip=target
+  info.domain=lines[0].replace("www.","")
+  info.email=lines[2]
+  info.admin=lines[1]
+  info.phone=lines[3]
+  // Extract company name from domain (second segment)
+  info.company=split(info.web,"\.")[1]
+  isPipe=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  if isPipe then
+    push(globals.G_pipe.stdout,"ip: "+info.ip)
+    push(globals.G_pipe.stdout,"web: "+info.web)
+    push(globals.G_pipe.stdout,"domain: "+info.domain)
+    push(globals.G_pipe.stdout,"company: "+info.company)
+    push(globals.G_pipe.stdout,"admin: "+info.admin)
+    push(globals.G_pipe.stdout,"email: "+info.email)
+    push(globals.G_pipe.stdout,"phone: "+info.phone)
+    if info.BSSID then push(globals.G_pipe.stdout,"bssid: "+info.BSSID)
+    if info.ESSID then push(globals.G_pipe.stdout,"essid: "+info.ESSID)
+    return
+  end if
+  if info.BSSID then print blue("BSSID ------------ : ")+yellow(info.BSSID)
+  if info.ESSID then print blue("ESSID ------------ : ")+yellow(info.ESSID)
+  print blue("COMPANY PUBLIC IP  : ")+yellow(info.ip)
+  print blue("COMPANY WEBSITE -- : ")+yellow(info.web)
+  print blue("COMPANY DOMAIN --- : ")+yellow(info.domain)
+  print blue("COMPANY NAME ----- : ")+yellow(info.company)
+  print blue("ADMIN NAME ------- : ")+yellow(info.admin)
+  print blue("ADMIN EMAIL ------ : ")+yellow(info.email)
+  print blue("ADMIN PHONE ------ : ")+yellow(info.phone)
+end function

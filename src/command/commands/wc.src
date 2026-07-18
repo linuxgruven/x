@@ -1,0 +1,124 @@
+// =============================================================================
+// WC
+// Count lines, words, characters, or argument length in a file.
+// =============================================================================
+Command.wc=function(Obj,argv)
+  if not argv then return Man.help(["wc"])
+  _p=ArgumentParser.init
+  // Line count mode flag
+  _p.addArgument("l",false,"flag")  // Count lines
+  // Word count mode flag
+  _p.addArgument("w",false,"flag")  // Count words
+  // Character count mode flag
+  _p.addArgument("c",false,"flag")  // Count characters
+  // Parameter mode flag (no file required)
+  _p.addArgument("p",false,"flag")  // Count characters of CLI argument (no file needed)
+  argv=_p.parse("wc",argv,Obj)
+  if argv isa Error then return
+  _modeCount=0
+  if argv.l then _modeCount+=1
+  if argv.w then _modeCount+=1
+  if argv.c then _modeCount+=1
+  if argv.p then _modeCount+=1
+  if _modeCount>1 then return Error.set("Only one mode flag allowed: -l, -w, -c, or -p")
+  // Check for piped stdin input BEFORE parsePath
+  usePipedInput=false
+  stdinContent=null
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
+    stdinContent=globals.G_pipe.stdin
+    usePipedInput=true
+  end if
+  if argv.p then
+    if not argv.rest then return Info.info("No parameters provided")
+    // Join arguments with spaces and count total characters
+    charCount=len(join(argv.rest," "))
+    print green(charCount+" char(s)")
+    return
+  end if
+  files=[]
+  multipleFiles=false
+  if usePipedInput then
+    // Process stdin content
+    content=stdinContent
+    if typeof(content)!="string" then content=str(content)
+    count=0
+    // Line count mode
+    if argv.l then
+      // Handle empty content - should be 0 lines, not 1
+      if len(content)==0 then
+        count=0
+      else
+        lines=split(content,char(10))
+        // Filter out empty lines from split (empty string splits to [""])
+        count=0
+        for line in lines;if len(line)>0 then count+=1;end for
+      end if
+    end if
+    // Word count mode
+    if argv.w then
+      for line in split(content,char(10));count+=len(split(line," "));end for
+    end if
+    // Character count mode (default if no flags)
+    if argv.c or (not argv.l and not argv.w) then count=len(content)
+    // Check if in pipe mode
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then push(globals.G_pipe.stdout,str(count)) else print green(count)
+    return
+  else if argv.hasIndex("files") and argv.files and len(argv.files)>0 then
+    // Glob expansion occurred
+    files=argv.files
+    multipleFiles=len(files)>1
+  else if argv.rest and len(argv.rest)>0 then
+    // Single file path provided
+    fileObj=Io._getFile(Obj,argv.rest[0])
+    if fileObj isa Error then return fileObj
+    files=[fileObj]
+  else
+    return Info.info("No file provided")
+  end if
+  totalCount=0
+  results=[]
+  for fileObj in files
+    if not fileObj or fileObj isa Error then continue
+    if not has_permission(fileObj,"r") then continue
+    content=get_content(fileObj)
+    if not content then
+      if multipleFiles then push(results,"0 "+path(fileObj)) else push(results,"0")
+      continue
+    end if
+    count=0
+    // Line count mode - split by newline and count non-empty segments
+    if argv.l then
+      if len(content)==0 then
+        count=0
+      else
+        lines=split(content,char(10))
+        // Filter out empty lines from split (empty string splits to [""])
+        count=0
+        for line in lines;if len(line)>0 then count+=1;end for
+      end if
+    end if
+    // Word count mode - split lines by spaces and count words
+    if argv.w then
+      for line in split(content,char(10));count+=len(split(line," "));end for
+    end if
+    // Character count mode - count all characters including newlines
+    if argv.c then
+      for line in split(content,char(10));count+=len(line)+1;end for
+      // Adjust for no trailing newline on last line
+      count-=1
+    end if
+    totalCount+=count
+    if multipleFiles then push(results,str(count)+" "+path(fileObj)) else push(results,str(count))
+  end for
+  if argv.l then
+    suffix=" line(s)"
+  else if argv.w then
+    suffix=" word(s)"
+  else if argv.c then
+    suffix=" char(s)"
+  else
+    return Man.help(["wc"])
+  end if
+  for result in results;print green(result+suffix);end for
+  if multipleFiles and len(results)>1 then print green(str(totalCount)+" total"+suffix)
+end function

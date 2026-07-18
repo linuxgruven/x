@@ -1,0 +1,45 @@
+// Man page for coin
+manCoin="COIN(6)                          X Shell Manual                          COIN(6)
+
+<b>NAME</b>
+    coin - Cryptocurrency wallet manager
+<b>SYNOPSIS</b>
+    <b>coin -n COIN_NAME -u USER</b> [-p PASS]
+<b>DESCRIPTION</b>
+    Access cryptocurrency wallet management interface. Login to coin
+    services to manage balances, transfers, and transactions. If password
+    is not provided with -p flag, you will be prompted interactively.
+<b>OPTIONS</b>
+    <b>-n COIN_NAME</b> - Coin Service Name
+      Specify the coin service to connect to.
+
+    <b>-u USER</b> - Username
+      Account username for authentication.
+
+    <b>-p PASS</b> - Password (Optional)
+      Account password. Omit for interactive prompt.
+
+    *** Will prompt for password if -p not specified ***
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Login to Coin Services</color>
+    <b>coin -n BitForce -u hacker123</b>
+    Login with interactive password prompt
+
+    <b>coin -n CryptoBank -u admin -p secretpass</b>
+    Login with password on command line
+
+    <color=#e4ff34># Different Coin Services</color>
+    <b>coin -n BitMiner -u miner01</b>
+    Access BitMiner service
+
+    <b>coin -n CoinExchange -u trader</b>
+    Access exchange service
+
+    <color=#e4ff34># Automated Scripts</color>
+    <b>coin -n WalletService -u bot -p $(cat .coinpass)</b>
+    Login using password from file
+
+    <b>coin -n BitVault -u user1 -p pass123</b>
+    Direct login for automation
+<b>SEE ALSO</b>
+    <b>web</b>"

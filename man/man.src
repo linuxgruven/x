@@ -1,0 +1,118 @@
+// Man page for man
+manMan="MAN(5)                           X Shell Manual                           MAN(5)
+
+<b>NAME</b>
+    man - use to view man pages|help on commands
+<b>SYNOPSIS</b>
+    <b>man </b><b>COMMAND</b>
+    <b>man </b><b>apropos</b>|<b>search</b> [<b>-e</b>] [<b>-v</b>] <b>KEYWORD</b> [KEYWORD...]
+    <b>man </b><b>dump</b> [COMMAND]
+<b>DESCRIPTION</b>
+    View comprehensive help documentation for commands. Access manual pages using man COMMAND
+    or COMMAND --help. Browse all available commands with cmds or help. Search man pages by
+    keyword using apropos or search - displays compact one-line summaries by default, or full
+    pages with -v flag. Dump man pages to file for offline reference - either all pages or
+    a specific command page.
+    Supports wildcards and path shortcuts for efficient command-line navigation.
+<b>OPTIONS</b>
+    <b>man COMMAND</b>
+    Display manual page for a command
+    Show detailed help documentation
+
+    <b>apropos, search KEYWORD</b>
+    Search man pages by keyword (compact output)
+    Shows one-line summaries of matching commands
+    Case-insensitive by default
+
+    <b>apropos, search -e KEYWORD</b>
+    Exact word match search
+    Only matches whole words
+
+    <b>apropos, search -v KEYWORD</b>
+    Verbose search (full man pages)
+    Shows complete manual pages with highlighted matches
+
+    <b>dump [COMMAND]</b>
+    Export man pages to text file
+    No argument: Creates man_pages_N files with all pages
+    With COMMAND: Creates man_COMMAND.txt with single page
+
+    <color=#e4ff34>Wildcards and Paths:</color>
+    ~ - Home directory (expands to user home)
+    . (dot) - Current directory
+    .. (dot dot) - Parent directory
+    ./* - All files/folders in current directory
+    ../* - All files/folders in parent directory
+    path/* - All items in directory
+    path/*/* - All items two levels deep
+    file* - Files starting with 'file'
+    *file - Files ending with 'file'
+    *file* - Files containing 'file'
+
+    <color=#e4ff34>Syntax:</color>
+    ARGUMENT - Mandatory arguments
+    [ARGUMENT] - Optional arguments
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View Manual Pages</color>
+    <b>man ls</b>
+    View ls command help
+
+    <b>man ssh</b>
+    View ssh manual
+
+    <b>ls --help</b>
+    Alternative help syntax
+
+    <color=#e4ff34># Search Commands</color>
+    <b>man apropos network</b>
+    Find network commands (compact)
+
+    <b>man search file</b>
+    Search for file commands
+
+    <b>man search -e exploit</b>
+    Exact word match for 'exploit'
+
+    <b>man search -v config</b>
+    Verbose search showing full pages
+
+    <b>man search ai network</b>
+    Search for 'ai' OR 'network'
+
+    <color=#e4ff34># List Commands</color>
+    <b>cmds</b>
+    List all available commands
+
+    <b>help</b>
+    Display command list
+
+    <color=#e4ff34># Export Documentation</color>
+    <b>man dump</b>
+    Export all pages to man_pages_N files
+
+    <b>man dump ssh</b>
+    Export ssh page to man_ssh.txt
+
+    <b>man dump ls</b>
+    Export ls page to man_ls.txt
+
+    <color=#e4ff34># Path Examples</color>
+    <b>cd $</b>
+    Navigate to home directory
+
+    <b>ls ../../../</b>
+    List three parent directories up
+
+    <b>rm ./*</b>
+    Remove all files in current dir
+
+    <b>wc -l payload/*/*</b>
+    Count lines in all files two levels deep
+
+    <b>ls *.txt</b>
+    List all .txt files in current directory
+
+    <b>cat log*</b>
+    Display all files starting with 'log'
+<b>SEE ALSO</b>
+    <b>x</b>"

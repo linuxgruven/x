@@ -1,0 +1,55 @@
+// =============================================================================
+// LOCATE
+// Find files by name pattern; -s for exact match.
+// =============================================================================
+Command.locate=function(Obj,argv)
+  if not argv then return Man.help(["locate"])
+  _p=ArgumentParser.init
+  _p.addArgument("s",false,"flag")    // Strict/exact match mode
+  _p.addArgument("x",false,"store")    // Exclude folders
+  _p.addArgument("exclude",true,"store") // Exclude folders (long)
+  argv=_p.parse("locate",argv,Obj)
+  if argv isa Error then return
+  if not argv.rest or len(argv.rest)==0 then return Error.set("Pattern required")
+  searchPatterns=argv.rest
+  found=null
+  excludeNames=null
+  excludeRaw=null
+  if argv.x then
+    excludeRaw=argv.x
+  else if argv.exclude then
+    excludeRaw=argv.exclude
+  end if
+  if excludeRaw then excludeNames=excludeRaw.split(":")
+  allItems=Io.getAll(Obj.root,excludeNames)
+  if allItems isa Error then return
+  for item in allItems
+    itemName=name(item)
+    for searchPattern in searchPatterns
+      useGlob=indexOf(searchPattern,"*")!=null or indexOf(searchPattern,"?")!=null
+      isMatch=false
+      if useGlob then
+        isMatch=Glob.match(itemName,searchPattern)
+      else if argv.s then
+        isMatch=(itemName==searchPattern)
+      else
+        isMatch=Io.matchName(itemName,searchPattern)
+      end if
+      if isMatch then
+        found=1
+        if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+          push(globals.G_pipe.stdout,path(item))
+        else
+          print yellow("Found : ")+blue(name(item))
+          print green(path(item))
+        end if
+        break
+      end if
+    end for
+  end for
+  if not found then
+    displayPatterns=[]
+    for sp in searchPatterns;push(displayPatterns,stripRegex(sp));end for
+    Info.warning("Unable to locate: "+join(displayPatterns,", "))
+  end if
+end function

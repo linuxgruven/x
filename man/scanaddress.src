@@ -1,0 +1,36 @@
+// Man page for scanaddress
+manScanaddress="SCANADDRESS(1)                    X Shell Manual                SCANADDRESS(1)
+
+<b>NAME</b>
+    scanaddress - Scan a memory zone address in a library for vulnerabilities
+
+<b>SYNOPSIS</b>
+    <b>scanaddress</b> [-av] LIB_PATH ZONE [ZONE...]
+    command | <b>scanaddress</b> [-v] LIB_PATH
+    <b>scanaddress</b> -a [-v] LIB_PATH
+
+<b>DESCRIPTION</b>
+    Runs scan_address on one or more memory zone addresses in a .so library.
+    Zone addresses can be passed as arguments or piped from stdin (e.g. from
+    scanlib). Requires metaxploit.
+
+<b>OPTIONS</b>
+    <b>-a</b>    Auto mode. Calls scan internally to find all zones and scans each
+          one. No need to pipe from scanlib.
+    <b>-v</b>    Verbose. Prints each zone address before scanning it.
+
+<b>EXAMPLE:</b>
+    <b>scanaddress -a /lib/crypto.so</b>
+    Scan all zones automatically
+
+    <b>scanlib /lib/libhttp.so | scanaddress /lib/libhttp.so</b>
+    Scan all zones found by scanlib
+
+    <b>scanlib /lib/libhttp.so | head -n 1 | scanaddress /lib/libhttp.so</b>
+    Scan only the first zone found by scanlib
+
+    <b>scanaddress -av /lib/libhttp.so | grep exploit</b>
+    Auto-scan verbosely and filter for exploits
+
+<b>SEE ALSO</b>
+    <b>scanlib</b>, <b>0day</b>, <b>lms</b>"

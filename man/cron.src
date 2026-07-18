@@ -1,0 +1,58 @@
+// Man page for cron
+manCron="CRON(1)                          X Shell Manual                          CRON(1)
+
+<b>NAME</b>
+    cron - Schedule X shell commands and macros from a crontab file
+
+<b>SYNOPSIS</b>
+    <b>cron</b> [<b>-f</b> FILE] [FILE]
+
+<b>DESCRIPTION</b>
+    Reads a crontab file and runs each job at its scheduled time. Unlike
+    the standalone /tools/cron binary, the cron command runs jobs through
+    the X shell, so any X command, alias, macro, builtin, external
+    binary, or bash script works as a job.
+
+    Bash scripts: prefix the script name with <b>@</b> to run it via
+    <b>Bash.run</b>. <b>@name</b> looks the script up in the bash dir; <b>@/path/to/file</b>
+    uses an explicit path. Without <b>@</b>, the first token is treated as an
+    X command, alias, macro, builtin, or absolute binary path.
+
+    Default crontab path: ~/Config/crontab (auto-created if missing).
+    Press 'q' to stop. Press 'r' to force-reload + immediate tick.
+    The crontab is auto-reloaded whenever its content changes.
+
+<b>OPTIONS</b>
+    <b>-f</b> FILE
+      Use a custom crontab path.
+
+<b>CRONTAB FORMAT</b>
+    Each non-blank, non-comment line is a job:
+
+      m  h  dom  mon  dow  command [args...]
+      0-59 0-23 1-31 1-12 0-6
+
+    Wildcards: <b>*</b> any, <b>*/N</b> every N, <b>a,b,c</b> list, <b>a-b</b> range.
+    Lines starting with <b>#</b> are comments.
+
+<b>EXAMPLES</b>
+    <b>0 * * * *   rm /home/tux/Config/Bank.txt</b>        every hour at :00
+    <b>*/5 * * * * wipe</b>                                every 5 minutes
+    <b>30 * * * *  rm /tmp/cache.log</b>                   every hour at :30
+    <b>0 3 * * *   clean</b>                               daily at 3:00 AM
+    <b>* * * * *   echo tick</b>                           every minute
+    <b>* * * * *   ls /home ; cat /etc/passwd</b>          run a chain
+    <b>0 4 * * *   @backup</b>                             bash script in bash dir
+    <b>15 * * * * @/home/tux/scripts/cleanup arg1</b>      bash script by path
+    <b>0 0 * * 0   wipe ; clean</b>                        weekly Sunday midnight
+    <b>*/10 9-17 * * 1-5  audit</b>                        every 10m, weekday hours
+    <b>45 23 1 * *  rm /var/log/old.log</b>                1st of month, 23:45
+    <b>0 12 * * *  mybackup</b>                            noon: run alias/macro
+
+<b>NOTES</b>
+    Grey Hack in-game time runs faster than real time; cron polls every
+    couple of real seconds, so a <b>* * * * *</b> job triggers each in-game
+    minute. Each minute window only fires once per job.
+
+<b>SEE ALSO</b>
+    <b>vi</b>, <b>alias</b>"

@@ -1,0 +1,47 @@
+_print <color=#eb0cc6>========================================</color>
+_print <color=#eb0cc6>  _File MONITOR TEST</color>
+_print <color=#eb0cc6>========================================</color>
+_print
+
+if $1 == ""
+  _print <color=#ff0000>[X] Usage: run test_fmon <path></color>
+  _exit
+endif
+
+_setvar(info,null)
+_setvar(content,"")
+_setvar(prevLen,0)
+_setvar(curLen,0)
+_setvar(i,0)
+
+_setvar(info,_File($1))
+if _getvar(info) == null
+  _print <color=#ff0000>[X] File not found: $1</color>
+  _exit
+endif
+
+_setvar(content,_getvar(info).get_content)
+_setvar(prevLen,len(content))
+_print <color=#00bfff>Monitoring $1 — initial char count: _getvar(prevLen)</color>
+_print <color=#888888>Checking every 3s for 10 iterations...</color>
+_print
+
+_setvar(i,0)
+while _getvar(i) < 10
+  _sleep 3
+  _setvar(info,_File($1))
+  if _getvar(info) == null
+    _print <color=#ffff00>[!] File removed</color>
+    _exit
+  endif
+  _setvar(content,_getvar(info).get_content)
+  _setvar(curLen,len(content))
+  _print <color=#888888>check: _getvar(curLen) chars (prev: _getvar(prevLen))</color>
+  if to_int(_getvar(curLen)) != to_int(_getvar(prevLen))
+    _print <color=#00ff00>[CHANGE] chars: _getvar(prevLen) -> _getvar(curLen)</color>
+    _setvar(prevLen,_getvar(curLen))
+  endif
+  _setvar(i,_getvar(i)+1)
+end while
+
+_print <color=#eb0cc6>Done (10 checks complete)</color>

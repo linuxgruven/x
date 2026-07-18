@@ -1,0 +1,110 @@
+// =============================================================================
+// MV
+// Move or rename a file or directory; -r overwrites existing.
+// =============================================================================
+Command.mv=function(Obj,argv)
+  hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+  if not argv and not hasPipeInput then return Man.help(["mv"])
+  if hasPipeInput then
+    if not argv then argv=[]
+    for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then insert(argv,0,line);end for
+  end if
+  _p=ArgumentParser.init
+  _p.addArgument("r",false,"flag")     // Recursive move
+  _p.addArgument("l",false,"flag")     // List mode (Io.mv)
+  _p.addArgument("n",false,"store")    // Name mode (Io.mv)
+  _p.addArgument("z",false,"flag")     // Z mode (Io.mv)
+  _p.addArgument("i",false,"flag")     // Interactive (prompt before overwrite)
+  argv=_p.parseArgs("mv",argv)
+  if argv isa Error then return
+  argv=_p.parsePath(Obj,argv)
+  if argv isa Error then return
+  if hasIndex(argv,"special") then return Io.mv(Obj,argv)
+  if argv.z then return Io.mv(Obj,argv)
+  if argv.l then return Io.mv(Obj,argv)
+  if argv.n then return Io.mv(Obj,argv)
+  if hasIndex(argv,"useAI") then
+    if Gui.yesNo("Are we moving a file?") then sourceObj=Io.file(Obj,Obj.dir.current,"Select a file to move:") else sourceObj=Io.folder(Obj,Obj.dir.current,"Select a directory to move:")
+    if sourceObj isa Warning then return sourceObj
+    if not has_permission(sourceObj,"r") and not has_permission(sourceObj,"w") then return Info.error("Permission denied for : "+path(sourceObj))
+    if Gui.yesNo("Would you like to give "+white(name(sourceObj))+" a new name?",false) then
+      newName=Gui.input({"text":"Enter a new name","default":name(sourceObj)})
+    else
+      // Handle root directory special case (rename "/" to "root")
+      if path(sourceObj)=="/" then newName="root" else newName=name(sourceObj)
+    end if
+    destObj=Io._getFile(Obj,argv.rest[1])
+    if destObj isa Error then return destObj
+    result=move(sourceObj,path(destObj),newName)
+    if result!=1 then Info.error(result)
+    return
+  end if
+  if len(argv.rest)<2 then return Man.help(["mv"])
+  destPath=argv.rest[-1]
+  destFile=Io._getFile(Obj,destPath)
+  destObj=null
+  newName=null
+  if destFile and not (destFile isa Error) and is_folder(destFile) then
+    destObj=destFile
+  else
+    // Parse as: mv source newname
+    parentPath=parent_path(destPath)
+    // If parent equals path, use current_path
+    if parentPath==destPath then parentPath=current_path
+    destObj=Io._getFile(Obj,parentPath)
+    if destObj isa Error then return destObj
+    if not is_folder(destObj) then return Error.set("Invalid path")
+    parts=split(destPath,"/")
+    newName=parts[-1]
+  end if
+  sourceFiles=[]
+  hasFiles=argv.hasIndex("files")
+  if hasFiles and argv.files and len(argv.files)>0 then
+    // Glob expansion: all files except destination
+    _len=len(argv.files);i=0;while i<_len;push(sourceFiles,argv.files[i]);i+=1;end while
+  else
+    // No glob: get source file(s) from argv.rest (all but last)
+    _len=len(argv.rest);i=0;while i<=_len-2;srcFile=Io._getFile(Obj,argv.rest[i]);if srcFile isa Error then return srcFile;push(sourceFiles,srcFile);i+=1;end while
+  end if
+  if not sourceFiles or len(sourceFiles)==0 then return Error.set("No source files specified")
+  if newName and len(sourceFiles)>1 then return Error.set("Cannot move multiple files to single name")
+  for sourceObj in sourceFiles
+    if not sourceObj or sourceObj isa Error then continue
+    canRead=has_permission(sourceObj,"r")
+    canWrite=has_permission(sourceObj,"w")
+    if not canRead and not canWrite then
+      Error.set("Permission denied for : "+path(sourceObj))
+      continue
+    end if
+    if argv.r and is_folder(sourceObj) then
+      allItems=get_files(sourceObj)+get_folders(sourceObj)
+      for item in allItems
+        if not destObj then
+          Error.set("Internal error")
+          continue
+        end if
+        Info.info("Moving "+name(item)+" to "+path(destObj)+" as "+name(item))
+        result=move(item,path(destObj),name(item))
+        // Report errors but continue processing remaining items
+        if result!=1 then Error.set(result)
+      end for
+    else
+      finalName=null
+      if newName then finalName=newName else finalName=name(sourceObj)
+      // Validate filename length (max 128 characters)
+      if len(finalName)>128 then
+        Error.set("Filename too long: "+finalName)
+        continue
+      end if
+      if argv.i then
+        destCheck=Io._getFile(Obj,path(destObj)+"/"+finalName)
+        if destCheck and not (destCheck isa Error) then
+          if not Gui.yesNo("Overwrite "+finalName+"?",false) then continue
+        end if
+      end if
+      Info.info("Moving "+name(sourceObj)+" to "+path(destObj)+" as "+finalName)
+      result=move(sourceObj,path(destObj),finalName)
+      if result!=1 then Error.set(result)
+    end if
+  end for
+end function

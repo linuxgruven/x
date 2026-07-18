@@ -1,0 +1,110 @@
+// Man page for sessions
+manSessions="SESSIONS(1)                      X Shell Manual                      SESSIONS(1)
+
+<b>NAME</b>
+    sess - Session management system
+
+<b>SYNOPSIS</b>
+    <b>sess -l</b>
+    <b>sess -u ID</b>
+    <b>sess -r ID</b> [-y|-n]
+    <b>sess -m</b>
+    <b>sess -a</b> [NICK]
+    <b>sess -x</b>
+    <b>sess -n ID NICK</b>
+    <b>sess -p SESSION_ID FILE</b> [FILE...] [--path]
+    <b>sess -e ID COMMAND</b> [PARAMS]
+    <b>sess -g NICK</b>
+    <b>sess -rn NICK</b> [-y|-n]
+    <b>sess back</b>
+
+<b>DESCRIPTION</b>
+    View, create, and manage shell sessions. Switch between multiple
+    sessions to work on different computers or tasks simultaneously.
+    The session cache is cleared when x is closed.
+
+<b>OPTIONS</b>
+    <b>-l</b> - List Sessions
+      Display all active sessions.
+
+    <b>-u ID</b> - Use Session
+      Switch to session by ID.
+
+    <b>-r ID</b> [-y|-n] - Remove Session
+      Remove session by ID. -y shows updated list after (default), -n suppresses it.
+
+    <b>-m</b> - Management Mode
+      Interactive session chooser with GUI selection menu.
+
+    <b>-a</b> [NICK] - Add Session
+      Add current session to list with optional nickname.
+
+    <b>-x</b> - Clear Sessions
+      Clear all sessions except Main from cache.
+
+    <b>-n ID NICK</b> - Set Nickname
+      Set or change nickname for session.
+
+    <b>-p SESSION_ID FILE</b> [FILE...] [--path] - Pass Files
+      Pass files from one session to another.
+      Use --path to specify destination directory.
+
+    <b>-e ID COMMAND</b> [PARAMS] - Execute Command
+      Execute command in session by ID.
+
+    <b>-g NICK</b> - Goto Nickname
+      Switch to session by nickname.
+
+    <b>-rn NICK</b> [-y|-n] - Remove by Nickname
+      Remove session by nickname. -y shows updated list after (default), -n suppresses it.
+
+    <b>back</b> - Return to Previous Session
+      Switch back to the last active session.
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># View and Switch</color>
+    <b>sess -l</b>
+        List all sessions
+
+    <b>sess -u 1</b>
+        Switch to session 1
+
+    <b>sess back</b>
+        Return to previous session
+
+    <b>sess -m</b>
+        Management mode
+
+    <color=#e4ff34># Create and Name</color>
+    <b>sess -a TargetServer</b>
+        Add current session with nickname
+
+    <b>sess -n 1 BankServer</b>
+        Set nickname for session 1
+
+    <b>sess -g BankServer</b>
+        Goto session by nickname
+
+    <color=#e4ff34># File Transfer</color>
+    <b>sess -p 2 exploit.txt config.src</b>
+        Pass files to session 2
+
+    <b>sess -p 1 --path /home/tux data.txt</b>
+        Pass file to session 1 at /home/tux
+
+    <color=#e4ff34># Execute Command</color>
+    <b>sess -e 1 ls</b>
+        Execute ls in session 1
+
+    <color=#e4ff34># Remove Sessions</color>
+    <b>sess -r 1</b>
+        Remove session 1 (with confirmation)
+
+    <b>sess -rn OldSession</b>
+        Remove session by nickname
+
+    <b>sess -x</b>
+        Clear all sessions except Main
+
+<b>SEE ALSO</b>
+    <b>spawn</b>"

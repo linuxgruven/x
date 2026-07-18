@@ -1,0 +1,74 @@
+// DEBUG TEST 3: Chapter 6-7 (System Interaction, Scanning)
+// This is where _fs_pwd lives and the crash likely happens after.
+
+func assert(label, actual, expected)
+  if _getvar(actual) == _getvar(expected)
+    _print <color=#00ff00>  [PASS]</color> _getvar(label)
+  else
+    _print <color=#ff0000>  [FAIL]</color> _getvar(label)
+  endif
+endfunc
+
+_print <color=#eb0cc6>=== CHAPTER 6 START ===</color>
+
+// -- 6.1 Environment --
+_print <color=#00bfff>--- 6.1 Environment ---</color>
+_setvar(u, get_user())
+_print <color=#aaaaaa>  User:</color> _getvar(u)
+_setvar(h, get_home())
+_print <color=#aaaaaa>  Home:</color> _getvar(h)
+_print <color=#00ff00>  6.1 OK</color>
+
+// -- 6.2 Network --
+_print <color=#00bfff>--- 6.2 Network ---</color>
+_setvar(lip, get_lanIP())
+_print <color=#aaaaaa>  LAN IP:</color> _getvar(lip)
+_setvar(pip, get_publicIP())
+_print <color=#aaaaaa>  Public IP:</color> _getvar(pip)
+_print <color=#00ff00>  6.2 OK</color>
+
+// -- 6.3 File System --
+_print <color=#00bfff>--- 6.3 File System ---</color>
+_setvar(cwd, _fs_pwd)
+_print <color=#aaaaaa>  PWD:</color> _getvar(cwd)
+_print <color=#00ff00>  6.3a PWD OK</color>
+
+_setvar(exists, _File(/etc))
+_print <color=#aaaaaa>  /etc exists?</color> _getvar(exists)
+_print <color=#00ff00>  6.3b _File OK</color>
+
+_setvar(isDir, _File(/etc))
+_setvar(isDir, _getvar(isDir).is_folder)
+_print <color=#aaaaaa>  /etc is folder?</color> _getvar(isDir)
+_print <color=#00ff00>  6.3c is_folder OK</color>
+
+_setvar(isDir, _File(/etc/passwd))
+_setvar(isDir, _getvar(isDir).is_folder)
+_print <color=#aaaaaa>  /etc/passwd is folder?</color> _getvar(isDir)
+_print <color=#00ff00>  6.3d OK</color>
+
+// -- 6.4 Reading Files --
+_print <color=#00bfff>--- 6.4 Reading Files ---</color>
+_setvar(exists, _File(/etc/passwd))
+if _getvar(exists)
+  _setvar(content, _fs_read /etc/passwd)
+  _print <color=#aaaaaa>  Content:</color> _getvar(content)
+  _setvar(cl, len(_getvar(content)))
+  _print <color=#aaaaaa>  Read /etc/passwd:</color> _getvar(cl) chars
+else
+  _print <color=#ffff00>  /etc/passwd not found</color>
+endif
+_print <color=#00ff00>  6.4 OK</color>
+
+_print <color=#eb0cc6>=== CHAPTER 6 DONE ===</color>
+
+// -- CH7: Scanning --
+_print <color=#eb0cc6>=== CHAPTER 7 START ===</color>
+_setvar(myIP, get_publicIP())
+_print <color=#aaaaaa>  My IP:</color> _getvar(myIP)
+_setvar(ports, _net_ports _getvar(myIP))
+_setvar(numPorts, len(_getvar(ports)))
+_print <color=#aaaaaa>  Ports found:</color> _getvar(numPorts)
+_print <color=#eb0cc6>=== CHAPTER 7 DONE ===</color>
+
+_print <color=#00ff00>=== DEBUG TEST 3 COMPLETE ===</color>

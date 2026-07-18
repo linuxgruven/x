@@ -1,0 +1,160 @@
+// =============================================================================
+// CAL
+// Print current month calendar with today highlighted. Use -y for full year.
+// =============================================================================
+Command.cal=function(Obj,argv)
+  _p=ArgumentParser.init
+  _p.addArgument("post",true,"flag")
+  _p.addArgument("y",false,"flag")
+  _p.addArgument("year",true,"storeNumber")
+  _p.addArgument("3",false,"flag")
+  _p.addArgument("m",false,"flag")
+  argv=_p.parseArgs("cal",argv)
+  if argv isa Error then return
+  argv=_p.checkRedirect(Obj,"cal",argv)
+  if argv isa Error then return
+  dateParts=split(current_date, "/| - ")[:-1]
+  monthNames=["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"]
+  monthDays=[31,28,31,30,31,30,31,31,30,31,30,31]
+  monthKeys=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+  actualYear=to_int(pop(dateParts))
+  monthAbbr=pop(dateParts)
+  currentDay=to_int(pop(dateParts))
+  curMonth=monthKeys.indexOf(monthAbbr)
+  mondayStart=(argv.m==true)
+  threeMonth=(hasIndex(argv,"3") and argv["3"])
+  year=actualYear
+  viewMonth=curMonth
+  // Handle positional args: cal <month> [year] or cal <year>
+  if argv.rest and len(argv.rest)>=1 then
+    m=to_int(argv.rest[0])
+    if not m isa number then return Error.set("Invalid argument: "+argv.rest[0])
+    if len(argv.rest)==1 and m>12 then
+      year=m
+      argv.y=true
+    else if m<1 or m>12 then
+      return Error.set("Invalid month: "+argv.rest[0])
+    else
+      viewMonth=m-1
+      if len(argv.rest)>=2 then
+        y=to_int(argv.rest[1])
+        if not y isa number or y<1 then return Error.set("Invalid year: "+argv.rest[1])
+        year=y
+      end if
+    end if
+  end if
+  // Optional named year argument: cal --year 2002
+  if argv.year and argv.year>0 then
+    year=argv.year
+    argv.y=true
+  end if
+  isCurrentYear=(year==actualYear)
+  zellerTable=[0,3,2,5,0,3,5,1,4,6,2,4]
+  // Build a single month grid as list of lines (8 lines: header, day header, 6 week rows)
+  buildMonth=function(mi,yr,highlightDay)
+    _md=[31,28,31,30,31,30,31,31,30,31,30,31]
+    if yr%4==0 and (yr%100!=0 or yr%400==0) then _md[1]=29
+    if mi<2 then ay=yr-1 else ay=yr
+    sd=(ay+floor(ay/4)-floor(ay/100)+floor(ay/400)+zellerTable[mi]+1)%7
+    if mondayStart then sd=(sd+6)%7
+    dim=_md[mi]
+    hdr=monthNames[mi]+"-( "+yr+" )"
+    // Center header to 21 chars to match week data width
+    pad=21-len(hdr)
+    lp=floor(pad/2)
+    hdr="                     "[:lp]+hdr+"                     "[:pad-lp]
+    if mondayStart then lines=[hdr,"MO TU WE TH FR SA SU "] else lines=[hdr,"SU MO TU WE TH FR SA "]
+    dn=1-sd
+    fd=false
+    while len(lines)<8
+      wk=[]
+      di=1
+      while di<=7
+        if dn<1 or dn>dim then
+          push(wk,"   ")
+        else
+          if dn<10 then push(wk,dn+"  ") else push(wk,dn+" ")
+        end if
+        dn+=1
+      di+=1
+      end while
+      if not fd and highlightDay then
+        for cell in clone(wk)
+          if trim(cell)==highlightDay then
+            wk[__cell_idx]=wk[__cell_idx].replace(highlightDay,bold(green(highlightDay)))
+            fd=true
+            break
+          end if
+        end for
+      end if
+      wl=join(wk,"")
+      while len(wl)<21;wl=wl+" ";end while
+      push(lines,wl)
+    end while
+    return lines
+  end function
+  if argv.y then
+    // Full year: 4 rows of 3 months
+    allLines=[]
+    row=0
+    while row<=3
+      grids=[]
+      col=0;while col<=2;mi=row*3+col;if isCurrentYear and mi==curMonth and not _p.write then hl=str(currentDay) else hl=null;push(grids,buildMonth(mi,year,hl));col+=1;end while
+      li=0
+      while li<=7
+        line=""
+        gi=0;while gi<=2;if gi>0 then line=line+"  ";line=line+grids[gi][li];gi+=1;end while
+        push(allLines,line)
+      li+=1
+      end while
+      if row<3 then push(allLines,"")
+    row+=1
+    end while
+    if _p.write then
+      argv.data=allLines
+      return _p.out(Obj,argv)
+    else
+      print join(allLines,char(10))
+    end if
+  else if threeMonth then
+    // Three-month view: previous, current, next
+    allLines=[]
+    grids=[]
+    mi=0;while mi<=2
+      pm=viewMonth+(mi-1)
+      py=year
+      if pm<0 then
+        pm=11
+        py=year-1
+      else if pm>11 then
+        pm=0
+        py=year+1
+      end if
+      if py==actualYear and pm==curMonth and not _p.write then hl=str(currentDay) else hl=null
+      push(grids,buildMonth(pm,py,hl))
+    mi+=1;end while
+    li=0
+    while li<=7
+      line=""
+      gi=0;while gi<=2;if gi>0 then line=line+"  ";line=line+grids[gi][li];gi+=1;end while
+      push(allLines,line)
+    li+=1
+    end while
+    if _p.write then
+      argv.data=allLines
+      return _p.out(Obj,argv)
+    else
+      print join(allLines,char(10))
+    end if
+  else
+    // Single month
+    if _p.write or not isCurrentYear or viewMonth!=curMonth then hl=null else hl=str(currentDay)
+    lines=buildMonth(viewMonth,year,hl)
+    if _p.write then
+      argv.data=lines
+      return _p.out(Obj,argv)
+    else
+      print join(lines,char(10))
+    end if
+  end if
+end function

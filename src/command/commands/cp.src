@@ -1,0 +1,100 @@
+// =============================================================================
+// CP
+// Copy files or directories; -r recurses, -l links, -z zips.
+// =============================================================================
+Command.cp=function(Obj,argv)
+	hasPipeInput=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and not globals.G_pipe.XARGS_MODE
+	if not argv and not hasPipeInput then return Man.help(["cp"])
+	if hasPipeInput then
+		if not argv then argv=[]
+		for line in globals.G_pipe.stdin.split(char(10));line=trim(line);if line then insert(argv,0,line);end for
+	end if
+	_p=ArgumentParser.init
+	_p.addArgument("r",false,"flag")      // Recursive flag (implicit for dirs)
+	_p.addArgument("l",false,"flag")      // List mode (multiple files)
+	_p.addArgument("L",false,"flag")      // Follow symlinks
+	_p.addArgument("follow",true,"flag")  // Follow symlinks (long option --follow)
+	_p.addArgument("n",false,"store")     // New name
+	_p.addArgument("z",false,"flag")      // Zip mode
+	_p.addArgument("i",false,"flag")      // Interactive (prompt before overwrite)
+	argv=_p.parse("cp",argv,Obj)
+	if argv isa Error then return
+	if hasIndex(argv,"special") then return Io.cp(Obj,argv)
+	if argv.z then return Io.cp(Obj,argv)
+	if argv.l then return Io.cp(Obj,argv)
+	if argv.n then return Io.cp(Obj,argv)
+	// Handle interactive GUI mode when triggered by ?
+	if hasIndex(argv,"useAI") then
+		if Gui.yesNo("Are we copying a file?") then sourceFile=Io.file(Obj,Obj.dir.current,"Select a file to copy:") else sourceFile=Io.folder(Obj,Obj.dir.current,"Select a directory to copy:")
+		if sourceFile isa Warning then return sourceFile
+		if not has_permission(sourceFile,"r") and not has_permission(sourceFile,"w") then return Info.error("Permission denied for : "+path(sourceFile))
+		if Gui.yesNo("Would you like to give "+white(name(sourceFile))+" a new name?",false) then
+			newName=Gui.input({"text":"Enter a new name","default":name(sourceFile)})
+			if newName==null then return Error.set("No name specified")
+		else
+			// Use original name, handle root directory special case
+			if path(sourceFile)=="/" then newName="root" else newName=name(sourceFile)
+		end if
+		targetDir=Io.folder(Obj,Obj.dir.current,"Select the destination directory:")
+		if targetDir isa Warning then return targetDir
+		// Perform copy operation - returns 1 on success, error string on failure
+		result=copy(sourceFile,path(targetDir),newName)
+		if result!=1 then Info.error(result)
+		return
+	end if
+	if not len(argv.rest)>=2 then return Man.help(["cp"])
+	destPath=argv.rest[-1]
+	destFile=Io._getFile(Obj,destPath)
+	targetDir=null
+	newName=null
+	if destFile and not (destFile isa Error) and is_folder(destFile) then
+		targetDir=destFile
+	else
+		// Parse as: cp source newname
+		parentPath=parent_path(destPath)
+		// If parent equals path, use current_path
+		if parentPath==destPath then parentPath=current_path
+		targetDir=Io._getFile(Obj,parentPath)
+		if targetDir isa Error then return targetDir
+		if not is_folder(targetDir) then return Error.set("Invalid path")
+		parts=split(destPath,"/")
+		newName=parts[-1]
+	end if
+	sourceFiles=[]
+	if argv.hasIndex("files") and argv.files and len(argv.files)>0 then
+		// Glob expansion: all files except destination
+		_len=len(argv.files);i=0;while i<_len;push(sourceFiles,argv.files[i]);i+=1;end while
+	else
+		// No glob: get source file(s) from argv.rest (all but last)
+		followSymlinks=argv.L or argv.follow
+		_len=len(argv.rest);i=0;while i<=_len-2;srcFile=Io._getFile(Obj,argv.rest[i],followSymlinks);if srcFile isa Error then return srcFile;push(sourceFiles,srcFile);i+=1;end while
+	end if
+	if not sourceFiles or len(sourceFiles)==0 then return Error.set("No source files specified")
+	if newName and len(sourceFiles)>1 then return Error.set("Cannot copy multiple files to single name")
+	for sourceFile in sourceFiles
+		if not sourceFile or sourceFile isa Error then continue
+		canRead=has_permission(sourceFile,"r")
+		canWrite=has_permission(sourceFile,"w")
+		if not canRead and not canWrite then
+			Error.set("Permission denied for : "+path(sourceFile))
+			continue
+		end if
+		finalName=null
+		if newName then
+			finalName=newName
+		else
+			// Use original name, handle root directory special case
+			if path(sourceFile)=="/" then finalName="root" else finalName=name(sourceFile)
+		end if
+		if argv.i then
+			destCheck=Io._getFile(Obj,path(targetDir)+"/"+finalName)
+			if destCheck and not (destCheck isa Error) then
+				if not Gui.yesNo("Overwrite "+finalName+"?",false) then continue
+			end if
+		end if
+		Info.info("Copying "+name(sourceFile)+" to "+path(targetDir)+" as "+finalName)
+		// Perform copy operation - returns 1 on success, error string on failure
+		result=copy(sourceFile,path(targetDir),finalName)
+		if result!=1 then Error.set(result)
+	end for
+end function

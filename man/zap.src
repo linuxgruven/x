@@ -1,0 +1,50 @@
+// Man page for zap
+manZap="ZAP(1)                           X Shell Manual                           ZAP(1)
+
+<b>NAME</b>
+    zap - use to remove a line from a text file
+<b>SYNOPSIS</b>
+    <b>zap </b><b>-l </b><b>NUMBER[,NUMBER,...] </b><b>FILE </b>
+    <b>zap </b><b>-c </b><b>FILE</b>
+<b>DESCRIPTION</b>
+    Remove one or more specific lines from a text file or clear entire file
+    contents. Use -l to delete lines by number (comma-separated for multiple),
+    or use -c to clear all content from a file.
+    Useful for editing configuration files, removing specific log entries, or
+    completely wiping file contents while preserving the file itself.
+    Line numbers start at 1.
+<b>OPTIONS</b>
+    <b>-l NUMBER[,NUMBER,...] FILE</b>
+    Remove one or more lines from a text file
+    Specify line numbers starting at 1, comma-separated for multiple
+
+    <b>-c FILE</b>
+    Clear a text file
+    Remove all content from file, keep file itself
+
+    <b>find PATTERN | zap -c</b>
+    Clear all files matched by pipe input
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Remove Single Line</color>
+    <b>zap -l 1 file.txt</b>
+    Delete first line
+
+    <b>zap -l 5 log.txt</b>
+    Delete line 5 from log
+
+    <color=#e4ff34># Remove Multiple Lines</color>
+    <b>zap -l 1,3,7 file.txt</b>
+    Delete lines 1, 3, and 7 at once
+
+    <b>zap -l 2,5 log.txt</b>
+    Remove lines 2 and 5
+
+    <color=#e4ff34># Clear File</color>
+    <b>zap -c data.txt</b>
+    Clear file contents
+
+    <color=#e4ff34># Pipe Input</color>
+    <b>find *.log | zap -c</b>
+    Clear all matched log files
+<b>SEE ALSO</b>
+    <b>write</b>, <b>cat</b>, <b>rm</b>"

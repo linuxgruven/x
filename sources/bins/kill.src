@@ -1,0 +1,7 @@
+binKill="if len(params)!=1 or params[0]==""-h"" or params[0]==""--help"" then exit(command_info(""kill_usage""))
+PID=to_int(params[0])
+if typeof(PID)!=""number"" then exit(""The PID must be a number\n""+command_info(""kill_usage""))
+output=close_program(host_computer(get_shell),PID)
+if output==true then exit(""Process ""+PID+"" closed"")
+if output then exit(output)
+print(""Process ""+PID+"" not found"")"

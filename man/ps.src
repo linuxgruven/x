@@ -1,0 +1,54 @@
+// Man page for ps
+manPs="PS(1)                            X Shell Manual                            PS(1)
+
+<b>NAME</b>
+    ps - used to view current running process
+<b>SYNOPSIS</b>
+    <b>ps</b> [<b>-u</b> USER] [<b>-c</b> CMD]
+    <b>ps </b><b>-m</b>
+    <b>ps </b><b>-l</b>
+    <b>ps </b><b>-w</b>
+<b>DESCRIPTION</b>
+    Display active processes on remote system. Multiple modes for viewing, managing,
+    locking, and real-time monitoring. Essential for process management and system monitoring.
+<b>OPTIONS</b>
+    <b>ps</b>
+    View active processes
+    List all running processes
+
+    <b>-m</b>
+    Manage processes
+    Interactive management mode
+
+    <b>-l</b>
+    Lock new processes
+    Prevent new launches
+
+    <b>-u</b> USER
+    Filter processes by username
+
+    <b>-c</b> CMD
+    Filter processes by command name
+
+    <b>-w</b>
+    Watch mode
+    Real-time monitoring
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic View</color>
+    <b>ps</b>
+    List processes
+
+    <color=#e4ff34># Management</color>
+    <b>ps -m</b>
+    Manage processes
+
+    <color=#e4ff34># Lock Mode</color>
+    <b>ps -l</b>
+    Prevent new processes
+
+    <color=#e4ff34># Watch Mode</color>
+    <b>ps -w</b>
+    Real-time monitoring
+<b>SEE ALSO</b>
+    <b>lsof</b>, <b>kill</b>"

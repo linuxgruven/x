@@ -1,0 +1,284 @@
+// =============================================================================
+// LS
+// List directory contents with permissions, owner, group, and size.
+// =============================================================================
+Command.ls=function(Obj,argv)
+  // Check for unstable filesystem and auto-correct to root
+  if len(get_folders(Obj.root))<=3 then
+    if not Obj.crp then
+      Info.warning("Unstable file structure setting current directory to /")
+      Obj.dir.current=Obj.root
+      Obj.dir.last=Obj.root
+      Obj.user.home=Obj.root
+      Obj.crp=1
+    end if
+  end if
+  _p=ArgumentParser.init
+  _p.addArgument("o",false,"flag")      // Octal permissions (short)
+  _p.addArgument("octal",true,"flag")   // Octal permissions (long)
+  _p.addArgument("a",false,"flag")      // Recursive all (short)
+  _p.addArgument("all",true,"flag")     // Recursive all (long)
+  _p.addArgument("n",false,"flag")      // Names only (short)
+  _p.addArgument("list",true,"flag")    // Detailed list (long)
+  _p.addArgument("post",true,"flag")    // Post processing flag
+  if not argv then argv=[]
+  argv=_p.parse("ls",argv,Obj)
+  if argv isa Error then return
+  if argv.list then
+    allDirs=Io.getAllFolders(Obj.root)
+    lines=[]
+    colorLines=[]
+    for dir in allDirs
+      for file in get_files(dir)
+        if argv.o or argv.octal then perms=Io.octal(permissions(file)) else perms=permissions(file)
+        o=owner(file)
+        g=group(file)
+        n=name(file)
+        prefix=""
+        colorPrefix=""
+        colorName=white(n)
+        isBinary=is_binary(file) or is_binary(file)==null
+        isLink=is_symlink(file)
+        if isBinary then
+          prefix="*"
+          colorPrefix=orange("*")
+          colorName=green(n)
+        end if
+        if isLink then colorName=yellow(n)
+        line="["+perms+" "+o+" "+g+"]  "+path(dir)+"/"+prefix+n
+        colorLine="["+green(perms)+" "+blue(o)+" "+blue(g)+"]  "+blue(path(dir))+"/"+colorPrefix+colorName
+        push(lines,line)
+        push(colorLines,colorLine)
+      end for
+    end for
+    if _p.write then
+      argv.data=lines
+      return _p.out(Obj,argv)
+    end if
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+      for l in lines;push(globals.G_pipe.stdout,l);end for
+      return
+    end if
+    for l in colorLines;print l;end for
+    return
+  end if
+  if argv.a or argv.all then
+    allDirs=Io.getAllFolders(Obj.root)
+    // Shared helper: build 4-per-row aligned rows from a name list
+    // types: map of name -> "folder"|"lib"|"binary"|"text"
+    buildNameRows=function(names,useColor,types=null)
+      colCount=4
+      colWidths=[0,0,0,0]
+      _len=len(names)
+      i=0;while i<_len;col=i%colCount;if len(names[i])>colWidths[col] then colWidths[col]=len(names[i]);i+=1;end while
+      rows=[]
+      row=[]
+      i=0
+      while i<_len
+        col=i%colCount
+        pad=""
+        if col<colCount-1 and i<len(names)-1 then pad=" "*(colWidths[col]-len(names[i])+2)
+        if useColor then
+          t=null
+          if types and hasIndex(types,names[i]) then t=types[names[i]]
+          if t=="folder" then
+            push(row,yellow(names[i])+pad)
+          else if t=="lib" then
+            push(row,green("*")+white(names[i])+pad)
+          else if t=="binary" then
+            push(row,orange("*")+white(names[i])+pad)
+          else
+            push(row,white(names[i])+pad)
+          end if
+        else
+          push(row,names[i]+pad)
+        end if
+        if col==colCount-1 or i==len(names)-1 then
+          push(rows,join(row,""))
+          row=[]
+        end if
+      i+=1
+      end while
+      return rows
+    end function
+    if _p.write then
+      outputLines=[]
+      for dir in allDirs
+        push(outputLines,path(dir)+":")
+        names=[]
+        types={}
+        for file in get_files(dir)
+          n=name(file)
+          push(names,n)
+          if is_binary(file) then
+            if indexOf(n,".so")!=null then types[n]="lib" else types[n]="binary"
+          else
+            types[n]="text"
+          end if
+        end for
+        if names then
+          for row in buildNameRows(names,false,types);push(outputLines,row);end for
+        end if
+      end for
+      argv.data=outputLines
+      return _p.out(Obj,argv)
+    end if
+    for dir in allDirs
+      print blue(path(dir)+":")
+      names=[]
+      types={}
+      for file in get_files(dir)
+        n=name(file)
+        push(names,n)
+        if is_binary(file) then
+          if indexOf(n,".so")!=null then types[n]="lib" else types[n]="binary"
+        else
+          types[n]="text"
+        end if
+      end for
+      if names then print join(buildNameRows(names,true,types),char(10))
+    end for
+    return
+  end if
+  color=function(fileObj)
+    if is_folder(fileObj) then return yellow(name(fileObj))
+    if is_binary(fileObj) then return error(name(fileObj))
+    return white(name(fileObj))
+  end function
+  files=null
+  _parentDisplay=[]
+  if hasIndex(argv,"special") then
+    files=argv.files
+  else
+    targetDir=null
+    if not argv.rest then targetDir=Obj.dir.current else targetDir=Io._getFile(Obj,argv.rest[0])
+    if targetDir isa Error then return targetDir
+    if not is_folder(targetDir) then return Error.set("Invalid file type")
+    files=get_folders(targetDir)+get_files(targetDir)
+    _pf=[];_pp=parent(targetDir)
+    while _pp!=null;push(_pf,_pp);_pp=parent(_pp);end while
+    _pi=len(_pf)-1;while _pi>=0;push(_parentDisplay,_pf[_pi]);_pi=_pi-1;end while
+    if len(_parentDisplay)==0 then push(_parentDisplay,targetDir)
+  end if
+  if not files then return Info.info("No files to list")
+  if argv.n then
+    names=[]
+    types={}
+    for file in files
+      n=name(file)
+      push(names,n)
+      if is_folder(file) then
+        types[n]="folder"
+      else if is_binary(file) then
+        if indexOf(n,".so")!=null then types[n]="lib" else types[n]="binary"
+      else
+        types[n]="text"
+      end if
+    end for
+    colCount=4
+    colWidths=[0,0,0,0]
+    _len=len(names)
+    i=0;while i<_len;col=i%colCount;if len(names[i])>colWidths[col] then colWidths[col]=len(names[i]);i+=1;end while
+    rows=[]
+    row=[]
+    i=0;while i<_len
+      col=i%colCount
+      pad=""
+      if col<colCount-1 and i<len(names)-1 then pad=" "*(colWidths[col]-len(names[i])+2)
+      if _p.write then
+        push(row,names[i]+pad)
+      else
+        t=types[names[i]]
+        if t=="folder" then
+          push(row,yellow(names[i])+pad)
+        else if t=="lib" then
+          push(row,green("*")+white(names[i])+pad)
+        else if t=="binary" then
+          push(row,orange("*")+white(names[i])+pad)
+        else
+          push(row,white(names[i])+pad)
+        end if
+      end if
+      if col==colCount-1 or i==len(names)-1 then
+        push(rows,join(row,""))
+        row=[]
+      end if
+      i+=1
+    end while
+    if _p.write then
+      argv.data=rows
+      return _p.out(Obj,argv)
+    end if
+    if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+      for n in names;push(globals.G_pipe.stdout,n);end for
+      return
+    end if
+    print join(rows,char(10))
+    return
+  end if
+  fileData={}
+  plainLines=[]
+  header=ljust("PERMISSIONS",15)+ljust("OWNER",10)+ljust("GROUP",10)+ljust("SIZE",10)+"NAME"
+  push(plainLines,header)
+  _plen=len(_parentDisplay)
+  _pi=0;while _pi<_plen;_ppf=_parentDisplay[_pi];_ppname=name(_ppf);if _ppname=="" then _ppname="/";_ppperms=permissions(_ppf);if argv.o or argv.octal then _ppperms=Io.octal(_ppperms);push(plainLines,ljust(_ppperms,15)+ljust(owner(_ppf),10)+ljust(group(_ppf),10)+ljust(str(Io.size(val(size(_ppf)))),10)+_ppname);_pi+=1;end while
+  if _plen>0 then push(plainLines,"- "*25)
+  for file in files
+    perms=null
+    if argv.o or argv.octal then perms=Io.octal(permissions(file)) else perms=permissions(file)
+    fileSize=str(Io.size(val(size(file))))
+    coloredPerms=null
+    fileName=name(file)
+    coloredName=color(file)
+    if is_symlink(file) then
+      if not owner(file) then
+        coloredPerms=green("----------")+red("X")
+        coloredName=color(file)+white(" -> ")+red(path(file,true))
+      else
+        coloredPerms=green(perms)
+        coloredName=color(file)+white(" -> ")+white(path(file,true))
+      end if
+    else
+      coloredPerms=green(perms)
+    end if
+    if is_symlink(file) then push(plainLines,ljust(perms,15)+ljust(owner(file),10)+ljust(group(file),10)+ljust(fileSize,10)+fileName+" -> "+path(file,true)) else push(plainLines,ljust(perms,15)+ljust(owner(file),10)+ljust(group(file),10)+ljust(fileSize,10)+fileName)
+    entry={
+      "name":coloredName,
+      "owner":blue(owner(file)),
+      "group":blue(group(file)),
+      "size":blue(fileSize),
+      "permissions":coloredPerms
+    }
+    fileData[__file_idx]=entry
+  end for
+  if not len(plainLines) then return Info.info("No files to list")
+  isPipeLs=hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE
+  if not isPipeLs then
+    if not _p.write then print liteGrey("listings: "+len(fileData)) else insert(plainLines,0,"listings: "+len(fileData))
+  end if
+  columns=[]
+  push(columns,join([grey("PERMISSIONS"),grey("OWNER"),grey("GROUP"),grey("SIZE"),grey("NAME")],"  "))
+  _pi=0;while _pi<_plen
+    _ppf=_parentDisplay[_pi]
+    _ppname=name(_ppf);if _ppname=="" then _ppname="/"
+    if _pi==_plen-1 then _pnc=green(_ppname) else _pnc=liteGrey(_ppname)
+    _ppperms=permissions(_ppf);if argv.o or argv.octal then _ppperms=Io.octal(_ppperms)
+    push(columns,join([green(_ppperms),blue(owner(_ppf)),blue(group(_ppf)),blue(str(Io.size(val(size(_ppf))))),_pnc],"  "))
+    _pi+=1
+  end while
+  _sepIdx=len(columns)
+  for entry in fileData;data=entry.value;push(columns,join([data.permissions,data.owner,data.group,data.size,data.name],"  "));end for
+  if _p.write then
+    argv.data=plainLines
+    return _p.out(Obj,argv)
+  end if
+  if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
+    for line in plainLines[1:];push(globals.G_pipe.stdout,line);end for
+    return
+  end if
+  _fmtLines=split(format_columns(join(columns,char(10))),char(10))
+  print _fmtLines[0]
+  _pi=1;while _pi<_sepIdx;print _fmtLines[_pi];_pi+=1;end while
+  if _plen>0 then print grey("- "*25)
+  _pi=_sepIdx;while _pi<len(_fmtLines);print _fmtLines[_pi];_pi+=1;end while
+end function

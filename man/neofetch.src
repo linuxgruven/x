@@ -1,0 +1,41 @@
+// Man page for neofetch
+manNeofetch="NEOFETCH(1)                      X Shell Manual                      NEOFETCH(1)
+
+<b>NAME</b>
+    <b>neofetch</b> - display system information
+
+<b>SYNOPSIS</b>
+    <b>neofetch</b>
+
+<b>DESCRIPTION</b>
+    Displays system information in a formatted layout with ASCII art.
+    Shows hostname, username, user type, shell type, IP addresses,
+    and current working directory. Information displayed adapts to
+    the current session context (shell, computer, or file object).
+
+    <b>Information Displayed:</b>
+      - Hostname and username
+      - Operating system (X Shell System)
+      - Kernel version
+      - User type (ROOT, USER, GUEST)
+      - Shell type (Shell, Computer, File)
+      - Public IP address
+      - Local IP address
+      - Home directory
+      - Current directory
+
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Basic Usage</color>
+    <b>neofetch</b>
+    Display system information
+
+    <color=#e4ff34># After SSH Connection</color>
+    <b>ssh user@remote.host</b>
+    <b>neofetch</b>
+    Show remote system information
+
+    <color=#e4ff34># In Script</color>
+    <b>neofetch</b>
+    Quick system identification
+<b>SEE ALSO</b>
+    <b>hostname</b>, <b>whoami</b>, <b>stat</b>, <b>show</b>"

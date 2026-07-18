@@ -1,0 +1,14 @@
+// =============================================================================
+// PASSWD
+// Change a user account password; prompts if no password argument given.
+// =============================================================================
+Command.passwd=function(Obj,argv)
+  if not argv then return Man.help(["passwd"])
+  username=argv[0]
+  print yellow("Changing password for user: "+username)
+  if len(argv)>=2 then password=argv[1] else password=Gui.inputPass("New password:")
+  if not password then return Info.error("Password change cancelled")
+  if len(password)>15 then return Error.set("Password too long")
+  result=change_password(Obj.computer,username,password)
+  if result==1 then Info.info("Password modified OK") else Info.error(result)
+end function

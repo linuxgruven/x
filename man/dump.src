@@ -1,0 +1,26 @@
+// Man page for dump
+manDump="DUMP(1)                          X Shell Manual                          DUMP(1)
+
+<b>NAME</b>
+    man dump - Export man pages to text files
+<b>SYNOPSIS</b>
+    <b>man dump</b>
+    <b>man dump </b><b>COMMAND</b>
+<b>DESCRIPTION</b>
+    Export man page documentation to plain text files. Without arguments,
+    dumps all man pages to numbered files (man_pages_1, man_pages_2, etc).
+    With a command argument, exports that specific command's man page to
+    man_COMMAND.txt. Strips color and formatting tags for plain text output.
+<b>EXAMPLE:</b>
+    <color=#e4ff34># Dump All Pages</color>
+    <b>man dump</b>
+    Export all man pages to files
+
+    <color=#e4ff34># Dump Single Command</color>
+    <b>man dump scan</b>
+    Create man_scan.txt
+
+    <b>man dump exploit</b>
+    Create man_exploit.txt
+<b>SEE ALSO</b>
+    <b>man</b>"
