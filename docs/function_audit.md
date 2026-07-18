@@ -173,10 +173,9 @@ Because `AgentPlanning` is loaded **after** `AgentCore`, its version **overwrite
 
 ---
 
-### 2.2 — `AgentCommandKnowledge.getSemanticFlags` vs `AgentCommandRegistry.getSemanticFlags`
+### 2.2 — ~~`AgentCommandKnowledge` vs `AgentCommandRegistry`~~ RESOLVED
 
-Both are dead (never called via full name), but they exist in parallel in two different agent knowledge files.  
-Verify whether these should be unified.
+Orphan `agent_command_knowledge.src` removed. Canonical path is `AgentCommandRegistry` (`get`, `getSemanticFlags`, `learnFlagsFromManPage`).
 
 ---
 

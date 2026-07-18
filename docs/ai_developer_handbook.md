@@ -71,24 +71,28 @@ Terminal Output
 
 ## Module Structure
 
-The AI system is split across 14 source files (~11,500 lines total):
+The AI system is split across modular source files (parser is further split for the 160k Grey Hack limit):
 
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| `agent_core.src` | 341 | Configuration, initialization, config save/load |
-| `agent_parser.src` | 3,086 | Natural language parsing, phrase detection, synonym expansion, compound commands |
-| `agent_planning.src` | 1,340 | Plan creation, strategy, template recall, risk assessment |
-| `agent_execute.src` | 513 | High-level execution dispatcher, compound command handler |
-| `agent_execution.src` | 494 | Plan execution, step sequencing, error handling |
-| `agent_handlers.src` | 1,618 | Step execution handlers (scan, exploit, test, etc.) |
-| `agent_handlers_attack.src` | 2,409 | Attack-oriented step handlers (exploit, crack, escalate, backdoor) |
-| `agent_learning.src` | 356 | Pattern reinforcement, user preferences, learning persistence |
-| `agent_knowledge.src` | 468 | Command knowledge cache, chunked save/load |
-| `agent_command_knowledge.src` | 46 | Command knowledge helpers |
-| `agent_command_registry.src` | 103 | Command metadata, argv formats, flags |
-| `agent_nlp.src` | 324 | NLP utilities, disambiguation |
-| `agent_util.src` | 219 | Shared utility functions |
-| `knowledge.src` | 245 | Persistent knowledge store (pipe-delimited) |
+| Module | Purpose |
+|--------|---------|
+| `agent_core.src` | Configuration, initialization, config save/load |
+| `agent_parser.src` | NL parse orchestration (phases 1–4) |
+| `agent_parser_flow.src` | Early returns, autonomous / conditional flow |
+| `agent_parser_action.src` | Phrase scoring, man-page / synonym action match |
+| `agent_parser_fields.src` | Per-command field extraction |
+| `agent_planning.src` | Plan creation, strategy, template recall, risk assessment |
+| `agent_execute.src` | High-level execution dispatcher, compound command handler |
+| `agent_execution.src` | Plan execution, step sequencing, error handling |
+| `agent_handlers.src` | Step execution handlers (non-attack) |
+| `agent_handlers_attack.src` | Scan / exploit handlers and autonomous exploit scoring |
+| `agent_handlers_access.src` | getObject, escalate, crack, fetch shell, recon, backdoor, analyze |
+| `agent_learning.src` | Pattern reinforcement, user preferences, learning persistence |
+| `agent_knowledge.src` | Command knowledge cache, man-page learn, save/load |
+| `agent_command_registry.src` | Command lookup, `learnFlagsFromManPage`, semantic flags |
+| `agent_nlp.src` | NLP utilities, disambiguation |
+| `agent_util.src` | Shared utility functions |
+| `knowledge.src` | Persistent knowledge store (pipe-delimited) |
+| `agent_test.src` | `ai test` harness |
 
 ### Why Modular?
 
@@ -2316,9 +2320,9 @@ end function
 **Status:** Not feasible (game limitation)
 
 #### 13. Multi-Turn Conversations
-**Current:** Single command per input  
-**Improvement:** Maintain conversation context
-**Status:** Not started (dialogState infrastructure exists but unused)
+**Current:** Ambiguous-action clarification uses `dialogState` (typed `ai <option>` follow-up)  
+**Improvement:** Broader multi-turn context beyond clarification  
+**Status:** Partial — `startDialog` / `resolveDialog` wired for `ambiguousAction`
 
 #### ~~14. Proactive Suggestions~~ ✅ IMPLEMENTED
 **Implemented as:** `_generateSuggestions()` in `agent_learning.src`  

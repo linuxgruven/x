@@ -1,0 +1,295 @@
+// =============================================================================
+// AGENT_PARSER_ACTION
+// Phrase scoring and man-page / synonym action matching.
+// =============================================================================
+//Mutates parsed; returns updated actionFound
+AgentParser._matchActionPhase=function(cmd,parsed,actionFound,debug)
+  if not actionFound then
+    for patternName in globals.G_agent._commandPatterns.indexes
+      pattern=globals.G_agent._commandPatterns[patternName]
+      //Check if pattern requires additional context words
+      if hasIndex(pattern,"requiresContext") then
+        //Pattern needs specific context words (like "all accounts" for crackAll)
+        hasRequiredContext=false
+        for contextWord in pattern.requiresContext
+          if indexOf(cmd,contextWord)!=null then
+            hasRequiredContext=true
+            break
+          end if
+        end for
+        if not hasRequiredContext then continue  //Skip this pattern if context missing
+      end if
+      //Special check for scan: skip if this should be 'es' or 'iwlist' instead
+      if patternName=="scan" and (indexOf(cmd," library")!=null or indexOf(cmd,"wireless")!=null or indexOf(cmd,"wifi")!=null or (indexOf(cmd," on ")!=null and (indexOf(cmd,"ssh")!=null or indexOf(cmd,"ftp")!=null or indexOf(cmd,"http")!=null or indexOf(cmd,"smtp")!=null))) then continue  //Skip scan pattern, will match 'es' or 'iwlist' in phrase patterns
+      //Check pattern keywords
+      for keyword in pattern.keywords
+        if indexOf(cmd,keyword)!=null then
+          parsed.action=pattern.action
+          parsed.summary=pattern.summary
+          actionFound=true
+          break
+        end if
+      end for
+      if actionFound then break
+    end for
+  end if
+  //Synonym expansion BEFORE fuzzy knowledge matches.
+  //Otherwise a weak man-page/registry hit (e.g. lone "scan" in cache) steals
+  //"break that" before the exploit/crack tie dialog can fire.
+  if not actionFound then
+    expandedWord=globals.G_agent._expandWithSynonyms(cmd)
+    if expandedWord then
+      if hasIndex(globals.G_agent._commandPatterns,expandedWord) then
+        pattern=globals.G_agent._commandPatterns[expandedWord]
+        parsed.action=pattern.action
+        parsed.summary=pattern.summary
+      else
+        parsed.action=expandedWord
+        parsed.summary="Execute "+expandedWord+" command"
+      end if
+      actionFound=true
+      if debug then print green("[DEBUG] Agent: Synonym expansion '"+expandedWord+"' matched")
+    end if
+    //Tie leaves dialogState.active; _parseCommand returns awaitDialog
+  end if
+  //First-word actions not covered by _commandPatterns (e.g. "exploit that")
+  if not actionFound then
+    firstWord=split(cmd," ")[0]
+    firstWordActions=["exploit","crack","attack","recon","fetch","escalate"]
+    if indexOf(firstWordActions,firstWord)!=null then
+      parsed.action=firstWord
+      parsed.summary="Execute "+firstWord+" command"
+      actionFound=true
+      if debug then print green("[DEBUG] Agent: First-word action '"+firstWord+"'")
+    end if
+  end if
+  //Try dynamic knowledge matching from man pages
+  if not actionFound then
+    //Pre-screening: detect strong phrase patterns that override word matching
+    //This prevents false matches like "file" command when user says "create file"
+    bestCommand=null
+    phraseScore=0
+    //Only replace current best when candidate score is strictly higher (ties keep first winner)
+    tryPhrase=function(name,score)
+      if outer.phraseScore==null or score>outer.phraseScore then
+        outer.bestCommand=name
+        outer.phraseScore=score
+      end if
+    end function
+    //Touch: create + file/empty
+    if (indexOf(cmd,"create")!=null or indexOf(cmd,"make")!=null or indexOf(cmd,"new")!=null) and (indexOf(cmd,"file")!=null or indexOf(cmd,"empty")!=null) and indexOf(cmd,"directory")==null and indexOf(cmd,"folder")==null and indexOf(cmd,"link")==null then tryPhrase("touch",25)
+    //Ln: create link/symlink
+    if (indexOf(cmd,"link")!=null or indexOf(cmd,"symlink")!=null or indexOf(cmd,"shortcut")!=null) and indexOf(cmd," from ")!=null and indexOf(cmd," to ")!=null then tryPhrase("ln",30)
+    //Mkdir: create + directory/folder
+    if (indexOf(cmd,"create")!=null or indexOf(cmd,"make")!=null or indexOf(cmd,"new")!=null) and (indexOf(cmd,"directory")!=null or indexOf(cmd,"folder")!=null or indexOf(cmd,"dir")!=null) and indexOf(cmd,"link")==null then tryPhrase("mkdir",25)
+    //Chmod: permission phrases (check specific patterns first to avoid conflicts)
+    if indexOf(cmd,"chmod")!=null or indexOf(cmd,"change permission")!=null or indexOf(cmd,"change permissions")!=null or indexOf(cmd,"set permission")!=null or indexOf(cmd,"set permissions")!=null or (indexOf(cmd,"give")!=null and (indexOf(cmd,"permission")!=null or indexOf(cmd,"permissions")!=null)) or (indexOf(cmd,"grant")!=null and (indexOf(cmd,"permission")!=null or indexOf(cmd,"permissions")!=null)) or (indexOf(cmd,"remove")!=null and (indexOf(cmd,"permission")!=null or indexOf(cmd,"permissions")!=null)) or (indexOf(cmd,"revoke")!=null and (indexOf(cmd,"permission")!=null or indexOf(cmd,"permissions")!=null)) or indexOf(cmd,"read only")!=null or indexOf(cmd,"make executable")!=null or indexOf(cmd,"make it executable")!=null then
+      if debug then print green("[DEBUG] Chmod pattern matched!")
+      tryPhrase("chmod",27)
+    end if
+    //Chown: change owner
+    if indexOf(cmd,"change owner")!=null or indexOf(cmd,"set owner")!=null or indexOf(cmd,"chown")!=null then tryPhrase("chown",25)
+    //Chgrp: change group
+    if indexOf(cmd,"change group")!=null or indexOf(cmd,"set group")!=null or indexOf(cmd,"chgrp")!=null then tryPhrase("chgrp",25)
+    //Chog: change owner and group (just look for chog keyword)
+    if indexOf(cmd,"chog")!=null then tryPhrase("chog",30)
+    //Es: discrete exploit scanning - "scan [service/library] on [ip]" or "scan [library] library"
+    if indexOf(cmd,"es ")!=null or (indexOf(cmd,"scan")!=null and (indexOf(cmd," library")!=null or (indexOf(cmd," on ")!=null and (indexOf(cmd,"ssh")!=null or indexOf(cmd,"ftp")!=null or indexOf(cmd,"http")!=null or indexOf(cmd,"smtp")!=null)))) then tryPhrase("es",28)
+    //WiFi/iwlist: wireless network scanning and management
+    if indexOf(cmd,"wifi")!=null or indexOf(cmd,"wireless")!=null or indexOf(cmd,"iwlist")!=null then tryPhrase("iwlist",30)
+    //Mv/Cp: with "to" indicates move/copy operation (check for word boundaries to avoid matching "remove")
+    if ((indexOf(cmd,"move ")!=null or indexOf(cmd," move")!=null or indexOf(cmd,"rename")!=null) and indexOf(cmd," to ")!=null) then
+      if debug then print green("[DEBUG] Mv pattern matched with score 25, current best="+phraseScore)
+      tryPhrase("mv",25)
+    end if
+    if ((indexOf(cmd,"copy ")!=null or indexOf(cmd," copy")!=null or indexOf(cmd,"duplicate")!=null) and indexOf(cmd," to ")!=null) then tryPhrase("cp",25)
+    //Cat: "show me" is very specific
+    if indexOf(cmd,"show me")!=null and indexOf(cmd,"file")!=null then tryPhrase("cat",20)
+    //Cat: "read/view/display/show" with filename (not "read only")
+    if (indexOf(cmd,"read ")!=null or indexOf(cmd,"view ")!=null or indexOf(cmd,"display ")!=null or indexOf(cmd,"show ")!=null) and indexOf(cmd,"only")==null and indexOf(cmd,"permission")==null then
+      //Check if there's a word after read/view/display/show that looks like a filename
+      words=split(cmd," ")
+      _len=len(words);i=0;while i<_len
+      if words[i]=="read" or words[i]=="view" or words[i]=="display" or words[i]=="show" then
+        //Skip "show me" pattern - look at word after "me"
+        if words[i]=="show" and i+1<len(words) and words[i+1]=="me" and i+2<len(words) then
+          tryPhrase("cat",28)
+          break
+        else if words[i]!="show" and i+1<len(words) and len(words[i+1])>0 then
+          tryPhrase("cat",28)
+          break
+        end if
+      end if
+      i+=1;end while
+    end if
+    //Grep: "search for X in Y" or "find X in Y"
+    if (indexOf(cmd,"search")!=null or indexOf(cmd,"find")!=null) and (indexOf(cmd," for ")!=null or indexOf(cmd," in ")!=null) then tryPhrase("grep",30)
+    //Nmap: "nmap" followed by target/flag keywords
+    if indexOf(cmd,"nmap")!=null then tryPhrase("nmap",35)
+    //If no strong phrase match, use dynamic matching
+    if phraseScore==0 then
+      //Extract meaningful words from query
+      queryWords=split(cmd," ")
+      //Use registry's dynamic matching (reads from commandKnowledgeCache)
+      matchResult=AgentCommandRegistry.matchQuery(queryWords)
+      if matchResult.command and matchResult.score>=10 then
+        bestCommand=matchResult.command
+        if debug then print yellow("[DEBUG] Dynamic match: '"+bestCommand+"' with score "+matchResult.score)
+      end if
+    else
+      if debug then print yellow("[DEBUG] Phrase match: '"+bestCommand+"' with score "+phraseScore)
+    end if
+    if bestCommand then
+      //Apply additional context-aware boosting
+      //Boost chmod for permission phrases
+      if bestCommand=="chmod" then
+        permPhrases=["read only","full permissions","all permissions","executable","make executable","set permissions"]
+        for phrase in permPhrases
+          if indexOf(cmd,phrase)!=null then
+            phraseScore=phraseScore+10
+            break
+          end if
+        end for
+      end if
+      actionFound=true
+      parsed.action=bestCommand
+      parsed.summary="Execute "+bestCommand+" command"
+      if debug then print green("[DEBUG] Final command: '"+bestCommand+"'")
+    end if
+  end if
+  //If hard-coded patterns and registry keywords didn't match, try man pages (dynamic learning)
+  if not actionFound then
+    //Try matching against cached man page descriptions
+    //Initialize cache if needed
+    if not hasIndex(globals.G_agent,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
+    //Load knowledge if cache is empty
+    if len(globals.G_agent.commandKnowledgeCache.indexes)==0 then
+      if debug then print green("[DEBUG] Agent: Loading man pages for command matching...")
+      globals.G_agent.loadKnowledge
+    end if
+    if hasIndex(globals.G_agent,"commandKnowledgeCache") and len(globals.G_agent.commandKnowledgeCache.indexes)>0 then
+      bestMatch=null
+      bestScore=0
+      //Extract meaningful words from user's query (skip common words)
+      sw=AgentCore._STOP_WORDS
+      queryWords=split(cmd," ")
+      meaningfulWords=[]
+      for word in queryWords;if len(word)>2 and not hasIndex(sw,word) then push(meaningfulWords,word);end for
+      //Only expand first word if it's an action verb (to avoid false matches)
+      if len(meaningfulWords)>0 then
+        firstWord=meaningfulWords[0]
+        actionSynonyms={"go":["cd"],"goto":["cd"],"navigate":["cd"],"list":["ls"],"show":["ls"],"display":["ls"],"create":["mkdir","touch"],"make":["mkdir"],"delete":["rm"],"remove":["rm"]}
+        if hasIndex(actionSynonyms,firstWord) then
+          for synonym in actionSynonyms[firstWord];if meaningfulWords.indexOf(synonym)==null then push(meaningfulWords,synonym);end for
+        end if
+      end if
+      if debug then print green("[DEBUG] Agent: Query meaningful words: "+join(meaningfulWords,", "))
+      //Detect user intent based on query words - map to command capabilities
+      requiredCapabilities=[]
+      for word in meaningfulWords
+        //Password/hash cracking intent
+        if word=="crack" or word=="break" or word=="decrypt" or word=="decipher" or word=="hash" then
+          if requiredCapabilities.indexOf("cracksPasswords")==null then push(requiredCapabilities,"cracksPasswords")
+          if requiredCapabilities.indexOf("decrypts")==null then push(requiredCapabilities,"decrypts")
+        end if
+        //File operations intent
+        if word=="file" or word=="files" or word=="read" or word=="write" or word=="cat" then
+          if requiredCapabilities.indexOf("handlesFiles")==null then push(requiredCapabilities,"handlesFiles")
+        end if
+        //Network operations intent
+        if word=="network" or word=="scan" or word=="ping" or word=="port" or word=="nmap" then
+          if requiredCapabilities.indexOf("handlesNetwork")==null then push(requiredCapabilities,"handlesNetwork")
+        end if
+        //System operations intent
+        if word=="system" or word=="disk" or word=="memory" or word=="process" then
+          if requiredCapabilities.indexOf("handlesSystem")==null then push(requiredCapabilities,"handlesSystem")
+        end if
+      end for
+      //Blacklist commands that should never be used for certain intents
+      escalationBlacklist=["cal","date","uptime","clear","pwd","whoami","hostname","echo","neofetch"]
+      isEscalationIntent=false
+      for word in meaningfulWords
+        if word=="escalate" or word=="root" or word=="privilege" or word=="admin" or word=="su" or word=="sudo" then
+          isEscalationIntent=true
+          break
+        end if
+      end for
+      matchCount=0
+      for cmdName in globals.G_agent.commandKnowledgeCache.indexes
+        knowledge=globals.G_agent.commandKnowledgeCache[cmdName]
+        //Only use 'raw' field (full description from man pages)
+        //Old knowledge files with only 'purpose' field are not supported
+        if not hasIndex(knowledge,"raw") or not knowledge.raw then continue
+        //Skip blacklisted commands for escalation intents
+        if isEscalationIntent then
+          isBlacklisted=false
+          for blacklisted in escalationBlacklist
+            if cmdName==blacklisted then
+              isBlacklisted=true
+              break
+            end if
+          end for
+          if isBlacklisted then continue
+        end if
+        matchCount+=1
+        descLower=lower(knowledge.raw)
+        //Debug first few commands
+        if debug and matchCount<=3 then print green("[DEBUG] Agent: Checking '"+cmdName+"' desc='"+descLower[:50]+"...'")
+        //Exact command name match - highest priority
+        score=0
+        for word in meaningfulWords
+          if word==cmdName then
+            score=score+100  //Exact match of command name gets massive boost
+            if debug then print green("[DEBUG] Agent: '"+cmdName+"' exactly matches query word!")
+          end if
+        end for
+        //Base score: match query words in description
+        for word in meaningfulWords;if word!=cmdName and len(word)!=32 and indexOf(descLower,word)!=null then score=score+10;end for
+        //Capability-based scoring boost
+        if len(requiredCapabilities)>0 then
+          for capability in requiredCapabilities
+            if hasIndex(knowledge,capability) and knowledge[capability] then
+              score=score+30  //Strong boost for matching capability
+              if debug and matchCount<=3 then print green("[DEBUG] Agent: '"+cmdName+"' has required capability: "+capability)
+            end if
+          end for
+        end if
+        //Bonus if command name appears as whole word in query (not substring)
+        cmdWords=split(cmd," ")
+        for cmdWord in cmdWords
+          if cmdWord==cmdName then
+            score=score+20
+            break
+          end if
+        end for
+        if score>bestScore then
+          bestMatch=cmdName
+          bestScore=score
+          if debug and score>=10 then print green("[DEBUG] Agent: New best match '"+cmdName+"' with score "+score)
+        end if
+      end for
+      if debug then print green("[DEBUG] Agent: Checked "+matchCount+" commands with descriptions. Best match='"+bestMatch+"' with score="+bestScore)
+      //If no good match but we have a single-word command, try learning it
+      if (not bestMatch or bestScore<10) and len(queryWords)==1 and len(queryWords[0])>2 then
+        possibleCmd=queryWords[0]
+        if not hasIndex(globals.G_agent.commandKnowledgeCache,possibleCmd) then
+          //Try to learn this command
+          if debug then print green("[DEBUG] Agent: Attempting to learn new command: "+possibleCmd)
+          newKnowledge=globals.G_agent.getCommandInfo(possibleCmd)
+          if newKnowledge then
+            bestMatch=possibleCmd
+            bestScore=20
+            if debug then print green("[DEBUG] Agent: Successfully learned '"+possibleCmd+"'")
+          end if
+        end if
+      end if
+      if bestMatch and bestScore>=10 then
+        parsed.action=bestMatch
+        parsed.summary="Execute "+bestMatch+" command"
+        actionFound=true
+        if debug then print green("[DEBUG] Agent: Matched '"+cmd+"' to '"+bestMatch+"' from man page (score: "+bestScore+")")
+      end if
+    end if
+  end if
+  return actionFound
+end function

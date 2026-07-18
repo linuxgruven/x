@@ -61,29 +61,115 @@ AgentCommandRegistry.matchQuery=function(queryWords)
   end for
   return {"command":bestCommand,"score":bestScore}
 end function
-//Extract semantic flag meanings from man page flag descriptions
-AgentCommandRegistry.getSemanticFlags=function(cmdName)
-  knowledge=self.get(cmdName)
-  if not knowledge or not hasIndex(knowledge,"flags") then return {}
+//Map parsed flag->description into semantic keys used by the executor (_FLAG_KEYWORDS)
+//Keys: randomIP, localhost, publicIP, recursive, force, verbose, quiet, all, port, pattern, count
+AgentCommandRegistry._mapSemanticFlags=function(flagsMap)
+  if not flagsMap then return {}
   semanticMap={}
-  //Map flag descriptions to semantic meanings
-  for flag in knowledge.flags.indexes
-    desc=lower(knowledge.flags[flag])
-    flagLetter=flag[1]  //Strip dash
-    //Pattern matching on flag descriptions
-    if indexOf(desc,"random")!=null then semanticMap.random=flagLetter
+  for flag in indexes(flagsMap)
+    desc=lower(flagsMap[flag])
+    if not len(flag) then continue
+    if flag[0]=="-" then flagLetter=flag[1:] else flagLetter=flag
+    if not len(flagLetter) then continue
+    if indexOf(desc,"random")!=null then semanticMap.randomIP=flagLetter
     if indexOf(desc,"localhost")!=null or (indexOf(desc,"local")!=null and indexOf(desc,"scan")!=null) then semanticMap.localhost=flagLetter
-    if indexOf(desc,"public")!=null then semanticMap.public=flagLetter
+    if indexOf(desc,"public")!=null then semanticMap.publicIP=flagLetter
     if indexOf(desc,"recursive")!=null or indexOf(desc,"recurse")!=null then semanticMap.recursive=flagLetter
     if indexOf(desc,"force")!=null then semanticMap.force=flagLetter
     if indexOf(desc,"verbose")!=null then semanticMap.verbose=flagLetter
     if indexOf(desc,"quiet")!=null or indexOf(desc,"silent")!=null then semanticMap.quiet=flagLetter
-    if indexOf(desc,"all")!=null then semanticMap.all=flagLetter
+    if indexOf(desc,"all")!=null or indexOf(desc,"everything")!=null then semanticMap.all=flagLetter
     if indexOf(desc,"port")!=null then semanticMap.port=flagLetter
     if indexOf(desc,"pattern")!=null then semanticMap.pattern=flagLetter
     if indexOf(desc,"count")!=null or indexOf(desc,"number")!=null then semanticMap.count=flagLetter
   end for
   return semanticMap
+end function
+//Extract semantic flag meanings from cached command knowledge
+AgentCommandRegistry.getSemanticFlags=function(cmdName)
+  knowledge=self.get(cmdName)
+  if not knowledge then return {}
+  if hasIndex(knowledge,"flagMappings") and knowledge.flagMappings then return knowledge.flagMappings
+  if not hasIndex(knowledge,"flags") then return {}
+  return self._mapSemanticFlags(knowledge.flags)
+end function
+//Parse OPTIONS from man-page text and learn semantic flagMappings for a command.
+//Returns {"flags":{-x:"desc",...},"flagMappings":{randomIP:"r",...}} or null
+AgentCommandRegistry.learnFlagsFromManPage=function(cmd,helpText)
+  if not helpText or not len(helpText) then return null
+  flags={}
+  openBold=char(60)+"b"+char(62)
+  closeBold=char(60)+"/b"+char(62)
+  optionsMarker=openBold+"OPTIONS"+closeBold
+  optionsIdx=indexOf(helpText,optionsMarker)
+  if optionsIdx==null then
+    //Plain-text fallback
+    optionsIdx=indexOf(upper(helpText),"OPTIONS")
+    if optionsIdx==null then return {"flags":flags,"flagMappings":{}}
+  end if
+  optionsSection=helpText[optionsIdx:]
+  examplesIdx=indexOf(optionsSection,openBold+"EXAMPLE")
+  if examplesIdx==null then examplesIdx=indexOf(optionsSection,"EXAMPLE")
+  seeAlsoIdx=indexOf(optionsSection,openBold+"SEE ALSO"+closeBold)
+  if seeAlsoIdx==null then seeAlsoIdx=indexOf(optionsSection,"SEE ALSO")
+  endIdx=null
+  if examplesIdx!=null then endIdx=examplesIdx
+  if seeAlsoIdx!=null and (endIdx==null or seeAlsoIdx<endIdx) then endIdx=seeAlsoIdx
+  if endIdx!=null then optionsSection=optionsSection[:endIdx]
+  lines=split(optionsSection,char(10))
+  currentFlag=null
+  _len=len(lines);i=0;while i<_len
+    line=lines[i]
+    if len(line)==0 then
+      i+=1
+      continue
+    end if
+    if len(line)>=4 and line[:4]=="    " and indexOf(line,openBold)!=null then
+      boldStart=indexOf(line,openBold)
+      boldEnd=indexOf(line,closeBold)
+      if boldStart!=null and boldEnd!=null and boldEnd>boldStart then
+        flagContent=line[boldStart+3:boldEnd]
+        spaceIdx=indexOf(flagContent," ")
+        bracketIdx=indexOf(flagContent,"[")
+        cutIdx=null
+        if spaceIdx!=null then cutIdx=spaceIdx
+        if bracketIdx!=null and (cutIdx==null or bracketIdx<cutIdx) then cutIdx=bracketIdx
+        if cutIdx!=null then currentFlag=trim(flagContent[:cutIdx]) else currentFlag=trim(flagContent)
+        if len(currentFlag)>=2 and currentFlag[0]=="-" then
+          flags[currentFlag]=""
+          remainingLine=trim(line[boldEnd+4:])
+          if len(remainingLine)>0 and remainingLine[0]=="-" then remainingLine=trim(remainingLine[1:])
+          if len(remainingLine)>0 then
+            if hasIndex(globals,"G_agent") and hasIndex(globals.G_agent,"_stripColorTags") then flags[currentFlag]=globals.G_agent._stripColorTags(remainingLine) else flags[currentFlag]=remainingLine
+          end if
+        else
+          currentFlag=null
+        end if
+      end if
+    else if currentFlag and len(line)>=8 and line[:8]=="        " then
+      desc=trim(line)
+      if len(desc)>0 then
+        if hasIndex(globals,"G_agent") and hasIndex(globals.G_agent,"_stripColorTags") then desc=globals.G_agent._stripColorTags(desc)
+        if len(flags[currentFlag])>0 then flags[currentFlag]+=" "+desc else flags[currentFlag]=desc
+        if len(flags[currentFlag])>200 then
+          flags[currentFlag]=flags[currentFlag][:200]
+          currentFlag=null
+        end if
+      end if
+    else
+      currentFlag=null
+    end if
+    i+=1
+  end while
+  mappings=self._mapSemanticFlags(flags)
+  //Persist onto cache entry when present
+  normalizedName=trim(lower(cmd))
+  if hasIndex(globals,"G_agent") and hasIndex(globals.G_agent,"commandKnowledgeCache") and hasIndex(globals.G_agent.commandKnowledgeCache,normalizedName) then
+    entry=globals.G_agent.commandKnowledgeCache[normalizedName]
+    entry.flags=flags
+    entry.flagMappings=mappings
+  end if
+  return {"flags":flags,"flagMappings":mappings}
 end function
 //Legacy compatibility - hardcoded commands structure (kept minimal for backward compat)
 //This is ONLY used for commands that have special parsing needs not in man pages

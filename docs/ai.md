@@ -1174,20 +1174,22 @@ ai go to lib              # Changes directory on 192.168.1.3
 
 ### Dialog State
 
-The agent maintains dialog state for multi-turn conversations:
+Used for typed multi-turn clarification when intent is ambiguous (`promptOnAmbiguous`):
+
+1. Agent prints options and sets `dialogState.active`
+2. Reply with `ai <option>` (name or `1`…`N`) or `ai cancel`
+3. Agent prepends the choice to the original phrase and continues
 
 **State Structure:**
 ```javascript
 {
-  "active": false,          // Whether dialog is in progress
-  "context": null,          // Current context
-  "question": null,         // Pending question
-  "expectedResponse": null, // Expected response format
-  "callback": null          // Handler function
+  "active": false,
+  "kind": null,       // e.g. "ambiguousAction"
+  "question": null,
+  "options": null,    // list of allowed replies
+  "context": null     // e.g. {mode:"prependAction", originalCommand:"…"}
 }
 ```
-
-**Usage**: Internal system for managing conversational flow and user prompts.
 
 ### State Snapshots
 

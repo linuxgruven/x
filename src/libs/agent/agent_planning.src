@@ -487,12 +487,17 @@ AgentPlanning._createPlan=function(Obj,parsed,headless=false)
   //Store headless flag in parsed for builders to use
   parsed.headless=headless
   plan.steps=[]
-  //AI: Check learned templates for a matching action sequence (fuzzy matching)
-  if hasIndex(globals.G_agent.sessionContext,"templates") and typeof(globals.G_agent.sessionContext.templates)=="list" then
+  //Initialize plan builders before template recall (builders take priority)
+  if not hasIndex(self,"_planBuilders") then globals.G_agent._initPlanBuilders
+  hasPlanBuilder=hasIndex(parsed,"action") and hasIndex(globals.G_agent._planBuilders,parsed.action)
+  //AI: Check learned templates only when no dedicated plan builder exists
+  //Otherwise dialog-resume noise (exploit->exploit->exploit) hijacks real plans
+  if not hasPlanBuilder and hasIndex(globals.G_agent.sessionContext,"templates") and typeof(globals.G_agent.sessionContext.templates)=="list" then
     bestTemplate=null
     bestTemplateScore=0
     for tmpl in globals.G_agent.sessionContext.templates
       if tmpl.successCount>=2 and hasIndex(tmpl,"signature") and hasIndex(tmpl,"steps") then
+        if globals.G_agent._isDegenerateTemplate(tmpl) then continue
         score=globals.G_agent._scoreFuzzyTemplate(parsed.action,tmpl)
         if score>bestTemplateScore then
           bestTemplateScore=score
@@ -503,7 +508,9 @@ AgentPlanning._createPlan=function(Obj,parsed,headless=false)
     //Use template if score is above threshold (0.4 = at least partial match)
     if bestTemplate and bestTemplateScore>=0.4 then
       if debug then print green("[DEBUG] Planning: Fuzzy template match '"+bestTemplate.signature+"' (score="+round(bestTemplateScore*100)+"%  success="+bestTemplate.successCount+")")
-      for stepCmd in bestTemplate.steps;push(plan.steps,{"type":"command","command":stepCmd});end for
+      for stepCmd in bestTemplate.steps
+        push(plan.steps,{"type":"directCommand","command":stepCmd,"description":stepCmd})
+      end for
       plan.fromTemplate=true
       plan.templateScore=bestTemplateScore
       if outLvl>=1 then print skyblue("Agent: Using learned template '"+bestTemplate.signature+"' ("+round(bestTemplateScore*100)+"% match)")
@@ -521,8 +528,6 @@ AgentPlanning._createPlan=function(Obj,parsed,headless=false)
       if learnedKnowledge then plan.commandKnowledge=learnedKnowledge
     end if
   end if
-  //Initialize plan builders if not already done
-  if not hasIndex(self,"_planBuilders") then globals.G_agent._initPlanBuilders
   //Dispatch to appropriate plan builder
   if hasIndex(parsed,"action") and hasIndex(globals.G_agent._planBuilders,parsed.action) then
     if debug then print green("[DEBUG] Planning: Using plan builder for action='"+parsed.action+"'")
@@ -1194,9 +1199,20 @@ AgentPlanning._buildPromptPlan=function(Obj,parsed,plan)
   return plan
 end function
 //Multi-target plan builder: apply same action to multiple IPs
+//True if template is a repeated single action (e.g. exploit->exploit->exploit)
+AgentPlanning._isDegenerateTemplate=function(tmpl)
+  if not tmpl or not hasIndex(tmpl,"signature") or not tmpl.signature then return true
+  sigParts=split(tmpl.signature,"->")
+  if len(sigParts)<2 then return true
+  first=sigParts[0]
+  if not first or first=="unknown" then return true
+  for part in sigParts;if part!=first then return false;end for
+  return true
+end function
 //AI: Fuzzy template matching - score how well a parsed action matches a template
 AgentPlanning._scoreFuzzyTemplate=function(action,tmpl)
   if not action or not hasIndex(tmpl,"signature") then return 0
+  if globals.G_agent._isDegenerateTemplate(tmpl) then return 0
   sigParts=split(tmpl.signature,"->")
   //Exact match: action appears directly in signature
   if indexOf(sigParts,action)!=null then return 1.0
@@ -1337,6 +1353,8 @@ AgentPlanning._buildTestPlan=function(Obj,parsed,plan)
       step.suite="persistence"
     else if indexOf(rawLower,"template")!=null or indexOf(rawLower,"planner")!=null then
       step.suite="template"
+    else if indexOf(rawLower,"dialog")!=null then
+      step.suite="dialog"
     end if
   end if
   push(plan.steps,step)

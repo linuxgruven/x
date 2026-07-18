@@ -55,6 +55,15 @@ AgentExecution._executePlan=function(Obj,plan,context=null)
       if outLvl>=1 then print skyblue("Agent: Step returned invalid result, continuing...")
       continue
     end if
+    //Typed dialog pause (e.g. pick attack vector) - stop plan and wait for reply
+    if hasIndex(stepResult,"awaitDialog") and stepResult.awaitDialog then
+      results.success=true
+      results.awaitDialog=true
+      if hasIndex(stepResult,"message") then results.message=stepResult.message
+      results.context=context
+      push(results.details,stepResult)
+      return results
+    end if
     push(results.details,stepResult)
     if stepResult.success then
       results.stepsCompleted+=1
@@ -155,6 +164,7 @@ AgentExecution._registerHandlers=function
   globals.G_agent._stepHandlers.checkPrivs=@globals.G_agent._handleCheckPrivs
   globals.G_agent._stepHandlers.findEscalation=@globals.G_agent._handleFindEscalation
   globals.G_agent._stepHandlers.directCommand=@globals.G_agent._handleDirectCommand
+  globals.G_agent._stepHandlers.command=@globals.G_agent._handleDirectCommand
   globals.G_agent._stepHandlers.openFile=@globals.G_agent._handleOpenFile
   globals.G_agent._stepHandlers.view=@globals.G_agent._handleOpenFile
   globals.G_agent._stepHandlers.fileOp=@globals.G_agent._handleSimpleCommand

@@ -21,8 +21,9 @@ AgentTest._handleTest=function(Obj,step,context)
     print "  risk         - Risk assessment & success prediction"
     print "  learning     - Pattern reinforcement & preference tracking"
     print "  signature    - Sequence signature generation"
+    print "  dialog       - Multi-turn dialogState + parse round-trip"
     result.success=true
-    result.message="Listed 11 test suites"
+    result.message="Listed 12 test suites"
     return result
   end if
   passed=0
@@ -154,14 +155,25 @@ AgentTest._handleTest=function(Obj,step,context)
     if hasIndex(globals.G_agent.sessionContext,"templates") then savedTemplates2=globals.G_agent.sessionContext.templates
     globals.G_agent.sessionContext.templates=[]
     push(globals.G_agent.sessionContext.templates,{"signature":"scan->exploit->crack","successCount":3,"lastUsed":0,"steps":["scan 1.2.3.4","exploit ssh","crack root"]})
-    tp=globals.G_agent._createPlan(Obj,{"action":"scan","target":"1.2.3.4","raw":"scan 1.2.3.4"})
+    //Actions with dedicated plan builders must not be hijacked by templates
+    tpBuilt=globals.G_agent._createPlan(Obj,{"action":"exploit","target":"1.2.3.4","raw":"exploit 1.2.3.4"})
+    _assert("builder beats template",not (hasIndex(tpBuilt,"fromTemplate") and tpBuilt.fromTemplate))
+    //Actions without a plan builder still use templates
+    tp=globals.G_agent._createPlan(Obj,{"action":"compromise","target":"1.2.3.4","raw":"compromise 1.2.3.4"})
     _assert("plan uses template",hasIndex(tp,"fromTemplate") and tp.fromTemplate)
     _assert("plan has 3 steps",len(tp.steps)==3)
+    if len(tp.steps)>0 then _assert("template step type",tp.steps[0].type=="directCommand")
     //Low success template should be skipped
     globals.G_agent.sessionContext.templates=[]
     push(globals.G_agent.sessionContext.templates,{"signature":"scan->exploit","successCount":1,"lastUsed":0,"steps":["scan x","exploit x"]})
-    tp2=globals.G_agent._createPlan(Obj,{"action":"scan","target":"test","raw":"scan test"})
+    tp2=globals.G_agent._createPlan(Obj,{"action":"compromise","target":"test","raw":"compromise test"})
     _assert("low-success skipped",not (hasIndex(tp2,"fromTemplate") and tp2.fromTemplate))
+    //Degenerate repeated-action templates are ignored
+    globals.G_agent.sessionContext.templates=[]
+    push(globals.G_agent.sessionContext.templates,{"signature":"exploit->exploit->exploit","successCount":9,"lastUsed":0,"steps":["exploit a","exploit b","exploit c"]})
+    _assert("degenerate detected",globals.G_agent._isDegenerateTemplate(globals.G_agent.sessionContext.templates[0])==true)
+    tp3=globals.G_agent._createPlan(Obj,{"action":"compromise","target":"test","raw":"compromise test"})
+    _assert("degenerate skipped",not (hasIndex(tp3,"fromTemplate") and tp3.fromTemplate))
     //Restore
     if savedTemplates2!=null then globals.G_agent.sessionContext.templates=savedTemplates2
   end if
@@ -202,7 +214,8 @@ AgentTest._handleTest=function(Obj,step,context)
     if hasIndex(globals.G_agent.sessionContext,"templates") then savedTemplates3=globals.G_agent.sessionContext.templates
     globals.G_agent.sessionContext.templates=[]
     push(globals.G_agent.sessionContext.templates,{"signature":"scan->exploit->crack","successCount":5,"lastUsed":0,"steps":["scan 1.2.3.4","exploit ssh","crack root"]})
-    tp=globals.G_agent._createPlan(Obj,{"action":"attack","target":"1.2.3.4","raw":"attack 1.2.3.4"})
+    //"hack" has no plan builder; fuzzy-matches exploit group and uses template
+    tp=globals.G_agent._createPlan(Obj,{"action":"hack","target":"1.2.3.4","raw":"hack 1.2.3.4"})
     _assert("fuzzy plan uses template",hasIndex(tp,"fromTemplate") and tp.fromTemplate)
     if savedTemplates3!=null then globals.G_agent.sessionContext.templates=savedTemplates3
   end if
@@ -396,6 +409,121 @@ AgentTest._handleTest=function(Obj,step,context)
     //Empty sequence
     sig=globals.G_agent._getSequenceSignature([])
     _assert("empty->\",sig=="")
+  end if
+  //TEST 12: Dialog state (typed clarification)
+  if suite=="all" or suite=="dialog" then
+    print yellow("="*50)
+    print yellow("TEST: DIALOG STATE")
+    print yellow("="*50)
+    globals.G_agent.clearDialog
+    globals.G_agent.startDialog("ambiguousAction","Test question?",["scan","exploit","crack"],{
+      "mode":"prependAction",
+      "originalCommand":"that host",
+      "suggested":"scan"
+    })
+    _assert("dialog active",globals.G_agent.dialogState.active==true)
+    _assert("3 options",len(globals.G_agent.dialogState.options)==3)
+    //Accept suggestion shortcut
+    r=globals.G_agent.resolveDialog("yes")
+    _assert("yes->command",hasIndex(r,"command") and r.command=="scan that host")
+    _assert("cleared after yes",globals.G_agent.dialogState.active==false)
+    //Numeric + cancel
+    globals.G_agent.startDialog("ambiguousAction","Q?",["scan","exploit"],{"mode":"prependAction","originalCommand":"x"})
+    r=globals.G_agent.resolveDialog("2")
+    _assert("2->exploit x",hasIndex(r,"command") and r.command=="exploit x")
+    globals.G_agent.startDialog("synonymTie","Q?",["crack","exploit"],{"mode":"prependAction","originalCommand":"break it","suggested":"crack"})
+    r=globals.G_agent.resolveDialog("cancel")
+    _assert("cancel ok",hasIndex(r,"cancelled") and r.cancelled==true)
+    _assert("cleared after cancel",globals.G_agent.dialogState.active==false)
+    //Bad reply leaves dialog active
+    globals.G_agent.startDialog("ambiguousAction","Q?",["scan"],{"mode":"prependAction","originalCommand":"x"})
+    r=globals.G_agent.resolveDialog("nope")
+    _assert("bad reply errors",hasIndex(r,"error"))
+    _assert("still active on bad",globals.G_agent.dialogState.active==true)
+    globals.G_agent.clearDialog
+    //Synonym tie resolves by replacing the synonym (not prepending)
+    globals.G_agent.startDialog("synonymTie","Q?",["crack","exploit"],{"mode":"prependAction","originalCommand":"break the password","suggested":"crack"})
+    r=globals.G_agent.resolveDialog("crack")
+    _assert("synonym replace",hasIndex(r,"command") and r.command=="crack the password")
+    //Round-trip: nonsense phrase -> dialog -> resolve -> re-parse has action
+    savedPrompt=globals.G_agent.config.promptOnAmbiguous
+    globals.G_agent.config.promptOnAmbiguous=true
+    globals.G_agent.clearDialog
+    p=globals.G_agent._parseCommand(Obj,"xyzzy plugh")
+    _assert("nonsense->await",hasIndex(p,"awaitDialog") and p.awaitDialog==true)
+    _assert("nonsense dialog on",globals.G_agent.dialogState.active==true)
+    r=globals.G_agent.resolveDialog("scan")
+    _assert("nonsense->scan cmd",hasIndex(r,"command") and r.command=="scan xyzzy plugh")
+    p2=globals.G_agent._parseCommand(Obj,r.command)
+    _assert("reparse has scan",hasIndex(p2,"action") and p2.action=="scan")
+    //Synonym-tie round-trip via expand (equal scores, no context)
+    globals.G_agent.clearDialog
+    syn=globals.G_agent._expandWithSynonyms("break that")
+    _assert("tie->null",syn==null)
+    _assert("tie dialog on",globals.G_agent.dialogState.active==true)
+    r=globals.G_agent.resolveDialog("exploit")
+    _assert("tie->exploit that",hasIndex(r,"command") and r.command=="exploit that")
+    //Full parse must prefer synonym tie over weak knowledge->scan matches
+    globals.G_agent.clearDialog
+    p=globals.G_agent._parseCommand(Obj,"break that")
+    _assert("break that->await",hasIndex(p,"awaitDialog") and p.awaitDialog==true)
+    _assert("break that dialog",globals.G_agent.dialogState.active==true)
+    //Choosing exploit with no lastTarget should ask for a target (not hard-error)
+    r=globals.G_agent.resolveDialog("exploit")
+    _assert("break->exploit that",hasIndex(r,"command") and r.command=="exploit that")
+    p=globals.G_agent._parseCommand(Obj,r.command)
+    _assert("exploit that->needTarget",hasIndex(p,"awaitDialog") and p.awaitDialog==true)
+    _assert("needTarget kind",globals.G_agent.dialogState.kind=="needTarget")
+    r=globals.G_agent.resolveDialog("192.168.1.2")
+    _assert("target->exploit ip",hasIndex(r,"command") and r.command=="exploit 192.168.1.2")
+    //pickVector dialog stores selectedAttackVector and resumes exploit
+    globals.G_agent.clearDialog
+    fakeVecs=[{"library":"libssh.so","target":"192.168.1.2:22","exploitCount":3},{"library":"libhttp.so","target":"192.168.1.2:80","exploitCount":2}]
+    labels=["libssh.so @ 192.168.1.2:22 [3]","libhttp.so @ 192.168.1.2:80 [2]"]
+    globals.G_agent.startDialog("pickVector","Which attack vector?",labels,{
+      "mode":"resumeExploit",
+      "resumeCommand":"exploit 41.1.8.226",
+      "vectors":fakeVecs,
+      "suggested":labels[0]
+    })
+    r=globals.G_agent.resolveDialog("2")
+    _assert("vector->resume cmd",hasIndex(r,"command") and r.command=="exploit 41.1.8.226")
+    _assert("vector stashed",globals.G_agentContext.selectedAttackVector!=null and globals.G_agentContext.selectedAttackVector.library=="libhttp.so")
+    globals.G_agentContext.selectedAttackVector=null
+    //pickExploit dialog: auto clears selection; numeric picks a scored exploit
+    globals.G_agent.clearDialog
+    fakeScored=[{"label":"shell (root)","type":"shell","user":"root","score":330,"library":"kernel_router.so"},{"label":"file (guest)","type":"file","user":"guest","score":110,"library":"kernel_router.so"}]
+    fakeVec={"library":"kernel_router.so","target":"192.168.1.1:0","exploitCount":2}
+    exLabels=["auto","shell (root)","file (guest)"]
+    globals.G_agent.startDialog("pickExploit","Which exploit?",exLabels,{
+      "mode":"resumeExploit",
+      "resumeCommand":"exploit 192.168.1.1",
+      "vector":fakeVec,
+      "scoredExploits":fakeScored,
+      "suggested":exLabels[0]
+    })
+    r=globals.G_agent.resolveDialog("auto")
+    _assert("exploit auto->resume",hasIndex(r,"command") and r.command=="exploit 192.168.1.1")
+    _assert("exploit auto no stash",not (globals.G_agentContext and hasIndex(globals.G_agentContext,"selectedAttackExploit") and globals.G_agentContext.selectedAttackExploit))
+    _assert("exploit auto keeps vector",globals.G_agentContext.selectedAttackVector!=null and globals.G_agentContext.selectedAttackVector.library=="kernel_router.so")
+    _assert("exploit auto marks resolved",globals.G_agentContext.exploitPromptResolved==true)
+    globals.G_agentContext.selectedAttackVector=null
+    globals.G_agentContext.exploitPromptResolved=false
+    globals.G_agent.clearDialog
+    globals.G_agent.startDialog("pickExploit","Which exploit?",exLabels,{
+      "mode":"resumeExploit",
+      "resumeCommand":"exploit 192.168.1.1",
+      "vector":fakeVec,
+      "scoredExploits":fakeScored,
+      "suggested":exLabels[0]
+    })
+    r=globals.G_agent.resolveDialog("2")
+    _assert("exploit pick->resume",hasIndex(r,"command") and r.command=="exploit 192.168.1.1")
+    _assert("exploit pick stashed",globals.G_agentContext.selectedAttackExploit!=null and globals.G_agentContext.selectedAttackExploit.type=="shell")
+    globals.G_agentContext.selectedAttackExploit=null
+    globals.G_agentContext.selectedAttackVector=null
+    globals.G_agent.clearDialog
+    globals.G_agent.config.promptOnAmbiguous=savedPrompt
   end if
   //Summary
   print ""

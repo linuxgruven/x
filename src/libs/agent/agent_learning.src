@@ -270,12 +270,18 @@ end function
 AgentLearning._learnTemplate=function(sequence)
   debug=globals.G_agent.config.debug
   if not sequence or len(sequence)<2 then return false
+  signature=globals.G_agent._getSequenceSignature(sequence)
+  //Skip dialog-resume noise like exploit->exploit->exploit
+  if hasIndex(globals.G_agent,"_isDegenerateTemplate") and globals.G_agent._isDegenerateTemplate({"signature":signature}) then
+    if debug then print yellow("[DEBUG] Template skipped (degenerate): "+signature)
+    return false
+  end if
   //Create template from sequence
   template={
     "steps":sequence,
     "successCount":1,
     "lastUsed":time,
-    "signature":globals.G_agent._getSequenceSignature(sequence)
+    "signature":signature
   }
   //Check if similar template already exists
   if not hasIndex(globals.G_agent.sessionContext,"templates") then globals.G_agent.sessionContext.templates=[]

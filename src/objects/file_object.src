@@ -19,7 +19,14 @@ FileObject.run=function(this,ex,meta={},headless=false,restoreState=null)
 		self.object=ex
     self.type="file"
 		self.layer="file"
-		//Store metadata (public and local IPs)
+		//Store metadata (public and local IPs); tolerate missing keys from callers
+		if not meta then meta={}
+		if not hasIndex(meta,"public_ip") then
+			if hasIndex(globals,"G_main") and hasIndex(globals.G_main,"meta") and hasIndex(globals.G_main.meta,"public_ip") then meta.public_ip=globals.G_main.meta.public_ip else meta.public_ip=""
+		end if
+		if not hasIndex(meta,"local_ip") then
+			if hasIndex(globals,"G_main") and hasIndex(globals.G_main,"meta") and hasIndex(globals.G_main.meta,"local_ip") then meta.local_ip=globals.G_main.meta.local_ip else meta.local_ip=""
+		end if
 		self.meta=meta
 		//Determine root directory from File object
 		self.root=FileHelper.toRoot(self)
@@ -29,9 +36,9 @@ FileObject.run=function(this,ex,meta={},headless=false,restoreState=null)
       "lan":null
     }
     //If internet available, get router and scan LAN
-    if self.net.hasInternet then
+    if self.net.hasInternet and self.meta.public_ip then
       self.net.router=get_router(self.meta.public_ip)
-      self.net.lan=devices_lan_ip(self.net.router)
+      if self.net.router then self.net.lan=devices_lan_ip(self.net.router)
     end if
     //Detect machine type
     self.machineType=System.getMachine(self,self.meta.local_ip)

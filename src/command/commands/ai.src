@@ -16,7 +16,6 @@ Command.ai=function(Obj,argv)
     for key in indexes(AgentExecution);globals.G_agent[key]=AgentExecution[key];end for
     for key in indexes(AgentHandlers);globals.G_agent[key]=AgentHandlers[key];end for
     for key in indexes(AgentTest);globals.G_agent[key]=AgentTest[key];end for
-    AI.init
     Info.info("Initializing Agent...")
     globals.G_agent.init
     Knowledge.init
@@ -201,6 +200,20 @@ Command.ai=function(Obj,argv)
   end for
   command=join(commandParts," ")
   if len(command)==0 then return Error.set("No command specified")
+  //Resume multi-turn dialog if one is pending (typed clarification)
+  if hasIndex(globals.G_agent,"dialogState") and globals.G_agent.dialogState and globals.G_agent.dialogState.active then
+    resolved=globals.G_agent.resolveDialog(command)
+    if hasIndex(resolved,"cancelled") and resolved.cancelled then
+      msg="Dialog cancelled"
+      if hasIndex(resolved,"message") then msg=resolved.message
+      return Info.info(msg)
+    end if
+    if hasIndex(resolved,"error") then return Error.set(str(resolved.error))
+    if hasIndex(resolved,"command") then
+      command=resolved.command
+      if globals.G_agent.config.outputLevel>=1 then print skyblue("Agent: Continuing with: "+command)
+    end if
+  end if
   result=globals.G_agent.execute(Obj,command,options)
   if hasIndex(result,"plan") and hasIndex(result.plan,"needs_prompt") then
     print white(result.plan.prompt_message)
@@ -218,20 +231,25 @@ Command.ai=function(Obj,argv)
     result=globals.G_agent.execute(Obj,new_command,options)
   end if
   if hasIndex(result,"error") then return Error.set(str(result.error))
-  //Skip printing message if it's a config command (already printed in agent.src)
-  if hasIndex(result,"message") and not (hasIndex(result,"isConfig") and result.isConfig) then print white(str(result.message))
+  //Skip printing message if config (already printed) or awaitDialog (startDialog printed prompt)
+  if hasIndex(result,"message") and not (hasIndex(result,"isConfig") and result.isConfig) and not (hasIndex(result,"awaitDialog") and result.awaitDialog) then print white(str(result.message))
   if hasIndex(result,"success") then
     if result.success then
       quietMode=false
       if hasIndex(options,"quiet") then quietMode=options.quiet
-      //Don't print "Done" if we're about to open a shell session
-      //But DO print "Done" (and don't open) if the user asked to store instead
-      willOpenShell=false
-      isShouldStore=hasIndex(result,"context") and result.context and hasIndex(result.context,"shouldStore") and result.context.shouldStore
-      if not isShouldStore and hasIndex(result,"context") and result.context then
-        if (hasIndex(result.context,"rootShell") and result.context.rootShell) or (hasIndex(result.context,"shell") and result.context.shell) then willOpenShell=true
+      //Don't print "Done" while waiting on a clarification dialog
+      if hasIndex(result,"awaitDialog") and result.awaitDialog then
+        //startDialog already printed the prompt
+      else
+        //Don't print "Done" if we're about to open a shell session
+        //But DO print "Done" (and don't open) if the user asked to store instead
+        willOpenShell=false
+        isShouldStore=hasIndex(result,"context") and result.context and hasIndex(result.context,"shouldStore") and result.context.shouldStore
+        if not isShouldStore and hasIndex(result,"context") and result.context then
+          if (hasIndex(result.context,"rootShell") and result.context.rootShell) or (hasIndex(result.context,"shell") and result.context.shell) then willOpenShell=true
+        end if
+        if not quietMode and not willOpenShell then print blue("Agent: Done. Awaiting further instructions.")
       end if
-      if not quietMode and not willOpenShell then print blue("Agent: Done. Awaiting further instructions.")
     else
       print white("Partial completion - "+str(result.stepsCompleted)+"/"+str(result.stepsCompleted+result.stepsFailed)+" steps succeeded")
     end if

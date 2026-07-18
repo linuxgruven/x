@@ -9,16 +9,16 @@ Knowledge.loaded=false
 // Initialize knowledge system
 Knowledge.init=function
   if not globals.G_main or not hasIndex(globals.G_main,"computer") then return Error.set("Knowledge: G_main not initialized")
-  // Use payload/data/ai for consistency with AI system (folder already created by AI.init)
-  aiPath=path(globals.G_main.dir.data)+"/ai"
+  // Store under payload/data/ai (create folder if missing)
+  dataDir=globals.G_main.dir.data
+  aiPath=path(dataDir)+"/ai"
+  if not File(globals.G_main.computer,aiPath) then create_folder(globals.G_main.computer,path(dataDir),"ai")
   filepath=aiPath+"/knowledge.ai"
   self.knowledgeFile=File(globals.G_main.computer,filepath)
   if not self.knowledgeFile then
-    // File doesn't exist, create it
     self.knowledgeFile=globals.G_main.computer.touch(aiPath,"knowledge.ai")
     if not self.knowledgeFile then return Error.set("Knowledge: Failed to create knowledge file")
   end if
-  // File exists or was just created, load it
   self.load
   return true
 end function

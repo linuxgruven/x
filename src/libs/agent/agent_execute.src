@@ -161,6 +161,12 @@ AgentExecute.execute=function(Obj, command, options=null)
   end if
   parsed=globals.G_agent._parseCommand(Obj,command,headlessMode)
   if hasIndex(parsed,"error") then return {"error":parsed.error}
+  //Parser started a multi-turn clarification dialog - wait for next ai reply
+  if hasIndex(parsed,"awaitDialog") and parsed.awaitDialog then
+    msg="Awaiting clarification"
+    if hasIndex(parsed,"summary") then msg=parsed.summary
+    return {"success":true,"awaitDialog":true,"message":msg}
+  end if
   //Handle compound commands: execute each sub-command sequentially
   if hasIndex(parsed,"compound") and parsed.compound then
     if debug then print green("[DEBUG] Execute: Processing compound command with "+len(parsed.subCommands)+" parts")

@@ -40,11 +40,6 @@ AgentCore._getCommandHelp=function(commandName)
         descSection=trim(descSection)
         return {"command":cmd,"description":descSection,"fullHelp":helpText}
       end if
-      //Learn flag mappings from man page
-      if hasIndex(AgentCommandRegistry,"learnFlagsFromManPage") then
-        learned=AgentCommandRegistry.learnFlagsFromManPage(cmd,helpText)
-        if learned and debug then print green("[DEBUG] Learned "+len(learned.indexes)+" flag mappings from man page for '"+cmd+"'")
-      end if
       return {"command":cmd,"description":"","fullHelp":helpText}
     end if
   end if
@@ -129,75 +124,20 @@ AgentCore.getCommandInfo=function(commandName)
     if indexOf(desc,"file")!=null then knowledge.handlesFiles=true
     if indexOf(desc,"network")!=null or indexOf(desc,"packet")!=null or indexOf(desc,"traffic")!=null then knowledge.handlesNetwork=true
     if indexOf(desc,"system")!=null or indexOf(desc,"process")!=null then knowledge.handlesSystem=true
-    //Extract common flags from OPTIONS section
+    //Learn flags + semantic flagMappings from man OPTIONS (used by executor)
     knowledge.flags={}
-    fullText=join(help.fullHelp,char(10))
-    optionsMarker=char(60)+"b"+char(62)+"OPTIONS"+char(60)+"/b"+char(62)
-    optionsIdx=indexOf(fullText,optionsMarker)
-    if debug then print green("[DEBUG]   OPTIONS section found at index: "+optionsIdx)
-    if optionsIdx!=null then
-      optionsSection=help.fullHelp[optionsIdx:]
-      //Find end of options (next section)
-      examplesIdx=indexOf(optionsSection,char(60)+"b"+char(62)+"EXAMPLE")
-      seeAlsoIdx=indexOf(optionsSection,char(60)+"b"+char(62)+"SEE ALSO"+char(60)+"/b"+char(62))
-      endIdx=null
-      if examplesIdx!=null then endIdx=examplesIdx
-      if seeAlsoIdx!=null and (endIdx==null or seeAlsoIdx<endIdx) then endIdx=seeAlsoIdx
-      if endIdx!=null then optionsSection=optionsSection[:endIdx]
-      //Parse flags from OPTIONS section
-      //Format in helpText: "    <b>-l</b>" (flag) then "        description" (8 spaces)
-      lines=split(optionsSection,char(10))
-      currentFlag=null
-      openBold=char(60)+"b"+char(62)
-      closeBold=char(60)+"/b"+char(62)
-      _len=len(lines);i=0;while i<_len
-        line=lines[i]
-        if len(line)==0 then
-          i+=1
-          continue
-        end if
-        //Check for flag line: starts with 4 spaces, has bold tags
-        if len(line)>=4 and line[:4]=="    " and indexOf(line,openBold)!=null then
-          //Extract flag from bold tags
-          boldStart=indexOf(line,openBold)
-          boldEnd=indexOf(line,closeBold)
-          if boldStart!=null and boldEnd!=null and boldEnd>boldStart then
-            flagContent=line[boldStart+3:boldEnd]
-            //Extract just the flag (before space or bracket)
-            spaceIdx=indexOf(flagContent," ")
-            bracketIdx=indexOf(flagContent,"[")
-            endIdx=null
-            if spaceIdx!=null then endIdx=spaceIdx
-            if bracketIdx!=null and (endIdx==null or bracketIdx<endIdx) then endIdx=bracketIdx
-            if endIdx!=null then currentFlag=trim(flagContent[:endIdx]) else currentFlag=trim(flagContent)
-            if len(currentFlag)>=2 and currentFlag[0]=="-" then
-              knowledge.flags[currentFlag]=""
-              //Check if description is on same line after bold tag
-              remainingLine=trim(line[boldEnd+4:])
-              if len(remainingLine)>0 and remainingLine[0]=="-" then remainingLine=trim(remainingLine[1:])
-              if len(remainingLine)>0 then knowledge.flags[currentFlag]=globals.G_agent._stripColorTags(remainingLine)
-              if debug then print green("[DEBUG]   Found flag: "+currentFlag+" desc: "+knowledge.flags[currentFlag])
-            else
-              currentFlag=null
-            end if
-          end if
-        else if currentFlag and len(line)>=8 and line[:8]=="        " then
-          //Description line: 8 spaces
-          desc=trim(line)
-          if len(desc)>0 then
-            desc=globals.G_agent._stripColorTags(desc)
-            if len(knowledge.flags[currentFlag])>0 then knowledge.flags[currentFlag]+=" "+desc else knowledge.flags[currentFlag]=desc
-            if len(knowledge.flags[currentFlag])>200 then
-              knowledge.flags[currentFlag]=knowledge.flags[currentFlag][:200]
-              currentFlag=null
-            end if
-          end if
-        else
-          currentFlag=null
-        end if
-      i+=1;end while
-      //Debug: show how many flags were parsed
-      if debug and len(indexes(knowledge.flags))>0 then print green("  Parsed "+len(indexes(knowledge.flags))+" flags: "+join(indexes(knowledge.flags),", "))
+    knowledge.flagMappings={}
+    learnedFlags=AgentCommandRegistry.learnFlagsFromManPage(normalizedName,help.fullHelp)
+    if learnedFlags then
+      knowledge.flags=learnedFlags.flags
+      knowledge.flagMappings=learnedFlags.flagMappings
+      if debug then
+        print green("[DEBUG]   OPTIONS flags: "+len(indexes(knowledge.flags)))
+        if len(indexes(knowledge.flagMappings))>0 then print green("[DEBUG]   Semantic mappings: "+join(indexes(knowledge.flagMappings),", "))
+        for f in indexes(knowledge.flags)
+          if debug then print green("[DEBUG]   Found flag: "+f+" desc: "+knowledge.flags[f])
+        end for
+      end if
     end if
     //Command-specific knowledge extraction (only for special cases needing structured data)
     if commandName=="scan" then

@@ -1110,6 +1110,13 @@ MainObject.run=function(this,ex,fileMeta={})
     end if
     //Execute command if found
     if hasIndex(self.commands,cmdKey) then
+      //Running any other command abandons a pending AI clarification dialog
+      if cmdKey!="ai" and globals.G_agent and hasIndex(globals.G_agent,"dialogState") and globals.G_agent.dialogState and globals.G_agent.dialogState.active then
+        if hasIndex(globals.G_agent,"clearDialog") then
+          globals.G_agent.clearDialog
+          print yellow("Agent: Clarification cancelled.")
+        end if
+      end if
       //Get command function
       f=self.commands[cmdKey]
       //Join command for history
@@ -1120,8 +1127,21 @@ MainObject.run=function(this,ex,fileMeta={})
       //Execute command with arguments
       f(c[1:])
     else
-      //Display command not found error
-      Info.error(Text.msg.command+c[0]+" ]")
+      //While AI clarification dialog is open, accept bare replies (1, exploit, yes, cancel)
+      replyText=join(c," ")
+      if hasIndex(self.commands,"ai") and globals.G_agent and hasIndex(globals.G_agent,"isDialogReply") and globals.G_agent.isDialogReply(replyText) then
+        self.commands["ai"](c)
+      else
+        //Unknown command also drops a pending AI dialog so it can't steal later input
+        if globals.G_agent and hasIndex(globals.G_agent,"dialogState") and globals.G_agent.dialogState and globals.G_agent.dialogState.active then
+          if hasIndex(globals.G_agent,"clearDialog") then
+            globals.G_agent.clearDialog
+            print yellow("Agent: Clarification cancelled.")
+          end if
+        end if
+        //Display command not found error
+        Info.error(Text.msg.command+c[0]+" ]")
+      end if
     end if
 	//End main loop (infinite)
 	end while
