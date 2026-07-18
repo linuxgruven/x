@@ -518,7 +518,7 @@ When chaining keywords are detected, the first step executes in headless mode, a
 
 The agent supports conditional execution with automatic fallback:
 
-**Conditional Keywords**: `if`, `or just`, `or get`, `otherwise`
+**Conditional Keywords**: `if`, `or just`, `or get`, `otherwise`, `else`, `or try`, `failing that`, `on success`
 
 **Example Commands**:
 ```
@@ -820,9 +820,10 @@ end if
 - Priority-based exploit selection
 - Machine learning for exploit success prediction
 - Adaptive retry strategies
-- Multi-target parallel operations
-- Enhanced natural language understanding
-- Context-aware command interpretation
+- ~~Multi-target batch operations~~ (batched headless fan-out)
+- ~~Enhanced natural language understanding~~ (synonym/privilege keyword expansion)
+- ~~Context-aware command interpretation~~ (dialog + conditionals)
+- ~~Command history search~~ (`ai history [query]`)
 
 ### Keyword Expansion
 - Add language variations (superuser, privileged, administrator)
@@ -854,7 +855,7 @@ ai need access to [IP] unless root available
 
 The agent supports conditional execution with automatic fallback:
 
-**Conditional Keywords**: `if`, `or just`, `or get`, `otherwise`
+**Conditional Keywords**: `if`, `or just`, `or get`, `otherwise`, `else`, `or try`, `failing that`, `on success`
 
 **Example Commands**:
 ```
@@ -1188,7 +1189,7 @@ Typed multi-turn prompts (reply with `ai <answer>` or `ai cancel`). No blocking 
 | `needTarget` | Action needs an IP (`exploit that`) | listed option or an IP |
 | `pickVector` | Multiple attack vectors | label / number |
 | `pickExploit` | Multiple exploits in a vector | `auto`, label, or number |
-| `confirmYesNo` | Critical-risk confirm (`promptOnCritical`) | `yes` / `no` |
+| `confirmYesNo` | Critical risk, plan confirm (`promptOnPlan`), LAN/tux/wipe prompts | `yes` / `no` |
 | `needHash` | Decipher/crack missing a hash | 32-char hex hash |
 | `planPrompt` | Plan asks which action to take | option name or number |
 | `pickIpType` | Show my IP without local/public | `local` / `public` |
@@ -1204,15 +1205,20 @@ Typed multi-turn prompts (reply with `ai <answer>` or `ai cancel`). No blocking 
 }
 ```
 
-### State Snapshots
+### State Snapshots / Undo
 
-The agent maintains state snapshots for undo/rollback functionality (future enhancement):
+Before each command, the agent saves a snapshot. Restore with:
 
-**Configuration:**
-- Maximum snapshots: 10
-- Snapshots include: command, target, source, timestamp
+```bash
+ai undo          # roll back last command's agent state
+ai undo 2        # roll back two snapshots
+ai snapshots     # list available snapshots
+```
 
-**Note**: Undo functionality is currently a placeholder for future implementation.
+**Restored:** config, sessionContext (targets/templates), lastTarget/lastCommand, history length, storedObjects count  
+**Not restored:** filesystem, shells, network, backdoors, or other game-world side effects
+
+Max snapshots: 10 (stack — undo drops the restored entry).
 
 ### Telemetry Logging
 

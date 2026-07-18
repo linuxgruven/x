@@ -798,8 +798,9 @@ AgentHandlers._handleExploit=function(Obj,step,context)
     end for
     context.availableExploits=uniqueVectors
   end if
-  //Multiple vectors: ask via typed dialog (same style as synonym/target clarify)
-  if hasIndex(context,"availableExploits") and len(context.availableExploits)>1 and globals.G_agent.config.promptOnAmbiguous then
+  //Multiple vectors: ask via typed dialog (skip in autonomous mode - agent picks)
+  isAutonomousStep=hasIndex(step,"autonomous") and step.autonomous
+  if not isAutonomousStep and hasIndex(context,"availableExploits") and len(context.availableExploits)>1 and globals.G_agent.config.promptOnAmbiguous then
     //Skip prompt if a single vector was already forced
     if not (hasIndex(step,"selectedVector") and step.selectedVector) then
       vectors=context.availableExploits
@@ -844,7 +845,7 @@ AgentHandlers._handleExploit=function(Obj,step,context)
   exploitPromptDone=globals.G_agentContext and hasIndex(globals.G_agentContext,"exploitPromptResolved") and globals.G_agentContext.exploitPromptResolved
   alreadyPickedExploit=globals.G_agentContext and hasIndex(globals.G_agentContext,"selectedAttackExploit") and globals.G_agentContext.selectedAttackExploit
   if exploitPromptDone then globals.G_agentContext.exploitPromptResolved=false
-  if not exploitPromptDone and not alreadyPickedExploit and hasIndex(context,"availableExploits") and len(context.availableExploits)>0 and globals.G_agent.config.promptOnAmbiguous then
+  if not isAutonomousStep and not exploitPromptDone and not alreadyPickedExploit and hasIndex(context,"availableExploits") and len(context.availableExploits)>0 and globals.G_agent.config.promptOnAmbiguous then
     scoredExploits=AgentHandlers._buildScoredExploits(context.availableExploits,requirements)
     pickerExploits=AgentHandlers._pickerExploits(scoredExploits)
     //Prompt when multiple capturable exploits (password/unknown hidden from list)
@@ -1031,12 +1032,9 @@ AgentHandlers._handleExploit=function(Obj,step,context)
             if outLvl>=2 then print skyblue("Agent: Initiating LAN setup approach...")
             //Prompt user if configured (this can be slow)
             if globals.G_agent.config.promptOnSlow then
-              shouldSetup=globals.G_agent._promptUser("No router shell available. Scan network for any available shell?",true)
-              if not shouldSetup then
-                result.error="LAN setup cancelled by user"
-                result.critical=true
-                return result
-              end if
+              resumeCmd=globals.G_agent._resumeCommand(context)
+              confirm=globals.G_agent._beginConfirm("No router shell available. Scan network for any available shell?",resumeCmd,"skipLanShellScanPrompt","yes",true)
+              if confirm then return confirm
             end if
             lanSetupResult=AgentHandlers._setupLanBounce(Obj,requirements)
             if not lanSetupResult or not lanSetupResult.success then

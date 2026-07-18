@@ -264,7 +264,73 @@ AgentLearning._parseConditionals=function(command)
       return result
     end if
   end if
+  //Pattern: "X else Y" / "X, else Y" / "X or else Y" / "X failing that Y"
+  elseDelims=[" or else "," failing that ",", else "," else "]
+  for delim in elseDelims
+    delimIdx=indexOf(cmd,delim)
+    if delimIdx!=null and delimIdx>0 then
+      primary=trim(cmd[:delimIdx])
+      fallback=trim(cmd[delimIdx+len(delim):])
+      if len(primary)>0 and len(fallback)>0 then
+        result.primary=primary
+        result.onFailure=fallback
+        result.summary=primary+" else "+fallback
+        return result
+      end if
+    end if
+  end for
+  //Pattern: "X or try Y" / "X, or try Y"
+  if indexOf(cmd," or try ")!=null then
+    parts=split(cmd," or try ")
+    if len(parts)>=2 then
+      result.primary=trim(parts[0])
+      result.onFailure=trim(parts[1])
+      result.summary=result.primary+" or try "+result.onFailure
+      return result
+    end if
+  end if
   return null
+end function
+//Evaluate conditional against a primary execute result
+AgentLearning._evalConditional=function(conditional,primaryResult)
+  if not conditional or not primaryResult then return false
+  if hasIndex(conditional,"onFailure") then
+    if not hasIndex(primaryResult,"success") or not primaryResult.success then return true
+    if hasIndex(primaryResult,"error") and primaryResult.error then return true
+    return false
+  end if
+  if not hasIndex(conditional,"onCondition") then return false
+  conditionMet=false
+  if hasIndex(conditional,"condition") then
+    cond=lower(conditional.condition)
+    if indexOf(cond,"vulnerable")!=null then
+      if hasIndex(primaryResult,"vulnerabilities") then
+        conditionMet=len(primaryResult.vulnerabilities)>0
+      else if hasIndex(primaryResult,"details") then
+        for detail in primaryResult.details
+          if hasIndex(detail,"vulnerabilities") and len(detail.vulnerabilities)>0 then
+            conditionMet=true
+            break
+          end if
+        end for
+      end if
+    else if indexOf(cond,"success")!=null then
+      conditionMet=hasIndex(primaryResult,"success") and primaryResult.success
+    else if indexOf(cond,"has ")!=null then
+      lookFor=cond[4:]
+      resultStr=""
+      if hasIndex(primaryResult,"data") then resultStr=lower(str(primaryResult.data))
+      if hasIndex(primaryResult,"message") then resultStr=resultStr+" "+lower(str(primaryResult.message))
+      if hasIndex(primaryResult,"details") then
+        for detail in primaryResult.details
+          if hasIndex(detail,"data") then resultStr=resultStr+" "+lower(str(detail.data))
+          if hasIndex(detail,"message") then resultStr=resultStr+" "+lower(str(detail.message))
+        end for
+      end if
+      if indexOf(resultStr,lookFor)!=null then conditionMet=true
+    end if
+  end if
+  return conditionMet
 end function
 //Template learning: Record successful command sequences as templates
 AgentLearning._learnTemplate=function(sequence)

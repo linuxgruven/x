@@ -741,12 +741,14 @@ AgentHandlers._handleEscalate=function(Obj,step,context)
         return result
       end if
     end if
-    //No escalation method worked
+    //No escalation method worked - mark critical so alternative plan can run findEscalation
     result.success=false
+    result.critical=true
     result.error="Failed to escalate privileges - no successful method found"
     if outLvl>=1 then print yellow("Agent: Failed to escalate to root on "+host_computer(shell).local_ip)
   else
     result.error="No shell available for escalation"
+    result.critical=true
   end if
   return result
 end function
@@ -965,14 +967,104 @@ AgentHandlers._handleCheckPrivs=function(Obj,step,context)
   end if
   return result
 end function
-//Handler: Find escalation
+//Handler: Find escalation - probe available privesc vectors (no overflow)
 AgentHandlers._handleFindEscalation=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
   outLvl=globals.G_agent.config.outputLevel
-  result={"success":false,"step":"findEscalation"}
-  //Honest stub: no autonomous method discovery yet (use escalate / tryShellEX instead)
-  result.error="No escalation search implemented - try: ai escalate"
-  result.critical=false
-  if outLvl>=1 then print yellow("Agent: Escalation search not implemented - use 'ai escalate' or su/tryShellEX")
+  result={"success":false,"step":"findEscalation","vectors":[]}
+  shell=null
+  if hasIndex(Obj,"shell") and Obj.shell then
+    shell=Obj.shell
+  else if context and hasIndex(context,"shell") and context.shell then
+    shell=context.shell
+  end if
+  if not shell then
+    result.error="No shell available for escalation search"
+    return result
+  end if
+  userInfo=globals.Utility.getUserEX(shell)
+  if userInfo and hasIndex(userInfo,"raw") and userInfo.raw=="root" then
+    result.success=true
+    result.alreadyRoot=true
+    result.message="Already root - no escalation needed"
+    if outLvl>=1 then print green("Agent: Already root")
+    return result
+  end if
+  vectors=[]
+  hasRootLib=false
+  hasUserLib=false
+  //Command-based methods
+  if hasIndex(Obj,"commands") and hasIndex(Obj.commands,"su") then push(vectors,{"method":"su","label":"su (cached passwords)"})
+  if hasIndex(Obj,"commands") and hasIndex(Obj.commands,"pRoot") then push(vectors,{"method":"pRoot","label":"pRoot"})
+  if typeof(globals.Exploit)=="AgentExploit" or hasIndex(globals,"Exploit") then push(vectors,{"method":"tryShellEX","label":"local lib shell exploits (tryShellEX)"})
+  //Passwd / crack path
+  comp=host_computer(shell)
+  if comp and typeof(globals.Utility)=="map" and hasIndex(globals.Utility,"hasPasswd") and globals.Utility.hasPasswd(comp) then push(vectors,{"method":"crackPassword","label":"crack /etc/passwd"})
+  if hasIndex(Obj,"commands") and hasIndex(Obj.commands,"scan") then push(vectors,{"method":"localScan","label":"scan --l (local exploits)"})
+  //Enumerate /lib shell exploits without overflowing
+  if (typeof(globals.Exploit)=="AgentExploit" or hasIndex(globals,"Exploit")) and typeof(globals.Library)=="map" and hasIndex(globals.Library,"haveMetaxploit") and globals.Library.haveMetaxploit then
+    libFiles=get_files(File(comp,"/lib"))
+    if libFiles then
+      rootLibs=[]
+      userLibs=[]
+      for f in libFiles
+        l=load(Library.metaxploit,path(f))
+        if not l then continue
+        if not globals.Exploit.haveAlready(l) then
+          if debug then print green("[DEBUG] findEscalation: indexing "+lib_name(l))
+          globals.Exploit.headless(l)
+        end if
+        for e in globals.Exploit.get(l)
+          if not e or not hasIndex(e,"e") then continue
+          if e.e!="s" then continue
+          lname=lib_name(l)
+          if hasIndex(e,"u") and e.u=="r" then
+            hasRootLib=true
+            if indexOf(rootLibs,lname)==null then push(rootLibs,lname)
+          else
+            hasUserLib=true
+            if indexOf(userLibs,lname)==null then push(userLibs,lname)
+          end if
+        end for
+      end for
+      if len(rootLibs)>0 then push(vectors,{"method":"localRootShell","label":"root shell via "+join(rootLibs,", "),"libs":rootLibs})
+      if len(userLibs)>0 then push(vectors,{"method":"localUserShell","label":"user shell via "+join(userLibs,", "),"libs":userLibs})
+    end if
+  end if
+  //Pick recommendation
+  recommended=null
+  if hasRootLib then
+    recommended="tryShellEX"
+  else if hasIndex(Obj,"commands") and hasIndex(Obj.commands,"su") then
+    recommended="su"
+  else if hasUserLib then
+    recommended="tryShellEX"
+  else
+    for v in vectors
+      if v.method=="crackPassword" then
+        recommended="crackPassword"
+        break
+      end if
+    end for
+  end if
+  if not recommended and len(vectors)>0 then recommended=vectors[0].method
+  result.vectors=vectors
+  result.recommended=recommended
+  result.success=len(vectors)>0
+  if context then
+    context.escalationVectors=vectors
+    context.recommendedEscalation=recommended
+  end if
+  if outLvl>=1 then
+    if len(vectors)==0 then
+      print yellow("Agent: No escalation vectors found - try: ai crack or ai scan --l")
+    else
+      print skyblue("Agent: Found "+str(len(vectors))+" escalation vector(s):")
+      for v in vectors;print white("  * "+v.label);end for
+      if recommended then print green("Agent: Recommended: "+recommended+" (try: ai escalate)")
+    end if
+  end if
+  if not result.success then result.error="No escalation vectors found"
   return result
 end function
 //Handler: Direct command

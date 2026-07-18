@@ -51,6 +51,37 @@ AgentParser._parseEarlyCommand=function(Obj,command,cmd,debug)
       return parsed
     end if
   end if
+  //History search / list (NL): "show history", "what did I run", "last commands", "history scan"
+  if indexOf(cmd,"history")!=null or indexOf(cmd,"what did i run")!=null or indexOf(cmd,"last command")!=null or indexOf(cmd,"recent command")!=null then
+    //Avoid stealing "clear history" style clears handled elsewhere
+    if indexOf(cmd,"clear history")==null and indexOf(cmd,"reset history")==null then
+      parsed.action="showHistory"
+      parsed.summary="Show command history"
+      //Optional limit: "last 5 commands" / "history 10"
+      words=split(cmd," ")
+      wi=0;while wi<len(words)
+        num=to_int(words[wi])
+        if typeof(num)=="number" and num>0 and num<1000 then
+          parsed.historyLimit=num
+          break
+        end if
+        wi+=1
+      end while
+      //Query: strip noise words, keep meaningful search term
+      noise={"show":1,"display":1,"view":1,"list":1,"my":1,"the":1,"ai":1,"agent":1,"command":1,"commands":1,"history":1,"last":1,"recent":1,"what":1,"did":1,"i":1,"run":1,"for":1,"search":1,"find":1}
+      qParts=[]
+      for w in words
+        if hasIndex(noise,w) then continue
+        if typeof(to_int(w))=="number" then continue
+        if len(w)>0 then push(qParts,w)
+      end for
+      if len(qParts)>0 then
+        parsed.historyQuery=join(qParts," ")
+        parsed.summary="Search history for '"+parsed.historyQuery+"'"
+      end if
+      return parsed
+    end if
+  end if
   //Check for config management commands first (but not permission commands)
   if (indexOf(cmd,"set ")!=null or indexOf(cmd,"config ")!=null or indexOf(cmd,"show config")!=null or indexOf(cmd,"reset config")!=null) and indexOf(cmd,"permission")==null and indexOf(cmd,"permissions")==null and indexOf(cmd,"owner")==null and indexOf(cmd,"group")==null then
     //Config commands: "set debug on", "config verbose true", "show config", "reset config"

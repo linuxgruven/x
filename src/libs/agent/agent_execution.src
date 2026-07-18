@@ -113,6 +113,8 @@ AgentExecution._executePlan=function(Obj,plan,context=null)
       //Decide whether to continue or abort
       isCritical=false
       if hasIndex(stepResult,"critical") then isCritical=stepResult.critical
+      //Batched multi-target steps never abort the whole plan
+      if hasIndex(step,"continueOnFail") and step.continueOnFail then isCritical=false
       if isCritical then
         //Attempt dynamic replanning
         if outLvl>=2 then print yellow("[VERBOSE] Agent: Critical failure detected, attempting to replan...")
@@ -133,6 +135,24 @@ AgentExecution._executePlan=function(Obj,plan,context=null)
     end if
     i+=1
   end while
+  //Multi-target batch summary
+  if context and hasIndex(context,"multiTarget") and context.multiTarget and hasIndex(context,"targetResults") then
+    okN=0
+    failN=0
+    for tr in context.targetResults;if hasIndex(tr,"success") and tr.success then okN+=1 else failN+=1;end for
+    if outLvl>=1 then
+      print skyblue("Agent: Batch summary - "+str(okN)+" ok, "+str(failN)+" failed ("+str(len(context.targetResults))+" targets)")
+      for tr in context.targetResults
+        mark="FAIL"
+        if hasIndex(tr,"success") and tr.success then mark="OK"
+        line="  ["+mark+"] "+tr.target
+        if hasIndex(tr,"message") and tr.message then line=line+" - "+tr.message
+        if mark=="FAIL" and hasIndex(tr,"error") and tr.error then line=line+" - "+tr.error
+        if mark=="OK" then print green(line) else print yellow(line)
+      end for
+    end if
+    results.targetResults=context.targetResults
+  end if
   //Check if overall goal achieved
   if results.stepsFailed==0 then
     results.success=true
@@ -194,6 +214,7 @@ AgentExecution._registerHandlers=function
   globals.G_agent._stepHandlers.showMyIp=@globals.G_agent._handleShowMyIp
   globals.G_agent._stepHandlers.test=@globals.G_agent._handleTest
   globals.G_agent._stepHandlers.multiTargetStep=@globals.G_agent._handleMultiTargetStep
+  globals.G_agent._stepHandlers.showHistory=@globals.G_agent._handleShowHistory
   //Simple command pass-through handlers (shared with planning)
   simpleCommands=self._SIMPLE_COMMANDS
   for cmdType in simpleCommands;globals.G_agent._stepHandlers[cmdType]=@globals.G_agent._handleSimpleCommand;end for

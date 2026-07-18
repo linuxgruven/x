@@ -216,21 +216,10 @@ AgentHandlers._handleDataExtraction=function(Obj,step,context)
     //Auto-detect router on network if no public IP specified
     if not publicIP then
       if outLvl>=2 then print yellow("Agent: No router IP specified - scanning network for router...")
-      //Prompt user if configured
-      if globals.G_agent.config.promptOnAmbiguous then
-        shouldDetect=globals.G_agent._promptUser("LAN target detected but no router specified. Auto-detect router?",true)
-        if not shouldDetect then
-          result.error="Router detection cancelled by user"
-          return result
-        end if
-      end if
-      //Prompt user if configured
-      if globals.G_agent.config.promptOnSlow then
-        shouldScan=globals.G_agent._promptUser("No router IP specified. Scan network for router?",true)
-        if not shouldScan then
-          result.error="Router scan cancelled by user"
-          return result
-        end if
+      if globals.G_agent.config.promptOnAmbiguous or globals.G_agent.config.promptOnSlow then
+        resumeCmd=globals.G_agent._resumeCommand(context)
+        confirm=globals.G_agent._beginConfirm("LAN target detected but no router specified. Scan network for router?",resumeCmd,"skipLanRouterPrompt","yes",true)
+        if confirm then return confirm
       end if
       routers=Attack.scanCustom(["router","s"],true)
       if routers and typeof(routers)=="shell" then
@@ -584,13 +573,9 @@ AgentHandlers._handleTux=function(Obj,step,context)
   result={"success":false,"step":"tux"}
   //Create backdoor user
   if globals.G_agent.config.promptOnAttack then
-    question="Create backdoor user for persistence?"
-    if not globals.G_agent._promptUser(question,true) then
-      result.success=true
-      result.message="Backdoor creation cancelled by user"
-      result.skipped=true
-      return result
-    end if
+    resumeCmd=globals.G_agent._resumeCommand(context)
+    confirm=globals.G_agent._beginConfirm("Create backdoor user for persistence?",resumeCmd,"skipTuxPrompt","yes",true)
+    if confirm then return confirm
   end if
   if typeof(Attack)=="map" and hasIndex(Attack,"tux") then
     tuxResult=Attack.tux(Obj,[])
@@ -611,16 +596,12 @@ AgentHandlers._handleAttackOP=function(Obj,step,context)
     return result
   end if
   cmdName=step.command
-  //Prompt for dangerous operations
-  if globals.G_agent.config.promptOnAttack then
-    if cmdName=="wipe" or cmdName=="bomb" then
-      question="Execute "+cmdName+" attack? This may cause damage."
-      if not globals.G_agent._promptUser(question,false) then
-        result.success=true
-        result.message="Attack cancelled by user"
-        result.skipped=true
-        return result
-      end if
+  //Prompt for dangerous operations (typed dialog; suggested=no)
+  if cmdName=="wipe" or cmdName=="bomb" then
+    if globals.G_agent.config.promptOnDestructive or globals.G_agent.config.promptOnAttack then
+      resumeCmd=globals.G_agent._resumeCommand(context)
+      confirm=globals.G_agent._beginConfirm("Execute "+cmdName+" attack? This may cause damage.",resumeCmd,"skipAttackOpPrompt","no",true)
+      if confirm then return confirm
     end if
   end if
   argv=[]
@@ -711,14 +692,29 @@ AgentHandlers._handlePromptUser=function(Obj,step,context)
   result.success=true
   if hasIndex(step,"question") then
     if hasIndex(step,"options") then
-      //Multiple choice
+      //Multiple choice (rare plan step - Gui menu)
       userResponse=globals.G_agent._askUser(step.question,step.options)
       result.response=userResponse
       context.userResponse=userResponse
     else if hasIndex(step,"yesno") and step.yesno then
-      //Yes/No question
+      //Yes/No via typed dialog (no cancels plan step with false, not abort)
       defaultVal=true
       if hasIndex(step,"default") then defaultVal=step.default
+      suggested="yes"
+      if not defaultVal then suggested="no"
+      resumeCmd=globals.G_agent._resumeCommand(context)
+      if resumeCmd and len(resumeCmd)>0 then
+        if globals.G_agentContext and hasIndex(globals.G_agentContext,"skipPromptUser") and globals.G_agentContext.skipPromptUser then
+          globals.G_agentContext.skipPromptUser=false
+          userResponse=true
+          if hasIndex(globals.G_agentContext,"promptResponse") then userResponse=globals.G_agentContext.promptResponse
+          result.response=userResponse
+          if context then context.userResponse=userResponse
+          return result
+        end if
+        confirm=globals.G_agent._beginConfirm(step.question,resumeCmd,"skipPromptUser",suggested,false)
+        if confirm then return confirm
+      end if
       userResponse=globals.G_agent._promptUser(step.question,defaultVal)
       result.response=userResponse
       context.userResponse=userResponse
@@ -1120,14 +1116,38 @@ AgentHandlers._findSimilarCommands=function(input)
   end if
   return similar
 end function
-// Feature #10: Command Undo/Rollback Capabilities
+// Feature #10: Command Undo/Rollback Capabilities (agent state only - not FS/shell side effects)
 AgentHandlers.saveSnapshot=function(label)
   debug=globals.G_agent.config.debug
+  //Copy sessionContext with list/map value copies
+  sessionCopy={}
+  sc=globals.G_agent.sessionContext
+  if sc and typeof(sc)=="map" then
+    for k in indexes(sc)
+      v=sc[k]
+      if typeof(v)=="list" then
+        sessionCopy[k]=v[:]
+      else if typeof(v)=="map" then
+        sessionCopy[k]={}+v
+      else
+        sessionCopy[k]=v
+      end if
+    end for
+  end if
+  //Lightweight agentContext fields (not live shell/computer objects)
+  ctxSnap={}
+  if globals.G_agentContext and typeof(globals.G_agentContext)=="map" then
+    for key in ["lastTarget","lastCommand","lastAction"]
+      if hasIndex(globals.G_agentContext,key) then ctxSnap[key]=globals.G_agentContext[key]
+    end for
+    if hasIndex(globals.G_agentContext,"storedObjects") and globals.G_agentContext.storedObjects then ctxSnap.storedObjectsCount=len(globals.G_agentContext.storedObjects)
+  end if
   snapshot={
     "timestamp":time,
     "label":label,
     "config":{}+globals.G_agent.config,
-    "sessionContext":{}+globals.G_agent.sessionContext,
+    "sessionContext":sessionCopy,
+    "agentContext":ctxSnap,
     "historyCount":len(globals.G_agent.history),
     "learnedPatternsCount":0,
     "failedExploitsCount":0
@@ -1140,10 +1160,11 @@ AgentHandlers.saveSnapshot=function(label)
   if debug then print skyblue("Agent: State snapshot saved - "+label)
   return {"success":true,"snapshot":snapshot}
 end function
-//Rollback to previous snapshot
+//Rollback to previous snapshot (stack: restores then drops that snapshot and newer)
 AgentHandlers.rollback=function(steps)
   outLvl=globals.G_agent.config.outputLevel
   if typeof(steps)!="number" then steps=1
+  if steps<1 then steps=1
   if len(globals.G_agent.stateSnapshots)==0 then return {"error":"No snapshots available for rollback"}
   if steps>len(globals.G_agent.stateSnapshots) then steps=len(globals.G_agent.stateSnapshots)
   //Get target snapshot
@@ -1151,20 +1172,46 @@ AgentHandlers.rollback=function(steps)
   if targetIdx<0 then targetIdx=0
   snapshot=globals.G_agent.stateSnapshots[targetIdx]
   //Restore state
-  globals.G_agent.config={}+snapshot.config
-  globals.G_agent.sessionContext={}+snapshot.sessionContext
+  if hasIndex(snapshot,"config") and snapshot.config then globals.G_agent.config={}+snapshot.config
+  if hasIndex(snapshot,"sessionContext") and snapshot.sessionContext then
+    restored={}
+    for k in indexes(snapshot.sessionContext)
+      v=snapshot.sessionContext[k]
+      if typeof(v)=="list" then
+        restored[k]=v[:]
+      else if typeof(v)=="map" then
+        restored[k]={}+v
+      else
+        restored[k]=v
+      end if
+    end for
+    globals.G_agent.sessionContext=restored
+  end if
+  //Restore lightweight agentContext + truncate storedObjects to prior count
+  if hasIndex(snapshot,"agentContext") and snapshot.agentContext and globals.G_agentContext then
+    ac=snapshot.agentContext
+    for key in ["lastTarget","lastCommand","lastAction"];if hasIndex(ac,key) then globals.G_agentContext[key]=ac[key];end for
+    if hasIndex(ac,"storedObjectsCount") and hasIndex(globals.G_agentContext,"storedObjects") then
+      n=ac.storedObjectsCount
+      if typeof(n)=="number" and n>=0 and n<len(globals.G_agentContext.storedObjects) then globals.G_agentContext.storedObjects=globals.G_agentContext.storedObjects[:n]
+    end if
+  end if
   //Truncate history to snapshot point
   if snapshot.historyCount<len(globals.G_agent.history) then globals.G_agent.history=globals.G_agent.history[:snapshot.historyCount]
+  //Drop restored snapshot and anything newer (undo stack)
+  globals.G_agent.stateSnapshots=globals.G_agent.stateSnapshots[:targetIdx]
+  //Clear any pending dialog
+  if hasIndex(globals.G_agent,"clearDialog") then globals.G_agent.clearDialog
   if outLvl>=1 then
     print yellow("Agent: Rolled back to snapshot - "+snapshot.label)
-    print white("  Timestamp: "+snapshot.timestamp)
+    print white("  (Agent state only - filesystem/shell changes are not reversed)")
   end if
   return {"success":true,"snapshot":snapshot}
 end function
 //List available snapshots
 AgentHandlers.listSnapshots=function
   _len=len(globals.G_agent.stateSnapshots)
-  if _len==0 then return {"snapshots":[],"message":"No snapshots available"}
+  if _len==0 then return {"snapshots":[],"message":"No snapshots available","count":0}
   snapshots=[]
   i=0;while i<_len;snap=globals.G_agent.stateSnapshots[i];push(snapshots,{"index":i+1,"label":snap.label,"timestamp":snap.timestamp});i+=1;end while
   return {"success":true,"snapshots":snapshots,"count":len(snapshots)}
@@ -1408,27 +1455,88 @@ AgentHandlers._handleHunt=function(Obj,step,context)
   end if
   return result
 end function
-//Handler: Execute action on a single target in a multi-target batch
+//Handler: Execute action on a single target in a multi-target batch (headless, no nested snapshot/history)
 AgentHandlers._handleMultiTargetStep=function(Obj,step,context)
-  result={"success":false,"step":"multiTargetStep"}
+  result={"success":false,"step":"multiTargetStep","critical":false}
   outLvl=globals.G_agent.config.outputLevel
-  debug=globals.G_agent.config.debug
   target=step.target
   targetAction=step.targetAction
   if not target or not targetAction then
     result.error="Missing target or action for multi-target step"
     return result
   end if
-  //Build a command string and execute it through the agent
   subCmd=targetAction+" "+target
   if outLvl>=1 then print skyblue("Agent: ["+target+"] "+targetAction)
-  subResult=globals.G_agent.execute(Obj,subCmd,{"headless":true})
-  //Copy results
+  subResult=globals.G_agent.execute(Obj,subCmd,{"headless":true,"skipSnapshot":true,"skipHistory":true})
   if hasIndex(subResult,"success") then result.success=subResult.success
   if hasIndex(subResult,"data") then result.data=subResult.data
   if hasIndex(subResult,"message") then result.message=subResult.message
   if hasIndex(subResult,"error") then result.error=subResult.error
   result.target=target
   result.description=targetAction+" "+target
+  //Aggregate into plan context for batch summary
+  if context then
+    if not hasIndex(context,"targetResults") or not context.targetResults then context.targetResults=[]
+    trErr=null
+    trMsg=null
+    if hasIndex(result,"error") then trErr=result.error
+    if hasIndex(result,"message") then trMsg=result.message
+    push(context.targetResults,{"target":target,"success":result.success,"error":trErr,"message":trMsg})
+  end if
+  return result
+end function
+//Print / search command history. query=null lists all; limit caps count (from end).
+AgentHandlers.printHistory=function(query=null,limit=0)
+  history=globals.G_agent.history
+  if not history or len(history)==0 then
+    print white("No command history")
+    return {"success":true,"count":0,"matches":0}
+  end if
+  q=null
+  if query!=null and len(str(query))>0 then q=lower(trim(str(query)))
+  //Build match index list (0-based)
+  matches=[]
+  i=0;while i<len(history)
+    entry=history[i]
+    cmdText=""
+    if hasIndex(entry,"command") then cmdText=str(entry.command)
+    if not q or indexOf(lower(cmdText),q)!=null then push(matches,i)
+    i+=1
+  end while
+  if len(matches)==0 then
+    print white("No history matches for: "+str(query))
+    return {"success":true,"count":len(history),"matches":0}
+  end if
+  //Apply limit from the end of matches
+  start=0
+  if typeof(limit)=="number" and limit>0 and limit<len(matches) then start=len(matches)-limit
+  title="AI Agent Command History"
+  if q then title=title+" matching '"+query+"'"
+  title=title+" ("+str(len(matches)-start)+" of "+str(len(history))+")"
+  print white(title+":")
+  print ""
+  mi=start;while mi<len(matches)
+    idx=matches[mi]
+    entry=history[idx]
+    print white(str(idx+1)+". "+entry.command)
+    if hasIndex(entry,"result") and entry.result then
+      if hasIndex(entry.result,"success") then
+        if entry.result.success then print green("   Result: Success") else print red("   Result: Failed")
+      end if
+    end if
+    print ""
+    mi+=1
+  end while
+  return {"success":true,"count":len(history),"matches":len(matches)-start}
+end function
+//Handler: show / search history (NL path)
+AgentHandlers._handleShowHistory=function(Obj,step,context)
+  result={"success":true,"step":"showHistory"}
+  query=null
+  limit=0
+  if hasIndex(step,"historyQuery") then query=step.historyQuery
+  if hasIndex(step,"historyLimit") then limit=step.historyLimit
+  printed=globals.G_agent.printHistory(query,limit)
+  if hasIndex(printed,"matches") then result.matches=printed.matches
   return result
 end function

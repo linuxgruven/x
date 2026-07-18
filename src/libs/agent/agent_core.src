@@ -7,10 +7,10 @@ AgentCore={}
 AgentCore._STOP_WORDS={"a":1,"an":1,"the":1,"is":1,"are":1,"was":1,"were":1,"be":1,"been":1,"being":1,"have":1,"has":1,"had":1,"do":1,"does":1,"did":1,"will":1,"would":1,"should":1,"could":1,"can":1,"may":1,"might":1,"must":1,"shall":1,"i":1,"you":1,"he":1,"she":1,"it":1,"we":1,"they":1,"me":1,"him":1,"her":1,"us":1,"them":1,"my":1,"your":1,"his":1,"its":1,"our":1,"their":1,"mine":1,"yours":1,"hers":1,"ours":1,"theirs":1,"this":1,"that":1,"these":1,"those":1,"what":1,"which":1,"who":1,"where":1,"when":1,"why":1,"how":1,"all":1,"each":1,"every":1,"both":1,"few":1,"more":1,"most":1,"other":1,"some":1,"such":1,"no":1,"nor":1,"not":1,"only":1,"own":1,"same":1,"so":1,"than":1,"too":1,"very":1,"just":1,"to":1,"of":1,"in":1,"for":1,"on":1,"with":1,"at":1,"by":1,"from":1,"as":1,"up":1,"about":1,"into":1,"through":1,"during":1,"before":1,"after":1,"above":1,"below":1,"between":1,"under":1,"again":1,"further":1,"then":1,"once":1,"please":1,"now":1,"much":1,"many":1,"any":1,"left":1,"remaining":1,"available":1,"used":1,"free":1,"total":1}
 AgentCore._ACTION_WORDS={"ai":1,"goto":1,"go":1,"crack":1,"break":1,"decrypt":1,"decipher":1,"list":1,"show":1,"display":1,"scan":1,"find":1,"search":1,"get":1,"fetch":1,"open":1,"read":1,"write":1,"create":1,"delete":1,"remove":1,"copy":1,"move":1,"change":1,"hash":1,"password":1,"file":1,"files":1,"network":1,"system":1,"disk":1,"memory":1,"process":1,"space":1}
 AgentCore._COMMON_DIRS={"root":"/root","etc":"/etc","var":"/var","usr":"/usr","bin":"/bin","lib":"/lib","opt":"/opt","srv":"/srv","boot":"/boot","sys":"/sys"}
-AgentCore._BOOL_KEYS=["debug","aggressive","stealth","dryRun","trainer","promptOnAttack","promptOnCritical","promptOnAmbiguous","promptOnSlow","promptOnDestructive","autoFallback"]
+AgentCore._BOOL_KEYS=["debug","aggressive","stealth","dryRun","trainer","promptOnAttack","promptOnCritical","promptOnAmbiguous","promptOnSlow","promptOnDestructive","promptOnPlan","autoFallback"]
 AgentCore._NUMBER_KEYS=["maxRetries","timeout","maxTargets","maxDepth","outputLevel"]
 AgentCore._ESCALATION_BLACKLIST=["cal","date","uptime","clear","pwd","whoami","hostname","echo"]
-AgentCore._SUGGESTIONS=[{"keywords":["list file","show file","display file","ls"],"command":"ls"},{"keywords":["list account","show account","display account","show user"],"command":"list"},{"keywords":["change directory","go to","cd"],"command":"cd"},{"keywords":["show process","list process","ps"],"command":"ps"},{"keywords":["network","interface","ip address","ifconfig"],"command":"ifconfig"},{"keywords":["scan port","port scan","nmap"],"command":"nmap"},{"keywords":["connect ssh","ssh into"],"command":"ssh"},{"keywords":["connect ftp","ftp into"],"command":"ftp"},{"keywords":["download","get file","pull"],"command":"scp"},{"keywords":["upload","put file","push"],"command":"scp"},{"keywords":["find file","search file","locate"],"command":"find"},{"keywords":["read file","view file","cat","show content"],"command":"cat"},{"keywords":["edit file","modify file","vi","vim"],"command":"vi"},{"keywords":["remove file","delete file","rm"],"command":"rm"},{"keywords":["copy file","cp"],"command":"cp"},{"keywords":["move file","rename","mv"],"command":"mv"},{"keywords":["make directory","create dir","mkdir"],"command":"mkdir"},{"keywords":["crack password","break password"],"command":"crack"},{"keywords":["exploit","attack","hack"],"command":"scan"}]
+AgentCore._SUGGESTIONS=[{"keywords":["list file","show file","display file","ls"],"command":"ls"},{"keywords":["list account","show account","display account","show user"],"command":"list"},{"keywords":["change directory","go to","cd"],"command":"cd"},{"keywords":["show process","list process","ps"],"command":"ps"},{"keywords":["network","interface","ip address","ifconfig"],"command":"ifconfig"},{"keywords":["scan port","port scan","nmap","recon","enumerate"],"command":"nmap"},{"keywords":["connect ssh","ssh into"],"command":"ssh"},{"keywords":["connect ftp","ftp into"],"command":"ftp"},{"keywords":["download","get file","pull","loot"],"command":"scp"},{"keywords":["upload","put file","push"],"command":"scp"},{"keywords":["find file","search file","locate"],"command":"find"},{"keywords":["read file","view file","cat","show content"],"command":"cat"},{"keywords":["edit file","modify file","vi","vim"],"command":"vi"},{"keywords":["remove file","delete file","rm","purge"],"command":"rm"},{"keywords":["copy file","cp"],"command":"cp"},{"keywords":["move file","rename","mv"],"command":"mv"},{"keywords":["make directory","create dir","mkdir"],"command":"mkdir"},{"keywords":["crack password","break password"],"command":"crack"},{"keywords":["exploit","attack","hack","pwn"],"command":"scan"},{"keywords":["escalate","privesc","elevate","become root"],"command":"escalate"},{"keywords":["show history","last commands","what did i run"],"command":"history"}]
 AgentCore._INTENT_MAPPINGS=[{"keywords":["all","hidden"],"flagPatterns":["a"],"desc":"show all/hidden"},{"keywords":["recursive","recursively","subdirectories","tree"],"flagPatterns":["R","r"],"desc":"recursive"},{"keywords":["size","sizes","file size"],"flagPatterns":["s"],"desc":"show sizes"},{"keywords":["long","detailed","details","verbose"],"flagPatterns":["l"],"desc":"long format"},{"keywords":["sort","sorted","order"],"flagPatterns":["S","t"],"desc":"sorting"},{"keywords":["reverse","reversed"],"flagPatterns":["r"],"desc":"reverse order"},{"keywords":["owner","owners","permissions","perms"],"flagPatterns":["l","o"],"desc":"show ownership"},{"keywords":["human readable","readable"],"flagPatterns":["h"],"desc":"human readable"},{"keywords":["only files","files only"],"flagPatterns":["f"],"desc":"files only"},{"keywords":["only directories","directories only","folders only"],"flagPatterns":["d"],"desc":"directories only"},{"keywords":["ports","port scan","services"],"flagPatterns":["p"],"desc":"port scan"},{"keywords":["lan","local network","network"],"flagPatterns":["n","l"],"desc":"LAN scan"},{"keywords":["fast","quick"],"flagPatterns":["f"],"desc":"fast scan"},{"keywords":["verbose","detailed"],"flagPatterns":["v"],"desc":"verbose"},{"keywords":["stealth","silent","quiet"],"flagPatterns":["s","q"],"desc":"stealth/quiet"},{"keywords":["brute","brute force","dictionary"],"flagPatterns":["b","d"],"desc":"brute force"},{"keywords":["overflow","buffer overflow"],"flagPatterns":["o"],"desc":"overflow"},{"keywords":["injection","sql","code"],"flagPatterns":["i"],"desc":"injection"}]
 AgentCore._COMMAND_MAPPINGS=[{"keywords":["list","show files","display files","ls"],"command":"list"},{"keywords":["scan","probe","enumerate"],"command":"scan"},{"keywords":["crack","break","brute"],"command":"crack"},{"keywords":["exploit","attack","compromise"],"command":"exploit"},{"keywords":["decipher","decrypt","decode"],"command":"decipher"},{"keywords":["build","compile"],"command":"build"}]
 //Default configuration with all available options
@@ -28,6 +28,7 @@ AgentCore.config={
   "promptOnAmbiguous":true,
   "promptOnSlow":true,
   "promptOnDestructive":true,
+  "promptOnPlan":true,
   "autoFallback":false
 }
 //User prompt preferences cache
@@ -49,6 +50,7 @@ AgentCore.init=function
     "promptOnAmbiguous":true,
     "promptOnSlow":true,
     "promptOnDestructive":true,
+    "promptOnPlan":true,
     "autoFallback":false
   }
   //Try to load saved config (silently during init)
@@ -267,6 +269,7 @@ AgentCore.showConfig=function
   print "  promptOnAmbiguous: "+globals.G_agent.config.promptOnAmbiguous
   print "  promptOnSlow: "+globals.G_agent.config.promptOnSlow
   print "  promptOnDestructive: "+globals.G_agent.config.promptOnDestructive
+  print "  promptOnPlan: "+globals.G_agent.config.promptOnPlan
   print "  autoFallback: "+globals.G_agent.config.autoFallback
   print white("Cached Preferences: "+len(indexes(globals.G_agent.promptPreferences))+" saved")
   return {"success":true}
@@ -287,6 +290,7 @@ AgentCore.resetConfig=function
     "promptOnAmbiguous":true,
     "promptOnSlow":true,
     "promptOnDestructive":true,
+    "promptOnPlan":true,
     "autoFallback":false
   }
   globals.G_agent.promptPreferences={}
@@ -304,6 +308,46 @@ AgentCore.clearDialog=function
     "context":null
   }
   return true
+end function
+//Best resume command for mid-handler confirms (context, then lastCommand)
+AgentCore._resumeCommand=function(context=null,fallback="")
+  if context and hasIndex(context,"originalCommand") and context.originalCommand then return context.originalCommand
+  if globals.G_agentContext and hasIndex(globals.G_agentContext,"lastCommand") and globals.G_agentContext.lastCommand then return globals.G_agentContext.lastCommand
+  return fallback
+end function
+//Typed yes/no confirm. Returns null to proceed, or awaitDialog result map.
+//skipKey: G_agentContext flag set on yes (and on no when cancelOnNo=false) so resume skips re-prompt.
+AgentCore._beginConfirm=function(question,resumeCommand,skipKey="skipConfirm",suggested="yes",cancelOnNo=true)
+  outLvl=globals.G_agent.config.outputLevel
+  if not globals.G_agentContext then globals.G_agentContext={}
+  if hasIndex(globals.G_agentContext,skipKey) and globals.G_agentContext[skipKey] then
+    globals.G_agentContext[skipKey]=false
+    return null
+  end if
+  //Silent mode: honor suggested default (same idea as _promptUser)
+  if outLvl==0 then
+    if suggested=="yes" or suggested=="y" then return null
+    if cancelOnNo then return {"success":true,"skipped":true,"message":"Cancelled (silent default)"}
+    globals.G_agentContext.promptResponse=false
+    return null
+  end if
+  if not resumeCommand or len(str(resumeCommand))==0 then resumeCommand=globals.G_agent._resumeCommand(null,"")
+  if not resumeCommand or len(str(resumeCommand))==0 then
+    //No resume path - blocking Gui fallback
+    ok=globals.G_agent._promptUser(question,suggested=="yes" or suggested=="y")
+    if ok then return null
+    if cancelOnNo then return {"success":true,"skipped":true,"message":"Cancelled by user"}
+    globals.G_agentContext.promptResponse=false
+    return null
+  end if
+  globals.G_agent.startDialog("confirmYesNo",question,["yes","no"],{
+    "resumeCommand":resumeCommand,
+    "originalCommand":resumeCommand,
+    "suggested":suggested,
+    "skipKey":skipKey,
+    "cancelOnNo":cancelOnNo
+  })
+  return {"success":true,"awaitDialog":true,"message":"Awaiting confirmation - reply with ai yes or ai no"}
 end function
 //Collect likely target IPs for needTarget dialogs (public_ip/local_ip are often methods).
 AgentCore._suggestTargetIps=function(Obj)
@@ -517,10 +561,25 @@ AgentCore.resolveDialog=function(reply)
       if indexOf(lower(choice),"yes")!=null then isYes=true
       if indexOf(lower(choice),"no")!=null or indexOf(lower(choice),"cancel")!=null then isNo=true
     end if
-    if isNo then return {"cancelled":true,"message":"Operation cancelled"}
-    if not isYes then return {"error":"Reply with yes or no (or cancel)"}
+    cancelOnNo=true
+    if ctx and hasIndex(ctx,"cancelOnNo") then cancelOnNo=ctx.cancelOnNo
     if not globals.G_agentContext then globals.G_agentContext={}
-    globals.G_agentContext.skipCriticalPrompt=true
+    skipKey="skipCriticalPrompt"
+    if ctx and hasIndex(ctx,"skipKey") and ctx.skipKey then skipKey=ctx.skipKey
+    if isNo then
+      if cancelOnNo then return {"cancelled":true,"message":"Operation cancelled"}
+      //Plan-step prompts: resume with false response
+      globals.G_agentContext[skipKey]=true
+      globals.G_agentContext.promptResponse=false
+      resumeCmd=""
+      if ctx and hasIndex(ctx,"resumeCommand") and ctx.resumeCommand then resumeCmd=ctx.resumeCommand
+      if len(resumeCmd)==0 and len(original)>0 then resumeCmd=original
+      if len(resumeCmd)==0 then return {"cancelled":true,"message":"Nothing to resume"}
+      return {"command":resumeCmd}
+    end if
+    if not isYes then return {"error":"Reply with yes or no (or cancel)"}
+    globals.G_agentContext[skipKey]=true
+    globals.G_agentContext.promptResponse=true
     resumeCmd=""
     if ctx and hasIndex(ctx,"resumeCommand") and ctx.resumeCommand then resumeCmd=ctx.resumeCommand
     if len(resumeCmd)==0 and len(original)>0 then resumeCmd=original

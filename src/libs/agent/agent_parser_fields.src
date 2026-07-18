@@ -949,17 +949,13 @@ AgentParser._extractActionPhase=function(Obj,command,cmd,parsed,headlessMode,deb
     parsed.fetchType="shell"
     //Determine if root access is required
     needRoot=false
-    if indexOf(cmd,"root")!=null then
-      needRoot=true
-    else if indexOf(cmd,"admin")!=null then
-      needRoot=true
-    else if indexOf(cmd,"elevated")!=null then
-      needRoot=true
-    else if indexOf(cmd,"best")!=null then
-      needRoot=true
-    else if indexOf(cmd,"highest")!=null then
-      needRoot=true
-    end if
+    rootWords=["root","admin","superuser","administrator","elevated","privileged","sudo","best","highest"]
+    for rw in rootWords
+      if indexOf(cmd,rw)!=null then
+        needRoot=true
+        break
+      end if
+    end for
     parsed.needRoot=needRoot
     //Check for library installation requests
     libsToInstall=[]

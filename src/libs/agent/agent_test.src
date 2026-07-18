@@ -22,8 +22,11 @@ AgentTest._handleTest=function(Obj,step,context)
     print "  learning     - Pattern reinforcement & preference tracking"
     print "  signature    - Sequence signature generation"
     print "  dialog       - Multi-turn dialogState + parse round-trip"
+    print "  undo         - Snapshot save/rollback stack"
+    print "  escalate     - findEscalation probe (no shell)"
+    print "  history      - History search helper"
     result.success=true
-    result.message="Listed 12 test suites"
+    result.message="Listed 15 test suites"
     return result
   end if
   passed=0
@@ -62,6 +65,10 @@ AgentTest._handleTest=function(Obj,step,context)
     _assert("no match->null",r==null)
     r=globals.G_agent._expandWithSynonyms("probe that")
     _assert("probe->scan",r=="scan")
+    r=globals.G_agent._expandWithSynonyms("recon the network")
+    _assert("recon+network->scan",r=="scan")
+    r=globals.G_agent._expandWithSynonyms("loot the file")
+    _assert("loot+file->fetch",r=="fetch")
   end if
   //TEST 2: Compound Command Parsing
   if suite=="all" or suite=="compound" then
@@ -254,6 +261,29 @@ AgentTest._handleTest=function(Obj,step,context)
     //Test non-conditional returns null
     r=globals.G_agent._parseConditionals("scan 1.2.3.4")
     _assert("simple->null",r==null)
+    //else / or try / failing that
+    r=globals.G_agent._parseConditionals("scan 1.2.3.4 else exploit 1.2.3.4")
+    _assert("else->onFailure",r!=null and hasIndex(r,"onFailure"))
+    r=globals.G_agent._parseConditionals("scan 1.2.3.4 or try exploit 1.2.3.4")
+    _assert("or try->onFailure",r!=null and hasIndex(r,"onFailure"))
+    r=globals.G_agent._parseConditionals("fetch mail failing that get users")
+    _assert("failing that->onFailure",r!=null and hasIndex(r,"onFailure"))
+    //_evalConditional
+    ev=globals.G_agent._evalConditional({"onFailure":"crack"},{"success":false})
+    _assert("eval fail->true",ev==true)
+    ev=globals.G_agent._evalConditional({"onFailure":"crack"},{"success":true})
+    _assert("eval ok->false",ev==false)
+    ev=globals.G_agent._evalConditional({"condition":"success","onCondition":"exploit"},{"success":true})
+    _assert("eval success->true",ev==true)
+    ev=globals.G_agent._evalConditional({"condition":"has ssh","onCondition":"exploit"},{"message":"open ports: ssh 22"})
+    _assert("eval has ssh->true",ev==true)
+    //Dig fallback wires hasFallback / isFallback into plan
+    tpFb=globals.G_agent._createPlan(Obj,{"action":"extractData","dataType":"email","fallbackDataType":"user","target":"1.2.3.4","raw":"get emails or just get users"})
+    _assert("dig fallback 2 steps",len(tpFb.steps)==2)
+    if len(tpFb.steps)>=2 then
+      _assert("dig primary hasFallback",hasIndex(tpFb.steps[0],"hasFallback") and tpFb.steps[0].hasFallback==true)
+      _assert("dig second isFallback",hasIndex(tpFb.steps[1],"isFallback") and tpFb.steps[1].isFallback==true)
+    end if
   end if
   //TEST 7: Multi-Target Parsing
   if suite=="all" or suite=="multitarget" then
@@ -278,7 +308,9 @@ AgentTest._handleTest=function(Obj,step,context)
     if len(tp.steps)>=1 then
       _assert("step type=multiTargetStep",tp.steps[0].type=="multiTargetStep")
       _assert("step has target",hasIndex(tp.steps[0],"target"))
+      _assert("step continueOnFail",hasIndex(tp.steps[0],"continueOnFail") and tp.steps[0].continueOnFail==true)
     end if
+    _assert("plan aggregate ctx",hasIndex(tp,"context") and hasIndex(tp.context,"aggregate") and tp.context.aggregate==true)
     if savedTemplates4!=null then globals.G_agent.sessionContext.templates=savedTemplates4
   end if
   //TEST 8: IP Extraction & Private IP Detection
@@ -568,7 +600,99 @@ AgentTest._handleTest=function(Obj,step,context)
     r=globals.G_agent.resolveDialog("public")
     _assert("pickIpType->public",hasIndex(r,"command") and r.command=="what is my public ip")
     globals.G_agent.clearDialog
+    //confirmYesNo custom skipKey + cancelOnNo=false resumes with promptResponse=false
+    globals.G_agent.startDialog("confirmYesNo","Ok?",["yes","no"],{
+      "resumeCommand":"scan 1.1.1.1",
+      "skipKey":"skipPlanPrompt",
+      "cancelOnNo":false,
+      "suggested":"yes"
+    })
+    r=globals.G_agent.resolveDialog("no")
+    _assert("confirm soft-no->resume",hasIndex(r,"command") and r.command=="scan 1.1.1.1")
+    _assert("confirm soft-no skipKey",globals.G_agentContext.skipPlanPrompt==true)
+    _assert("confirm soft-no response",globals.G_agentContext.promptResponse==false)
+    globals.G_agentContext.skipPlanPrompt=false
+    //_beginConfirm returns awaitDialog then skip consumes
+    globals.G_agent.clearDialog
+    c=globals.G_agent._beginConfirm("Proceed with plan?", "exploit 10.0.0.1","skipPlanPrompt","yes",true)
+    _assert("beginConfirm awaits",c!=null and hasIndex(c,"awaitDialog") and c.awaitDialog==true)
+    r=globals.G_agent.resolveDialog("yes")
+    _assert("beginConfirm yes",hasIndex(r,"command") and r.command=="exploit 10.0.0.1")
+    c2=globals.G_agent._beginConfirm("Proceed with plan?", "exploit 10.0.0.1","skipPlanPrompt","yes",true)
+    _assert("beginConfirm skip",c2==null)
+    globals.G_agent.clearDialog
     globals.G_agent.config.promptOnAmbiguous=savedPrompt
+  end if
+  //TEST 13: Undo / snapshot stack
+  if suite=="all" or suite=="undo" then
+    print yellow("="*50)
+    print yellow("TEST: UNDO / SNAPSHOTS")
+    print yellow("="*50)
+    savedSnaps=globals.G_agent.stateSnapshots
+    globals.G_agent.stateSnapshots=[]
+    if not globals.G_agent.sessionContext then globals.G_agent.sessionContext={}
+    globals.G_agent.sessionContext.lastTarget="1.1.1.1"
+    globals.G_agent.saveSnapshot("before_a")
+    globals.G_agent.sessionContext.lastTarget="2.2.2.2"
+    globals.G_agent.saveSnapshot("before_b")
+    globals.G_agent.sessionContext.lastTarget="3.3.3.3"
+    _assert("2 snapshots",len(globals.G_agent.stateSnapshots)==2)
+    rb=globals.G_agent.rollback(1)
+    _assert("rollback ok",hasIndex(rb,"success") and rb.success==true)
+    _assert("rollback label",rb.snapshot.label=="before_b")
+    _assert("stack popped",len(globals.G_agent.stateSnapshots)==1)
+    _assert("target restored b",globals.G_agent.sessionContext.lastTarget=="2.2.2.2")
+    //Undo again to before_a
+    globals.G_agent.sessionContext.lastTarget="9.9.9.9"
+    rb2=globals.G_agent.rollback(1)
+    _assert("rollback2 ok",hasIndex(rb2,"success") and rb2.success==true)
+    _assert("target restored a",globals.G_agent.sessionContext.lastTarget=="1.1.1.1")
+    _assert("stack empty",len(globals.G_agent.stateSnapshots)==0)
+    rb3=globals.G_agent.rollback(1)
+    _assert("empty rollback errors",hasIndex(rb3,"error"))
+    globals.G_agent.stateSnapshots=savedSnaps
+  end if
+  //TEST 14: findEscalation
+  if suite=="all" or suite=="escalate" then
+    print yellow("="*50)
+    print yellow("TEST: FIND ESCALATION")
+    print yellow("="*50)
+    //No shell -> error
+    fe=globals.G_agent._handleFindEscalation({},{"type":"findEscalation"},{})
+    _assert("no shell errors",hasIndex(fe,"error"))
+    _assert("no shell fail",fe.success==false)
+    //Live Obj with shell -> discovery succeeds (vectors may vary by host)
+    if hasIndex(Obj,"shell") and Obj.shell then
+      fe2=globals.G_agent._handleFindEscalation(Obj,{"type":"findEscalation"},{})
+      _assert("with shell ok",hasIndex(fe2,"success") and fe2.success==true)
+      _assert("with shell vectors",hasIndex(fe2,"vectors") and len(fe2.vectors)>0)
+    end if
+  end if
+  //TEST 15: History search + privilege keywords
+  if suite=="all" or suite=="history" then
+    print yellow("="*50)
+    print yellow("TEST: HISTORY SEARCH + KEYWORDS")
+    print yellow("="*50)
+    savedHist=globals.G_agent.history
+    globals.G_agent.history=[
+      {"command":"scan 1.1.1.1","timestamp":1,"result":{"success":true}},
+      {"command":"exploit 2.2.2.2","timestamp":2,"result":{"success":false}},
+      {"command":"scan 3.3.3.3","timestamp":3,"result":{"success":true}}
+    ]
+    //Query filter (printHistory returns match count; we also test parse)
+    ph=globals.G_agent.printHistory("scan",0)
+    _assert("history search matches",hasIndex(ph,"matches") and ph.matches==2)
+    ph2=globals.G_agent.printHistory(null,2)
+    _assert("history limit",hasIndex(ph2,"matches") and ph2.matches==2)
+    globals.G_agent.history=savedHist
+    //NL history parse
+    pH=globals.G_agent._parseCommand(Obj,"show history scan")
+    _assert("nl history action",hasIndex(pH,"action") and pH.action=="showHistory")
+    _assert("nl history query",hasIndex(pH,"historyQuery") and indexOf(pH.historyQuery,"scan")!=null)
+    //needRoot privilege synonyms
+    pR=globals.G_agent._parseCommand(Obj,"fetch superuser shell on 1.2.3.4")
+    //May be fetch or other action; if fetch, needRoot should be set
+    if hasIndex(pR,"action") and pR.action=="fetch" then _assert("superuser->needRoot",hasIndex(pR,"needRoot") and pR.needRoot==true) else _assert("superuser parse ok",pR!=null)
   end if
   //Summary
   print ""

@@ -2265,42 +2265,35 @@ end function
 **Improvement:** Generic parameter extractor using templates
 **Status:** Not started
 
-#### 3. Visual Plan Preview
-**Current:** Plans execute immediately  
-**Improvement:** Show plan steps before execution
-**Status:** Not started (partially addressed by `dryRun` config)
+#### ~~3. Visual Plan Preview / Confirm~~ ✅ IMPLEMENTED
+**Implemented as:** `promptOnPlan` (default on) prints multi-step plans and asks via `confirmYesNo` before execute  
+**Also:** `dryRun` returns the plan without running
 
-#### 4. Command History Search
-**Current:** No history search  
-**Improvement:** Search previous commands
-**Status:** Not started
+#### ~~4. Command History Search~~ ✅ IMPLEMENTED
+**Implemented as:** `ai history [limit] [query]`, NL `show history` / `what did I run`, `printHistory()`  
+**Session-only** (not persisted to disk)
 
-#### 5. Undo Last Command
-**Current:** No undo functionality  
-**Improvement:** Reverse last operation via state snapshots
-**Status:** Not started
+#### ~~5. Undo Last Command~~ ✅ IMPLEMENTED
+**Implemented as:** `ai undo` / `ai snapshots` — restores agent config/sessionContext (not filesystem/shell)  
+**See:** `saveSnapshot` / `rollback` in `agent_handlers.src`
 
 ### Medium-Term Improvements
 
-#### 6. Intent Clarification Dialog
-**Current:** AI guesses user intent  
-**Improvement:** Ask clarifying questions when ambiguous
-**Status:** Not started
+#### ~~6. Intent Clarification Dialog~~ ✅ IMPLEMENTED
+**Implemented as:** typed `dialogState` (`ambiguousAction`, `synonymTie`, etc.)
 
 #### ~~7. Batch Operations~~ ✅ IMPLEMENTED (v0.9.7.3)
 **Implemented as:** Compound command parsing  
 **Usage:** `ai scan 1.2.3.4 and then exploit ssh`  
 **See:** [Compound Command Parsing](#2-compound-command-parsing)
 
-#### 8. Conditional Logic
-**Current:** Linear step execution  
-**Improvement:** if/else branching in plans
-**Status:** Not started
+#### ~~8. Conditional Logic~~ ✅ IMPLEMENTED
+**Implemented as:** `_parseConditionals` + `_evalConditional` + nested recursive execute; dig `fallbackDataType` uses `hasFallback`/`isFallback`  
+**Patterns:** has/then, if fails, on success, or, otherwise, else, or try, failing that
 
-#### 9. Parallel Execution
-**Current:** Sequential steps  
-**Improvement:** Run independent steps in parallel
-**Status:** Not started
+#### ~~9. Parallel / Batch Multi-Target~~ ✅ IMPLEMENTED (batched)
+**Implemented as:** multi-target headless fan-out with `continueOnFail`, skipped nested snapshots/history, and batch summary  
+**Note:** GreyScript has no threads — sequential batch, not true parallel
 
 #### ~~10. Smart Defaults~~ ✅ IMPLEMENTED (v0.9.7.3)
 **Implemented as:** Learning persistence + user preference tracking  
@@ -2322,16 +2315,14 @@ end function
 #### ~~13. Multi-Turn Conversations~~ ✅ IMPLEMENTED
 **Implemented as:** `dialogState` via `startDialog` / `resolveDialog` / `isDialogReply` in `agent_core.src`  
 **Kinds:** `ambiguousAction`, `synonymTie`, `needTarget`, `pickVector`, `pickExploit`, `confirmYesNo`, `needHash`, `planPrompt`, `pickIpType`  
-**Details:** Typed `ai <reply>` follow-ups (no GUI menus). Critical confirm, hash input, and plan prompts use the same path.
+**Details:** Typed `ai [reply]` follow-ups. Critical confirm, hash input, plan confirm, and mid-handler prompts share this path.
 
 #### ~~14. Proactive Suggestions~~ ✅ IMPLEMENTED
 **Implemented as:** `_generateSuggestions()` in `agent_learning.src`  
 **Details:** After each operation, context-aware suggestions are printed (e.g., "Escalate to root" after getting shell, "Install backdoor" after getting root)
 
-#### 15. Collaborative Planning
-**Current:** AI plans alone  
-**Improvement:** User participates in planning
-**Status:** Not started
+#### ~~15. Collaborative Planning~~ ✅ IMPLEMENTED
+**Implemented as:** `promptOnPlan` shows steps and asks `ai yes`/`ai no` before multi-step execute
 
 ---
 

@@ -3,7 +3,7 @@
 // AI agent parser; natural language command parsing and intent extraction.
 // =============================================================================
 AgentParser={}
-AgentParser._CONFIG_KEYWORDS=["aggressive","stealth","dryRun","debug","trainer","promptOnAttack","promptOnCritical","outputLevel"]
+AgentParser._CONFIG_KEYWORDS=["aggressive","stealth","dryRun","debug","trainer","promptOnAttack","promptOnCritical","promptOnPlan","outputLevel"]
 AgentParser._LEGACY_ALIASES={"verbose":"outputLevel","quiet":"outputLevel"}
 AgentParser._AUTONOMOUS_PATTERNS=["decide how","figure out","choose your own","think for yourself","you decide","your choice","use your judgment","be creative"]
 AgentParser._CONDITIONAL_PATTERNS=["if","then","else","otherwise","or try","fallback","on failure","failing that","if it works","on success","if successful"]
@@ -107,27 +107,27 @@ AgentParser._commandPatterns={
   "scan":{"keywords":["scan"],"action":"scan","summary":"Scan target","subtypes":{"local":{"keywords":["local"],"mode":"local","summary":"Scan local machine"},"lan":{"keywords":["lan","network"],"mode":"lan","summary":"Scan LAN"}}},
   "fetch":{"keywords":["fetch","get"],"action":"fetch","summary":"Fetch shell or access"},
   "crackAll":{"keywords":["crack"],"action":"crackAll","summary":"Crack passwords","requiresContext":["all","accounts","users","passwords","computer","machine","system"]},
-  "escalate":{"keywords":["escalate","privilege","privesc"],"action":"escalate","summary":"Escalate privileges"},
+  "escalate":{"keywords":["escalate","privilege","privesc","elevate"],"action":"escalate","summary":"Escalate privileges"},
   "test":{"keywords":["test","run test","load test","self test","selftest","unit test"],"action":"test","summary":"Run AI test suite"}
 }
 //Goal pattern definitions
 AgentParser._goalPatterns={
-  "rootShell":{"keywords":["root"],"suffix":"for root access"},
+  "rootShell":{"keywords":["root","superuser","administrator"],"suffix":"for root access"},
   "admin":{"keywords":["admin"],"suffix":"for admin access"},
   "shell":{"keywords":["shell"],"suffix":"for shell access"},
-  "data":{"keywords":["data"],"suffix":"to extract data"},
-  "persistence":{"keywords":["persist"],"suffix":"for persistence"}
+  "data":{"keywords":["data","loot"],"suffix":"to extract data"},
+  "persistence":{"keywords":["persist","backdoor","foothold"],"suffix":"for persistence"}
 }
 //Synonym dictionary for NLP enhancement
 AgentParser._synonyms={
-  "scan":["probe","check","inspect","examine","survey"],
+  "scan":["probe","check","inspect","examine","survey","recon","enumerate","enum"],
   "exploit":["hack","penetrate","compromise","breach","pwn","break"],
   "crack":["break","decode","decrypt","bruteforce"],
   "attack":["assault","strike","raid","hit"],
-  "escalate":["elevate","promote","upgrade","advance"],
-  "fetch":["get","retrieve","obtain","acquire","grab"],
+  "escalate":["elevate","promote","upgrade","advance","privesc"],
+  "fetch":["get","retrieve","obtain","acquire","grab","loot","pull"],
   "install":["deploy","setup","place","add"],
-  "remove":["delete","erase","wipe","uninstall"],
+  "remove":["delete","erase","wipe","uninstall","purge"],
   "find":["search","locate","discover","seek"],
   "show":["display","list","view","present"],
   "root":["admin","superuser","administrator","su"],
@@ -135,17 +135,17 @@ AgentParser._synonyms={
 }
 //Context hints: words that increase likelihood of each synonym group
 AgentParser._synonymContext={
-  "scan":["network","port","ports","nmap","service","services","open","range","discovery"],
+  "scan":["network","port","ports","nmap","service","services","open","range","discovery","recon","lan"],
   "exploit":["system","server","vulnerability","vuln","remote","access","into","entry"],
   "crack":["password","hash","login","credentials","auth","key","cipher"],
   "attack":["ddos","flood","target","offensive","launch"],
-  "escalate":["privilege","root","admin","permission","sudo","level"],
-  "fetch":["file","download","data","info","information","copy"],
+  "escalate":["privilege","root","admin","permission","sudo","level","superuser"],
+  "fetch":["file","download","data","info","information","copy","loot"],
   "install":["lib","library","package","tool","module","setup"],
   "remove":["file","log","logs","trace","traces","evidence","clean"],
   "find":["where","location","path","look","directory","hidden"],
-  "show":["status","info","information","current","my","config"],
-  "root":["shell","access","privilege","escalate","become"],
+  "show":["status","info","information","current","my","config","history"],
+  "root":["shell","access","privilege","escalate","become","sudo"],
   "target":["ip","address","remote","connect","reach"]
 }
 //Expand command with context-weighted synonyms for better matching

@@ -7,7 +7,8 @@ manAi="AI(1)                            X Shell Manual                          
     <b>ai</b> STRING
     <b>ai</b> STRING <b>-d</b>|<b>-a</b>|<b>-s</b>|<b>-t</b>|<b>-D</b>
     <b>ai</b> <b>status</b>
-    <b>ai</b> <b>history</b>
+    <b>ai</b> <b>history</b> [LIMIT] [QUERY]
+    <b>ai</b> <b>test</b> [SUITE]
     <b>ai</b> <b>clear</b>
     <b>ai</b> <b>clear stored</b>
     <b>ai</b> <b>clear</b> N
@@ -30,6 +31,12 @@ manAi="AI(1)                            X Shell Manual                          
     parses your intent, creates an execution plan, and autonomously carries
     out the operation using available tools and commands.
     Integration with scan, exploit, crack, and attack systems.
+
+    MULTI-TURN DIALOGS: When the agent needs a choice (ambiguous intent,
+    target, attack vector, exploit, hash, critical/plan confirm), it asks
+    and waits. Reply with <b>ai yes</b>, <b>ai 2</b>, <b>ai [option]</b>,
+    an IP/hash, or <b>ai cancel</b>. Bare replies also work while a prompt
+    is open.
 
     AUTONOMOUS MODE: Request agent to make all decisions automatically.
     Agent evaluates targets, selects best exploits from database, scores
@@ -74,9 +81,18 @@ manAi="AI(1)                            X Shell Manual                          
     Show agent status
     Display active sessions and config
 
-    <b>ai history</b>
-    Show command history
-    Display previous commands
+    <b>ai history</b> [LIMIT] [QUERY]
+    Show or search command history
+    Examples: ai history, ai history 10, ai history scan,
+              ai history 5 exploit
+    Also: ai show history, ai what did I run
+
+    <b>ai test</b> [SUITE]
+    Run built-in AI test suite (default: all)
+    Suites: all, synonyms, compound, persistence, template,
+            fuzzy, conditional, multitarget, iputils, risk,
+            learning, signature, dialog, undo, escalate, history
+    List: ai test list
 
     <b>ai clear</b>
     Complete agent reset
@@ -126,16 +142,15 @@ manAi="AI(1)                            X Shell Manual                          
     Build comprehensive knowledge base
 
     <b>ai undo [STEPS]</b>
-    Rollback previous operations
+    Rollback agent state (config, session, history tip)
+    Does NOT reverse filesystem/shell side effects
     Default: undo last 1 step
 
     <b>ai rollback [STEPS]</b>
     Alias for undo
-    Rollback to previous state
 
     <b>ai snapshots</b>
-    List state snapshots
-    View available rollback points
+    List state snapshots available for undo
 
     <b>ai export [FILE]</b>
     Export telemetry logs
@@ -334,6 +349,26 @@ manAi="AI(1)                            X Shell Manual                          
     <b>ai get emails otherwise get users</b>
     Primary with fallback alternative
 
+    <b>ai scan 1.2.3.4 else exploit 1.2.3.4</b>
+    Fallback on failure (also: or try, failing that)
+
+    <b>ai scan 1.2.3.4, on success exploit it</b>
+    Follow-up only if primary succeeds
+
+    <b>ai if scan has ssh, then exploit it</b>
+    Condition on result content
+
+    <color=#e4ff34># Multi-Target Batch</color>
+    <b>ai scan 1.1.1.1 2.2.2.2 3.3.3.3</b>
+    3+ IPs → batched headless fan-out (continue-on-fail)
+    Prints per-target OK/FAIL summary
+
+    <color=#e4ff34># Typed Dialogs (reply with next ai command)</color>
+    <b>ai break that</b>  →  pick intent, then target / vector / exploit
+    <b>ai yes</b> / <b>ai no</b>  →  confirm critical ops or multi-step plans
+    <b>ai cancel</b>  →  abort active dialog
+    <b>ai auto</b>  →  when picking exploits, try in priority order
+
     <color=#e4ff34># Reconnaissance</color>
     <b>ai recon 8.8.8.8</b>
     Perform reconnaissance
@@ -444,7 +479,16 @@ manAi="AI(1)                            X Shell Manual                          
            configuration settings
 
     <b>ai history</b>
-    Show command history
+    Show full command history
+
+    <b>ai history scan</b>
+    Search history for 'scan'
+
+    <b>ai history 5</b>
+    Show last 5 history entries
+
+    <b>ai show history exploit</b>
+    NL form of history search
 
     <b>ai clear</b>
     Complete agent reset
@@ -479,6 +523,12 @@ manAi="AI(1)                            X Shell Manual                          
     <b>ai set promptOnAttack true</b>
     Enable attack prompts
 
+    <b>ai set promptOnPlan on</b>
+    Confirm before multi-step plans (default on)
+
+    <b>ai set promptOnCritical on</b>
+    Confirm critical-risk operations
+
     <b>ai show config</b>
     Display all settings
     Organized by category
@@ -489,10 +539,10 @@ manAi="AI(1)                            X Shell Manual                          
     <color=#e4ff34># Available Config Keys</color>
     Behavior: outputLevel, debug, dryRun
     Operation: aggressive, stealth, trainer
-    Limits: maxRetries, timeout, maxTargets, maxDepth
+    Limits: maxRetries, timeout
     Prompts: promptOnAttack, promptOnCritical, promptOnAmbiguous,
-             promptOnSlowOperation, promptOnMissingInfo,
-             promptOnDestructive
+             promptOnSlow, promptOnDestructive, promptOnPlan
+    Other: autoFallback
 
     <color=#e4ff34># Knowledge Management</color>
     <b>ai learn scan</b>
@@ -524,13 +574,14 @@ manAi="AI(1)                            X Shell Manual                          
     Load saved knowledge
 
     <b>ai undo</b>
-    Undo last operation
+    Undo last agent-state snapshot
+    (not filesystem/shell changes)
 
     <b>ai undo 3</b>
-    Rollback 3 steps
+    Rollback 3 snapshots
 
     <b>ai rollback 2</b>
-    Rollback 2 steps (alias)
+    Rollback 2 snapshots (alias)
 
     <b>ai snapshots</b>
     List state snapshots
@@ -541,4 +592,4 @@ manAi="AI(1)                            X Shell Manual                          
     <b>ai telemetry /home/tux/mission.log</b>
     Export to specific file
 <b>SEE ALSO</b>
-    <b>scan</b>, <b>exploit</b>"
+    <b>scan</b>, <b>exploit</b>, <b>crack</b>, <b>hunt</b>"

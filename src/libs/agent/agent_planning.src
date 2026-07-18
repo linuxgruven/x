@@ -470,6 +470,7 @@ AgentPlanning._initPlanBuilders=function
   globals.G_agent._planBuilders.promptIpAction=@globals.G_agent._buildPromptPlan
   globals.G_agent._planBuilders.multiTarget=@globals.G_agent._buildMultiTargetPlan
   globals.G_agent._planBuilders.test=@globals.G_agent._buildTestPlan
+  globals.G_agent._planBuilders.showHistory=@globals.G_agent._buildShowHistoryPlan
 end function
 //Create execution plan based on parsed command
 AgentPlanning._createPlan=function(Obj,parsed,headless=false)
@@ -921,6 +922,31 @@ AgentPlanning._buildExtractDataPlan=function(Obj,parsed,plan)
   if hasIndex(parsed,"saveResults") then step.saveResults=parsed.saveResults
   //Pass extracted IPs for multi-IP commands ("via" syntax)
   if hasIndex(parsed,"extractedIps") then step.extractedIps=parsed.extractedIps
+  //Wire dig fallbackDataType into in-plan hasFallback / isFallback skip path
+  if hasIndex(parsed,"fallbackDataType") and parsed.fallbackDataType then
+    step.hasFallback=true
+    push(plan.steps,step)
+    fbFlag=null
+    fbType=parsed.fallbackDataType
+    if fbType=="email" then
+      fbFlag="-e"
+    else if fbType=="bank" then
+      fbFlag="-b"
+    else if fbType=="user" then
+      fbFlag="-u"
+    else if fbType=="rshell" then
+      fbFlag="-r"
+    else if fbType=="all" then
+      fbFlag="-a"
+    end if
+    fbStep={"type":"dataExtractionFallback","target":target,"dataType":fbType,"description":"Fallback: extract "+fbType+" data","isFallback":true}
+    if fbFlag then fbStep.flag=fbFlag
+    if hasIndex(parsed,"useFilter") then fbStep.useFilter=parsed.useFilter
+    if hasIndex(parsed,"saveResults") then fbStep.saveResults=parsed.saveResults
+    if hasIndex(parsed,"extractedIps") then fbStep.extractedIps=parsed.extractedIps
+    push(plan.steps,fbStep)
+    return plan
+  end if
   push(plan.steps,step)
   return plan
 end function
@@ -1256,14 +1282,16 @@ AgentPlanning._buildMultiTargetPlan=function(Obj,parsed,plan)
   end if
   targetAction=parsed.targetAction
   if not targetAction then targetAction="scan"
-  if outLvl>=1 then print skyblue("Agent: Multi-target "+targetAction+" on "+len(parsed.targets)+" targets")
-  plan.context={"multiTarget":true,"targetAction":targetAction}
+  if outLvl>=1 then print skyblue("Agent: Batching "+targetAction+" on "+len(parsed.targets)+" targets (headless, continue-on-fail)")
+  plan.context={"multiTarget":true,"targetAction":targetAction,"targetResults":[],"aggregate":true}
   for ip in parsed.targets
     step={}
     step.type="multiTargetStep"
     step.target=ip
     step.targetAction=targetAction
     step.description=targetAction+" "+ip
+    step.continueOnFail=true
+    step.critical=false
     push(plan.steps,step)
   end for
   return plan
@@ -1351,8 +1379,25 @@ AgentPlanning._buildTestPlan=function(Obj,parsed,plan)
       step.suite="template"
     else if indexOf(rawLower,"dialog")!=null then
       step.suite="dialog"
+    else if indexOf(rawLower,"undo")!=null or indexOf(rawLower,"snapshot")!=null then
+      step.suite="undo"
+    else if indexOf(rawLower,"escalat")!=null then
+      step.suite="escalate"
+    else if indexOf(rawLower,"history")!=null then
+      step.suite="history"
     end if
   end if
+  push(plan.steps,step)
+  return plan
+end function
+//Build show/search history plan
+AgentPlanning._buildShowHistoryPlan=function(Obj,parsed,plan)
+  step={"type":"showHistory","description":"Show command history"}
+  if hasIndex(parsed,"historyQuery") and parsed.historyQuery then
+    step.historyQuery=parsed.historyQuery
+    step.description="Search history for '"+parsed.historyQuery+"'"
+  end if
+  if hasIndex(parsed,"historyLimit") then step.historyLimit=parsed.historyLimit
   push(plan.steps,step)
   return plan
 end function

@@ -178,7 +178,7 @@ AgentParser._matchActionPhase=function(cmd,parsed,actionFound,debug)
       //Only expand first word if it's an action verb (to avoid false matches)
       if len(meaningfulWords)>0 then
         firstWord=meaningfulWords[0]
-        actionSynonyms={"go":["cd"],"goto":["cd"],"navigate":["cd"],"list":["ls"],"show":["ls"],"display":["ls"],"create":["mkdir","touch"],"make":["mkdir"],"delete":["rm"],"remove":["rm"]}
+        actionSynonyms={"go":["cd"],"goto":["cd"],"navigate":["cd"],"list":["ls"],"show":["ls"],"display":["ls"],"create":["mkdir","touch"],"make":["mkdir"],"delete":["rm"],"remove":["rm"],"probe":["scan"],"recon":["scan"],"enum":["scan"],"enumerate":["scan"],"pwn":["exploit"],"loot":["fetch"],"elevate":["escalate"],"privesc":["escalate"]}
         if hasIndex(actionSynonyms,firstWord) then
           for synonym in actionSynonyms[firstWord];if meaningfulWords.indexOf(synonym)==null then push(meaningfulWords,synonym);end for
         end if
@@ -209,7 +209,7 @@ AgentParser._matchActionPhase=function(cmd,parsed,actionFound,debug)
       escalationBlacklist=["cal","date","uptime","clear","pwd","whoami","hostname","echo","neofetch"]
       isEscalationIntent=false
       for word in meaningfulWords
-        if word=="escalate" or word=="root" or word=="privilege" or word=="admin" or word=="su" or word=="sudo" then
+        if word=="escalate" or word=="root" or word=="privilege" or word=="admin" or word=="su" or word=="sudo" or word=="superuser" or word=="administrator" or word=="privesc" or word=="elevate" then
           isEscalationIntent=true
           break
         end if

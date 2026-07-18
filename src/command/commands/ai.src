@@ -110,21 +110,19 @@ Command.ai=function(Obj,argv)
     end if
     return
   else if argv[0]=="history" then
-    history=globals.G_agent.history
-    if len(history)==0 then Info.info("No command history")
-    print white("AI Agent Command History ("+str(len(history))+" commands):")
-    print ""
-    _len=len(history)
-    i=0
-    while i<_len
-      entry=history[i]
-      print white(str(i+1)+". "+entry.command)
-      if hasIndex(entry.result,"success") then
-        if entry.result.success then print white("   Result: Success") else print red("   Result: Failed")
+    //ai history [limit] [query...]  e.g. ai history 5, ai history scan, ai history 10 exploit
+    limit=0
+    query=null
+    if len(argv)>1 then
+      num=to_int(argv[1])
+      if typeof(num)=="number" and num>0 then
+        limit=num
+        if len(argv)>2 then query=join(argv[2:]," ")
+      else
+        query=join(argv[1:]," ")
       end if
-      print ""
-    i+=1
-    end while
+    end if
+    globals.G_agent.printHistory(query,limit)
     return
   else if argv[0]=="clear" then
     if len(argv)>1 then
@@ -163,13 +161,21 @@ Command.ai=function(Obj,argv)
   else if argv[0]=="undo" or argv[0]=="rollback" then
     steps=1
     if len(argv)>1 then steps=to_int(argv[1])
+    if typeof(steps)!="number" or steps<1 then steps=1
     result=globals.G_agent.rollback(steps)
-    if hasIndex(result,"success") and result.success then return Info.info("Rolled back "+str(steps)+" steps to: "+result.snapshot.label) else return Error.set("Rollback failed: "+result.error)
+    if hasIndex(result,"success") and result.success then
+      return Info.info("Rolled back agent state to: "+result.snapshot.label+" (filesystem/shell not reversed)")
+    else
+      err="unknown"
+      if hasIndex(result,"error") then err=result.error
+      return Error.set("Rollback failed: "+err)
+    end if
   else if argv[0]=="snapshots" then
     result=globals.G_agent.listSnapshots
-    if len(result.snapshots)==0 then return Info.info("No state snapshots available")
+    if not result or not hasIndex(result,"snapshots") or len(result.snapshots)==0 then return Info.info("No state snapshots available")
     print white("Available State Snapshots ("+str(result.count)+"):")
     for snap in result.snapshots;print white("  "+str(snap.index)+". "+snap.label+" ("+snap.timestamp+")");end for
+    print white("(ai undo restores agent state only - not filesystem/shell changes)")
     return
   else if argv[0]=="export" or argv[0]=="telemetry" then
     filepath=null
