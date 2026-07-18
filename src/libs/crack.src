@@ -1416,7 +1416,12 @@ Crack.SHA256=function(argv)
 	end if
 	Info.info("The SHA256 hash for [ "+s+" ] is: "+Crypt.SHA256(s),"=")
 end function
-Crack.loadLastFile=function;sys=System.getSystem;if len(get_files(sys.dir.rainbow)) then return get_files(sys.dir.rainbow)[-1] else return Command.touch(sys.obj,[path(sys.dir.rainbow)+"/r0"]);end function
+Crack.loadLastFile=function
+  sys=System.getSystem
+  files=get_files(sys.dir.rainbow)
+  if files and len(files) then return files[-1]
+  return Command.touch(sys.obj,[path(sys.dir.rainbow)+"/r0"])
+end function
 Crack.loadLastListFile=function
 	sys=System.getSystem
   if not sys.dir.list then return null
@@ -1463,33 +1468,39 @@ Crack.addPassword=function(t,r=null)
       push(plainPasswords,t)
     end if
 	end if
-	if not get_content(f) then
-		set_content(f,join(p,char(10)))
-	else
-    r=join(p,char(10))
-		if (val(size(f))+len(r))>159900 then
-			sys=System.getSystem
-			f=Command.touch(sys.obj,[path(sys.dir.rainbow)+"/r"+(len(get_files(sys.dir.rainbow))+1)])
-			if f isa Error then return
-			set_content(f,r)
-		else
-			set_content(f,get_content(f)+char(10)+r)
-		end if
-	end if
+  batch=join(p,char(10))
+  ct=get_content(f)
+  if not ct then ct=""
+  if not ct then
+    set_content(f,batch)
+  else if (val(size(f))+len(batch))>159900 then
+    sys=System.getSystem
+    rainbowFiles=get_files(sys.dir.rainbow)
+    n=1
+    if rainbowFiles then n=len(rainbowFiles)+1
+    f=Command.touch(sys.obj,[path(sys.dir.rainbow)+"/r"+n])
+    if f isa Error then return
+    set_content(f,batch)
+  else
+    set_content(f,ct+char(10)+batch)
+  end if
   // Add to list files (plain password format)
   listFile=self.loadLastListFile
   if listFile then
     plainText=join(plainPasswords,char(10))
-    if not get_content(listFile) then
+    listCt=get_content(listFile)
+    if not listCt then listCt=""
+    if not listCt then
       set_content(listFile,plainText)
+    else if (val(size(listFile))+len(plainText))>159900 then
+      sys=System.getSystem
+      listFiles=get_files(sys.dir.list)
+      n=1
+      if listFiles then n=len(listFiles)+1
+      listFile=Command.touch(sys.obj,[path(sys.dir.list)+"/list"+n])
+      if not listFile isa Error then set_content(listFile,plainText)
     else
-      if (val(size(listFile))+len(plainText))>159900 then
-        sys=System.getSystem
-        listFile=Command.touch(sys.obj,[path(sys.dir.list)+"/list"+(len(get_files(sys.dir.list))+1)])
-        if not listFile isa Error then set_content(listFile,plainText)
-      else
-        set_content(listFile,get_content(listFile)+char(10)+plainText)
-      end if
+      set_content(listFile,listCt+char(10)+plainText)
     end if
   end if
   return true

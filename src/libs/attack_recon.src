@@ -286,69 +286,68 @@ Attack.recon=function(rt,ex,argv)
         if hasIndex(U[name(h)],"bank") and hasIndex(U[name(h)],"email") then
           if not z.user=="root" then continue
         end if
+        uname=name(h)
         for c in get_folders(h)
           if name(c)!="Config" then continue
           for f in get_files(c)
-            if name(f)=="Mail.txt" or name(f)=="Bank.txt" then
-              if not has_permission(f,"r") then
-                if name(f)=="Mail.txt" then
-                  U[name(h)]+={
-                    "email":"Permission Denied"
+            fname=name(f)
+            if fname!="Mail.txt" and fname!="Bank.txt" then continue
+            if not has_permission(f,"r") then
+              if fname=="Mail.txt" then
+                U[uname]+={
+                  "email":"Permission Denied"
+                }
+                U[uname]+={
+                  "emailPass":"Permission Denied"
+                }
+              else
+                U[uname]+={
+                  "bank":"Permission Denied"
+                }
+                U[uname]+={
+                  "bankPass":"Permission Denied"
+                }
+              end if
+            else
+              content=get_content(f)
+              if not content then content=""
+              s=split(content,":")
+              if not len(s)==2 then
+                if fname=="Mail.txt" then
+                  U[uname]+={
+                    "email":"Bad MD5"
                   }
-                  U[name(h)]+={
-                    "emailPass":"Permission Denied"
+                  U[uname]+={
+                    "emailPass":"Bad MD5"
                   }
-                else if name(f)=="Bank.txt" then
-                  U[name(h)]+={
-                    "bank":"Permission Denied"
+                else
+                  U[uname]+={
+                    "bank":"Bad MD5"
                   }
-                  U[name(h)]+={
-                    "bankPass":"Permission Denied"
+                  U[uname]+={
+                    "bankPass":"Bad MD5"
                   }
                 end if
               else
-                content=get_content(f)
-                if not content then content=""
-                s=split(content,":")
-                if not len(s)==2 then
-                  if name(f)=="Mail.txt" then
-                    U[name(h)]+={
-                      "email":"Bad MD5"
-                    }
-                    U[name(h)]+={
-                      "emailPass":"Bad MD5"
-                    }
-                  else if name(f)=="Bank.txt" then
-                    U[name(h)]+={
-                      "bank":"Bad MD5"
-                    }
-                    U[name(h)]+={
-                      "bankPass":"Bad MD5"
-                    }
-                  end if
+                t=Crack.hash(s[1])
+                if fname=="Mail.txt" then
+                  U[uname]+={
+                    "email":s[0]
+                  }
+                  if t then U[uname]+={
+                    "emailPass":t
+                  } else U[uname]+={
+                    "emailPass":"Bad MD5"
+                  }
                 else
-                  t=Crack.hash(s[1])
-                  if name(f)=="Mail.txt" then
-                    U[name(h)]+={
-                      "email":s[0]
-                    }
-                    t=Crack.hash(s[1])
-                    if t then U[name(h)]+={
-                      "emailPass":t
-                    } else U[name(h)]+={
-                      "emailPass":"Bad MD5"
-                    }
-                  else if name(f)=="Bank.txt" then
-                    U[name(h)]+={
-                      "bank":s[0]
-                    }
-                    t=Crack.hash(s[1])
-                    if t then U[name(h)]+={
-                      "bankPass":t
-                    } else U[name(h)]+={
-                      "bankPass":"Bad MD5"
-                    }
-                  end if
+                  U[uname]+={
+                    "bank":s[0]
+                  }
+                  if t then U[uname]+={
+                    "bankPass":t
+                  } else U[uname]+={
+                    "bankPass":"Bad MD5"
+                  }
                 end if
               end if
             end if
@@ -493,79 +492,90 @@ Attack.recon=function(rt,ex,argv)
 		if not x then return
 		if not len(x) then return
 		for h in x
-      if name(h)=="guest" then continue
-      if not hasIndex(U,name(h)) then U[name(h)]={
+      uname=name(h)
+      if uname=="guest" then continue
+      if not hasIndex(U,uname) then U[uname]={
         "type":z.type,
         "ip":z.ip
       }
-      if hasIndex(U[name(h)],"bank") and hasIndex(U[name(h)],"email") then
+      if hasIndex(U[uname],"bank") and hasIndex(U[uname],"email") then
         if not z.user=="root" then continue
       end if
-			f=getFile(z.object,z.type,"/home/"+name(h)+"/Config/Mail.txt")
-      if f then
-        if not has_permission(f,"r") then
-          U[name(h)]+={
+      //One Config listing for Mail.txt + Bank.txt (same idea as dig)
+      mailF=null
+      bankF=null
+      configDir=getFile(z.object,z.type,"/home/"+uname+"/Config")
+      if configDir then
+        for cf in get_files(configDir)
+          cn=name(cf)
+          if cn=="Mail.txt" then
+            mailF=cf
+          else if cn=="Bank.txt" then
+            bankF=cf
+          end if
+        end for
+      end if
+      if mailF then
+        if not has_permission(mailF,"r") then
+          U[uname]+={
             "email":"Permission Denied"
           }
-          U[name(h)]+={
+          U[uname]+={
             "emailPass":"Permission Denied"
           }
         else
-          content=get_content(f)
+          content=get_content(mailF)
           if not content then content=""
           s=split(content,":")
-          if not len(s)==2 then
-          else
-            U[name(h)]+={
+          if len(s)==2 then
+            U[uname]+={
               "email":s[0]
             }
             t=Crack.hash(s[1])
-            if t then U[name(h)]+={
+            if t then U[uname]+={
               "emailPass":t
-            } else U[name(h)]+={
+            } else U[uname]+={
               "emailPass":"Bad MD5"
             }
           end if
         end if
       else
-        U[name(h)]+={
+        U[uname]+={
           "email":"Missing"
         }
-        U[name(h)]+={
+        U[uname]+={
           "emailPass":"Missing"
         }
       end if
-      f=getFile(z.object,z.type,"/home/"+name(h)+"/Config/Bank.txt")
-      if f then
-        if not has_permission(f,"r") then
-            U[name(h)]+={
+      if bankF then
+        if not has_permission(bankF,"r") then
+            U[uname]+={
               "bank":"Permission Denied"
             }
-            U[name(h)]+={
+            U[uname]+={
               "bankPass":"Permission Denied"
             }
         else
-          content=get_content(f)
+          content=get_content(bankF)
           if not content then content=""
           s=split(content,":")
-          if not len(s)==2 then
-          else
-            U[name(h)]+={
+          if len(s)==2 then
+            U[uname]+={
               "bank":s[0]
             }
             t=Crack.hash(s[1])
-            if t then U[name(h)]+={
+            if t then U[uname]+={
               "bankPass":t
-            } else U[name(h)]+={
+            } else U[uname]+={
               "bankPass":"Bad MD5"
             }
           end if
         end if
       else
-        U[name(h)]+={
+        U[uname]+={
           "bank":"Missing"
         }
-        U[name(h)]+={
+        U[uname]+={
           "bankPass":"Missing"
         }
       end if
@@ -583,8 +593,8 @@ Attack.recon=function(rt,ex,argv)
           end if
         end if
       end for
-      if bins then U[name(h)]+={"bins":bins}
-      if len(binContents) then U[name(h)]+={"binContents":binContents}
+      if bins then U[uname]+={"bins":bins}
+      if len(binContents) then U[uname]+={"binContents":binContents}
 		end for
     if argv.g then _extractGrab(z)
   end function

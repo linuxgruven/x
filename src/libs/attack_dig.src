@@ -435,102 +435,143 @@ Attack.dig=function(Obj,argv)
 		if f then
 			if has_permission(f,"r") then
 				Info.info("Cracking credentials...")
+				//O(1) dup checks: build maps once instead of nested Records scan per line
+				_userSeen={}
+				_userPass={}
+				for _ipRec in outer.Records
+					for _uRec in _ipRec.value.users
+						if _uRec.value.user==null then continue
+						_userSeen[_uRec.key]=1
+						_userPass[_uRec.key+char(1)+str(_uRec.value.user.pass)]=1
+					end for
+				end for
 				for q in split(get_content(f),char(10))
 					if not q then continue
 					q=split(trim(q),":")
 					if not len(q)==2 then continue
 					_hash=_crackHash(q[1])
-					_skip=false
-					_dup=false
-					for _ipRec in outer.Records
-						for _uRec in _ipRec.value.users
-							if _uRec.value.user==null then continue
-							if _uRec.key==q[0] and _uRec.value.user.pass==_hash then _skip=true
-							if _uRec.key==q[0] then _dup=true
-						end for
-					end for
-					if _skip then continue
+					_ukey=q[0]+char(1)+str(_hash)
+					if hasIndex(_userPass,_ukey) then continue
 					_dname=q[0]
-					if _dup then _dname=q[0]+" ["+ex.local_ip+"]"
+					if hasIndex(_userSeen,q[0]) then _dname=q[0]+" ["+ex.local_ip+"]"
 					_ensureRecord(ex.local_ip,q[0])
 					outer.Records[ex.local_ip].users[q[0]].user={"name":_dname,"pass":_hash,"probe":System.probeEX(ex)}
+					_userSeen[q[0]]=1
+					_userPass[_ukey]=1
 				end for
 			end if
 		end if
 	end function
-	_extractEmail=function(ex,doWipe,doClean)
+	//Read all Mail.txt on a host once; returns {uname:{addr,pass}}
+	_cacheHostMail=function(ex)
+		mailCache={}
 		for h in get_folders(File(ex,"/home"))
 			if name(h)=="guest" then continue
 			_uname=name(h)
-			found=false
 			for c in get_files(File(ex,"/home/"+_uname+"/Config"))
-				if not name(c)=="Mail.txt" then continue
+				if name(c)!="Mail.txt" then continue
 				content=get_content(c)
 				if not content then content=""
 				s=split(content,":")
-				if not len(s)==2 then continue
-				_ensureRecord(ex.local_ip,_uname)
-				if outer.Records[ex.local_ip].users[_uname].email then continue
-				bins=[]
-				for hf in get_files(h)
-					n=name(hf)
-					if is_binary(hf) then
-						push(bins,n)
-					else if n[-4:]==".txt" and n!="Bank.txt" and n!="Mail.txt" then
-						push(bins,n)
-					end if
-				end for
-				outer.Records[ex.local_ip].users[_uname].email={"name":_uname,"addr":s[0],"pass":_crackHash(s[1]),"bins":bins}
-				if doWipe then
-					delete(c)
-				else if doClean then
-					set_content(c,"")
-				end if
-				found=true
+				if len(s)==2 then mailCache[_uname]={"addr":s[0],"pass":s[1]}
+				break
 			end for
-			if not found then
-				_ensureRecord(ex.local_ip,_uname)
-				if not outer.Records[ex.local_ip].users[_uname].email then outer.Records[ex.local_ip].users[_uname].email={"name":_uname,"addr":"MISSING","pass":"MISSING","bins":[]}
-			end if
+		end for
+		return mailCache
+	end function
+	//Attach a found file as email bin using a prebuilt mail cache
+	_attachMailBins=function(ex,mailCache,binName)
+		if not mailCache then return
+		for _uname in indexes(mailCache)
+			_m=mailCache[_uname]
+			_ensureRecord(ex.local_ip,_uname)
+			if outer.Records[ex.local_ip].users[_uname].email then continue
+			outer.Records[ex.local_ip].users[_uname].email={"name":_uname,"addr":_m.addr,"pass":_crackHash(_m.pass),"bins":[binName]}
 		end for
 	end function
-	_extractBank=function(ex,doWipe,doClean)
+	//One Config walk per home: Mail.txt (email/rshell) + Bank.txt
+	_extractHomeConfig=function(ex,doWipe,doClean,wantEmail=false,wantBank=false,wantRshell=false)
 		for h in get_folders(File(ex,"/home"))
 			if name(h)=="guest" then continue
 			_uname=name(h)
 			_ensureRecord(ex.local_ip,_uname)
-			if outer.Records[ex.local_ip].users[_uname].bank then continue
+			mailFile=null
+			mailContent=null
+			bankFile=null
+			bankContent=null
 			for c in get_files(File(ex,"/home/"+_uname+"/Config"))
-				if not name(c)=="Bank.txt" then continue
-				content=get_content(c)
-				if not content then content=""
-				s=split(content,":")
-				if not len(s)==2 then continue
-				outer.Records[ex.local_ip].users[_uname].bank={"name":_uname,"account":s[0],"pass":_crackHash(s[1])}
-				if doWipe then
-					delete(c)
-				else if doClean then
-					set_content(c,"")
+				n=name(c)
+				if n=="Mail.txt" then
+					mailFile=c
+					mailContent=get_content(c)
+					if not mailContent then mailContent=""
+				else if n=="Bank.txt" then
+					bankFile=c
+					bankContent=get_content(c)
+					if not bankContent then bankContent=""
 				end if
 			end for
-			if not outer.Records[ex.local_ip].users[_uname].bank then outer.Records[ex.local_ip].users[_uname].bank={"name":_uname,"account":"MISSING","pass":"MISSING"}
+			if wantEmail then
+				found=false
+				if mailContent!=null and not outer.Records[ex.local_ip].users[_uname].email then
+					s=split(mailContent,":")
+					if len(s)==2 then
+						bins=[]
+						for hf in get_files(h)
+							hn=name(hf)
+							if is_binary(hf) then
+								push(bins,hn)
+							else if hn[-4:]==".txt" and hn!="Bank.txt" and hn!="Mail.txt" then
+								push(bins,hn)
+							end if
+						end for
+						outer.Records[ex.local_ip].users[_uname].email={"name":_uname,"addr":s[0],"pass":_crackHash(s[1]),"bins":bins}
+						found=true
+						if mailFile then
+							if doWipe then
+								delete(mailFile)
+							else if doClean then
+								set_content(mailFile,"")
+							end if
+						end if
+					end if
+				end if
+				if not found and not outer.Records[ex.local_ip].users[_uname].email then
+					outer.Records[ex.local_ip].users[_uname].email={"name":_uname,"addr":"MISSING","pass":"MISSING","bins":[]}
+				end if
+			end if
+			if wantRshell and mailContent!=null and not outer.Records[ex.local_ip].users[_uname].rshell then
+				s=split(mailContent,":")
+				if len(s)==2 then outer.Records[ex.local_ip].users[_uname].rshell={"name":_uname,"addr":s[0],"pass":_crackHash(s[1])}
+			end if
+			if wantBank then
+				if bankContent!=null and not outer.Records[ex.local_ip].users[_uname].bank then
+					s=split(bankContent,":")
+					if len(s)==2 then
+						outer.Records[ex.local_ip].users[_uname].bank={"name":_uname,"account":s[0],"pass":_crackHash(s[1])}
+						if bankFile then
+							if doWipe then
+								delete(bankFile)
+							else if doClean then
+								set_content(bankFile,"")
+							end if
+						end if
+					end if
+				end if
+				if not outer.Records[ex.local_ip].users[_uname].bank then
+					outer.Records[ex.local_ip].users[_uname].bank={"name":_uname,"account":"MISSING","pass":"MISSING"}
+				end if
+			end if
 		end for
 	end function
+	_extractEmail=function(ex,doWipe,doClean)
+		_extractHomeConfig(ex,doWipe,doClean,true,false,false)
+	end function
+	_extractBank=function(ex,doWipe,doClean)
+		_extractHomeConfig(ex,doWipe,doClean,false,true,false)
+	end function
 	_extractRshell=function(ex)
-		for h in get_folders(File(ex,"/home"))
-			if name(h)=="guest" then continue
-			_uname=name(h)
-			for c in get_files(File(ex,"/home/"+_uname+"/Config"))
-				if not name(c)=="Mail.txt" then continue
-				content=get_content(c)
-				if not content then content=""
-				s=split(content,":")
-				if not len(s)==2 then continue
-				_ensureRecord(ex.local_ip,_uname)
-				if outer.Records[ex.local_ip].users[_uname].rshell then continue
-				outer.Records[ex.local_ip].users[_uname].rshell={"name":_uname,"addr":s[0],"pass":_crackHash(s[1])}
-			end for
-		end for
+		_extractHomeConfig(ex,false,false,false,false,true)
 	end function
 	populateAll=function(m=null,z=null)
 		computers=_scanLan(m,z)
@@ -539,8 +580,7 @@ Attack.dig=function(Obj,argv)
 		for ex in computers
 			Info.info("  "+ex.local_ip+" - cracking...")
 			_extractUsers(ex)
-			_extractEmail(ex,false,false)
-			_extractBank(ex,false,false)
+			_extractHomeConfig(ex,false,false,true,true,false)
 			if argv.files or argv.view then
 				_extractHomeFiles(ex)
 				_extractSysFiles(ex)
@@ -655,8 +695,7 @@ Attack.dig=function(Obj,argv)
 	_extractGrab=function(ex)
 		Info.info("  "+ex.local_ip+" - cracking...")
 		_extractUsers(ex)
-		_extractEmail(ex,false,false)
-		_extractBank(ex,false,false)
+		_extractHomeConfig(ex,false,false,true,true,false)
 		_extractHomeFiles(ex)
 		_extractSysFiles(ex)
 	end function
@@ -686,22 +725,12 @@ Attack.dig=function(Obj,argv)
 				if argv.lwipe then Log.computerLog(ex)
 				f=Io.getAll(File(ex,argv.p))
 				if f isa Error then continue
+				_mailCache=null
         for w in f
           if not Io.matchName(name(w),argv.f) then continue
           Info.info("Found: "+name(w)+" on "+ex.local_ip)
-          for h in get_folders(File(ex,"/home"))
-            if name(h)=="guest" then continue
-            for c in get_files(File(ex,"/home/"+name(h)+"/Config"))
-              if not name(c)=="Mail.txt" then continue
-              content=get_content(c)
-              if not content then content=""
-              s=split(content,":")
-              if not len(s)==2 then continue
-              _ensureRecord(ex.local_ip,name(h))
-              if outer.Records[ex.local_ip].users[name(h)].email then continue
-              outer.Records[ex.local_ip].users[name(h)].email={"name":name(h),"addr":s[0],"pass":_crackHash(s[1]),"bins":[name(w)]}
-            end for
-          end for
+          if _mailCache==null then _mailCache=_cacheHostMail(ex)
+          _attachMailBins(ex,_mailCache,name(w))
           if argv.view then
             if not is_binary(w) and has_permission(w,"r") then
               _ct=get_content(w)
@@ -740,22 +769,12 @@ Attack.dig=function(Obj,argv)
 						a+=1
 						continue
 					end if
+					_mailCache=null
         for w in f
           if not Io.matchName(name(w),argv.f) then continue
           Info.info("Found: "+name(w)+" on "+ex.local_ip)
-          for h in get_folders(File(ex,"/home"))
-            if name(h)=="guest" then continue
-            for c in get_files(File(ex,"/home/"+name(h)+"/Config"))
-              if not name(c)=="Mail.txt" then continue
-              content=get_content(c)
-              if not content then content=""
-              s=split(content,":")
-              if not len(s)==2 then continue
-              _ensureRecord(ex.local_ip,name(h))
-              if outer.Records[ex.local_ip].users[name(h)].email then continue
-              outer.Records[ex.local_ip].users[name(h)].email={"name":name(h),"addr":s[0],"pass":_crackHash(s[1]),"bins":[name(w)]}
-            end for
-          end for
+          if _mailCache==null then _mailCache=_cacheHostMail(ex)
+          _attachMailBins(ex,_mailCache,name(w))
           if argv.view then
             if not is_binary(w) and has_permission(w,"r") then
               _ct=get_content(w)
@@ -781,22 +800,12 @@ Attack.dig=function(Obj,argv)
         if typeof(ex)!="computer" then continue
 				f=Io.getAll(File(ex,argv.p))
         if f isa Error then continue
+				_mailCache=null
         for w in f
           if not Io.matchName(name(w),argv.f) then continue
           Info.info("Found: "+name(w)+" on "+ex.local_ip)
-          for h in get_folders(File(ex,"/home"))
-            if name(h)=="guest" then continue
-            for c in get_files(File(ex,"/home/"+name(h)+"/Config"))
-              if not name(c)=="Mail.txt" then continue
-              content=get_content(c)
-              if not content then content=""
-              s=split(content,":")
-              if not len(s)==2 then continue
-              _ensureRecord(ex.local_ip,name(h))
-              if outer.Records[ex.local_ip].users[name(h)].email then continue
-              outer.Records[ex.local_ip].users[name(h)].email={"name":name(h),"addr":s[0],"pass":_crackHash(s[1]),"bins":[name(w)]}
-            end for
-          end for
+          if _mailCache==null then _mailCache=_cacheHostMail(ex)
+          _attachMailBins(ex,_mailCache,name(w))
           if argv.view then
             if not is_binary(w) and has_permission(w,"r") then
               _ct=get_content(w)
