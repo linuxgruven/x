@@ -27,6 +27,8 @@ AgentPlanning._expandSubnet=function(subnet)
   end if
   if ipCount>0 and globals.G_agent.config.promptOnSlow then
     shouldExpand=globals.G_agent.promptUser("This will scan "+ipCount+" IP addresses. Continue?",{"type":"subnet_expansion","details":"Subnet: "+subnet+" ("+ipCount+" IPs)"},true)
+    //Typed confirm returns awaitDialog map - bubble to caller
+    if typeof(shouldExpand)=="map" and hasIndex(shouldExpand,"awaitDialog") then return shouldExpand
     if not shouldExpand then
       if debug then print green("[DEBUG] Agent: Subnet expansion cancelled by user")
       return [subnet]
@@ -117,35 +119,23 @@ AgentPlanning._isPrivateIp=function(ip)
   if first==127 then return true
   return false
 end function
-//Prompt user with yes/no question
+//Prompt user with yes/no question (sync fallback only - prefer typed _beginConfirm)
 AgentPlanning._promptUser=function(question,defaultYes=true)
   outLvl=globals.G_agent.config.outputLevel
   if outLvl==0 then return defaultYes
-  if typeof(Gui)!="map" or not hasIndex(Gui,"yesNo") then return defaultYes
-  response=Gui.yesNo(question,defaultYes)
-  if response==null then return defaultYes
-  return response
+  //Interactive path should use _beginConfirm; sync callers get the default
+  return defaultYes
 end function
-//Ask user a question and get response
+//Ask user a question (sync fallback only - prefer typed pickOption / needText)
 AgentPlanning._askUser=function(question, options=null)
   outLvl=globals.G_agent.config.outputLevel
-  if outLvl==0 then return null
-  if typeof(Gui)!="map" or not hasIndex(Gui,"input") then return null
-  if options then
-    //Multiple choice (index 0 is a non-selectable header)
-    if hasIndex(Gui,"choiceHybrid") then
-      choices=[yellow(question)]
-      for opt in options;push(choices,opt);end for
-      result=Gui.choiceHybrid(choices,{},1,false,true)
-      if result>=1 and result<=len(options) then return options[result-1]
-      return null
-    end if
+  if outLvl==0 then
+    if options and len(options)>0 then return options[0]
+    return null
   end if
-  //Free text input
-  inputConfig={}
-  inputConfig.text=question
-  result=Gui.input(inputConfig)
-  return result
+  //Interactive path should use typed dialogs in _handlePromptUser
+  if options and len(options)>0 then return options[0]
+  return null
 end function
 //Generic command executor helper
 AgentPlanning._execCommand=function(Obj,cmdName,argv,context)

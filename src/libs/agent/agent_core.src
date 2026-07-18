@@ -351,10 +351,9 @@ AgentCore._beginConfirm=function(question,resumeCommand,skipKey="skipConfirm",su
   end if
   if not resumeCommand or len(str(resumeCommand))==0 then resumeCommand=globals.G_agent._resumeCommand(null,"")
   if not resumeCommand or len(str(resumeCommand))==0 then
-    //No resume path - blocking Gui fallback
-    ok=globals.G_agent._promptUser(question,suggested=="yes" or suggested=="y")
-    if ok then return null
-    if cancelOnNo then return {"success":true,"skipped":true,"message":"Cancelled by user"}
+    //No resume path - honor suggested default (avoid blocking Gui)
+    if suggested=="yes" or suggested=="y" then return null
+    if cancelOnNo then return {"success":true,"skipped":true,"message":"Cancelled (no resume path)"}
     globals.G_agentContext.promptResponse=false
     return null
   end if
@@ -424,6 +423,8 @@ AgentCore.startDialog=function(kind,question,options,context=null)
       print white("Reply with: ai [32-char hex hash]   (or ai cancel)")
     else if kind=="needTarget" then
       print white("Reply with: ai [ip]   (or ai cancel)")
+    else if kind=="needText" then
+      print white("Reply with: ai [answer]   (or ai cancel)")
     else
       print white("Reply with: ai [answer]   (or ai cancel)")
     end if
@@ -469,9 +470,12 @@ AgentCore.isDialogReply=function(reply)
       if ok then return true
     end if
   end if
-  //confirmYesNo: yes/no aliases
-  if ds.kind=="confirmYesNo" then
+  //needText: any non-empty reply is an answer
+  if ds.kind=="needText" then return true
+  //confirmYesNo / confirmRemember: yes/no aliases
+  if ds.kind=="confirmYesNo" or ds.kind=="confirmRemember" then
     if lowerText=="yes" or lowerText=="y" or lowerText=="no" or lowerText=="n" then return true
+    if ds.kind=="confirmRemember" and (lowerText=="always" or lowerText=="never") then return true
   end if
   return false
 end function
@@ -491,8 +495,10 @@ AgentCore.resolveDialog=function(reply)
   if not options then options=[]
   choice=null
   //Accept suggestion shortcut when dialog stored one
-  //confirmYesNo: "yes"/"ok"/"sure" mean proceed, not "accept suggested" (suggested is often "no")
-  if ds.kind!="confirmYesNo" and (lowerText=="yes" or lowerText=="ok" or lowerText=="sure" or lowerText=="suggested") and ds.context and hasIndex(ds.context,"suggested") and ds.context.suggested then choice=ds.context.suggested
+  //confirm*/needText: "yes"/"ok"/"sure" are literal answers, not "accept suggested"
+  if ds.kind!="confirmYesNo" and ds.kind!="confirmRemember" and ds.kind!="needText" and (lowerText=="yes" or lowerText=="ok" or lowerText=="sure" or lowerText=="suggested") and ds.context and hasIndex(ds.context,"suggested") and ds.context.suggested then choice=ds.context.suggested
+  //needText: "suggested" still accepts the stored suggestion
+  if not choice and ds.kind=="needText" and lowerText=="suggested" and ds.context and hasIndex(ds.context,"suggested") and ds.context.suggested then choice=ds.context.suggested
   //Numeric index (1-based)
   num=to_int(text)
   if typeof(num)=="number" and num>=1 and num<=len(options) then choice=options[num-1]
@@ -540,15 +546,23 @@ AgentCore.resolveDialog=function(reply)
       if ok then choice=h
     end if
   end if
-  //confirmYesNo: accept y/n / ok / sure shorthand
-  if not choice and ds.kind=="confirmYesNo" then
+  //needText: accept any non-empty free-text answer
+  if not choice and ds.kind=="needText" then choice=text
+  //confirmYesNo / confirmRemember: accept y/n / ok / sure / always / never shorthand
+  if not choice and (ds.kind=="confirmYesNo" or ds.kind=="confirmRemember") then
     if lowerText=="y" or lowerText=="yes" or lowerText=="ok" or lowerText=="sure" then choice="yes"
     if lowerText=="n" or lowerText=="no" then choice="no"
+    if ds.kind=="confirmRemember" then
+      if lowerText=="always" then choice="always"
+      if lowerText=="never" then choice="never"
+    end if
   end if
   if not choice then
     if ds.kind=="needTarget" then return {"error":"Unrecognized target. Reply with an IP (or a listed option), or cancel"}
     if ds.kind=="needHash" then return {"error":"Enter a 32-character hex hash (or cancel)"}
     if ds.kind=="confirmYesNo" then return {"error":"Reply with yes or no (or cancel)"}
+    if ds.kind=="confirmRemember" then return {"error":"Reply with yes, no, always, or never (or cancel)"}
+    if ds.kind=="pickStoredObject" or ds.kind=="pickOption" then return {"error":"Reply with a listed option number (or cancel)"}
     return {"error":"Unrecognized reply. Use one of: "+join(options,", ")+" (or cancel)"}
   end if
   ctx=ds.context
@@ -570,14 +584,26 @@ AgentCore.resolveDialog=function(reply)
     if ctx and hasIndex(ctx,"resumeCommand") and ctx.resumeCommand then resumeCmd=ctx.resumeCommand
     return {"command":trim(resumeCmd+" "+hashVal)}
   end if
-  //Yes/no confirm: cancel on no; resume original command on yes
-  if kind=="confirmYesNo" then
-    isYes=lower(choice)=="yes" or lower(choice)=="y"
-    isNo=lower(choice)=="no" or lower(choice)=="n"
+  //Yes/no confirm (optional always/never prefs): cancel on no; resume on yes
+  if kind=="confirmYesNo" or kind=="confirmRemember" then
+    choiceLower=lower(choice)
+    isAlways=choiceLower=="always" or indexOf(choiceLower,"always")!=null
+    isNever=choiceLower=="never" or indexOf(choiceLower,"never")!=null
+    isYes=choiceLower=="yes" or choiceLower=="y" or isAlways
+    isNo=choiceLower=="no" or choiceLower=="n" or isNever
     if not isYes and not isNo then
-      //Map from option labels
-      if indexOf(lower(choice),"yes")!=null then isYes=true
-      if indexOf(lower(choice),"no")!=null or indexOf(lower(choice),"cancel")!=null then isNo=true
+      if indexOf(choiceLower,"yes")!=null then isYes=true
+      if indexOf(choiceLower,"no")!=null or indexOf(choiceLower,"cancel")!=null then isNo=true
+    end if
+    //Persist remember preferences when requested
+    if kind=="confirmRemember" and ctx and hasIndex(ctx,"questionHash") and ctx.questionHash then
+      if isAlways then
+        globals.G_agent.promptPreferences[ctx.questionHash]="always"
+        globals.G_agent.saveConfig
+      else if isNever then
+        globals.G_agent.promptPreferences[ctx.questionHash]="never"
+        globals.G_agent.saveConfig
+      end if
     end if
     cancelOnNo=true
     if ctx and hasIndex(ctx,"cancelOnNo") then cancelOnNo=ctx.cancelOnNo
@@ -586,7 +612,6 @@ AgentCore.resolveDialog=function(reply)
     if ctx and hasIndex(ctx,"skipKey") and ctx.skipKey then skipKey=ctx.skipKey
     if isNo then
       if cancelOnNo then return {"cancelled":true,"message":"Operation cancelled"}
-      //Plan-step prompts: resume with false response
       globals.G_agentContext[skipKey]=true
       globals.G_agentContext.promptResponse=false
       resumeCmd=""
@@ -602,6 +627,42 @@ AgentCore.resolveDialog=function(reply)
     if ctx and hasIndex(ctx,"resumeCommand") and ctx.resumeCommand then resumeCmd=ctx.resumeCommand
     if len(resumeCmd)==0 and len(original)>0 then resumeCmd=original
     if len(resumeCmd)==0 then return {"cancelled":true,"message":"Nothing to resume"}
+    return {"command":resumeCmd}
+  end if
+  //Stored object pick: stash index, resume original command
+  if kind=="pickStoredObject" then
+    selectedIdx=null
+    oi=0;while oi<len(options)
+      if lower(options[oi])==lower(choice) then
+        selectedIdx=oi
+        break
+      end if
+      oi+=1
+    end while
+    if selectedIdx==null then
+      num2=to_int(str(choice))
+      if typeof(num2)=="number" and num2>=1 and num2<=len(options) then selectedIdx=num2-1
+    end if
+    if selectedIdx!=null then
+      if not globals.G_agentContext then globals.G_agentContext={}
+      globals.G_agentContext.selectedStoredIndex=selectedIdx
+    end if
+    resumeCmd="extract"
+    if ctx and hasIndex(ctx,"resumeCommand") and ctx.resumeCommand then resumeCmd=ctx.resumeCommand
+    if len(str(resumeCmd))==0 and len(original)>0 then resumeCmd=original
+    return {"command":resumeCmd}
+  end if
+  //Plan-step option pick / free text: stash response, resume
+  if kind=="pickOption" or kind=="needText" then
+    if not globals.G_agentContext then globals.G_agentContext={}
+    skipKey="skipAskUser"
+    if ctx and hasIndex(ctx,"skipKey") and ctx.skipKey then skipKey=ctx.skipKey
+    globals.G_agentContext[skipKey]=true
+    globals.G_agentContext.promptResponse=choice
+    resumeCmd=""
+    if ctx and hasIndex(ctx,"resumeCommand") and ctx.resumeCommand then resumeCmd=ctx.resumeCommand
+    if len(str(resumeCmd))==0 and len(original)>0 then resumeCmd=original
+    if len(str(resumeCmd))==0 then return {"cancelled":true,"message":"Nothing to resume"}
     return {"command":resumeCmd}
   end if
   //Plan prompt: pick an action for a target
@@ -691,9 +752,10 @@ AgentCore.resolveDialog=function(reply)
   //Default: use the chosen option as the full command
   return {"command":choice}
 end function
-//Prompt user with yes/no question and remember preference
+//Prompt user with yes/no (+ optional always/never). Returns true/false, or awaitDialog map.
 AgentCore.promptUser=function(question,context,allowRemember)
   if allowRemember==null then allowRemember=true
+  outLvl=globals.G_agent.config.outputLevel
   //Generate hash of question for caching
   questionHash=question
   if context and hasIndex(context,"type") then questionHash=context.type+"_"+question
@@ -703,8 +765,15 @@ AgentCore.promptUser=function(question,context,allowRemember)
     if cachedPref=="always" then return true
     if cachedPref=="never" then return false
   end if
-  //Show prompt
-  print yellow("[!] "+question)
+  skipKey="skipConfirmRemember"
+  if not globals.G_agentContext then globals.G_agentContext={}
+  if hasIndex(globals.G_agentContext,skipKey) and globals.G_agentContext[skipKey] then
+    globals.G_agentContext[skipKey]=false
+    if hasIndex(globals.G_agentContext,"promptResponse") then return globals.G_agentContext.promptResponse
+    return true
+  end if
+  //Silent mode: default continue
+  if outLvl==0 then return true
   if context and hasIndex(context,"details") then
     if typeof(context.details)=="list" then
       for detail in context.details;print white("  - "+detail);end for
@@ -712,24 +781,27 @@ AgentCore.promptUser=function(question,context,allowRemember)
       print white("  "+context.details)
     end if
   end if
-  //choiceHybrid treats index 0 as a non-selectable header
-  choices=[yellow("Confirm:"),"Yes, continue","No, cancel"]
+  options=["yes","no"]
   if allowRemember then
-    push(choices,"Always (don't ask again)")
-    push(choices,"Never (don't ask again)")
+    push(options,"always")
+    push(options,"never")
   end if
-  choice=Gui.choiceHybrid(choices,{},1,false,true)
-  //Handle remember preferences (1=Yes, 2=No, 3=Always, 4=Never)
-  if allowRemember then
-    if choice==3 then
-      globals.G_agent.promptPreferences[questionHash]="always"
-      globals.G_agent.saveConfig
-      return true
-    else if choice==4 then
-      globals.G_agent.promptPreferences[questionHash]="never"
-      globals.G_agent.saveConfig
-      return false
-    end if
+  resumeCmd=globals.G_agent._resumeCommand(null,"")
+  if resumeCmd and len(str(resumeCmd))>0 then
+    kind="confirmYesNo"
+    if allowRemember then kind="confirmRemember"
+    globals.G_agent.startDialog(kind,question,options,{
+      "resumeCommand":resumeCmd,
+      "originalCommand":resumeCmd,
+      "suggested":"yes",
+      "skipKey":skipKey,
+      "cancelOnNo":true,
+      "questionHash":questionHash
+    })
+    msg="Awaiting confirmation - reply with ai yes / no"
+    if allowRemember then msg=msg+" / always / never"
+    return {"awaitDialog":true,"message":msg}
   end if
-  return choice==1
+  //No resume path - default continue (interactive callers should have lastCommand)
+  return true
 end function

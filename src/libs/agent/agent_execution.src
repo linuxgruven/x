@@ -238,9 +238,8 @@ AgentExecution._checkRecursiveFlag=function(Obj,command,target,argv,context=null
         confirm=globals.G_agent._beginConfirm("Apply "+command+" recursively to all contents of "+target+"?",resumeCmd,skipKey,"yes",false)
         if confirm then return confirm
       end if
-      //Fallback: Gui or default yes
-      if typeof(Gui)=="map" and hasIndex(Gui,"yesNo") then return Gui.yesNo("Apply "+command+" recursively to all contents of "+target+"?",true)
-      if debug then print green("[DEBUG] Executor: Auto-added -r flag (no GUI)")
+      //No resume path - default yes (typed confirm covers the interactive case)
+      if debug then print green("[DEBUG] Executor: Auto-added -r flag (default)")
       return true
     end if
   end if

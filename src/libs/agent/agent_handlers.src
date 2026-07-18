@@ -105,8 +105,10 @@ AgentHandlers._handleDataExtraction=function(Obj,step,context)
   objType=""
   if expectsStoredObject then
     if debug then print green("[DEBUG] Data extraction - checking for stored objects")
-    //Use new selection menu for multiple objects
-    storedObj=globals.G_agent._selectStoredObject
+    resumeCmd=globals.G_agent._resumeCommand(context)
+    storedObj=globals.G_agent._selectStoredObject(resumeCmd)
+    //Typed dialog pending - pause and wait for ai 1 / ai 2 / ...
+    if typeof(storedObj)=="map" and hasIndex(storedObj,"awaitDialog") then return storedObj
     //Check if user canceled selection
     if storedObj=="CANCELED" then
       result.error="Object selection canceled by user"
@@ -691,9 +693,31 @@ AgentHandlers._handlePromptUser=function(Obj,step,context)
   //Prompt user for input
   result.success=true
   if hasIndex(step,"question") then
+    resumeCmd=globals.G_agent._resumeCommand(context)
     if hasIndex(step,"options") then
-      //Multiple choice (rare plan step - Gui menu)
-      userResponse=globals.G_agent._askUser(step.question,step.options)
+      //Multiple choice via typed dialog
+      skipKey="skipAskUser"
+      if globals.G_agentContext and hasIndex(globals.G_agentContext,skipKey) and globals.G_agentContext[skipKey] then
+        globals.G_agentContext[skipKey]=false
+        userResponse=null
+        if hasIndex(globals.G_agentContext,"promptResponse") then userResponse=globals.G_agentContext.promptResponse
+        result.response=userResponse
+        if context then context.userResponse=userResponse
+        return result
+      end if
+      if resumeCmd and len(str(resumeCmd))>0 then
+        globals.G_agent.startDialog("pickOption",step.question,step.options,{
+          "resumeCommand":resumeCmd,
+          "originalCommand":resumeCmd,
+          "skipKey":skipKey,
+          "suggested":step.options[0]
+        })
+        result.awaitDialog=true
+        result.message="Awaiting choice - reply with ai 1 / ai 2 / ..."
+        return result
+      end if
+      //No resume path - default first option (avoid blocking Gui)
+      userResponse=step.options[0]
       result.response=userResponse
       context.userResponse=userResponse
     else if hasIndex(step,"yesno") and step.yesno then
@@ -702,8 +726,7 @@ AgentHandlers._handlePromptUser=function(Obj,step,context)
       if hasIndex(step,"default") then defaultVal=step.default
       suggested="yes"
       if not defaultVal then suggested="no"
-      resumeCmd=globals.G_agent._resumeCommand(context)
-      if resumeCmd and len(resumeCmd)>0 then
+      if resumeCmd and len(str(resumeCmd))>0 then
         if globals.G_agentContext and hasIndex(globals.G_agentContext,"skipPromptUser") and globals.G_agentContext.skipPromptUser then
           globals.G_agentContext.skipPromptUser=false
           userResponse=true
@@ -715,14 +738,33 @@ AgentHandlers._handlePromptUser=function(Obj,step,context)
         confirm=globals.G_agent._beginConfirm(step.question,resumeCmd,"skipPromptUser",suggested,false)
         if confirm then return confirm
       end if
-      userResponse=globals.G_agent._promptUser(step.question,defaultVal)
+      //No resume path - honor default
+      userResponse=defaultVal
       result.response=userResponse
       context.userResponse=userResponse
     else
-      //Free text
-      userResponse=globals.G_agent._askUser(step.question,null)
-      result.response=userResponse
-      context.userResponse=userResponse
+      //Free text via typed dialog
+      skipKey="skipAskUser"
+      if globals.G_agentContext and hasIndex(globals.G_agentContext,skipKey) and globals.G_agentContext[skipKey] then
+        globals.G_agentContext[skipKey]=false
+        userResponse=null
+        if hasIndex(globals.G_agentContext,"promptResponse") then userResponse=globals.G_agentContext.promptResponse
+        result.response=userResponse
+        if context then context.userResponse=userResponse
+        return result
+      end if
+      if resumeCmd and len(str(resumeCmd))>0 then
+        globals.G_agent.startDialog("needText",step.question,[],{
+          "resumeCommand":resumeCmd,
+          "originalCommand":resumeCmd,
+          "skipKey":skipKey
+        })
+        result.awaitDialog=true
+        result.message="Awaiting answer - reply with ai [text]"
+        return result
+      end if
+      result.error="Cannot prompt for text without a resume command"
+      result.success=false
     end if
   else
     result.error="No question specified"
@@ -780,8 +822,8 @@ AgentHandlers.clearStoredObjects=function(index=null)
     return {"success":false,"error":"No stored objects to clear"}
   end if
 end function
-//Format stored object for display
-AgentHandlers._formatStoredObject=function(obj,index)
+//Format stored object for display. Pass index=null to omit the leading "N. ".
+AgentHandlers._formatStoredObject=function(obj,index=null)
   if not obj or typeof(obj)!="map" then return "Unknown object"
   objType="unknown"
   if hasIndex(obj,"type") then objType=obj.type
@@ -812,34 +854,46 @@ AgentHandlers._formatStoredObject=function(obj,index)
     end if
   end if
   //Build display string with user prefix for all types
-  if details then result=str(index)+". "+userName+" "+capitalize(objType)+" - "+details else result=str(index)+". "+userName+" "+capitalize(objType)
-  return result
+  label=userName+" "+capitalize(objType)
+  if details then label=label+" - "+details
+  if index!=null then return str(index)+". "+label
+  return label
 end function
-//Select stored object from menu if multiple exist
-AgentHandlers._selectStoredObject=function
+//Select stored object. Multiple -> typed dialog. Returns object, null, "CANCELED", or awaitDialog map.
+AgentHandlers._selectStoredObject=function(resumeCommand=null)
   if not hasIndex(globals.G_agentContext,"storedObjects") then return null
   storedObjects=globals.G_agentContext.storedObjects
   if typeof(storedObjects)!="list" then return null
   _len=len(storedObjects)
   if _len==0 then return null
+  //Resume path: user already picked via typed dialog
+  if hasIndex(globals.G_agentContext,"selectedStoredIndex") and globals.G_agentContext.selectedStoredIndex!=null then
+    idx=globals.G_agentContext.selectedStoredIndex
+    globals.G_agentContext.selectedStoredIndex=null
+    if typeof(idx)=="number" and idx>=0 and idx<_len then return storedObjects[idx].object
+  end if
   //Only one object - return it directly
   if _len==1 then return storedObjects[0].object
-  //Multiple objects - show menu
-  print skyblue("Multiple stored objects available:")
-  i=0;while i<_len;formatted=globals.G_agent._formatStoredObject(storedObjects[i],i+1);print white("  "+formatted);i+=1;end while
-  print white("")
-  //Prompt for selection
-  response=Gui.input({"text":"Select object (1-"+_len+"):"})
-  if not response then
-    print yellow("Selection canceled")
-    return "CANCELED"  //Special value to indicate user canceled
+  outLvl=globals.G_agent.config.outputLevel
+  //Silent: prefer most recent (matches execute path using storedObjects[-1])
+  if outLvl==0 then return storedObjects[_len-1].object
+  //Build labels (no leading numbers - startDialog adds 1/2/...)
+  labels=[]
+  i=0;while i<_len
+    push(labels,globals.G_agent._formatStoredObject(storedObjects[i],null))
+    i+=1
+  end while
+  if not resumeCommand or len(str(resumeCommand))==0 then resumeCommand=globals.G_agent._resumeCommand(null,"")
+  if resumeCommand and len(str(resumeCommand))>0 then
+    globals.G_agent.startDialog("pickStoredObject","Which stored object?",labels,{
+      "resumeCommand":resumeCommand,
+      "originalCommand":resumeCommand,
+      "suggested":labels[0]
+    })
+    return {"success":true,"awaitDialog":true,"message":"Awaiting object selection - reply with ai 1 / ai 2 / ..."}
   end if
-  selectedIndex=response.val
-  if selectedIndex<1 or selectedIndex>_len then
-    print yellow("Invalid selection")
-    return null
-  end if
-  return storedObjects[selectedIndex-1].object
+  //No resume path - prefer most recent object
+  return storedObjects[_len-1].object
 end function
 //Handler: Launch executable - find and execute with launch
 AgentHandlers._handleLaunch=function(Obj,step,context)

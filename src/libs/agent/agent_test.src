@@ -621,6 +621,98 @@ AgentTest._handleTest=function(Obj,step,context)
     c2=globals.G_agent._beginConfirm("Proceed with plan?", "exploit 10.0.0.1","skipPlanPrompt","yes",true)
     _assert("beginConfirm skip",c2==null)
     globals.G_agent.clearDialog
+    //pickStoredObject: numeric pick stashes index and resumes
+    if not globals.G_agentContext then globals.G_agentContext={}
+    globals.G_agentContext.storedObjects=[
+      {"type":"shell","object":{"type":"shell","_test":"a"}},
+      {"type":"computer","object":{"type":"computer","_test":"b"}}
+    ]
+    labels=["User Shell","User Computer"]
+    globals.G_agent.startDialog("pickStoredObject","Which stored object?",labels,{
+      "resumeCommand":"get emails",
+      "originalCommand":"get emails",
+      "suggested":labels[0]
+    })
+    r=globals.G_agent.resolveDialog("2")
+    _assert("stored->resume cmd",hasIndex(r,"command") and r.command=="get emails")
+    _assert("stored index stashed",globals.G_agentContext.selectedStoredIndex==1)
+    picked=globals.G_agent._selectStoredObject("get emails")
+    _assert("stored pick consumes",picked!=null and hasIndex(picked,"_test") and picked._test=="b")
+    _assert("stored index cleared",not (hasIndex(globals.G_agentContext,"selectedStoredIndex") and globals.G_agentContext.selectedStoredIndex!=null))
+    //Single stored object returns immediately (no dialog)
+    globals.G_agentContext.storedObjects=[{"type":"shell","object":{"type":"shell","_test":"solo"}}]
+    picked=globals.G_agent._selectStoredObject("get emails")
+    _assert("stored single",picked!=null and picked._test=="solo")
+    globals.G_agentContext.storedObjects=[]
+    //confirmRemember: always saves pref and resumes; never cancels + saves
+    savedPrefs=globals.G_agent.promptPreferences
+    globals.G_agent.promptPreferences={}
+    //Stub saveConfig so tests don't write disk
+    _savedSaveConfig=null
+    if hasIndex(globals.G_agent,"saveConfig") then _savedSaveConfig=@globals.G_agent.saveConfig
+    globals.G_agent.saveConfig=function;end function
+    if globals.G_agentContext then globals.G_agentContext.lastCommand="scan 10.0.0.0/24"
+    pu=globals.G_agent.promptUser("Scan many IPs? Continue?",{"type":"subnet_expansion","details":"254 IPs"},true)
+    _assert("promptUser awaits",typeof(pu)=="map" and hasIndex(pu,"awaitDialog") and pu.awaitDialog==true)
+    _assert("confirmRemember kind",globals.G_agent.dialogState!=null and globals.G_agent.dialogState.kind=="confirmRemember")
+    r=globals.G_agent.resolveDialog("always")
+    _assert("remember always->cmd",hasIndex(r,"command") and r.command=="scan 10.0.0.0/24")
+    _assert("remember always pref",hasIndex(globals.G_agent.promptPreferences,"subnet_expansion_Scan many IPs? Continue?") and globals.G_agent.promptPreferences["subnet_expansion_Scan many IPs? Continue?"]=="always")
+    //Cached always skips dialog
+    pu2=globals.G_agent.promptUser("Scan many IPs? Continue?",{"type":"subnet_expansion"},true)
+    _assert("remember cache always",pu2==true)
+    globals.G_agent.promptPreferences={}
+    globals.G_agent.startDialog("confirmRemember","Ask again?",["yes","no","always","never"],{
+      "resumeCommand":"scan x",
+      "skipKey":"skipConfirmRemember",
+      "cancelOnNo":true,
+      "questionHash":"test_never",
+      "suggested":"yes"
+    })
+    r=globals.G_agent.resolveDialog("never")
+    _assert("remember never->cancel",hasIndex(r,"cancelled") and r.cancelled==true)
+    _assert("remember never pref",hasIndex(globals.G_agent.promptPreferences,"test_never") and globals.G_agent.promptPreferences["test_never"]=="never")
+    if _savedSaveConfig!=null then globals.G_agent.saveConfig=@_savedSaveConfig
+    globals.G_agent.promptPreferences=savedPrefs
+    if globals.G_agentContext then
+      globals.G_agentContext.lastCommand=null
+      globals.G_agentContext.skipConfirmRemember=false
+    end if
+    globals.G_agent.clearDialog
+    //pickOption: stash chosen option and resume
+    globals.G_agent.startDialog("pickOption","Pick one:",["alpha","beta","gamma"],{
+      "resumeCommand":"do thing",
+      "skipKey":"skipAskUser",
+      "suggested":"alpha"
+    })
+    r=globals.G_agent.resolveDialog("2")
+    _assert("pickOption->resume",hasIndex(r,"command") and r.command=="do thing")
+    _assert("pickOption response",globals.G_agentContext.promptResponse=="beta")
+    _assert("pickOption skip",globals.G_agentContext.skipAskUser==true)
+    globals.G_agentContext.skipAskUser=false
+    //needText: free-text answer resumes with stash
+    globals.G_agent.clearDialog
+    globals.G_agent.startDialog("needText","Enter name:",[],{
+      "resumeCommand":"rename",
+      "skipKey":"skipAskUser"
+    })
+    _assert("needText is reply",globals.G_agent.isDialogReply("mybox")==true)
+    r=globals.G_agent.resolveDialog("mybox")
+    _assert("needText->resume",hasIndex(r,"command") and r.command=="rename")
+    _assert("needText response",globals.G_agentContext.promptResponse=="mybox")
+    globals.G_agentContext.skipAskUser=false
+    globals.G_agentContext.promptResponse=null
+    //Recursive confirm uses typed dialog (no Gui)
+    globals.G_agent.clearDialog
+    if globals.G_agentContext then globals.G_agentContext.lastCommand="chmod 777 /tmp/d"
+    c=globals.G_agent._beginConfirm("Apply chmod recursively to all contents of /tmp/d?","chmod 777 /tmp/d","skipRecursive_chmod","yes",false)
+    _assert("recursive confirm awaits",c!=null and hasIndex(c,"awaitDialog") and c.awaitDialog==true)
+    r=globals.G_agent.resolveDialog("no")
+    _assert("recursive soft-no",hasIndex(r,"command") and r.command=="chmod 777 /tmp/d")
+    _assert("recursive soft-no response",globals.G_agentContext.promptResponse==false)
+    globals.G_agentContext.skipRecursive_chmod=false
+    if globals.G_agentContext then globals.G_agentContext.lastCommand=null
+    globals.G_agent.clearDialog
     globals.G_agent.config.promptOnAmbiguous=savedPrompt
   end if
   //TEST 13: Undo / snapshot stack
