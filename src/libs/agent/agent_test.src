@@ -26,7 +26,7 @@ AgentTest._handleTest=function(Obj,step,context)
     print "  escalate     - findEscalation probe (no shell)"
     print "  history      - History search helper"
     result.success=true
-    result.message="Listed 15 test suites"
+    result.message="Listed 16 test suites"
     return result
   end if
   passed=0
@@ -693,6 +693,22 @@ AgentTest._handleTest=function(Obj,step,context)
     pR=globals.G_agent._parseCommand(Obj,"fetch superuser shell on 1.2.3.4")
     //May be fetch or other action; if fetch, needRoot should be set
     if hasIndex(pR,"action") and pR.action=="fetch" then _assert("superuser->needRoot",hasIndex(pR,"needRoot") and pR.needRoot==true) else _assert("superuser parse ok",pR!=null)
+    //Soft fillers + fetch gate (router without saying shell)
+    stripped=globals.G_agent._stripSoftFillers("grab me a random router")
+    _assert("strip grab me a",indexOf(lower(stripped),"grab me")==null)
+    _assert("strip keeps grab",indexOf(lower(stripped),"grab")!=null)
+    pFetch=globals.G_agent._parseCommand(Obj,"grab me a router")
+    _assert("grab router->fetch",hasIndex(pFetch,"action") and pFetch.action=="fetch")
+    //Autonomous scan = scan-only; attack = scan+exploit
+    pScan=globals.G_agent._createPlan(Obj,{"action":"autonomous","target":"1.2.3.4","goal":"scan","originalInput":"judgment to scan 1.2.3.4","raw":"judgment to scan 1.2.3.4"},true)
+    _assert("auto scan steps",hasIndex(pScan,"steps") and len(pScan.steps)==1)
+    if len(pScan.steps)>0 then _assert("auto scan type",pScan.steps[0].type=="scan")
+    pAtk=globals.G_agent._createPlan(Obj,{"action":"autonomous","target":"1.2.3.4","goal":"attack","originalInput":"figure out how to attack 1.2.3.4","raw":"figure out how to attack 1.2.3.4"},true)
+    _assert("auto attack steps",hasIndex(pAtk,"steps") and len(pAtk.steps)>=2)
+    if len(pAtk.steps)>=2 then
+      _assert("auto attack scan",pAtk.steps[0].type=="scan")
+      _assert("auto attack exploit",pAtk.steps[1].type=="exploit")
+    end if
   end if
   //Summary
   print ""

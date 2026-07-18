@@ -36,7 +36,7 @@ The X AI Agent System is a **zero-hardcoded-registry natural language command in
 
 1. **Dynamic Learning**: No hardcoded command lists. The system reads man pages on-the-fly to learn command capabilities.
 2. **Phrase-Based Detection**: Uses scored phrase patterns (20-35 points) to identify commands from natural language.
-3. **Modular Architecture**: Separated into 14 source files for maintainability.
+3. **Modular Architecture**: Separated into ~21 source files for maintainability (and Grey Hack import size limits).
 4. **Context Preservation**: Tracks session state, command history, and user preferences.
 5. **Multi-Step Planning**: Breaks complex goals into executable steps with fallback strategies.
 6. **Persistent Learning**: Saves pattern scores, preferences, and templates to disk as JSON.
@@ -79,13 +79,16 @@ The AI system is split across modular source files (parser is further split for 
 | `agent_parser.src` | NL parse orchestration (phases 1–4) |
 | `agent_parser_flow.src` | Early returns, autonomous / conditional flow |
 | `agent_parser_action.src` | Phrase scoring, man-page / synonym action match |
-| `agent_parser_fields.src` | Per-command field extraction |
-| `agent_planning.src` | Plan creation, strategy, template recall, risk assessment |
+| `agent_parser_fields.src` | Action-specific field extraction |
+| `agent_parser_clarify.src` | No-action clarification + final fields phase |
+| `agent_planning.src` | Plan creation, strategy, risk assessment |
+| `agent_planning_builders.src` | `_build*Plan` builders + fuzzy template helpers |
 | `agent_execute.src` | High-level execution dispatcher, compound command handler |
 | `agent_execution.src` | Plan execution, step sequencing, error handling |
 | `agent_handlers.src` | Step execution handlers (non-attack) |
 | `agent_handlers_attack.src` | Scan / exploit handlers and autonomous exploit scoring |
-| `agent_handlers_access.src` | getObject, escalate, crack, fetch shell, recon, backdoor, analyze |
+| `agent_handlers_access.src` | getObject / Mission bounce |
+| `agent_handlers_post.src` | escalate, crack, fetch shell, recon, backdoor, analyze |
 | `agent_learning.src` | Pattern reinforcement, user preferences, learning persistence |
 | `agent_knowledge.src` | Command knowledge cache, man-page learn, save/load |
 | `agent_command_registry.src` | Command lookup, `learnFlagsFromManPage`, semantic flags |
@@ -2215,7 +2218,7 @@ end function
 ### Cons
 
 #### 1. Complexity
-- ~11,500 lines of code across 14 modules
+- ~13,000 lines of code across ~21 modules
 - Steep learning curve for new developers
 - Debugging pattern conflicts can be tedious
 
@@ -2241,8 +2244,8 @@ end function
 
 #### 6. No Visual Feedback
 - Text-only interface limits usability
-- Users don't see what AI is planning
-- No undo for executed commands
+- Plan preview exists (`promptOnPlan`) but UI is still text-only
+- Undo restores agent config/session context only (not filesystem/shell)
 
 #### 7. Testing Difficulty
 - Natural language inputs are infinite
@@ -2323,6 +2326,13 @@ end function
 
 #### ~~15. Collaborative Planning~~ ✅ IMPLEMENTED
 **Implemented as:** `promptOnPlan` shows steps and asks `ai yes`/`ai no` before multi-step execute
+
+### Cleanup notes (current)
+
+- **Autonomous goals:** `goal=scan|recon` → scan-only; `goal=attack|compromise` (default) → scan then exploit
+- **Typed confirms:** recursive chmod/chown/chgrp/chog use `_beginConfirm` (same path as tux/wipe)
+- **NL softeners:** `_stripSoftFillers` strips `get me` / `grab me` / `fetch me` before match; fetch gate accepts `router`/`computer`/`file` without requiring the word `shell`
+- **Module splits:** `agent_planning_builders`, `agent_parser_clarify`, `agent_handlers_post` keep imports under Grey Hack size limits
 
 ---
 
@@ -2577,7 +2587,7 @@ end if
 
 ## Conclusion
 
-The X AI Agent System is a sophisticated natural language command interface with a modular, extensible architecture. With 14 source files and ~11,500 lines, it provides a powerful way for users to interact with the game using everyday language.
+The X AI Agent System is a sophisticated natural language command interface with a modular, extensible architecture. With ~21 source files and ~13,000 lines, it provides a powerful way for users to interact with the game using everyday language.
 
 **Key Takeaways for Developers:**
 1. Always use score comparison to prevent pattern conflicts

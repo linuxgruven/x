@@ -221,21 +221,6 @@ Command.ai=function(Obj,argv)
     end if
   end if
   result=globals.G_agent.execute(Obj,command,options)
-  if hasIndex(result,"plan") and hasIndex(result.plan,"needs_prompt") then
-    print white(result.plan.prompt_message)
-    print white("Options:")
-    _len=len(result.plan.options);i=0;while i<_len;opt=result.plan.options[i];if opt==result.plan.default_option then print white("  "+str(i+1)+". "+opt+" (default)") else print white("  "+str(i+1)+". "+opt);i+=1;end while
-    choice=user_input(white("Select option (1-"+str(len(result.plan.options))+") or press Enter for default: "))
-    choice=trim(choice)
-    if choice=="" then
-      selected=result.plan.default_option
-    else
-      choice_num=to_int(choice)
-      if choice_num>0 and choice_num<=len(result.plan.options) then selected=result.plan.options[choice_num-1] else return Error.set("Invalid choice")
-    end if
-    new_command=selected+" "+result.plan.target
-    result=globals.G_agent.execute(Obj,new_command,options)
-  end if
   if hasIndex(result,"error") then return Error.set(str(result.error))
   //Skip printing message if config (already printed) or awaitDialog (startDialog printed prompt)
   if hasIndex(result,"message") and not (hasIndex(result,"isConfig") and result.isConfig) and not (hasIndex(result,"awaitDialog") and result.awaitDialog) then print white(str(result.message))

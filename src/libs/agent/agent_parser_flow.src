@@ -449,7 +449,7 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
       skipAllCommands=false
       //Check for object request patterns with flexible matching (allow words between "need" and "computer")
       hasObjectRequest=false
-      if (indexOf(cmdLower,"i want")!=null or indexOf(cmdLower,"i need")!=null or indexOf(cmdLower,"give me")!=null or indexOf(cmdLower,"get me")!=null) and (indexOf(cmdLower," shell")!=null or indexOf(cmdLower," computer")!=null or indexOf(cmdLower," file")!=null or indexOf(cmdLower," object")!=null) then hasObjectRequest=true
+      if (indexOf(cmdLower,"i want")!=null or indexOf(cmdLower,"i need")!=null or indexOf(cmdLower,"give me")!=null or indexOf(cmdLower,"get me")!=null or indexOf(cmdLower,"grab me")!=null or indexOf(cmdLower,"fetch me")!=null) and (indexOf(cmdLower," shell")!=null or indexOf(cmdLower," computer")!=null or indexOf(cmdLower," file")!=null or indexOf(cmdLower," object")!=null or indexOf(cmdLower," router")!=null) then hasObjectRequest=true
       if hasObjectRequest then
         //Check if this has continuation context (comma, then, and, also, to do X, etc)
         hasContinuationContext=false
@@ -717,19 +717,7 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
       end if
     end if
     if requestingObject then
-      //Determine if root access is required
-      needRoot=false
-      if indexOf(cmd,"root")!=null then
-        needRoot=true
-      else if indexOf(cmd,"admin")!=null then
-        needRoot=true
-      else if indexOf(cmd,"elevated")!=null then
-        needRoot=true
-      else if indexOf(cmd,"best")!=null then
-        needRoot=true
-      else if indexOf(cmd,"highest")!=null then
-        needRoot=true
-      end if
+      needRoot=globals.G_agent._wantsRoot(cmd)
       //Determine if headless (intermediate step) or interactive (final goal)
       isHeadless=false
       //Commands like "get shell to do X" or "need computer then Y" suggest intermediate step
@@ -1047,7 +1035,7 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
         parsed.summary="Crack password"
         actionFound=true
         if debug then print green("[DEBUG] Agent: 'get password' detected - using crack action")
-      else if indexOf(cmd,"shell")!=null or len(ips)>0 then
+      else if indexOf(cmd,"shell")!=null or indexOf(cmd,"router")!=null or indexOf(cmd,"computer")!=null or indexOf(cmd,"file")!=null or len(ips)>0 then
       //If user wants to exclude certain services, use autonomous mode to try all others
       if hasExclusionPattern then
         parsed.action="autonomous"

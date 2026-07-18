@@ -1,0 +1,779 @@
+// =============================================================================
+// AGENT_HANDLERS_POST
+// Post-access handlers: escalate, crack, recon, backdoor, analyze, fetch shell,
+// open file/browser, direct command.
+// Companion: agent_handlers_access.src (getObject)
+// =============================================================================
+//Handler: Escalate
+AgentHandlers._handleEscalate=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"escalate"}
+  //Privilege escalation using Obj
+  shell=null
+  if hasIndex(Obj,"shell") and Obj.shell then
+    shell=Obj.shell
+  else if hasIndex(context,"shell") and context.shell then
+    shell=context.shell
+  end if
+  if shell then
+    //Check if already root
+    userInfo=globals.Utility.getUserEX(shell)
+    if userInfo.raw=="root" then
+      result.success=true
+      result.message="Already have root access"
+      result.alreadyRoot=true
+      return result
+    end if
+    if outLvl>=2 then print skyblue("[VERBOSE] Agent: Attempting privilege escalation on "+host_computer(shell).local_ip)
+    //Use su or su -r based on session layer
+    if hasIndex(Obj,"layer") and Obj.layer=="shell" then
+      //In shell session: use su command
+      if hasIndex(Obj.commands,"su") then
+        if debug then print green("[DEBUG] Agent: Using su command for shell session")
+        suResult=Obj.commands.su([])
+        if typeof(suResult)=="shell" then
+          result.success=true
+          result.message="Successfully escalated to root via su"
+          result.rootShell=suResult
+          Obj.shell=suResult
+          if context then context.shell=suResult
+          if context then context.hasRoot=true
+          if outLvl>=1 then print green("Agent: Successfully escalated to root via su")
+          return result
+        end if
+      end if
+    else if hasIndex(Obj,"shell") then
+      //Not in shell session but have shell: use su -r
+      if hasIndex(Obj.commands,"su") then
+        if debug then print green("[DEBUG] Agent: Using su -r command for non-shell session")
+        //su -r launches interactive shell and blocks until exit
+        Obj.commands.su(["-r"])
+        //After interactive session exits, check if root shell was successfully cached
+        if hasIndex(Obj,"rootShell") and Obj.rootShell and typeof(Obj.rootShell)=="shell" then
+          userInfo=globals.Utility.getUserEX(Obj.rootShell)
+          if userInfo.raw=="root" then
+            result.success=true
+            result.message="Successfully escalated to root via su -r (interactive session completed)"
+            result.rootShell=Obj.rootShell
+            Obj.shell=Obj.rootShell
+            if context then context.shell=Obj.rootShell
+            if context then context.hasRoot=true
+            if outLvl>=1 then print green("Agent: Successfully escalated to root via su -r")
+            return result
+          end if
+        end if
+      end if
+    end if
+    //Fallback: Try Exploit.tryShellEX for local root shell
+    if typeof(globals.Exploit)=="AgentExploit" or hasIndex(globals,"Exploit") then
+      if debug then print green("[DEBUG] Agent: Using Exploit.tryShellEX for escalation")
+      rootShell=globals.Exploit.tryShellEX(shell,true)
+      if typeof(rootShell)=="shell" then
+        //Verify root access
+        rootUserInfo=globals.Utility.getUserEX(rootShell)
+        if rootUserInfo.raw=="root" then
+          result.success=true
+          result.message="Successfully escalated to root"
+          result.rootShell=rootShell
+          //Update Obj and context with new root shell
+          Obj.shell=rootShell
+          if context then context.shell=rootShell
+          if context then context.hasRoot=true
+          if outLvl>=1 then print green("Agent: Successfully escalated to root on "+host_computer(rootShell).local_ip)
+          return result
+        else
+          if debug then print yellow("[DEBUG] Agent: Exploit returned shell but not root user: "+rootUserInfo.raw)
+        end if
+      else
+        if debug then print yellow("[DEBUG] Agent: Exploit.tryShellEX did not return a shell")
+      end if
+    else
+      if debug then print yellow("[DEBUG] Agent: Exploit library not available")
+    end if
+    //Fallback: Try common escalation commands if available
+    if hasIndex(Obj.commands,"pRoot") then
+      if debug then print green("[DEBUG] Agent: Trying pRoot command")
+      pRootResult=Obj.commands.pRoot(Obj,[])
+      if pRootResult then
+        result.success=true
+        result.message="Escalation attempted via pRoot"
+        return result
+      end if
+    end if
+    //No escalation method worked - mark critical so alternative plan can run findEscalation
+    result.success=false
+    result.critical=true
+    result.error="Failed to escalate privileges - no successful method found"
+    if outLvl>=1 then print yellow("Agent: Failed to escalate to root on "+host_computer(shell).local_ip)
+  else
+    result.error="No shell available for escalation"
+    result.critical=true
+  end if
+  return result
+end function
+//Handler: Crack password
+AgentHandlers._handleCrackPassword=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"crackPassword"}
+  //If a hash is provided, use decipher instead of machine password cracking
+  if hasIndex(step,"target") and step.target and len(step.target)==32 then
+    //This is a hash - use decipher -d
+    if debug then print green("[DEBUG] Agent: Cracking hash with decipher: "+step.target)
+    if hasIndex(Obj.commands,"decipher") then
+      decipherResult=Obj.commands.decipher(Obj,["-d",step.target])
+      if decipherResult then
+        result.success=true
+        result.data=decipherResult
+        result.message="Hash cracked: "+decipherResult
+      else
+        result.error="Unable to crack hash"
+      end if
+    else
+      result.error="Decipher command not available"
+    end if
+    return result
+  end if
+  //Password cracking using Crack library
+  if typeof(Crack)=="map" then
+    //Check if we have a shell to crack on
+    if hasIndex(Obj,"shell") and Obj.shell then
+      //Crack root password (Crack library only supports root)
+      if debug then print green("[DEBUG] Agent: Attempting to crack root password")
+      password=Crack.returnRootPass(Obj.shell,null)
+      if password and not password isa Error and password!="" then
+        result.success=true
+        result.data=password
+        result.message="Password: "+password
+        if outLvl>=1 then print green("Password cracked: "+password)
+      else
+        //Rainbow tables failed - try decipher if /etc/passwd accessible
+        if outLvl>=2 then print yellow("[VERBOSE] Agent: Rainbow tables failed, trying decipher fallback")
+        c=host_computer(Obj.shell)
+        if typeof(Utility)=="map" and hasIndex(Utility,"hasPasswd") then
+          if Utility.hasPasswd(c) then
+            passwdFile=File(c,"/etc/passwd")
+            if passwdFile then
+              passwdContent=content(passwdFile)
+              if passwdContent then
+                lines=split(passwdContent,char(10))
+                for line in lines
+                  parts=split(line,":")
+                  if len(parts)>=2 and parts[0]=="root" then
+                    password=parts[1]
+                    if password and password!="" then
+                      result.success=true
+                      result.data=password
+                      result.message="Password: "+password
+                      if outLvl>=1 then print green("Password cracked via decipher: "+password)
+                      break
+                    end if
+                  end if
+                end for
+              end if
+            end if
+          end if
+        end if
+        if not result.success then result.error="Password cracking failed"
+      end if
+    else if hasIndex(step,"target") then
+      //No shell yet - need to get shell first
+      result.error="Need shell access to crack passwords. Try getting a shell first."
+    else
+      result.error="No target specified for password cracking"
+    end if
+  else if hasIndex(Obj.commands,"crack") then
+    argv=["password"]
+    if hasIndex(step,"target") then argv=argv+[step.target]
+    crackResult=Obj.commands.crack(Obj,argv)
+    result.success=true
+    result.data=crackResult
+  else
+    result.error="Crack library not available"
+  end if
+  return result
+end function
+//Handler: Crack shell
+AgentHandlers._handleCrackShell=function(Obj,step,context)
+  result={"success":false,"step":"crackShell"}
+  //Shell cracking using Obj
+  if hasIndex(Obj.commands,"crack") then
+    argv=["shell"]
+    if hasIndex(step,"target") then argv=argv+[step.target]
+    crackResult=Obj.commands.crack(Obj,argv)
+    result.success=true
+    result.data=crackResult
+  else
+    result.error="Crack functionality not available"
+  end if
+  return result
+end function
+//Handler: Recon
+AgentHandlers._handleRecon=function(Obj,step,context)
+  result={"success":false,"step":"recon"}
+  //Reconnaissance using Obj
+  if hasIndex(Obj.commands,"recon") then
+    argv=[]
+    if hasIndex(step,"target") then argv=argv+[step.target]
+    reconResult=Obj.commands.recon(argv)
+    result.success=true
+    result.data=reconResult
+    context.reconData=reconResult
+  else if typeof(Attack)=="map" and hasIndex(Attack,"recon") then
+    result.success=true
+  else
+    result.success=true
+    result.message="Basic recon completed"
+  end if
+  return result
+end function
+//Handler: Backdoor
+AgentHandlers._handleBackdoor=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"backdoor"}
+  //Obj should be the wrapped computer object from previous step
+  if not hasIndex(Obj,"computer") then
+    result.error="No computer object available for backdoor installation"
+    return result
+  end if
+  if debug then
+    if debug then print green("[DEBUG] Backdoor handler - Obj.computer.local_ip: "+Obj.computer.local_ip)
+    if debug then
+      if hasIndex(Obj,"dir") then print green("[DEBUG] Backdoor handler - Obj.dir.current: "+Obj.dir.current) else print green("[DEBUG] Backdoor handler - WARNING: Obj.dir not set!")
+    end if
+  end if
+  if outLvl>=2 then print skyblue("Agent: Installing backdoor on "+Obj.computer.local_ip+"...")
+  //Call Attack.tux with the wrapped object
+  tuxResult=Attack.tux(Obj,[])
+  result.success=true
+  result.message="Backdoor installation complete"
+  return result
+end function
+//Handler: Analyze
+AgentHandlers._handleAnalyze=function(Obj,step,context)
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"analyze"}
+  //Use AI to analyze data with critical thinking
+  if hasIndex(context,"scanData") then
+    //Deep analysis using AI library
+    if typeof(AI)=="map" and hasIndex(AI,"analyze") then
+      analysis=AI.analyze(context.scanData)
+      result.success=true
+      result.analysis=analysis
+      result.message="AI analysis completed"
+      //AI: Extract actionable insights
+      insights=[]
+      if hasIndex(analysis,"patterns") and len(analysis.patterns)>0 then push(insights,"Found "+len(analysis.patterns)+" behavioral patterns")
+      if hasIndex(analysis,"statistics") then
+        stats=analysis.statistics
+        if hasIndex(stats,"anomalies") then push(insights,"Detected "+stats.anomalies+" anomalies")
+      end if
+      result.insights=insights
+      if outLvl>=2 and len(insights)>0 then print white("AI Insights: "+join(insights,", "))
+      //AI: Generate recommendations based on analysis
+      recommendations=[]
+      if hasIndex(context,"goal") then
+        if context.goal=="rootShell" then
+          push(recommendations,"Focus on privilege escalation vectors")
+        else if context.goal=="persistence" then
+          push(recommendations,"Prioritize backdoor installation")
+        end if
+      end if
+      result.recommendations=recommendations
+      context.aiInsights=insights
+      context.aiRecommendations=recommendations
+    else
+      //Fallback analysis
+      result.success=true
+      result.message="Basic analysis completed"
+    end if
+  else
+    result.success=true
+    result.message="No data to analyze"
+  end if
+  return result
+end function
+//Handler: Check access
+AgentHandlers._handleCheckAccess=function(Obj,step,context)
+  result={"success":false,"step":"checkAccess"}
+  //Check current access level
+  result.success=true
+  if hasIndex(Obj,"shell") then
+    result.hasShell=true
+    result.user=Obj.shell.getIndex("user","unknown")
+  else
+    result.hasShell=false
+  end if
+  return result
+end function
+//Handler: Verify
+AgentHandlers._handleVerify=function(Obj,step,context)
+  result={"success":false,"step":"verify"}
+  //Verify operation success
+  result.success=true
+  result.message="Verification completed"
+  return result
+end function
+//Handler: Check privs
+AgentHandlers._handleCheckPrivs=function(Obj,step,context)
+  result={"success":false,"step":"checkPrivs"}
+  //Check privileges
+  result.success=true
+  if hasIndex(Obj,"shell") then
+    result.user=Obj.shell.getIndex("user","unknown")
+    result.isRoot=(result.user=="root")
+  end if
+  return result
+end function
+//Handler: Find escalation - probe available privesc vectors (no overflow)
+AgentHandlers._handleFindEscalation=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"findEscalation","vectors":[]}
+  shell=null
+  if hasIndex(Obj,"shell") and Obj.shell then
+    shell=Obj.shell
+  else if context and hasIndex(context,"shell") and context.shell then
+    shell=context.shell
+  end if
+  if not shell then
+    result.error="No shell available for escalation search"
+    return result
+  end if
+  userInfo=globals.Utility.getUserEX(shell)
+  if userInfo and hasIndex(userInfo,"raw") and userInfo.raw=="root" then
+    result.success=true
+    result.alreadyRoot=true
+    result.message="Already root - no escalation needed"
+    if outLvl>=1 then print green("Agent: Already root")
+    return result
+  end if
+  vectors=[]
+  hasRootLib=false
+  hasUserLib=false
+  //Command-based methods
+  if hasIndex(Obj,"commands") and hasIndex(Obj.commands,"su") then push(vectors,{"method":"su","label":"su (cached passwords)"})
+  if hasIndex(Obj,"commands") and hasIndex(Obj.commands,"pRoot") then push(vectors,{"method":"pRoot","label":"pRoot"})
+  if typeof(globals.Exploit)=="AgentExploit" or hasIndex(globals,"Exploit") then push(vectors,{"method":"tryShellEX","label":"local lib shell exploits (tryShellEX)"})
+  //Passwd / crack path
+  comp=host_computer(shell)
+  if comp and typeof(globals.Utility)=="map" and hasIndex(globals.Utility,"hasPasswd") and globals.Utility.hasPasswd(comp) then push(vectors,{"method":"crackPassword","label":"crack /etc/passwd"})
+  if hasIndex(Obj,"commands") and hasIndex(Obj.commands,"scan") then push(vectors,{"method":"localScan","label":"scan --l (local exploits)"})
+  //Enumerate /lib shell exploits without overflowing
+  if (typeof(globals.Exploit)=="AgentExploit" or hasIndex(globals,"Exploit")) and typeof(globals.Library)=="map" and hasIndex(globals.Library,"haveMetaxploit") and globals.Library.haveMetaxploit then
+    libFiles=get_files(File(comp,"/lib"))
+    if libFiles then
+      rootLibs=[]
+      userLibs=[]
+      for f in libFiles
+        l=load(Library.metaxploit,path(f))
+        if not l then continue
+        if not globals.Exploit.haveAlready(l) then
+          if debug then print green("[DEBUG] findEscalation: indexing "+lib_name(l))
+          globals.Exploit.headless(l)
+        end if
+        for e in globals.Exploit.get(l)
+          if not e or not hasIndex(e,"e") then continue
+          if e.e!="s" then continue
+          lname=lib_name(l)
+          if hasIndex(e,"u") and e.u=="r" then
+            hasRootLib=true
+            if indexOf(rootLibs,lname)==null then push(rootLibs,lname)
+          else
+            hasUserLib=true
+            if indexOf(userLibs,lname)==null then push(userLibs,lname)
+          end if
+        end for
+      end for
+      if len(rootLibs)>0 then push(vectors,{"method":"localRootShell","label":"root shell via "+join(rootLibs,", "),"libs":rootLibs})
+      if len(userLibs)>0 then push(vectors,{"method":"localUserShell","label":"user shell via "+join(userLibs,", "),"libs":userLibs})
+    end if
+  end if
+  //Pick recommendation
+  recommended=null
+  if hasRootLib then
+    recommended="tryShellEX"
+  else if hasIndex(Obj,"commands") and hasIndex(Obj.commands,"su") then
+    recommended="su"
+  else if hasUserLib then
+    recommended="tryShellEX"
+  else
+    for v in vectors
+      if v.method=="crackPassword" then
+        recommended="crackPassword"
+        break
+      end if
+    end for
+  end if
+  if not recommended and len(vectors)>0 then recommended=vectors[0].method
+  result.vectors=vectors
+  result.recommended=recommended
+  result.success=len(vectors)>0
+  if context then
+    context.escalationVectors=vectors
+    context.recommendedEscalation=recommended
+  end if
+  if outLvl>=1 then
+    if len(vectors)==0 then
+      print yellow("Agent: No escalation vectors found - try: ai crack or ai scan --l")
+    else
+      print skyblue("Agent: Found "+str(len(vectors))+" escalation vector(s):")
+      for v in vectors;print white("  * "+v.label);end for
+      if recommended then print green("Agent: Recommended: "+recommended+" (try: ai escalate)")
+    end if
+  end if
+  if not result.success then result.error="No escalation vectors found"
+  return result
+end function
+//Handler: Direct command
+AgentHandlers._handleDirectCommand=function(Obj,step,context)
+  result={"success":false,"step":"directCommand"}
+  //Execute direct command
+  if not hasIndex(step,"command") then
+    result.error="No command specified"
+    return result
+  end if
+  cmdParts=split(step.command," ")
+  if len(cmdParts)==0 then
+    result.error="Empty command"
+    return result
+  end if
+  cmdName=cmdParts[0]
+  cmdArgs=cmdParts[1:]
+  //Check if command ends with a flag that expects a parameter but doesn't have one
+  if len(cmdArgs)>0 then
+    lastArg=cmdArgs[len(cmdArgs)-1]
+    if lastArg[0]=="-" then
+      //Last argument is a flag with no value after it - might need a parameter
+      //Check for hash-cracking commands that need a hash
+      if (cmdName=="decipher" or cmdName=="hc" or cmdName=="hashcat") and (lastArg=="-d" or lastArg=="-h" or lastArg=="-c") then
+        //Ask via typed dialog instead of blocking user_input
+        resumeCmd=cmdName+" "+join(cmdArgs," ")
+        globals.G_agent.startDialog("needHash","Enter hash to crack (32 hex chars):",[],{
+          "resumeCommand":resumeCmd,
+          "originalCommand":step.command
+        })
+        result.success=true
+        result.awaitDialog=true
+        result.message="Awaiting hash"
+        return result
+      end if
+    end if
+  end if
+  //Try to find command in Obj.commands
+  if hasIndex(Obj.commands,cmdName) then
+    f=Obj.commands[cmdName]
+    if globals.G_agent.config.trainer then print orange("Command you need to run: "+step.command)
+    cmdResult=f(cmdArgs)
+    result.success=true
+    result.data=cmdResult
+  else
+    result.error="Command not found: "+cmdName
+  end if
+  return result
+end function
+//Handler: Open file
+AgentHandlers._handleOpenFile=function(Obj,step,context)
+  result={"success":false,"step":"openFile"}
+  //Open file with appropriate flags
+  //Check if we have a shell with open command, otherwise use local open
+  openCmd=null
+  if hasIndex(Obj,"commands") and hasIndex(Obj.commands,"open") then
+    openCmd=Obj.commands["open"]
+  else if typeof(open)=="function" then
+    //Use local open command
+    openCmd=@open
+  else
+    result.error="Open command not available"
+    return result
+  end if
+  //Handle log file search
+  if hasIndex(step,"searchLocation") and step.searchLocation=="home" then
+    //Search for .log file in home
+    homePath=Obj.homeDir
+    if not homePath then homePath="/home/"+Obj.user
+    //Try to find log files
+    if hasIndex(Obj,"computer") and hasIndex(Obj.computer,"File") then
+      homeFolder=Obj.computer.File(homePath)
+      if homeFolder then
+        files=homeFolder.getFiles
+        logFile=null
+        for f in files
+          if indexOf(f.name,".log")!=null then
+            logFile=f.path
+            break
+          end if
+        end for
+        if logFile then
+          openResult=openCmd(["-l",logFile])
+          result.success=true
+          result.data=openResult
+        else
+          result.error="No log file found in home"
+        end if
+      else
+        result.error="Cannot access home directory"
+      end if
+    else
+      result.error="File system not accessible"
+    end if
+  else if hasIndex(step,"openFlag") then
+    //Use specified flag
+    openResult=openCmd([step.openFlag])
+    result.success=true
+    result.data=openResult
+  else if hasIndex(step,"path") then
+    //Open specific file by path
+    //The open command doesn't take arbitrary filenames, only flags
+    //Try to open with code editor if it looks like a file
+    if indexOf(step.path,".")!=null or step.path[0]=="/" then
+      //Has extension or absolute path - try code editor
+      openResult=openCmd(["-c","--code",step.path])
+      result.success=true
+      result.data=openResult
+    else
+      //No extension, might be an app name we don't recognize
+      result.error="Unknown application '"+step.path+"'. Use 'man open' to see available applications."
+      result.success=false
+    end if
+  else
+    result.error="No file or flag specified"
+  end if
+  return result
+end function
+//Handler: Open browser
+AgentHandlers._handleOpenBrowser=function(Obj,step,context)
+  result={"success":false,"step":"openBrowser"}
+  //Open browser
+  if not hasIndex(Obj,"commands") or not hasIndex(Obj.commands,"open") then
+    result.error="Open command not available"
+    return result
+  end if
+  openCmd=Obj.commands["open"]
+  if hasIndex(step,"openFlag") then
+    //Parse flag string into array
+    flagParts=split(step.openFlag," ")
+    openResult=openCmd(flagParts)
+    result.success=true
+    result.data=openResult
+  else
+    openResult=openCmd(["-b"])
+    result.success=true
+    result.data=openResult
+  end if
+  return result
+end function
+//Handler: Fetch shell
+AgentHandlers._handleFetchShell=function(Obj,step,context)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  result={"success":false,"step":"fetchShell"}
+  //Fetch shell from target
+  if not hasIndex(step,"target") then
+    result.error="No target specified for fetch"
+    result.critical=true
+    return result
+  end if
+  //Check if target is a LAN IP - if so, this needs to be a bounce attack
+  targetIp=step.target
+  if is_lan_ip(targetIp) then
+    if outLvl>=2 then print yellow("Agent: Target "+targetIp+" is a LAN IP - converting to bounce attack")
+    //Find public router IP - check if multiple IPs were extracted
+    publicIP=null
+    //First check if we have extracted IPs stored in step
+    if hasIndex(step,"extractedIps") and len(step.extractedIps)>1 then
+      //Look for a non-LAN IP in the extracted list
+      for ip in step.extractedIps
+        if ip!=targetIp and not is_lan_ip(ip) then
+          publicIP=ip
+          if outLvl>=2 then print green("Agent: Using router IP "+publicIP+" from command")
+          break
+        end if
+      end for
+    end if
+    //Fallback to context target if different from LAN target
+    if not publicIP and hasIndex(context,"target") and context.target!=targetIp and not is_lan_ip(context.target) then
+      publicIP=context.target
+      if outLvl>=2 then print green("Agent: Using router IP "+publicIP+" from context")
+    end if
+    //Auto-detect router if still not found
+    if not publicIP then
+      if outLvl>=2 then print yellow("Agent: No router IP specified - scanning network for router...")
+      //Use network scan to find routers
+      if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then
+        routerShell=Attack.scanCustom(["router","s"],true)
+        if routerShell and typeof(routerShell)=="shell" then
+          if hasIndex(routerShell,"host_computer") then
+            routerComp=routerShell.host_computer
+            if hasIndex(routerComp,"public_ip") then
+              publicIP=routerComp.public_ip
+            else if hasIndex(routerComp,"local_ip") then
+              publicIP=routerComp.local_ip
+            end if
+          end if
+          if publicIP and outLvl>=2 then print green("Agent: Auto-detected router at "+publicIP)
+        end if
+      end if
+    end if
+    if not publicIP then
+      result.error="LAN target requires router IP - cannot auto-detect router"
+      result.critical=true
+      return result
+    end if
+    //Build getObject step for LAN bounce
+    getObjectStep={}
+    getObjectStep.action="getObject"
+    getObjectStep.publicIP=publicIP
+    getObjectStep.lanIP=targetIp
+    getObjectStep.needRoot=false
+    if hasIndex(step,"needRoot") then getObjectStep.needRoot=step.needRoot
+    getObjectStep.isHeadless=false
+    if hasIndex(step,"isHeadless") then getObjectStep.isHeadless=step.isHeadless
+    getObjectStep.objectType="computer"
+    if hasIndex(step,"objectType") then getObjectStep.objectType=step.objectType
+    if hasIndex(step,"continuationCommands") then getObjectStep.continuationCommands=step.continuationCommands
+    if outLvl>=2 then print skyblue("Agent: Redirecting to LAN bounce handler")
+    return globals.G_agent._handleGetObject(Obj,getObjectStep,context)
+  end if
+  //Check if we have learned knowledge about scan command
+  learnedPorts=null
+  learnedTypes=null
+  if hasIndex(step,"commandKnowledge") then
+    if hasIndex(step.commandKnowledge,"ports") then learnedPorts=step.commandKnowledge.ports
+    if hasIndex(step.commandKnowledge,"objectTypes") then learnedTypes=step.commandKnowledge.objectTypes
+  end if
+  //Use scan command with service-specific options
+  //Format: scan --c <ip> <service> <type>
+  //Build argv array directly
+  serviceName="router"
+  if hasIndex(step,"service") then serviceName=step.service
+  objectType="s"
+  if hasIndex(step,"objectType") then objectType=step.objectType
+  //Check if headless mode requested
+  isHeadless=false
+  if hasIndex(step,"isHeadless") and step.isHeadless then isHeadless=true
+  if debug then print green("Debug: After step check: isHeadless="+isHeadless+", step.isHeadless type="+typeof(step.isHeadless)+", value="+step.isHeadless)
+  if hasIndex(context,"shouldStore") and context.shouldStore then
+    isHeadless=true  //Force headless when storing
+    if debug then print green("Debug: Forcing isHeadless=true because shouldStore=true")
+  end if
+  if debug then print green("Debug: Final isHeadless="+isHeadless)
+  //Apply learned knowledge
+  if debug and learnedPorts and hasIndex(learnedPorts,serviceName) then print skyblue("Agent: Using learned knowledge - "+serviceName+" runs on port "+learnedPorts[serviceName])
+  if debug and learnedTypes and hasIndex(learnedTypes,objectType) then print skyblue("Agent: Using learned knowledge - type '"+objectType+"' = "+learnedTypes[objectType])
+  if debug and isHeadless then print green("Debug: Headless mode - will get shell object without opening terminal")
+  //Validate target is not empty
+  targetIp=step.target
+  if not targetIp or targetIp=="" then
+    result.error="Empty target IP"
+    result.critical=true
+    return result
+  end if
+  //Debug output to see what we're building
+  if debug then print green("Debug: Building argv with target="+targetIp+", service="+serviceName+", type="+objectType)
+  //Use Attack.scanCustom for headless shell fetching
+  if isHeadless then
+    if outLvl>=2 then print skyblue("Agent: Getting shell in headless mode...")
+    ex=Attack.scanCustom([targetIp,serviceName,objectType],true)
+    if typeof(ex)!="shell" then
+      result.error="Could not get shell on "+targetIp
+      return result
+    end if
+    shell=Exploit.getShell(ex,false,[],true)
+    if shell isa Error then
+      result.error="Failed to wrap shell: "+shell.message
+      return result
+    end if
+    //Check if root access required
+    needRoot=false
+    if hasIndex(step,"needRoot") then needRoot=step.needRoot
+    if indexOf(lower(step.description),"root")!=null then needRoot=true
+    //Escalate to root if needed
+    if needRoot and shell.user.raw!="root" then
+      if outLvl>=2 then print skyblue("Agent: Escalating to root...")
+      shell=ShellObject.headlessSu(shell)
+      if shell isa Error then
+        result.error="Could not escalate to root: "+shell.message
+        return result
+      end if
+      if shell.user.raw!="root" then
+        result.error="Root escalation did not succeed"
+        return result
+      end if
+      if outLvl>=2 then print green("Agent: Root access obtained")
+    end if
+    //Install libraries if requested
+    if hasIndex(step,"libsToInstall") and len(step.libsToInstall)>0 then
+      if debug then print green("Debug: Installing libraries: "+join(step.libsToInstall,", "))
+      if hasIndex(Obj.commands,"libs") then
+        libsCmd=Obj.commands["libs"]
+        for libName in step.libsToInstall;if outLvl>=2 then print skyblue("Agent: Installing "+libName+" library...");libsCmd(["-g","-p","/lib",libName]);end for
+      else
+        print yellow("Agent: Warning - libs command not available")
+      end if
+    end if
+    //Store shell in context for next steps
+    result.success=true
+    result.shell=shell
+    context.shell=shell
+    if shell.user.raw=="root" then context.rootShell=shell
+    result.message="Shell obtained on "+targetIp
+    if outLvl>=2 then print green("Agent: Shell ready for next step")
+    return result
+  end if
+  //Interactive mode - get shell first, install libs if needed, then open terminal
+  if outLvl>=2 then print skyblue("Agent: Getting shell...")
+  ex=Attack.scanCustom([targetIp,serviceName,objectType],true)
+  if typeof(ex)!="shell" then
+    result.error="Could not get shell on "+targetIp
+    return result
+  end if
+  shell=Exploit.getShell(ex,false,[],true)
+  if shell isa Error then
+    result.error="Failed to wrap shell: "+shell.message
+    return result
+  end if
+  //Check if root access required
+  needRoot=false
+  if hasIndex(step,"needRoot") then needRoot=step.needRoot
+  if indexOf(lower(step.description),"root")!=null then needRoot=true
+  if debug then print green("Debug: needRoot="+needRoot+", current user="+shell.user.raw)
+  //Escalate to root if needed
+  if needRoot and shell.user.raw!="root" then
+    if outLvl>=2 then print skyblue("Agent: Escalating to root...")
+    shell=ShellObject.headlessSu(shell)
+    if shell isa Error then
+      result.error="Could not escalate to root: "+shell.message
+      return result
+    end if
+    if shell.user.raw!="root" then
+      result.error="Root escalation did not succeed"
+      return result
+    end if
+    if outLvl>=2 then print green("Agent: Root access obtained")
+    if debug then print green("Debug: After escalation, user="+shell.user.raw)
+  end if
+  //Install libraries if requested (always in headless mode)
+  if hasIndex(step,"libsToInstall") and len(step.libsToInstall)>0 then
+    if debug then print green("Debug: Installing libraries in headless mode: "+join(step.libsToInstall,", "))
+    if hasIndex(Obj.commands,"libs") then
+      libsCmd=Obj.commands["libs"]
+      for libName in step.libsToInstall;if outLvl>=2 then print skyblue("Agent: Installing "+libName+" library...");libsCmd(["-g","-p","/lib",libName]);end for
+    else
+      print yellow("Agent: Warning - libs command not available")
+    end if
+  end if
+  //Store the headless shell in context so ai.src can open the interactive session
+  //at the top level of Command.ai. Opening it from deep inside _executePlan causes
+  //the session to fall back through the proxy/pivot call stack to MAIN instead of
+  //staying in the current context (proxy or normal).
+  if outLvl>=2 then print skyblue("Agent: Shell ready, opening...")
+  result.success=true
+  context.shell=shell
+  //Mark root shell so ai.src picks it up via context.rootShell
+  if shell.user.raw=="root" then context.rootShell=shell
+  context.target=step.target
+  return result
+end function

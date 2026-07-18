@@ -8,8 +8,34 @@ AgentCore._STOP_WORDS={"a":1,"an":1,"the":1,"is":1,"are":1,"was":1,"were":1,"be"
 AgentCore._ACTION_WORDS={"ai":1,"goto":1,"go":1,"crack":1,"break":1,"decrypt":1,"decipher":1,"list":1,"show":1,"display":1,"scan":1,"find":1,"search":1,"get":1,"fetch":1,"open":1,"read":1,"write":1,"create":1,"delete":1,"remove":1,"copy":1,"move":1,"change":1,"hash":1,"password":1,"file":1,"files":1,"network":1,"system":1,"disk":1,"memory":1,"process":1,"space":1}
 AgentCore._COMMON_DIRS={"root":"/root","etc":"/etc","var":"/var","usr":"/usr","bin":"/bin","lib":"/lib","opt":"/opt","srv":"/srv","boot":"/boot","sys":"/sys"}
 AgentCore._BOOL_KEYS=["debug","aggressive","stealth","dryRun","trainer","promptOnAttack","promptOnCritical","promptOnAmbiguous","promptOnSlow","promptOnDestructive","promptOnPlan","autoFallback"]
-AgentCore._NUMBER_KEYS=["maxRetries","timeout","maxTargets","maxDepth","outputLevel"]
+AgentCore._NUMBER_KEYS=["maxRetries","timeout","outputLevel"]
+AgentCore._ROOT_WORDS=["root","admin","superuser","administrator","elevated","privileged","sudo","best","highest"]
 AgentCore._ESCALATION_BLACKLIST=["cal","date","uptime","clear","pwd","whoami","hostname","echo"]
+//True if command text asks for elevated/root privileges
+AgentCore._wantsRoot=function(cmd)
+  if not cmd then return false
+  c=lower(str(cmd))
+  for rw in self._ROOT_WORDS;if indexOf(c,rw)!=null then return true;end for
+  return false
+end function
+//Normalize soft NL fillers, keeping an action verb for later match.
+//"grab me a router" -> "grab router" (not bare "router")
+AgentCore._stripSoftFillers=function(cmd)
+  if not cmd then return cmd
+  c=lower(str(cmd))
+  //Parallel lists (longer fillers first). Keep verb so fetch/object gates still match.
+  fillers=["grab me a ","get me a ","fetch me a ","give me a ","grab me ","get me ","fetch me ","give me ","i want a ","i need a ","i want ","i need "]
+  keeps=["grab ","get ","fetch ","get ","grab ","get ","fetch ","get ","get ","get ","get ","get "]
+  i=0
+  n=len(fillers)
+  while i<n
+    f=fillers[i]
+    idx=indexOf(c,f)
+    if idx!=null then return trim(cmd[:idx]+keeps[i]+cmd[idx+len(f):])
+    i+=1
+  end while
+  return cmd
+end function
 AgentCore._SUGGESTIONS=[{"keywords":["list file","show file","display file","ls"],"command":"ls"},{"keywords":["list account","show account","display account","show user"],"command":"list"},{"keywords":["change directory","go to","cd"],"command":"cd"},{"keywords":["show process","list process","ps"],"command":"ps"},{"keywords":["network","interface","ip address","ifconfig"],"command":"ifconfig"},{"keywords":["scan port","port scan","nmap","recon","enumerate"],"command":"nmap"},{"keywords":["connect ssh","ssh into"],"command":"ssh"},{"keywords":["connect ftp","ftp into"],"command":"ftp"},{"keywords":["download","get file","pull","loot"],"command":"scp"},{"keywords":["upload","put file","push"],"command":"scp"},{"keywords":["find file","search file","locate"],"command":"find"},{"keywords":["read file","view file","cat","show content"],"command":"cat"},{"keywords":["edit file","modify file","vi","vim"],"command":"vi"},{"keywords":["remove file","delete file","rm","purge"],"command":"rm"},{"keywords":["copy file","cp"],"command":"cp"},{"keywords":["move file","rename","mv"],"command":"mv"},{"keywords":["make directory","create dir","mkdir"],"command":"mkdir"},{"keywords":["crack password","break password"],"command":"crack"},{"keywords":["exploit","attack","hack","pwn"],"command":"scan"},{"keywords":["escalate","privesc","elevate","become root"],"command":"escalate"},{"keywords":["show history","last commands","what did i run"],"command":"history"}]
 AgentCore._INTENT_MAPPINGS=[{"keywords":["all","hidden"],"flagPatterns":["a"],"desc":"show all/hidden"},{"keywords":["recursive","recursively","subdirectories","tree"],"flagPatterns":["R","r"],"desc":"recursive"},{"keywords":["size","sizes","file size"],"flagPatterns":["s"],"desc":"show sizes"},{"keywords":["long","detailed","details","verbose"],"flagPatterns":["l"],"desc":"long format"},{"keywords":["sort","sorted","order"],"flagPatterns":["S","t"],"desc":"sorting"},{"keywords":["reverse","reversed"],"flagPatterns":["r"],"desc":"reverse order"},{"keywords":["owner","owners","permissions","perms"],"flagPatterns":["l","o"],"desc":"show ownership"},{"keywords":["human readable","readable"],"flagPatterns":["h"],"desc":"human readable"},{"keywords":["only files","files only"],"flagPatterns":["f"],"desc":"files only"},{"keywords":["only directories","directories only","folders only"],"flagPatterns":["d"],"desc":"directories only"},{"keywords":["ports","port scan","services"],"flagPatterns":["p"],"desc":"port scan"},{"keywords":["lan","local network","network"],"flagPatterns":["n","l"],"desc":"LAN scan"},{"keywords":["fast","quick"],"flagPatterns":["f"],"desc":"fast scan"},{"keywords":["verbose","detailed"],"flagPatterns":["v"],"desc":"verbose"},{"keywords":["stealth","silent","quiet"],"flagPatterns":["s","q"],"desc":"stealth/quiet"},{"keywords":["brute","brute force","dictionary"],"flagPatterns":["b","d"],"desc":"brute force"},{"keywords":["overflow","buffer overflow"],"flagPatterns":["o"],"desc":"overflow"},{"keywords":["injection","sql","code"],"flagPatterns":["i"],"desc":"injection"}]
 AgentCore._COMMAND_MAPPINGS=[{"keywords":["list","show files","display files","ls"],"command":"list"},{"keywords":["scan","probe","enumerate"],"command":"scan"},{"keywords":["crack","break","brute"],"command":"crack"},{"keywords":["exploit","attack","compromise"],"command":"exploit"},{"keywords":["decipher","decrypt","decode"],"command":"decipher"},{"keywords":["build","compile"],"command":"build"}]
@@ -208,7 +234,7 @@ AgentCore.setConfig=function(key,value)
       end if
     end if
     //Range validation
-    if key=="maxRetries" or key=="timeout" or key=="maxTargets" or key=="maxDepth" then
+    if key=="maxRetries" or key=="timeout" then
       if value<1 then
         print yellow("Agent: Config '"+key+"' must be at least 1")
         return {"success":false,"error":"Value out of range: minimum is 1"}
@@ -221,18 +247,10 @@ AgentCore.setConfig=function(key,value)
         print yellow("Agent: Config '"+key+"' exceeds reasonable maximum (3600 seconds)")
         return {"success":false,"error":"Value out of range: maximum is 3600"}
       end if
-      if key=="maxTargets" and value>1000 then
-        print yellow("Agent: Config '"+key+"' exceeds reasonable maximum (1000)")
-        return {"success":false,"error":"Value out of range: maximum is 1000"}
-      end if
-      if key=="maxDepth" and value>20 then
-        print yellow("Agent: Config '"+key+"' exceeds reasonable maximum (20)")
-        return {"success":false,"error":"Value out of range: maximum is 20"}
-      end if
-      if key=="outputLevel" and (value<0 or value>2) then
-        print yellow("Agent: Config 'outputLevel' must be 0 (silent), 1 (normal), or 2 (verbose)")
-        return {"success":false,"error":"Value out of range: must be 0-2"}
-      end if
+    end if
+    if key=="outputLevel" and (value<0 or value>2) then
+      print yellow("Agent: Config 'outputLevel' must be 0 (silent), 1 (normal), or 2 (verbose)")
+      return {"success":false,"error":"Value out of range: must be 0-2"}
     end if
   end if
   oldValue=globals.G_agent.config[key]

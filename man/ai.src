@@ -163,11 +163,11 @@ manAi="AI(1)                            X Shell Manual                          
 <b>EXAMPLE:</b>
     <color=#e4ff34># Autonomous Decision Making</color>
     <b>ai you decide how to attack 29.91.110.203</b>
-    Agent autonomously scans and exploits
+    Autonomous scan then exploit (full chain)
     Scores all exploits, executes best first
 
     <b>ai use your judgment to scan 192.168.1.1</b>
-    Agent makes all exploitation decisions
+    Scan-only (goal=scan/recon does not auto-exploit)
 
     <b>ai figure out how to attack 10.0.0.1</b>
     Autonomous scan and exploitation

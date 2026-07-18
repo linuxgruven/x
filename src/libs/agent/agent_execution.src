@@ -219,26 +219,29 @@ AgentExecution._registerHandlers=function
   simpleCommands=self._SIMPLE_COMMANDS
   for cmdType in simpleCommands;globals.G_agent._stepHandlers[cmdType]=@globals.G_agent._handleSimpleCommand;end for
 end function
-//Helper: Check if target is directory and prompt for recursive flag
-AgentExecution._checkRecursiveFlag=function(Obj,command,target,argv)
+//Helper: Check if target is directory and prompt for recursive flag.
+//Returns true/false, or a map with awaitDialog if typed confirm is needed.
+AgentExecution._checkRecursiveFlag=function(Obj,command,target,argv,context=null)
   debug=globals.G_agent.config.debug
   targetFile=Obj.computer.File(target)
   if targetFile and targetFile.is_folder then
     if argv.indexOf("-r")==null and argv.indexOf("-R")==null then
-      if typeof(Gui)=="map" and hasIndex(Gui,"yesNo") then
-        recursive=Gui.yesNo("Apply "+command+" recursively to all contents of "+target+"?",true)
-        if recursive then
-          if debug then print green("[DEBUG] Executor: User confirmed -r flag for "+command)
-          return true
-        else
-          if debug then print green("[DEBUG] Executor: User declined -r flag for "+command)
-          return false
-        end if
-      else
-        //No GUI available, default to recursive
-        if debug then print green("[DEBUG] Executor: Auto-added -r flag (no GUI)")
-        return true
+      skipKey="skipRecursive_"+command
+      if globals.G_agentContext and hasIndex(globals.G_agentContext,skipKey) and globals.G_agentContext[skipKey] then
+        globals.G_agentContext[skipKey]=false
+        want=true
+        if hasIndex(globals.G_agentContext,"promptResponse") then want=globals.G_agentContext.promptResponse
+        return want
       end if
+      resumeCmd=globals.G_agent._resumeCommand(context)
+      if resumeCmd and len(str(resumeCmd))>0 and hasIndex(globals.G_agent,"_beginConfirm") then
+        confirm=globals.G_agent._beginConfirm("Apply "+command+" recursively to all contents of "+target+"?",resumeCmd,skipKey,"yes",false)
+        if confirm then return confirm
+      end if
+      //Fallback: Gui or default yes
+      if typeof(Gui)=="map" and hasIndex(Gui,"yesNo") then return Gui.yesNo("Apply "+command+" recursively to all contents of "+target+"?",true)
+      if debug then print green("[DEBUG] Executor: Auto-added -r flag (no GUI)")
+      return true
     end if
   end if
   return false
@@ -319,8 +322,9 @@ AgentExecution._handleSimpleCommand=function(Obj,step,context)
     push(argv,step.permValue)
     push(argv,step.target)
     if debug then print green("[DEBUG] Built argv with permValue='"+step.permValue+"' and target='"+step.target+"'")
-    //Check if target is a directory and prompt for -r
-    if globals.G_agent._checkRecursiveFlag(Obj,"chmod",step.target,argv) then argv=[step.permValue,"-r",step.target]  //Reorder: permValue, -r, target
+    rec=globals.G_agent._checkRecursiveFlag(Obj,"chmod",step.target,argv,context)
+    if typeof(rec)=="map" and hasIndex(rec,"awaitDialog") then return rec
+    if rec then argv=[step.permValue,"-r",step.target]
     return globals.G_agent._execCommand(Obj,step.command,argv,context)
   end if
   //Special handling for chown (user + target)
@@ -328,8 +332,9 @@ AgentExecution._handleSimpleCommand=function(Obj,step,context)
     push(argv,step.user)
     push(argv,step.target)
     if debug then print green("[DEBUG] Built argv with user='"+step.user+"' and target='"+step.target+"'")
-    //Check if target is a directory and prompt for -r
-    if globals.G_agent._checkRecursiveFlag(Obj,"chown",step.target,argv) then argv=["-r",step.user,step.target]  //Reorder: -r, user, target
+    rec=globals.G_agent._checkRecursiveFlag(Obj,"chown",step.target,argv,context)
+    if typeof(rec)=="map" and hasIndex(rec,"awaitDialog") then return rec
+    if rec then argv=["-r",step.user,step.target]
     return globals.G_agent._execCommand(Obj,step.command,argv,context)
   end if
   //Special handling for chgrp (group + target)
@@ -337,8 +342,9 @@ AgentExecution._handleSimpleCommand=function(Obj,step,context)
     push(argv,step.group)
     push(argv,step.target)
     if debug then print green("[DEBUG] Built argv with group='"+step.group+"' and target='"+step.target+"'")
-    //Check if target is a directory and prompt for -r
-    if globals.G_agent._checkRecursiveFlag(Obj,"chgrp",step.target,argv) then argv=["-r",step.group,step.target]  //Reorder: -r, group, target
+    rec=globals.G_agent._checkRecursiveFlag(Obj,"chgrp",step.target,argv,context)
+    if typeof(rec)=="map" and hasIndex(rec,"awaitDialog") then return rec
+    if rec then argv=["-r",step.group,step.target]
     return globals.G_agent._execCommand(Obj,step.command,argv,context)
   end if
   //Special handling for chog (user + target)
@@ -346,8 +352,9 @@ AgentExecution._handleSimpleCommand=function(Obj,step,context)
     push(argv,step.user)
     push(argv,step.target)
     if debug then print green("[DEBUG] Built argv with user='"+step.user+"' and target='"+step.target+"'")
-    //Check if target is a directory and prompt for -r
-    if globals.G_agent._checkRecursiveFlag(Obj,"chog",step.target,argv) then argv=["-r",step.user,step.target]  //Reorder: -r, user, target
+    rec=globals.G_agent._checkRecursiveFlag(Obj,"chog",step.target,argv,context)
+    if typeof(rec)=="map" and hasIndex(rec,"awaitDialog") then return rec
+    if rec then argv=["-r",step.user,step.target]
     return globals.G_agent._execCommand(Obj,step.command,argv,context)
   end if
   //Special handling for es (IP + port or library) - show man page since it's interactive
@@ -491,30 +498,11 @@ AgentExecution._handleSimpleCommand=function(Obj,step,context)
       end if
     end if
   end if
-  //Smart flag detection: Prompt for -r on chown/chgrp/chmod directories
+  //Smart flag detection: typed confirm for -r on chown/chgrp/chmod directories
   if (step.command=="chown" or step.command=="chgrp" or step.command=="chmod") and hasIndex(step,"target") and step.target then
-    targetPath=step.target
-    //Check if target is a folder
-    targetFile=Obj.computer.File(targetPath)
-    if targetFile and targetFile.is_folder then
-      //Prompt user for recursive flag
-      if argv.indexOf("-r")==null and argv.indexOf("-R")==null then
-        //Check if we have Gui available
-        if typeof(Gui)=="map" and hasIndex(Gui,"yesNo") then
-          recursive=Gui.yesNo("Apply "+step.command+" recursively to all contents of "+step.target+"?",true)
-          if recursive then
-            argv.push("-r")
-            if debug then print green("[DEBUG] Executor: User confirmed -r flag for "+step.command)
-          else
-            if debug then print green("[DEBUG] Executor: User declined -r flag for "+step.command)
-          end if
-        else
-          //No GUI available, default to recursive
-          argv.push("-r")
-          if debug then print green("[DEBUG] Executor: Auto-added -r flag (no GUI)")
-        end if
-      end if
-    end if
+    rec=globals.G_agent._checkRecursiveFlag(Obj,step.command,step.target,argv,context)
+    if typeof(rec)=="map" and hasIndex(rec,"awaitDialog") then return rec
+    if rec and argv.indexOf("-r")==null and argv.indexOf("-R")==null then push(argv,"-r")
   end if
   return globals.G_agent._execCommand(Obj,step.command,argv,context)
 end function

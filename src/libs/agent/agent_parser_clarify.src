@@ -1,0 +1,195 @@
+// =============================================================================
+// AGENT_PARSER_CLARIFY
+// No-action clarification, directCommand fallback, and final fields phase.
+// Companion: agent_parser_fields.src (action-specific extraction)
+// =============================================================================
+//No-action clarification / directCommand fallback.
+AgentParser._extractNoActionPhase=function(Obj,command,cmd,parsed,headlessMode,debug,ips)
+  if ips==null then ips=[]
+  //Check if a service was implied (router, ssh, ftp, etc.)
+  hasService=false
+  impliedService=null
+  if indexOf(cmd,"router")!=null then
+    hasService=true
+    impliedService="router"
+  else if indexOf(cmd,"ssh")!=null then
+    hasService=true
+    impliedService="ssh"
+  else if indexOf(cmd,"ftp")!=null then
+    hasService=true
+    impliedService="ftp"
+  else if indexOf(cmd,"http")!=null or indexOf(cmd,"web")!=null then
+    hasService=true
+    impliedService="http"
+  else if indexOf(cmd,"smtp")!=null or indexOf(cmd,"mail")!=null then
+    hasService=true
+    impliedService="smtp"
+  end if
+  //Special case: if we have an IP and service, infer scan action
+  if len(ips)>0 and hasService then
+    parsed.action="scan"
+    parsed.tool="scan"
+    parsed.service=impliedService
+    parsed.scanMode="ip"
+    parsed.summary="Scan "+impliedService+" on "+ips[0]
+    //Detect access type (shell, file, computer)
+    if indexOf(cmd,"shell")!=null then
+      parsed.accessType="shell"
+    else if indexOf(cmd,"file")!=null then
+      parsed.accessType="file"
+    else if indexOf(cmd,"computer")!=null then
+      parsed.accessType="computer"
+    else
+      parsed.accessType="shell"  //default
+    end if
+  else if len(ips)>0 then
+    //Just an IP with no service
+    //Public IPs get a prompt, private IPs default to scan
+    if globals.G_agent._isPrivateIp(ips[0]) then
+      //Private IP - scan that specific target
+      parsed.action="scan"
+      parsed.tool="scan"
+      parsed.scanMode="ip"
+      parsed.summary="Scan "+ips[0]
+    else
+      //Public IP - prompt for action
+      if len(ips)>0 then
+        parsed.action="promptIpAction"
+        parsed.target=ips[0]
+        parsed.summary="What do you want to do with "+ips[0]+"?"
+        parsed.defaultAction="nmap"
+        parsed.options=["nmap","scan","recon"]
+      else
+        parsed.action="directCommand"
+        parsed.command=command
+        parsed.summary="Execute: "+command
+      end if
+    end if
+  else
+    //No action detected - try knowledge auto-suggest, else typed dialog
+    if globals.G_agent.config.promptOnAmbiguous then
+      outLvl=globals.G_agent.config.outputLevel
+      //High confidence: knowledge cache pick -> re-parse with action prepended
+      knowledgeHit=globals.G_agent._chooseBestCommand(command,{})
+      if knowledgeHit and typeof(knowledgeHit)=="string" and len(knowledgeHit)>0 then
+        alreadyPrefixed=(lower(command)==lower(knowledgeHit)) or (indexOf(lower(command),lower(knowledgeHit)+" ")==0)
+        if not alreadyPrefixed then
+          if outLvl>=1 then print skyblue("Agent: Interpreting as '"+knowledgeHit+"' from knowledge")
+          return globals.G_agent._parseCommand(Obj,knowledgeHit+" "+command,headlessMode)
+        end if
+      end if
+      choices=["scan","exploit","crack","fetch","show","find"]
+      //Seed options with suggestCommand (knowledge or static table)
+      suggested=globals.G_agent.suggestCommand(command)
+      if suggested and typeof(suggested)=="string" and len(suggested)>0 then
+        ranked=[suggested]
+        for c in choices
+          if lower(c)!=lower(suggested) then push(ranked,c)
+        end for
+        choices=ranked
+        question="I'm not sure what you want to do. Suggested: "+suggested
+      else
+        question="I'm not sure what you want to do."
+      end if
+      globals.G_agent.startDialog("ambiguousAction",question,choices,{
+        "mode":"prependAction",
+        "originalCommand":command,
+        "suggested":suggested
+      })
+      return {"awaitDialog":true,"summary":"Awaiting clarification - reply with ai [option]"}
+    end if
+    parsed.action="directCommand"
+    parsed.command=command
+    parsed.summary="Execute: "+command
+  end if
+  return parsed
+end function
+AgentParser._extractFieldsPhase=function(Obj,command,cmd,parsed,actionFound,headlessMode,debug)
+  //Must extract here: formerly shared locals from monolithic _parseCommand
+  ips=globals.G_agent._extractIps(cmd)
+  if hasIndex(parsed,"action") then
+    parsed=self._extractActionPhase(Obj,command,cmd,parsed,headlessMode,debug,ips)
+  end if
+  if not actionFound then
+    result=self._extractNoActionPhase(Obj,command,cmd,parsed,headlessMode,debug,ips)
+    if hasIndex(result,"awaitDialog") or hasIndex(result,"error") then return result
+    //Knowledge re-parse returns a complete result (raw differs from original command)
+    if hasIndex(result,"raw") and result.raw!=command then return result
+    parsed=result
+  end if
+  //Detect goal using pattern map
+  for goalName in globals.G_agent._goalPatterns.indexes
+    goalPattern=globals.G_agent._goalPatterns[goalName]
+    for keyword in goalPattern.keywords
+      if indexOf(cmd,keyword)!=null then
+        parsed.goal=goalName
+        //Only add suffix if summary doesn't already mention the goal
+        if parsed.summary then
+          //Check if summary already mentions root access, admin, etc.
+          summaryLower=lower(parsed.summary)
+          suffixLower=lower(goalPattern.suffix)
+          //Don't add suffix if summary already contains "root access", "admin access", "user access", "guest access", "shell access", etc.
+          hasAccess=false
+          if indexOf(summaryLower,"root access")!=null then
+            hasAccess=true
+          else if indexOf(summaryLower,"admin access")!=null then
+            hasAccess=true
+          else if indexOf(summaryLower,"user access")!=null then
+            hasAccess=true
+          else if indexOf(summaryLower,"guest access")!=null then
+            hasAccess=true
+          else if indexOf(summaryLower,"shell access")!=null then
+            hasAccess=true
+          end if
+          if not hasAccess then parsed.summary=parsed.summary+" "+goalPattern.suffix
+        end if
+        break
+      end if
+    end for
+    if hasIndex(parsed,"goal") then break
+  end for
+  //Pronoun with no prior target ("exploit that") - ask via typed dialog instead of guessing
+  if hasIndex(parsed,"unresolvedContext") and parsed.unresolvedContext and (not hasIndex(parsed,"target") or not parsed.target) then
+    if globals.G_agent.config.promptOnAmbiguous and hasIndex(parsed,"action") and parsed.action then
+      choices=globals.G_agent._suggestTargetIps(Obj)
+      suggested=null
+      if len(choices)>0 then suggested=choices[0]
+      question="Which target for "+parsed.action+"? (reply with a listed option or type an IP)"
+      globals.G_agent.startDialog("needTarget",question,choices,{
+        "mode":"setTarget",
+        "action":parsed.action,
+        "originalCommand":command,
+        "suggested":suggested
+      })
+      return {"awaitDialog":true,"summary":"Awaiting target - reply with ai [option] or an IP"}
+    end if
+    return {"error":"No prior target for 'that'/'it'. Specify an IP (e.g. ai exploit 192.168.1.2)."}
+  end if
+  //If no target was found but action requires one, try to use current shell context
+  if not hasIndex(parsed,"target") or not parsed.target then
+    needsTargetActions=["fetch","scan","exploit","attack","crack","recon"]
+    if hasIndex(parsed,"action") then
+      for act in needsTargetActions
+        if parsed.action==act then
+          //Skip setting default target if scan has -r flag (random scan)
+          if parsed.action=="scan" and hasIndex(parsed,"flag") and parsed.flag=="-r" then
+            if debug then print green("[DEBUG] Agent: Scan with -r flag, skipping default target")
+            break
+          end if
+          //Try to get target from Obj context
+          if hasIndex(Obj,"net") and hasIndex(Obj.net,"router") then
+            parsed.target=Obj.net.router.public_ip
+            if debug then print green("[DEBUG] Agent: No target specified, using current router: "+parsed.target)
+          else if hasIndex(Obj,"host") then
+            parsed.target=Obj.host
+            if debug then print green("[DEBUG] Agent: No target specified, using current host: "+parsed.target)
+          end if
+          break
+        end if
+      end for
+    end if
+  end if
+  //Add target to summary if found
+  if hasIndex(parsed,"target") and hasIndex(parsed,"summary") and indexOf(parsed.summary,parsed.target)==null then parsed.summary=parsed.summary+" on "+parsed.target
+  return parsed
+end function

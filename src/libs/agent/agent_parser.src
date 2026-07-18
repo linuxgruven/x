@@ -192,6 +192,8 @@ AgentParser._parseCommand=function(Obj,command,headlessMode=false)
   debug=globals.G_agent.config.debug
   //Validate input
   if not command or typeof(command)!="string" then return {"error":"Invalid command input"}
+  //Normalize soft fillers: "grab me a random router" -> "grab a random router"
+  if hasIndex(globals.G_agent,"_stripSoftFillers") then command=globals.G_agent._stripSoftFillers(command)
   cmd=lower(trim(command))
   if cmd=="" then return {"error":"Empty command"}
   parsed={}
