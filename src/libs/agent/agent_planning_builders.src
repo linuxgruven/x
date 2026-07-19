@@ -7,6 +7,7 @@
 //Autonomous decision-making
 AgentPlanning._buildAutonomousPlan=function(Obj,parsed,plan)
   debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
   target=parsed.target
   if not target then
     push(plan.steps,{"type":"error","description":"Need target for autonomous decision-making"})
@@ -51,11 +52,74 @@ AgentPlanning._buildAutonomousPlan=function(Obj,parsed,plan)
     if debug then print green("[DEBUG] plan.context exists: "+hasIndex(plan,"context"))
     if hasIndex(parsed,"publicIP") and debug then print green("[DEBUG] Using publicIP "+parsed.publicIP+" for scanning")
   end if
+  //LAN computer/shell via public router: use man-learned scan bounce flag (ai learn scan -> --b)
+  if requirements and hasIndex(requirements,"targetIP") and is_lan_ip(requirements.targetIP) then
+    lanIP=requirements.targetIP
+    publicIP=null
+    if hasIndex(parsed,"publicIP") and parsed.publicIP and not is_lan_ip(parsed.publicIP) then publicIP=parsed.publicIP
+    if not publicIP and scanTarget and not is_lan_ip(scanTarget) then publicIP=scanTarget
+    objectType="computer"
+    if hasIndex(requirements,"objectType") then objectType=requirements.objectType
+    if publicIP and (objectType=="computer" or objectType=="shell") then
+      needRoot=false
+      if hasIndex(requirements,"privilege") and requirements.privilege=="root" then needRoot=true
+      //Consult learned man page for the bounce -- flag
+      bounceFlag="--b"
+      if hasIndex(globals.G_agent,"_getScanFlagForIntent") then bounceFlag=globals.G_agent._getScanFlagForIntent("bounce")
+      if not bounceFlag then bounceFlag="--b"
+      descStr="scan "+bounceFlag+" -p "+publicIP+" -l "+lanIP
+      if needRoot then descStr="Get root "+objectType+" via "+descStr else descStr="Get "+objectType+" via "+descStr
+      step={"type":"getObject","publicIP":publicIP,"lanIP":lanIP,"objectType":objectType,"isHeadless":false,"needRoot":needRoot,"description":descStr,"tool":"scan","flag":bounceFlag}
+      //Attach scan man knowledge for the handler
+      if hasIndex(plan,"commandKnowledge") then step.commandKnowledge=plan.commandKnowledge
+      if hasIndex(parsed,"continuationCommands") then step.continuationCommands=parsed.continuationCommands
+      if hasIndex(parsed,"needsInteractiveShell") and parsed.needsInteractiveShell then step.needsInteractiveShell=true
+      if outLvl>=1 then print skyblue("Agent: Using man scan flag "+bounceFlag+" for LAN bounce")
+      push(plan.steps,step)
+      return plan
+    end if
+  end if
+  //Public router shell (e.g. "root router shell on 1.2.3.4"): use scanCustom fetch, not scan+exploit.
+  //Generic exploit hard-filters root-only and often returns nothing; fetchShell gets any shell then su.
+  if requirements and hasIndex(requirements,"libraryType") and requirements.libraryType=="router" then
+    wantShell=true
+    if hasIndex(requirements,"objectType") and requirements.objectType!="shell" then wantShell=false
+    lanOnly=hasIndex(requirements,"targetIP") and is_lan_ip(requirements.targetIP)
+    pubTarget=target
+    if hasIndex(parsed,"publicIP") and parsed.publicIP and not is_lan_ip(parsed.publicIP) then
+      pubTarget=parsed.publicIP
+    else if scanTarget and not is_lan_ip(scanTarget) then
+      pubTarget=scanTarget
+    end if
+    if wantShell and not lanOnly and pubTarget and not is_lan_ip(pubTarget) then
+      needRoot=false
+      if hasIndex(requirements,"privilege") and requirements.privilege=="root" then needRoot=true
+      descStr="Fetch router shell on "+pubTarget
+      if needRoot then descStr="Fetch root router shell on "+pubTarget
+      step={"type":"fetchShell","target":pubTarget,"service":"router","objectType":"s","needRoot":needRoot,"isHeadless":false,"description":descStr}
+      if hasIndex(plan,"commandKnowledge") then step.commandKnowledge=plan.commandKnowledge
+      if hasIndex(parsed,"continuationCommands") then step.continuationCommands=parsed.continuationCommands
+      if hasIndex(parsed,"needsInteractiveShell") and parsed.needsInteractiveShell then step.needsInteractiveShell=true
+      if requirements then step.requirements=requirements
+      if outLvl>=1 then print skyblue("Agent: Using scanCustom router shell fetch for "+pubTarget)
+      push(plan.steps,step)
+      return plan
+    end if
+  end if
   //If we have specific requirements (especially LAN targets), skip command selection and go straight to exploit
   if requirements and (hasIndex(requirements,"targetIP") or hasIndex(requirements,"privilege") or hasIndex(requirements,"objectType")) then
     //Build scan + exploit steps for requirement-based attacks
     step1={"type":"scan","target":scanTarget,"flag":"-n","autonomous":true,"description":"Scan "+scanTarget}
     step2={"type":"exploit","target":target,"autonomous":true,"description":"Exploit "+target}
+    //Keep router/public IP on steps - target alone is often the LAN goal
+    if hasIndex(parsed,"publicIP") and parsed.publicIP then
+      step1.publicIP=parsed.publicIP
+      step2.publicIP=parsed.publicIP
+    else if scanTarget and not is_lan_ip(scanTarget) then
+      step1.publicIP=scanTarget
+      step2.publicIP=scanTarget
+    end if
+    if hasIndex(parsed,"lanIP") and parsed.lanIP then step2.lanIP=parsed.lanIP
     if requirements then
       step1.requirements=requirements
       step2.requirements=requirements
@@ -77,6 +141,14 @@ AgentPlanning._buildAutonomousPlan=function(Obj,parsed,plan)
   if not goal or goal=="compromise" or goal=="attack" then
     step1={"type":"scan","target":scanTarget,"flag":"-n","autonomous":true,"description":"Scan "+scanTarget}
     step2={"type":"exploit","target":target,"autonomous":true,"description":"Exploit "+target}
+    if hasIndex(parsed,"publicIP") and parsed.publicIP then
+      step1.publicIP=parsed.publicIP
+      step2.publicIP=parsed.publicIP
+    else if scanTarget and not is_lan_ip(scanTarget) then
+      step1.publicIP=scanTarget
+      step2.publicIP=scanTarget
+    end if
+    if hasIndex(parsed,"lanIP") and parsed.lanIP then step2.lanIP=parsed.lanIP
     if requirements then
       step1.requirements=requirements
       step2.requirements=requirements
@@ -146,6 +218,7 @@ end function
 AgentPlanning._buildKnowledgePlan=function(Obj,parsed,plan);push(plan.steps,{"type":"knowledge","command":parsed.knowledgeCommand,"description":"Get information about "+parsed.knowledgeCommand});return plan;end function
 AgentPlanning._buildGetObjectPlan=function(Obj,parsed,plan)
   debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
   objectType="computer"
   if hasIndex(parsed,"objectType") then objectType=parsed.objectType
   isHeadless=false
@@ -167,11 +240,16 @@ AgentPlanning._buildGetObjectPlan=function(Obj,parsed,plan)
   plan.context=context
   //Check if we have both IPs
   if hasIndex(parsed,"publicIP") and hasIndex(parsed,"lanIP") then
-    //Have both - direct bounce attack
-    descStr="Get "+objectType+" on "+parsed.lanIP+" via router bounce from "+parsed.publicIP
-    if needRoot then descStr="Get root "+objectType+" on "+parsed.lanIP+" via router bounce from "+parsed.publicIP
-    step={"type":"getObject","publicIP":parsed.publicIP,"lanIP":parsed.lanIP,"objectType":objectType,"isHeadless":isHeadless,"needRoot":needRoot,"description":descStr}
+    //Have both - bounce via man-learned scan flag (ai learn scan -> --b)
+    bounceFlag="--b"
+    if hasIndex(globals.G_agent,"_getScanFlagForIntent") then bounceFlag=globals.G_agent._getScanFlagForIntent("bounce")
+    if not bounceFlag then bounceFlag="--b"
+    descStr="scan "+bounceFlag+" -p "+parsed.publicIP+" -l "+parsed.lanIP
+    if needRoot then descStr="Get root "+objectType+" via "+descStr else descStr="Get "+objectType+" via "+descStr
+    step={"type":"getObject","publicIP":parsed.publicIP,"lanIP":parsed.lanIP,"objectType":objectType,"isHeadless":isHeadless,"needRoot":needRoot,"description":descStr,"tool":"scan","flag":bounceFlag}
+    if hasIndex(plan,"commandKnowledge") then step.commandKnowledge=plan.commandKnowledge
     if needsInteractiveShell then step.needsInteractiveShell=needsInteractiveShell
+    if outLvl>=1 then print skyblue("Agent: Using man scan flag "+bounceFlag+" for LAN bounce")
     push(plan.steps,step)
   else if hasIndex(parsed,"lanIP") and not hasIndex(parsed,"publicIP") then
     //Only have LAN IP - need to scan for routers first

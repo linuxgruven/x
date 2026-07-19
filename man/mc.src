@@ -11,7 +11,8 @@ manMc="MC(1)                            X Shell Manual                          
     opening files, editing content, and performing file operations. Supports
     both single panel and dual panel modes for side-by-side directory viewing.
     Features include sorting, filtering, hidden file display, permission
-    management, and more.
+    management, and more. If using a shell, selecting a binary offers to launch
+    it (with optional params). Select no for the usual file menu.
 <b>OPTIONS</b>
     <b>-d</b> - Start in dual panel mode
       Launch with two side-by-side directory panels for easy

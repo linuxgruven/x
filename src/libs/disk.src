@@ -3,48 +3,57 @@
 // Filesystem library; analysis, management, synchronization, and disk utility operations.
 // =============================================================================
 Disk={}
+//Skip copy when -u and destination already matches source (size/content).
+Disk.rsyncSkipUpdate=function(srcFile,dstFile)
+  if not srcFile or not dstFile then return false
+  if is_folder(srcFile) or is_folder(dstFile) then return false
+  if is_binary(srcFile) then return size(dstFile)>=size(srcFile)
+  srcContent=get_content(srcFile)
+  dstContent=get_content(dstFile)
+  if srcContent==null or dstContent==null then return false
+  return srcContent==dstContent
+end function
+//Apply source owner/group/mode onto destination (-a archive).
+Disk.rsyncPreserveMeta=function(srcFile,dstFile)
+  if not srcFile or not dstFile then return
+  mode=Io.octal(permissions(srcFile))
+  if mode and len(mode)>3 then mode=mode[len(mode)-3:]
+  if mode and len(mode)==3 then Command.chmodFile(dstFile,mode,false)
+  o=owner(srcFile)
+  g=group(srcFile)
+  if o then set_owner(dstFile,o,false)
+  if g then set_group(dstFile,g,false)
+end function
 Disk.rsyncDir=function(Obj,srcFolder,dstPath,argv)
   dstFolder=Io.getFileObj(Obj,dstPath)
   if not dstFolder then
     parent=parent_path(dstPath)
     parentFolder=Io.getFileObj(Obj,parent)
     if not parentFolder then return Error.set("Destination parent does not exist: "+parent)
-    //Create destination folder
-    if not create_folder(Obj.computer,parent,name(srcFolder)) then return Error.set("Failed to create destination folder: "+dstPath)
+    //Create destination using dst path basename (supports rename sync)
+    dstParts=split(dstPath,"/")
+    dstName=dstParts[len(dstParts)-1]
+    if not dstName then dstName=name(srcFolder)
+    if not create_folder(Obj.computer,parent,dstName) then return Error.set("Failed to create destination folder: "+dstPath)
     dstFolder=Io.getFileObj(Obj,dstPath)
   end if
   if not is_folder(dstFolder) then return Error.set("Destination is not a folder: "+path(dstFolder))
-  //Sync all files in source folder
-  for f in get_files(srcFolder)+get_folders(srcFolder)
+  //Sync files only; directories handled recursively below
+  for f in get_files(srcFolder)
     if not has_permission(f,"r") then continue
     dstFilePath=path(dstFolder)+"/"+name(f)
     dstFile=Io.getFileObj(Obj,dstFilePath)
     shouldCopy=true
-    if dstFile and argv.u then
-      //Update mode: skip if destination is newer or same
-      //For text files, check character count; for binary, check file size
-      if is_binary(f) then
-        if size(dstFile)>=size(f) then shouldCopy=false
-      else
-        //Text file - compare character counts and content
-        srcContent=get_content(f)
-        dstContent=get_content(dstFile)
-        if srcContent!=null and dstContent!=null then
-          srcLen=len(srcContent)
-          dstLen=len(dstContent)
-          //If both are empty (length 0), skip copy
-          if srcLen==0 and dstLen==0 then
-            shouldCopy=false
-          else if srcLen==dstLen and srcContent==dstContent then
-            shouldCopy=false
-          end if
-        end if
-      end if
-    end if
+    if dstFile and argv.u and Disk.rsyncSkipUpdate(f,dstFile) then shouldCopy=false
     if shouldCopy then
       if argv.v then Info.info("  Copying file: "+name(f))
       result=copy(f,path(dstFolder),name(f))
-      if result!=1 and argv.v then Info.error("Failed to copy "+name(f)+": "+result)
+      if result!=1 then
+        if argv.v then Info.error("Failed to copy "+name(f)+": "+result)
+      else if argv.a then
+        dstFile=Io.getFileObj(Obj,dstFilePath)
+        Disk.rsyncPreserveMeta(f,dstFile)
+      end if
     end if
   end for
   //Recursively sync subdirectories
@@ -55,21 +64,9 @@ Disk.rsyncDir=function(Obj,srcFolder,dstPath,argv)
     result=self.rsyncDir(Obj,d,dstSubPath,argv)
     if result isa Error and argv.v then Info.error("Failed to sync directory "+name(d))
   end for
-  //Delete source files if --delete flag is set
-  if argv.delete then
-    srcNames={}
-    for f in get_files(srcFolder)+get_folders(srcFolder);srcNames[name(f)]=1;end for
-    for f in get_files(dstFolder)+get_folders(dstFolder)
-      if not hasIndex(srcNames,name(f)) then
-        if argv.v then Info.info("  Deleting: "+name(f))
-        if is_folder(f) then
-          f.delete
-        else
-          if has_permission(f,"w") then f.delete
-        end if
-      end if
-    end for
-  end if
+  //Note: --delete means remove source after transfer (handled by Command.rsync),
+  //not mirror-delete extras on the destination.
+  if argv.a then Disk.rsyncPreserveMeta(srcFolder,dstFolder)
   return true
 end function
 Disk.analyzeFileSystem=function(Obj,startPath=null)

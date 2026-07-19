@@ -17,39 +17,54 @@ manProxy="PROXY(1)                         X Shell Manual                       
     <b>proxy -h -c</b> COUNT
     <b>proxy -d</b><b> (-r) (-i</b> ID <b>| -n</b> NAME<b>)</b>
 <b>DESCRIPTION</b>
-    If supplied the (-s) flag will enable the use of shells.
-    On initial setup you will be prompted for an end point, use this if you need to
-    end at a specific IP. If you do not need to end at a specific IP, just enter
-    n. Once a connection is established will return an active shell. 
-    All the logs are wiped from the inital connection to the last connection.
+    Two chain styles:
+      <b>SSH chains</b> (<b>-a</b>/<b>-p</b>/<b>-m</b>/<b>-x</b>/<b>-r</b>): connect hop-to-hop
+        with <b>connect service</b> using ip:port:user:password. Not router bounces.
+      <b>Router bounce</b> (<b>-q</b>/<b>-h</b>): exploit random routers for shell hops.
+
+    If supplied the (-s) flag will enable shell exploits while farming for <b>-r</b>.
+    On initial setup for SSH chains you will be prompted for an end point; use this
+    if you need to end at a specific IP. If you do not need that, enter n. Once the
+    chain connects, x is deployed on the endpoint and a registered <b>PROXY</b>
+    session starts, with <b>hops</b> available for multi-hop chains. All logs are
+    wiped from the first hop to the last.
     Create proxy.dat using vi. Once inside of vi issue the ne command. ne proxy.dat
     proxy.dat format is as follows: ip:port:user:password, one per line and DO not
-    forget the : separator. Switches -p -m and -r will accept y to skip prompts.
-    Using proxy -q in conjunction with config -y will save a proxy file in your data
+    forget the : separator. Use the <b>yes</b> command to skip prompts for -p/-m/-r,
+    or pass trailing <b>yes</b> (e.g. <b>proxy -r 5 yes</b>) to enable the same flag.
+    Using proxy -q with config -y saves a proxy file in your data
     folder. If x should crash or something happens to the connection, you can
     you can instantly re-establish the connection using the proxy file by running
-    proxy -q again. If you need more that one quick proxy hop just use the -h flag.
+    proxy -q again. If you need more that one quick router hop just use the -h flag.
 <b>OPTIONS</b>
-    <b>-a</b> - Standard Proxy
-      Starts a proxy chain using either proxy.dat or Map.conf. Will favor proxy.dat.
+    <b>-a</b> [yes] - Standard Proxy (SSH)
+      Starts an SSH proxy chain using either proxy.dat or Map.conf. Will favor proxy.dat.
+      Trailing <b>yes</b> (or run <b>yes</b> first) skips endpoint/cache prompts.
 
-    <b>-x</b> - Combined Proxy
-      Combines IPs from both proxy.dat and Map.conf.
+    <b>-x</b> [yes] - Combined Proxy (SSH)
+      Combines IPs from both proxy.dat and Map.conf into an SSH chain.
+      Trailing <b>yes</b> (or run <b>yes</b> first) skips endpoint/cache prompts.
 
-    <b>-q</b> - Quick Proxy
-      Starts a quick router single hop proxy.
+    <b>-q</b> - Quick Proxy (router bounce)
+      Starts a quick single-hop proxy by exploiting a random router.
 
     <b>-c</b> - Count Hops
       Returns an IP address count from the proxy chain(s).
 
-    <b>-p</b> - Proxy.dat
-      Starts a proxy chain using proxy.dat.
+    <b>-p</b> [yes] - Proxy.dat (SSH)
+      Starts an SSH proxy chain using proxy.dat credentials.
+      Trailing <b>yes</b> (or run <b>yes</b> first) skips endpoint/cache prompts.
 
-    <b>-m</b> - Map.conf
-      Starts a proxy chain using Map.conf.
+    <b>-m</b> [yes] - Map.conf (SSH)
+      Starts an SSH proxy chain using Map.conf credentials.
+      Trailing <b>yes</b> (or run <b>yes</b> first) skips endpoint/cache prompts.
 
-    <b>-r COUNT (-s)</b> - Random Chain
-      Will fetch [COUNT] of random ips to use as a proxy chain.
+    <b>-r COUNT (-s) [yes]</b> - Random Chain (SSH)
+      Farms [COUNT] random hosts for root SSH passwords, then builds an SSH
+      hop chain (not router bounces). Deploys x and enters a registered PROXY
+      session. Use <b>hops</b> to view/access hops. Pass <b>-s</b> to also try
+      shell exploits while farming. Run <b>yes</b> first, or trailing <b>yes</b>,
+      to skip endpoint/cache prompts.
 
     <b>-n</b> - New Map
       Creates a new empty Map.conf file. Will overwrite your existing
@@ -64,10 +79,10 @@ manProxy="PROXY(1)                         X Shell Manual                       
       your current directory. If a name (NAME) is passed then (NAME) will
       be used instead of map_ips.dat
 
-    <b>-h -c COUNT</b> - Hop Count
-      Use to specify the number of hops [COUNT] for the proxy chain. If 1 is
-      passed for the -c flag then will use proxy -q. You will also have access
-      to the hops command.
+    <b>-h -c COUNT</b> - Hop Count (router bounce)
+      Build a [COUNT]-hop chain by exploiting random routers (not SSH). If 1 is
+      passed for -c then uses proxy -q. You will also have access to the hops
+      command.
 
     <b>-d (-r) (-i ID | -n NAME)</b> - Decoy
       Create a decoy to catch crashes. Use decoy to absorb crashes when using
@@ -82,12 +97,20 @@ manProxy="PROXY(1)                         X Shell Manual                       
     <b>proxy -a</b>
     Start proxy chain with proxy.dat or Map.conf
 
-    <b>proxy -p y</b>
-    Start proxy.dat chain, skip prompts
+    <b>yes</b>
+    <b>proxy -p</b>
+    Start proxy.dat chain (yes skips prompts)
+
+    <b>proxy -p yes</b>
+    Same with trailing yes
 
     <color=#e4ff34># Random Chain</color>
-    <b>proxy -r 5 y</b>
-    Random chain with 5 hops
+    <b>yes</b>
+    <b>proxy -r 5</b>
+    Random chain with 5 hops (yes skips prompts)
+
+    <b>proxy -r 5 yes</b>
+    Same with trailing yes
 
     <b>proxy -h -c 10</b>
     Create 10-hop proxy chain
@@ -117,4 +140,4 @@ manProxy="PROXY(1)                         X Shell Manual                       
     <b>proxy -d -r</b>
     Remove and recreate decoy
 <b>SEE ALSO</b>
-    <b>hops</b>, <b>pivot</b>"
+    <b>hops</b>, <b>pivot</b>, <b>yes</b>"

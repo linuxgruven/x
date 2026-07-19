@@ -1031,8 +1031,15 @@ Command.fileCallbacks=function(Obj)
     transLog=function(arg);Log.transLog(Obj);end function
 		logx=function(arg);Log.logX(Obj);end function
 		logc=function(arg);Log.logC(Obj);end function
-		boot=function(arg);if not arg then return Attack.boot(Obj);if arg[0]=="-y" then Attack.boot(Obj,true) else Attack.boot(Obj);end function
-		system=function(arg);if not arg then return Attack.system(Obj);if arg[0]=="-y" then Attack.system(Obj,true) else Attack.system(Obj);end function
+		boot=function(arg)
+      //Trailing yes enables session yes (same as running the yes command)
+      if arg and len(arg)>0 and lower(str(arg[0]))=="yes" then globals.G_auto_yes=true
+      Attack.boot(Obj,Gui.skipConfirm(false))
+    end function
+		system=function(arg)
+      if arg and len(arg)>0 and lower(str(arg[0]))=="yes" then globals.G_auto_yes=true
+      Attack.system(Obj,Gui.skipConfirm(false))
+    end function
 		proxyLogs=function(arg)
 			m=Proxy.getMapConf(Obj).accounts.values
 			if not m then return Info.info("No systems in Map.conf. Run [ get -m (count) ] to add systems to Map.conf")

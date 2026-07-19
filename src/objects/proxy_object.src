@@ -318,8 +318,10 @@ ProxyObject.run=function(this,ex,restoreState=null)
     _p.addArgument("y",false,"flag")
     argv=_p.parseArgs("proxy",argv)
     if argv isa Error then return argv
-    //Prompt for confirmation unless -n or -y flag provided
-    if not argv.n and not argv.y then
+    //Prompt for confirmation unless -n, -y, or session `yes`
+    if argv.n then
+      //explicit no - still exit without asking
+    else if not Gui.skipConfirm(argv.y) then
       if not Gui.yesNo("Are you sure you want to exit your proxy?") then return
     end if
     //Clear proxy chain state

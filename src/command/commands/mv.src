@@ -29,12 +29,13 @@ Command.mv=function(Obj,argv)
     if not has_permission(sourceObj,"r") and not has_permission(sourceObj,"w") then return Info.error("Permission denied for : "+path(sourceObj))
     if Gui.yesNo("Would you like to give "+white(name(sourceObj))+" a new name?",false) then
       newName=Gui.input({"text":"Enter a new name","default":name(sourceObj)})
+      if newName==null then return Error.set("No name specified")
     else
       // Handle root directory special case (rename "/" to "root")
       if path(sourceObj)=="/" then newName="root" else newName=name(sourceObj)
     end if
-    destObj=Io._getFile(Obj,argv.rest[1])
-    if destObj isa Error then return destObj
+    destObj=Io.folder(Obj,Obj.dir.current,"Select the destination directory:")
+    if destObj isa Warning then return destObj
     result=move(sourceObj,path(destObj),newName)
     if result!=1 then Info.error(result)
     return

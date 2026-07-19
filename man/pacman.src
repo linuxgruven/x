@@ -77,8 +77,9 @@ manPacman="PACMAN(1)                        X Shell Manual                      
     <b>-Sy -l</b> - Sync Local Exploits
       Sync exploit database, targets local libraries.
 
-    <b>-Su</b> - System Upgrade
+    <b>-Su</b> (-y) - System Upgrade
       Upgrade system by installing or upgrading to latest versions.
+      <b>-y</b> skips the continue prompt (or run <b>yes</b> first).
 
     <b>setup</b> - Setup Pacman
       Setup default apt directory and offer to find random repository.
@@ -130,6 +131,10 @@ manPacman="PACMAN(1)                        X Shell Manual                      
     Search for package
 
     <b>pacman -Su -y -p lib -i lib</b>
-    Upgrade with yes flag
+    Upgrade with -y flag
+
+    <b>yes</b>
+    <b>pacman -Su -p lib -i lib</b>
+    Same via session auto-yes
 <b>SEE ALSO</b>
-    <b>make</b>, <b>build</b>, <b>scan</b>"
+    <b>make</b>, <b>build</b>, <b>scan</b>, <b>yes</b>"

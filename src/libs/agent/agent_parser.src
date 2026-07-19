@@ -6,8 +6,9 @@ AgentParser={}
 AgentParser._CONFIG_KEYWORDS=["aggressive","stealth","dryRun","debug","trainer","promptOnAttack","promptOnCritical","promptOnPlan","outputLevel"]
 AgentParser._LEGACY_ALIASES={"verbose":"outputLevel","quiet":"outputLevel"}
 AgentParser._AUTONOMOUS_PATTERNS=["decide how","figure out","choose your own","think for yourself","you decide","your choice","use your judgment","be creative"]
-AgentParser._CONDITIONAL_PATTERNS=["if","then","else","otherwise","or try","fallback","on failure","failing that","if it works","on success","if successful"]
-AgentParser._EXCLUDE_KEYWORDS=["not from","but not","except","exclude","not a","no","without"]
+//Keep phrases long enough to avoid substring false positives (e.g. "if" inside "specific")
+AgentParser._CONDITIONAL_PATTERNS=[" if "," then "," else ","otherwise","or try","fallback","on failure","failing that","if it works","on success","if successful"]
+AgentParser._EXCLUDE_KEYWORDS=["not from","but not","except","exclude","not a","without"]
 AgentParser._KNOWLEDGE_PATTERNS=["what do you know about","tell me about","what is","what's","explain","info on","info about","information about","help with","describe"]
 AgentParser._NUMBER_WORDS={"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,"ten":10,"twenty":20,"thirty":30,"forty":40,"fifty":50}
 //Parse config commands (enable/disable settings)

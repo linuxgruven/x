@@ -63,25 +63,49 @@ AgentCommandRegistry.matchQuery=function(queryWords)
 end function
 //Map parsed flag->description into semantic keys used by the executor (_FLAG_KEYWORDS)
 //Keys: randomIP, localhost, publicIP, recursive, force, verbose, quiet, all, port, pattern, count
+//Plus scan -- intents: bounce, exploitSearch, customLocal, customRemote, lanNetwork (full flag strings)
 AgentCommandRegistry._mapSemanticFlags=function(flagsMap)
   if not flagsMap then return {}
   semanticMap={}
   for flag in indexes(flagsMap)
     desc=lower(flagsMap[flag])
     if not len(flag) then continue
-    if flag[0]=="-" then flagLetter=flag[1:] else flagLetter=flag
-    if not len(flagLetter) then continue
-    if indexOf(desc,"random")!=null then semanticMap.randomIP=flagLetter
-    if indexOf(desc,"localhost")!=null or (indexOf(desc,"local")!=null and indexOf(desc,"scan")!=null) then semanticMap.localhost=flagLetter
-    if indexOf(desc,"public")!=null then semanticMap.publicIP=flagLetter
-    if indexOf(desc,"recursive")!=null or indexOf(desc,"recurse")!=null then semanticMap.recursive=flagLetter
-    if indexOf(desc,"force")!=null then semanticMap.force=flagLetter
-    if indexOf(desc,"verbose")!=null then semanticMap.verbose=flagLetter
-    if indexOf(desc,"quiet")!=null or indexOf(desc,"silent")!=null then semanticMap.quiet=flagLetter
-    if indexOf(desc,"all")!=null or indexOf(desc,"everything")!=null then semanticMap.all=flagLetter
-    if indexOf(desc,"port")!=null then semanticMap.port=flagLetter
-    if indexOf(desc,"pattern")!=null then semanticMap.pattern=flagLetter
-    if indexOf(desc,"count")!=null or indexOf(desc,"number")!=null then semanticMap.count=flagLetter
+    //Keep full --flag for double-dash; single-letter for short flags
+    flagToken=flag
+    if len(flag)>=2 and flag[:2]=="--" then
+      flagToken=flag
+    else if flag[0]=="-" then
+      flagToken=flag[1:]
+    end if
+    if not len(flagToken) then continue
+    if indexOf(desc,"random")!=null then semanticMap.randomIP=flagToken
+    //Localhost: only single-dash -l style "local ports", not --l custom local exploit
+    if indexOf(desc,"localhost")!=null then
+      semanticMap.localhost=flagToken
+    else if indexOf(desc,"local")!=null and indexOf(desc,"port")!=null and indexOf(desc,"exploit")==null then
+      semanticMap.localhost=flagToken
+    end if
+    if indexOf(desc,"public")!=null and indexOf(desc,"bounce")==null then semanticMap.publicIP=flagToken
+    if indexOf(desc,"recursive")!=null or indexOf(desc,"recurse")!=null then semanticMap.recursive=flagToken
+    if indexOf(desc,"force")!=null then semanticMap.force=flagToken
+    if indexOf(desc,"verbose")!=null then semanticMap.verbose=flagToken
+    if indexOf(desc,"quiet")!=null or indexOf(desc,"silent")!=null then semanticMap.quiet=flagToken
+    if indexOf(desc,"all")!=null or indexOf(desc,"everything")!=null then semanticMap.all=flagToken
+    if indexOf(desc,"port")!=null then semanticMap.port=flagToken
+    if indexOf(desc,"pattern")!=null then semanticMap.pattern=flagToken
+    if indexOf(desc,"count")!=null or indexOf(desc,"number")!=null then semanticMap.count=flagToken
+    //scan bash autos: only store -- flags (scriptable $scan_ok / $hold path)
+    isDashDash=len(flag)>=2 and flag[:2]=="--"
+    if not isDashDash then
+      //skip single-dash for scan intents below
+    else
+      if indexOf(desc,"bounce")!=null then semanticMap.bounce=flag
+      if indexOf(desc,"search")!=null and indexOf(desc,"libraries")!=null then semanticMap.exploitSearch=flag
+      if indexOf(desc,"custom")!=null and indexOf(desc,"local")!=null and indexOf(desc,"index")!=null then semanticMap.customLocal=flag
+      if indexOf(desc,"custom")!=null and (indexOf(desc,"public")!=null or indexOf(desc,"remote")!=null) then semanticMap.customRemote=flag
+      if indexOf(desc,"smart")!=null and indexOf(desc,"lan")!=null then semanticMap.lanNetwork=flag
+      if indexOf(desc,"shell")!=null and indexOf(desc,"bounce")!=null then semanticMap.shellBounce=flag
+    end if
   end for
   return semanticMap
 end function

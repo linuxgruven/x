@@ -21,7 +21,7 @@ Command.rsync=function(Obj,argv)
   _p.addArgument("r",false,"flag") // Recursive mode
   _p.addArgument("a",false,"flag") // Archive mode (recursive + preserve permissions)
   _p.addArgument("v",false,"flag") // Verbose output
-  _p.addArgument("u",false,"flag") // Update mode (skip newer files)
+  _p.addArgument("u",false,"flag") // Update mode (skip matching files)
   _p.addArgument("delete",true,"flag") // Delete source after transfer
   _p.addArgument("n",false,"flag") // Dry-run mode
   _p.addArgument("p",false,"store") // SSH password
@@ -30,16 +30,27 @@ Command.rsync=function(Obj,argv)
   if len(argv.rest)<2 then return Error.set("rsync requires source and destination arguments")
   src=argv.rest[0]
   dst=argv.rest[1]
-  // Detect remote operations by checking for colon separator (remote/session indicator)
-  srcIsRemote=indexOf(src,":")!=null
-  dstIsRemote=indexOf(dst,":")!=null
+  // Remote: sess:id:path, user@host:path, or host:path (no '/' before ':')
+  isRemotePath=function(p)
+    if not p then return false
+    colon=indexOf(p,":")
+    if colon==null then return false
+    if len(p)>=5 and p[:5]=="sess:" then return true
+    at=indexOf(p,"@")
+    if at!=null and at<colon then return true
+    before=p[:colon]
+    if before=="" or indexOf(before,"/")!=null then return false
+    return true
+  end function
+  srcIsRemote=isRemotePath(src)
+  dstIsRemote=isRemotePath(dst)
   parseRemote=function(remoteStr)
     parts=split(remoteStr,":")
-    // Check for session format: sess:id:path (3 parts)
-    isSessionFormat=len(parts)==3 and parts[0]=="sess"
+    // Session format: sess:id:path (path may contain colons)
+    isSessionFormat=len(parts)>=3 and parts[0]=="sess"
     if isSessionFormat then
       sessionId=val(parts[1])
-      sessionPath=parts[2]
+      sessionPath=join(parts[2:],":")
       if not hasIndex(globals.G_sessions.values,sessionId) then return Error.set("Session "+sessionId+" not found")
       return {"type":"session","id":sessionId,"path":sessionPath}
     else if len(parts)==2 then
@@ -85,6 +96,16 @@ Command.rsync=function(Obj,argv)
     end if
     return shell
   end function
+  requireRecursive=function(isDir)
+    if not isDir then return null
+    if argv.r or argv.a then return null
+    return Error.set("Cannot sync directory without -r or -a flag")
+  end function
+  basenamePath=function(p)
+    if not p or p=="/" then return p
+    parts=split(p,"/")
+    return parts[len(parts)-1]
+  end function
   // Local-to-local sync: direct file copy without remote connections
   isBothLocal=not srcIsRemote and not dstIsRemote
   if isBothLocal then
@@ -95,19 +116,40 @@ Command.rsync=function(Obj,argv)
     if not dstFile then
       parent=parent_path(dstPath)
       if not Io.getFileObj(Obj,parent) then return Error.set("Destination parent directory does not exist: "+parent)
-      dstFile=Io.getFileObj(Obj,parent)
     end if
     if argv.n then return Info.info("[DRY RUN] Would sync "+path(srcFile)+" to "+dstPath)
     if argv.v then Info.info("Syncing "+path(srcFile)+" to "+dstPath)
     isDirectory=is_folder(srcFile)
+    recErr=requireRecursive(isDirectory)
+    if recErr then return recErr
     if isDirectory then
-      needsRecursive=not argv.r and not argv.a
-      if needsRecursive then return Error.set("Cannot sync directory without -r or -a flag")
       result=Disk.rsyncDir(Obj,srcFile,dstPath,argv)
       if result isa Error then return result
     else
-      result=copy(srcFile,parent_path(dstPath),name(srcFile))
-      if result!=1 then return Error.set(result)
+      // Copy into folder (keep source name) or rename to destination basename
+      if dstFile and is_folder(dstFile) then
+        copyParent=dstPath
+        copyName=name(srcFile)
+        finalPath=dstPath+"/"+copyName
+      else
+        copyParent=parent_path(dstPath)
+        copyName=basenamePath(dstPath)
+        finalPath=dstPath
+      end if
+      if argv.u then
+        existing=Io.getFileObj(Obj,finalPath)
+        if existing and Disk.rsyncSkipUpdate(srcFile,existing) then
+          if argv.v then Info.info("Skipping up-to-date: "+finalPath)
+        else
+          result=copy(srcFile,copyParent,copyName)
+          if result!=1 then return Error.set(result)
+          if argv.a then Disk.rsyncPreserveMeta(srcFile,Io.getFileObj(Obj,finalPath))
+        end if
+      else
+        result=copy(srcFile,copyParent,copyName)
+        if result!=1 then return Error.set(result)
+        if argv.a then Disk.rsyncPreserveMeta(srcFile,Io.getFileObj(Obj,finalPath))
+      end if
     end if
     if argv.delete then
       if argv.v then Info.info("Deleting source files...")
@@ -143,11 +185,16 @@ Command.rsync=function(Obj,argv)
       dstShell=getSSHShell(dstRemote.host,argv.p)
       if dstShell isa Error then return dstShell
     end if
+    srcFile=srcShell.host_computer.File(srcRemote.path)
+    if srcFile then
+      recErr=requireRecursive(is_folder(srcFile))
+      if recErr then return recErr
+    end if
+    if argv.u and argv.v then Info.info("Note: -u is ignored for remote-to-remote transfers")
     result=scp(srcShell,srcRemote.path,dstRemote.path,dstShell)
     if result isa string then return Error.set(result)
     if argv.delete then
       if argv.v then Info.info("Deleting source files...")
-      srcFile=srcShell.host_computer.File(srcRemote.path)
       if srcFile then srcFile.delete
       if argv.v then Info.info("Source files deleted")
     end if
@@ -168,11 +215,34 @@ Command.rsync=function(Obj,argv)
       remoteShell=getSSHShell(remote.host,argv.p)
       if remoteShell isa Error then return remoteShell
     end if
-    // Check if running as root and prompt for file ownership
+    srcFile=remoteShell.host_computer.File(srcPath)
+    if srcFile then
+      recErr=requireRecursive(is_folder(srcFile))
+      if recErr then return recErr
+    end if
+    // -u: skip download when local file already matches remote (files only)
+    if argv.u and srcFile and not is_folder(srcFile) then
+      localDst=Io.getFileObj(Obj,dstPath)
+      if localDst and is_folder(localDst) then localDst=Io.getFileObj(Obj,dstPath+"/"+name(srcFile))
+      if localDst and Disk.rsyncSkipUpdate(srcFile,localDst) then
+        if argv.v then Info.info("Skipping up-to-date: "+path(localDst))
+        if argv.delete then
+          srcFile.delete
+          if argv.v then Info.info("Source files deleted")
+        end if
+        if argv.v then Info.info("Download complete")
+        return
+      end if
+    else if argv.u and srcFile and is_folder(srcFile) and argv.v then
+      Info.info("Note: -u for remote directories is not applied before transfer")
+    end if
+    // Root download owner: session yes keeps root; otherwise prompt
     ownerName=null
     if Obj.user.name=="root" then
-      ownerName=Gui.input("Enter owner name for downloaded files (leave empty for root)")
-      if ownerName=="" then ownerName=null
+      if not Gui.skipConfirm(false) then
+        ownerName=Gui.input({"text":"Enter owner name for downloaded files (leave empty for root)","default":""})
+        if ownerName==null or ownerName=="" then ownerName=null
+      end if
     else
       ownerName=Obj.user.name
     end if
@@ -180,6 +250,7 @@ Command.rsync=function(Obj,argv)
     if result isa string then return Error.set(result)
     if ownerName then
       dstFile=Io.getFileObj(Obj,dstPath)
+      if not dstFile and srcFile then dstFile=Io.getFileObj(Obj,dstPath+"/"+name(srcFile))
       if dstFile then
         if argv.v then Info.info("Setting owner to "+ownerName+"...")
         chownResult=set_owner(dstFile,ownerName,true) // true for recursive
@@ -199,7 +270,7 @@ Command.rsync=function(Obj,argv)
     end if
     if argv.delete then
       if argv.v then Info.info("Deleting source files...")
-      srcFile=remoteShell.host_computer.File(srcPath)
+      if not srcFile then srcFile=remoteShell.host_computer.File(srcPath)
       if srcFile then srcFile.delete
       if argv.v then Info.info("Source files deleted")
     end if
@@ -212,6 +283,8 @@ Command.rsync=function(Obj,argv)
     if srcFile isa Error then return srcFile
     if argv.n then return Info.info("[DRY RUN] Would upload "+path(srcFile)+" to remote at "+remote.path)
     if argv.v then Info.info("Uploading "+path(srcFile)+" to remote")
+    recErr=requireRecursive(is_folder(srcFile))
+    if recErr then return recErr
     isSession=remote.type=="session"
     if isSession then
       remoteShell=getSessionShell(remote.id)
@@ -219,6 +292,22 @@ Command.rsync=function(Obj,argv)
     else
       remoteShell=getSSHShell(remote.host,argv.p)
       if remoteShell isa Error then return remoteShell
+    end if
+    // -u: skip upload when remote file already matches (files only)
+    if argv.u and not is_folder(srcFile) then
+      remoteFile=remoteShell.host_computer.File(remote.path)
+      if remoteFile and is_folder(remoteFile) then remoteFile=remoteShell.host_computer.File(remote.path+"/"+name(srcFile))
+      if remoteFile and Disk.rsyncSkipUpdate(srcFile,remoteFile) then
+        if argv.v then Info.info("Skipping up-to-date remote: "+remote.path)
+        if argv.delete then
+          srcFile.delete
+          if argv.v then Info.info("Source files deleted")
+        end if
+        if argv.v then Info.info("Upload complete")
+        return
+      end if
+    else if argv.u and is_folder(srcFile) and argv.v then
+      Info.info("Note: -u for remote directories is not applied before transfer")
     end if
     result=scp(Obj.shell,path(srcFile),remote.path,remoteShell)
     if result isa string then return Error.set(result)

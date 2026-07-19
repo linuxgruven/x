@@ -1187,9 +1187,11 @@ Net.hunt=function(Obj,argv)
         _di+=1
         if not _q then print "    -> "+yellow(targetLan)
         comp=null
+        _bi={}
+        if globals.G_proxy then _bi.Obj=globals.G_proxy
         if arg.R then
           // -R flag: root bounce only
-          result=Mission.getRootBounce(pub,targetLan,{})
+          result=Mission.getRootBounce(pub,targetLan,_bi)
           if not result isa list then
             comp=result
             if not _q then print green("    Got bounce")
@@ -1202,7 +1204,7 @@ Net.hunt=function(Obj,argv)
             if not _q then print green("    Got shell")
           else if globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex then
             // Method 2: getRootBounce fallback
-            result=Mission.getRootBounce(pub,targetLan,{})
+            result=Mission.getRootBounce(pub,targetLan,_bi)
             if not result isa list then
               comp=result
               if not _q then print green("    Got bounce")

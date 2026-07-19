@@ -223,8 +223,8 @@ Attack.system=function(Obj,o=false)
   z=[]
   for d in get_folders(Obj.root);if has_permission(d,"w") then push(z,d);end for
   if not z then return Error.set("No files to remove or lacking permissions to remove root files")
-	// Show confirmation prompt unless overridden
-	if not o then
+	// Show confirmation prompt unless -y / session `yes`
+	if not Gui.skipConfirm(o) then
 		p=[]
 		for f in z;push(p,white("Remove "+name(f)));end for
 		push(p,white("Clear system.log"))
@@ -282,10 +282,18 @@ end function
 // Args: Obj (context), o (override confirmation)
 Attack.boot=function(Obj,o=false)
 	// Find and delete boot folder
-	for f in get_folders(Obj.root);if name(f)!="boot" then continue;Gui.delPrompt(f,o);end for
-  Info.info("Boot has been wiped ;-)")
-  // Clear system logs
-  if Log.log(Obj,false) then Info.info("The log has also been cleared ;-)")
+	boot=null
+	for f in get_folders(Obj.root);if name(f)=="boot" then;boot=f;break;end if;end for
+	if not boot then return Info.info("No /boot folder found")
+	n=name(boot)
+	doDelete=Gui.skipConfirm(o)
+	if not doDelete then doDelete=Gui.yesNo("Are you sure you want to delete "+blue(n)+"?")
+	if not doDelete then return
+	r=delete(boot)
+	if r!="" then return Error.set(r)
+	Info.info("Boot has been wiped ;-)")
+	// Clear system logs
+	if Log.log(Obj,false) then Info.info("The log has also been cleared ;-)")
 end function
 // Leave attack note/message file in directory
 // Args: Obj (context), argv (message text or use default)
@@ -474,24 +482,17 @@ Attack.scan=function(Obj,w,t=false)
 	if not t then
     if globals.G_settings.monitorDirtyips then Dirty.add(i)
   end if
+  // Resolve metaxploit from session/proxy (OPSEC: never use home mx while proxied)
+  _mx=Library.mxFor(Obj)
   // If LAN IP, use dedicated LAN target scanner
-  // Use packMetaxploit (shell obj) or metaxploit (proxy/pivot obj) when in remote context
-  if is_lan_ip(i) then
-    _mx=Library.metaxploit
-    if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then
-      _mx=Obj.packMetaxploit
-    else if hasIndex(Obj,"metaxploit") and Obj.metaxploit then
-      _mx=Obj.metaxploit
-    end if
-    return Net.lanTarget(Obj,_mx,i)
-  end if
+  if is_lan_ip(i) then return Net.lanTarget(Obj,_mx,i)
   // Save GUI state and begin scan
 	globals.G_gui=Gui.cp
   while true
-    // Get router and extract exploits
+    // Get router and extract exploits via session/proxy metaxploit
     r=get_router(i)
     if not r then return Warning.set("IP down")
-    m=Exploit.extract(r,i)
+    m=Exploit.extract(r,i,_mx)
     if m isa Error then return Warning.set("No attack vectors found")
     // Exploit selection loop
     while true

@@ -3,16 +3,47 @@
 // Scan / exploit step handlers and autonomous exploit scoring/selection.
 // Companion: agent_handlers_access.src (getObject, escalate, crack, fetch, ...)
 // =============================================================================
-//Autonomous scan helper
-AgentHandlers._scanAutonomous=function(targetIp)
+//True when the active session is already on a router (proxy / router shell)
+AgentHandlers._isRouterSession=function(Obj)
+  if not Obj or typeof(Obj)!="map" then return false
+  if hasIndex(Obj,"layer") and Obj.layer=="proxy" then return true
+  if hasIndex(Obj,"machineType") then
+    mt=lower(str(Obj.machineType))
+    if indexOf(mt,"router")!=null or mt=="switch" then return true
+  end if
+  return false
+end function
+//Public IP for the active session, if known
+AgentHandlers._sessionPublicIP=function(Obj)
+  if not Obj then return null
+  if hasIndex(Obj,"meta") and typeof(Obj.meta)=="map" and hasIndex(Obj.meta,"public_ip") and Obj.meta.public_ip then return Obj.meta.public_ip
+  if hasIndex(Obj,"computer") and Obj.computer and hasIndex(Obj.computer,"public_ip") and Obj.computer.public_ip then return Obj.computer.public_ip
+  return null
+end function
+//True if lanIP appears on the current session router's device list
+AgentHandlers._lanReachableFromSession=function(Obj,lanIP)
+  if not lanIP or not is_lan_ip(lanIP) then return false
+  pub=AgentHandlers._sessionPublicIP(Obj)
+  r=null
+  if pub then r=get_router(pub)
+  if not r then r=get_router
+  if not r then return false
+  devices=devices_lan_ip(r)
+  if not devices then return false
+  for d in devices;if d==lanIP then return true;end for
+  return false
+end function
+//Autonomous scan helper - Obj required so extract uses proxy/session metaxploit (OPSEC)
+AgentHandlers._scanAutonomous=function(targetIp,Obj=null)
   outLvl=globals.G_agent.config.outputLevel
   if not targetIp then return []
   if typeof(Exploit)!="map" then return []
   //Get router at target (same as scan command)
   r=get_router(targetIp)
   if not r then return []
-  //Extract exploitable libraries without interaction (same as scan command)
-  libraries=Exploit.extract(r,targetIp)
+  //Extract via session/proxy metaxploit - never bare Library.metaxploit while proxied
+  _mx=Library.mxFor(Obj)
+  libraries=Exploit.extract(r,targetIp,_mx)
   if not libraries or libraries isa Error then return []
   if outLvl>=2 then print skyblue("Agent: Autonomous scan found "+len(libraries)+" exploitable libraries")
   //Process each library - check database first, only scan if needed
@@ -227,14 +258,22 @@ AgentHandlers._buildScoredExploits=function(attackVectors,requirements)
       if requirements and hasIndex(requirements,"objectType") and info.canCapture then
         if info.objType!=requirements.objectType then continue
       end if
+      //Privilege: prefer exact match via score, but when root is required still allow
+      //guest/user shells (su later). Hard-filter only for user/guest-only goals.
       if requirements and hasIndex(requirements,"privilege") and info.canCapture then
-        if info.userPriv!=requirements.privilege then continue
+        if info.userPriv!=requirements.privilege then
+          if requirements.privilege=="root" and (info.userPriv=="guest" or info.userPriv=="user") then
+            //keep - escalate after capture
+          else
+            continue
+          end if
+        end if
       end if
       score=AgentHandlers._exploitObjectScore(info.objType)+AgentHandlers._exploitPrivScore(info.userPriv)
       if info.canCapture then score=score+50
       if requirements then
         if hasIndex(requirements,"libraryType") then score=score+5
-        if hasIndex(requirements,"privilege") and info.userPriv==requirements.privilege then score=score+5
+        if hasIndex(requirements,"privilege") and info.userPriv==requirements.privilege then score=score+15
         if hasIndex(requirements,"objectType") and info.objType==requirements.objectType then score=score+5
         if hasIndex(requirements,"targetIP") then score=score+5
       end if
@@ -421,6 +460,22 @@ AgentHandlers._setupLanBounce=function(Obj,requirements)
       return {"success":true,"alreadyConfigured":true}
     end if
   end if
+  //Already on a router/proxy shell - use current session (skip remote shell hunt)
+  if AgentHandlers._isRouterSession(Obj) then
+    sessionIP=AgentHandlers._sessionPublicIP(Obj)
+    if outLvl>=2 then
+      if sessionIP then print green("Agent: Already on router session "+sessionIP+" - using current shell") else print green("Agent: Already on router session - using current shell")
+    end if
+    if typeof(ShellObject)=="map" and hasIndex(ShellObject,"packMeta") then
+      if not (hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit) then
+        if outLvl>=2 then print skyblue("Agent: Packing metaxploit on current router session...")
+        ShellObject.packMeta(Obj)
+      end if
+    end if
+    userLevel="root"
+    if hasIndex(Obj,"user") and typeof(Obj.user)=="map" and hasIndex(Obj.user,"raw") then userLevel=Obj.user.raw
+    return {"success":true,"shell":Obj,"user":userLevel,"library":"current router","usedCurrentSession":true,"publicIP":sessionIP}
+  end if
   //Need to set up LAN bounce capability
   if outLvl>=2 then print yellow("Agent: Vulnerable library not configured - initiating LAN setup...")
   //Step 1: Disable root requirements if user requested them (since we can't guarantee root without vuln lib)
@@ -434,11 +489,16 @@ AgentHandlers._setupLanBounce=function(Obj,requirements)
       if outLvl>=2 then print yellow("Agent: Disabled needRoot (no vulnerable library)")
     end if
   end if
-  //Step 2: Scan network for router shell (priority: root -> user -> guest)
+  //Step 2: Scan for router shell (scanCustom requires ip|library|target)
   if outLvl>=2 then print skyblue("Agent: Scanning network for router shells...")
-  //Use Attack.scanCustom to find router with shell access
   shell=null
-  if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then shell=Attack.scanCustom(["http","s"],true)
+  scanIP="-r"
+  if requirements and hasIndex(requirements,"publicIP") and requirements.publicIP then scanIP=requirements.publicIP
+  if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then
+    shell=Attack.scanCustom([scanIP,"router","s"],true, Obj)
+    if (not shell or typeof(shell)!="shell") and scanIP!="-r" then shell=Attack.scanCustom(["-r","router","s"],true, Obj)
+    if not shell or typeof(shell)!="shell" then shell=Attack.scanCustom([scanIP,"http","s"],true, Obj)
+  end if
   //If no router shell found, try to get ANY shell on the network
   if not shell or typeof(shell)!="shell" then
     if outLvl>=2 then print yellow("Agent: No direct router shells - scanning for any available shell...")
@@ -476,23 +536,16 @@ AgentHandlers._setupLanBounce=function(Obj,requirements)
   userLevel="guest"
   if hasIndex(headlessShell,"user") and hasIndex(headlessShell.user,"raw") then userLevel=headlessShell.user.raw
   if outLvl>=2 then print green("Agent: Got "+userLevel+" shell in headless mode")
-  //Step 4: Use this shell to scan for routers on the network
+  //Step 4 (optional): scan via ShellObject.commands - native shell has no .run
   if outLvl>=2 then print skyblue("Agent: Using shell to scan network for routers...")
-  //Try to find routers using the shell we have
-  if hasIndex(headlessShell,"shell") then
-    //Try scan --n router s from the shell
-    scanOutput=headlessShell.shell.run("scan --n router s")
-    if scanOutput and typeof(scanOutput)=="string" then
-      if indexOf(scanOutput,"exploit")!=null or indexOf(scanOutput,"vulnerab")!=null then
-        if outLvl>=2 then print green("Agent: Found routers on network from shell scan")
-      end if
+  if hasIndex(headlessShell,"commands") and typeof(headlessShell.commands)=="map" and hasIndex(headlessShell.commands,"scan") then
+    scanOutput=headlessShell.commands.scan(["--n","router","s"])
+    if scanOutput and typeof(scanOutput)=="string" and (indexOf(scanOutput,"exploit")!=null or indexOf(scanOutput,"vulnerab")!=null) then
+      if outLvl>=2 then print green("Agent: Found routers on network from shell scan")
     end if
-    //Also try scan --n http s as alternative
-    scanOutput2=headlessShell.shell.run("scan --n http s")
-    if scanOutput2 and typeof(scanOutput2)=="string" then
-      if indexOf(scanOutput2,"exploit")!=null or indexOf(scanOutput2,"vulnerab")!=null then
-        if outLvl>=2 then print green("Agent: Found HTTP routers on network from shell scan")
-      end if
+    scanOutput2=headlessShell.commands.scan(["--n","http","s"])
+    if scanOutput2 and typeof(scanOutput2)=="string" and (indexOf(scanOutput2,"exploit")!=null or indexOf(scanOutput2,"vulnerab")!=null) then
+      if outLvl>=2 then print green("Agent: Found HTTP routers on network from shell scan")
     end if
   end if
   //Step 5: Pack custom objects using ShellObject.packMeta
@@ -593,7 +646,7 @@ AgentHandlers._handleScan=function(Obj,step,context)
   //For autonomous mode, use dedicated non-interactive scan
   if isAutonomous and hasIndex(step,"target") then
     if outLvl>=2 then print skyblue("Agent: Running autonomous scan on "+step.target)
-    attackVectors=AgentHandlers._scanAutonomous(step.target)
+    attackVectors=AgentHandlers._scanAutonomous(step.target,Obj)
     if attackVectors and len(attackVectors)>0 then
       context.availableExploits=attackVectors
       context.target=step.target
@@ -619,7 +672,7 @@ AgentHandlers._handleScan=function(Obj,step,context)
     if typeof(Exploit)=="map" and hasIndex(Exploit,"extract") and hasIndex(step,"target") then
       r=get_router(step.target)
       if r then
-        scanLibraries=Exploit.extract(r,step.target)
+        scanLibraries=Exploit.extract(r,step.target,Library.mxFor(Obj))
         if scanLibraries and not (scanLibraries isa Error) then
           if outLvl>=2 then print skyblue("Agent: Extracted "+len(scanLibraries)+" libraries from scan")
           //Parse attack vectors from library list
@@ -893,6 +946,82 @@ AgentHandlers._handleExploit=function(Obj,step,context)
     if capturedObjects and len(capturedObjects)>0 then
       //We got the best object already (only one returned)
       bestObj=capturedObjects[0]
+      //LAN computer goal: router shell is only a bounce point - never open it as the final session
+      lanGoal=null
+      if requirements and hasIndex(requirements,"targetIP") and is_lan_ip(requirements.targetIP) then lanGoal=requirements.targetIP
+      if not lanGoal and hasIndex(step,"lanIP") and step.lanIP and is_lan_ip(step.lanIP) then lanGoal=step.lanIP
+      if not lanGoal and context and hasIndex(context,"lanIP") and context.lanIP and is_lan_ip(context.lanIP) then lanGoal=context.lanIP
+      if not lanGoal and hasIndex(step,"target") and step.target and is_lan_ip(step.target) then lanGoal=step.target
+      wantLanComputer=lanGoal!=null and ((not requirements) or (not hasIndex(requirements,"objectType")) or requirements.objectType=="computer" or requirements.objectType=="shell")
+      if wantLanComputer and bestObj.type=="shell" then
+        //Resolve router/public IP (step.target/context.target are often the LAN goal)
+        publicIP=null
+        if hasIndex(step,"publicIP") and step.publicIP and not is_lan_ip(step.publicIP) then publicIP=step.publicIP
+        if not publicIP and hasIndex(context,"publicIP") and context.publicIP and not is_lan_ip(context.publicIP) then publicIP=context.publicIP
+        if not publicIP and hasIndex(step,"extractedIps") and step.extractedIps then
+          for ip in step.extractedIps
+            if not is_lan_ip(ip) then
+              publicIP=ip
+              break
+            end if
+          end for
+        end if
+        if not publicIP and hasIndex(context,"target") and context.target and not is_lan_ip(context.target) then publicIP=context.target
+        if not publicIP and hasIndex(step,"target") and step.target and not is_lan_ip(step.target) then publicIP=step.target
+        if not publicIP and hasIndex(bestObj,"ip") and bestObj.ip and not is_lan_ip(bestObj.ip) then publicIP=bestObj.ip
+        if not publicIP then
+          result.error="LAN target "+lanGoal+" needs a public router IP - none found in plan context"
+          result.critical=true
+          if outLvl>=1 then print yellow("Agent: "+result.error)
+          return result
+        end if
+        //scan --b: --e root bounce on router libs, else config -v/-x + --l (never open guest shell)
+        if outLvl>=1 then print skyblue("Agent: Router shell captured - scan --b to "+lanGoal+" (not opening guest shell)")
+        context.bounceShell=bestObj.object
+        needRoot=true
+        if requirements and hasIndex(requirements,"privilege") and requirements.privilege!="root" then needRoot=false
+        if typeof(Mission)=="map" and hasIndex(Mission,"getRootBounce") then
+          if outLvl>=1 then print skyblue("Agent: scan --b -p "+publicIP+" -l "+lanGoal+" (via Mission.getRootBounce)")
+          bounceComputer=Mission.getRootBounce(publicIP,lanGoal,{"shell":bestObj.object,"Obj":Obj})
+          if typeof(bounceComputer)=="computer" then
+            isHeadless=false
+            if hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then isHeadless=true
+            wrappedObj=null
+            if typeof(Exploit)=="map" and hasIndex(Exploit,"getComputer") then wrappedObj=Exploit.getComputer(bounceComputer,isHeadless)
+            result.success=true
+            result.exploitUsed="scan --b root bounce"
+            result.publicIP=publicIP
+            result.lanIP=lanGoal
+            result.baseType="computer"
+            result.rawObject=bounceComputer
+            result.wrappedObj=wrappedObj
+            context.computer=wrappedObj
+            context.rootComputer=wrappedObj
+            if isHeadless and hasIndex(step,"continuationCommands") then AgentHandlers._runContinuation(wrappedObj,step.continuationCommands,lanGoal)
+            return result
+          end if
+          errMsg="bounce failed"
+          if typeof(bounceComputer)=="list" and len(bounceComputer)>=2 then errMsg=str(bounceComputer[1]) else if bounceComputer then errMsg=str(bounceComputer)
+          //Firewall never blocks LAN bounce - don't surface that as the cause
+          if indexOf(lower(errMsg),"firewall")!=null or indexOf(lower(errMsg),"connection refused")!=null then errMsg="bounce failed (not firewall) - try scan --e on router or config -v/-x"
+          result.error="scan --b failed: "+errMsg
+          result.critical=true
+          if outLvl>=1 then print yellow("Agent: "+result.error)
+          return result
+        end if
+        getObjectStep={"action":"getObject","publicIP":publicIP,"lanIP":lanGoal,"needRoot":needRoot,"isHeadless":false,"objectType":"computer"}
+        if requirements and hasIndex(requirements,"objectType") then getObjectStep.objectType=requirements.objectType
+        if hasIndex(step,"continuationCommands") then getObjectStep.continuationCommands=step.continuationCommands
+        if hasIndex(context,"bounceShell") then getObjectStep.routerShell=context.bounceShell
+        return globals.G_agent._handleGetObject(Obj,getObjectStep,context)
+      end if
+      //Never open a captured router guest shell when the goal was a LAN machine
+      if lanGoal!=null and bestObj.type=="shell" then
+        result.error="Refusing to open router shell - goal is LAN target "+lanGoal
+        result.critical=true
+        if outLvl>=1 then print yellow("Agent: "+result.error)
+        return result
+      end if
       //Check if we need escalation (got object but wrong privilege)
       needsEscalation=false
       if requirements and hasIndex(requirements,"privilege") then
@@ -905,7 +1034,10 @@ AgentHandlers._handleExploit=function(Obj,step,context)
       result.exploitUsed="Autonomous ("+bestObj.library+")"
       result.data=bestObj.object
       context.shell=bestObj.object
-      if needsEscalation then context.needsEscalation=true
+      if needsEscalation then
+        context.needsEscalation=true
+        result.needsEscalation=true
+      end if
       if outLvl>=2 then
         locationInfo=""
         if hasIndex(bestObj,"ip") and hasIndex(bestObj,"port") then
@@ -921,8 +1053,9 @@ AgentHandlers._handleExploit=function(Obj,step,context)
         //Check if we have continuation commands - if so, activate headless
         isHeadless=false
         if hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then isHeadless=true
+        //getShell(shell, pivoting, args, headless) - headless is 4th arg, not 2nd
         if bestObj.type=="shell" and hasIndex(Exploit,"getShell") then
-          Exploit.getShell(bestObj.object,isHeadless)
+          Exploit.getShell(bestObj.object,false,[],isHeadless)
         else if bestObj.type=="computer" and hasIndex(Exploit,"getComputer") then
           Exploit.getComputer(bestObj.object,isHeadless)
           //Execute continuation commands if present and headless
@@ -981,41 +1114,58 @@ AgentHandlers._handleExploit=function(Obj,step,context)
       if requirements and hasIndex(requirements,"targetIP") then
         targetIP=requirements.targetIP
         if is_lan_ip(targetIP) then
-          //This is a LAN target - need to set up LAN bounce capability first
+          //This is a LAN target - need router bounce
           if outLvl>=2 then print yellow("Agent: LAN target "+targetIP+" requires router bounce")
-          //Only use LAN setup approach under 2 circumstances:
-          //1) Config settings not configured OR 2) No shell on router available
-          needsLanSetup=false
-          //Check 1: Are config settings configured?
-          if not hasIndex(globals,"G_settings") or not hasIndex(globals.G_settings,"vulnerableLib") or not hasIndex(globals.G_settings,"vulnerableLibIndex") then
-            needsLanSetup=true
-            if outLvl>=2 then print yellow("Agent: Config settings not configured - will need LAN setup")
-          else if not globals.G_settings.vulnerableLib or not globals.G_settings.vulnerableLibIndex then
-            needsLanSetup=true
-            if outLvl>=2 then print yellow("Agent: Config settings not configured - will need LAN setup")
-          else
-            if outLvl>=2 then print green("Agent: Config settings configured - will try direct approach")
+          //Resolve intended public/router IP from step/context (target is often the LAN goal)
+          publicIP=null
+          if hasIndex(step,"publicIP") and step.publicIP and not is_lan_ip(step.publicIP) then publicIP=step.publicIP
+          if not publicIP and hasIndex(context,"publicIP") and context.publicIP and not is_lan_ip(context.publicIP) then publicIP=context.publicIP
+          if not publicIP and hasIndex(step,"extractedIps") and step.extractedIps then
+            for ip in step.extractedIps
+              if not is_lan_ip(ip) then
+                publicIP=ip
+                break
+              end if
+            end for
           end if
-          //Check 2: Can we get a router shell? (only check if config settings configured)
-          routerShellAvailable=false
-          if not needsLanSetup then
-            //Try to get router IP first
-            publicIP=null
-            if hasIndex(step,"extractedIps") and step.extractedIps then
-              for ip in step.extractedIps
-                if not is_lan_ip(ip) then
-                  publicIP=ip
-                  break
-                end if
-              end for
+          if not publicIP and hasIndex(context,"target") and context.target!=targetIP and not is_lan_ip(context.target) then publicIP=context.target
+          if not publicIP and hasIndex(step,"target") and step.target!=targetIP and not is_lan_ip(step.target) then publicIP=step.target
+          currentRouter=AgentHandlers._isRouterSession(Obj)
+          currentPub=AgentHandlers._sessionPublicIP(Obj)
+          useCurrentRouter=false
+          //Prefer live router/proxy session when target is on this LAN, or specified router has no shell
+          if currentRouter and currentPub then
+            if AgentHandlers._lanReachableFromSession(Obj,targetIP) then
+              useCurrentRouter=true
+              if outLvl>=2 then print green("Agent: Target "+targetIP+" reachable from current router "+currentPub)
+            else if not publicIP or publicIP==currentPub then
+              useCurrentRouter=true
+            else
+              routerShell=null
+              if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then routerShell=Attack.scanCustom([publicIP,"router","s"],true, Obj)
+              if not routerShell or typeof(routerShell)!="shell" then
+                useCurrentRouter=true
+                if outLvl>=2 then print yellow("Agent: No shell on "+publicIP+" - falling back to current router "+currentPub)
+              end if
             end if
-            if not publicIP and hasIndex(context,"target") then publicIP=context.target
-            if not publicIP and hasIndex(step,"target") then publicIP=step.target
-            if publicIP and publicIP!=targetIP and not is_lan_ip(publicIP) then
-              //Try to get router shell
+          end if
+          if useCurrentRouter then publicIP=currentPub
+          //Only use LAN setup when we are NOT already on a usable router session
+          needsLanSetup=false
+          routerShellAvailable=false
+          if useCurrentRouter then
+            routerShellAvailable=true
+            needsLanSetup=false
+          else
+            if not hasIndex(globals,"G_settings") or not hasIndex(globals.G_settings,"vulnerableLib") or not hasIndex(globals.G_settings,"vulnerableLibIndex") then
+              needsLanSetup=true
+            else if not globals.G_settings.vulnerableLib or not globals.G_settings.vulnerableLibIndex then
+              needsLanSetup=true
+            end if
+            if not needsLanSetup and publicIP and publicIP!=targetIP and not is_lan_ip(publicIP) then
               if outLvl>=2 then print skyblue("Agent: Checking router "+publicIP+" for available shells...")
               routerShell=null
-              if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then routerShell=Attack.scanCustom([publicIP,"router","s"],true)
+              if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then routerShell=Attack.scanCustom([publicIP,"router","s"],true, Obj)
               if routerShell and typeof(routerShell)=="shell" then
                 routerShellAvailable=true
                 if outLvl>=2 then print green("Agent: Router shell available - no LAN setup needed")
@@ -1023,113 +1173,58 @@ AgentHandlers._handleExploit=function(Obj,step,context)
                 needsLanSetup=true
                 if outLvl>=2 then print yellow("Agent: No router shell available - will need LAN setup")
               end if
+            else if not publicIP then
+              needsLanSetup=true
             end if
           end if
-          //Call LAN setup only if needed
           bounceShell=null
           lanSetupResult=null
           if needsLanSetup then
             if outLvl>=2 then print skyblue("Agent: Initiating LAN setup approach...")
-            //Prompt user if configured (this can be slow)
-            if globals.G_agent.config.promptOnSlow then
+            //Pass known public IP into setup for correct scanCustom args
+            if publicIP and requirements then requirements.publicIP=publicIP
+            //Autonomous / current-router: never pause for shell-scan confirm - just proceed
+            if not isAutonomousStep and not currentRouter and globals.G_agent.config.promptOnSlow then
               resumeCmd=globals.G_agent._resumeCommand(context)
               confirm=globals.G_agent._beginConfirm("No router shell available. Scan network for any available shell?",resumeCmd,"skipLanShellScanPrompt","yes",true)
               if confirm then return confirm
             end if
             lanSetupResult=AgentHandlers._setupLanBounce(Obj,requirements)
             if not lanSetupResult or not lanSetupResult.success then
-              result.error="Failed to set up LAN bounce: "+lanSetupResult.error
+              errMsg="unknown"
+              if lanSetupResult and hasIndex(lanSetupResult,"error") then errMsg=lanSetupResult.error
+              result.error="Failed to set up LAN bounce: "+errMsg
               result.critical=true
               return result
             end if
-            //Get the bounce shell from setup (if new setup was needed)
             if hasIndex(lanSetupResult,"shell") then
               bounceShell=lanSetupResult.shell
-              //Store in context for later use
               context.bounceShell=bounceShell
               if outLvl>=2 then print green("Agent: Using "+lanSetupResult.user+" shell from "+lanSetupResult.library+" as bounce point")
             end if
+            //If setup used current session, prefer that public IP for bounce
+            if hasIndex(lanSetupResult,"usedCurrentSession") and lanSetupResult.usedCurrentSession and hasIndex(lanSetupResult,"publicIP") and lanSetupResult.publicIP then publicIP=lanSetupResult.publicIP
           end if
-          //Now perform LAN attack setup - scan LAN from bounce shell to find targets
-          if outLvl>=2 then print skyblue("Agent: Scanning LAN for targets...")
-          //Use the bounce shell to scan the LAN
-          lanIps=[]
-          if bounceShell and hasIndex(bounceShell,"shell") then
-            //Get LAN IPs using shell command
-            lanScanResult=bounceShell.shell.run("ip a | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d'/' -f1")
-            if lanScanResult and typeof(lanScanResult)=="string" then
-              lanIpList=split(lanScanResult,"\n")
-              for ip in lanIpList;ipTrimmed=trim(ip);if len(ipTrimmed)>0 and is_lan_ip(ipTrimmed) then push(lanIps,ipTrimmed);end for
-            end if
-          end if
-          if len(lanIps)==0 then
-            if outLvl>=2 then print yellow("Agent: Could not enumerate LAN IPs - using target directly")
-            lanIps=[targetIP]
-          end if
-          //Filter LAN IPs to see if our target is directly accessible
-          targetFound=false
-          for lanIp in lanIps
-            if lanIp==targetIP then
-              targetFound=true
-              break
-            end if
-          end for
-          if outLvl>=2 then
-            if targetFound then print green("Agent: Target "+targetIP+" found on LAN") else print yellow("Agent: Target "+targetIP+" not directly found - may need router bounce")
-          end if
-          //Check if target has shell exploits available
-          hasDirectExploits=false
-          if bounceShell then
-            //Scan target from bounce shell to check for exploits
-            if outLvl>=2 then print skyblue("Agent: Checking target "+targetIP+" for exploits...")
-            //Use Attack.scan or similar to check target
-            //For now, assume we need router bounce if vuln lib wasn't configured
-            hasDirectExploits=false
-          end if
-          //Determine router IP for bounce
-          publicIP=null
-          if hasIndex(context,"target") then publicIP=context.target
-          if not publicIP and hasIndex(step,"target") then publicIP=step.target
-          //If publicIP is the same as targetIP (LAN), we need to find a router
-          if publicIP==targetIP or (publicIP and is_lan_ip(publicIP)) then publicIP=null
-          //Auto-detect router on network if no public IP specified
-          if not publicIP then
+          //If still no public IP, derive from bounce shell meta / host_computer (native shell has no .run)
+          if not publicIP or is_lan_ip(publicIP) then
             if outLvl>=2 then print yellow("Agent: No router IP specified - auto-detecting on network...")
-            //Use the bounce shell we set up earlier to find router IPs
-            if bounceShell and hasIndex(bounceShell,"shell") then
-              //Get router IP from the bounce shell's network interface
-              routerResult=bounceShell.shell.run("ip route | grep default | awk '{print $3}'")
-              if routerResult and typeof(routerResult)=="string" then
-                routerIP=trim(routerResult)
-                if len(routerIP)>0 and not is_lan_ip(routerIP) then
-                  publicIP=routerIP
-                  if outLvl>=2 then print green("Agent: Auto-detected router at "+publicIP)
-                else if len(routerIP)>0 then
-                  //Got a LAN IP - this might be the router's LAN interface, try to get public IP
-                  publicIP=routerIP
-                  if outLvl>=2 then print yellow("Agent: Using LAN router at "+publicIP)
-                end if
+            if bounceShell then
+              if hasIndex(bounceShell,"meta") and typeof(bounceShell.meta)=="map" and hasIndex(bounceShell.meta,"public_ip") and bounceShell.meta.public_ip then
+                publicIP=bounceShell.meta.public_ip
+              else if hasIndex(bounceShell,"computer") and bounceShell.computer and hasIndex(bounceShell.computer,"public_ip") then
+                publicIP=bounceShell.computer.public_ip
+              else if hasIndex(bounceShell,"shell") and bounceShell.shell then
+                hc=host_computer(bounceShell.shell)
+                if hc and hasIndex(hc,"public_ip") then publicIP=hc.public_ip else if hc and hasIndex(hc,"local_ip") then publicIP=hc.local_ip
               end if
             end if
-            //Fallback: scan network for any router
-            if not publicIP then
+            if not publicIP and currentPub then publicIP=currentPub
+            if not publicIP and typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then
               if outLvl>=2 then print yellow("Agent: Scanning for router on network...")
-              if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then
-                routerShell=Attack.scanCustom(["http","s"],true)
-                if routerShell and typeof(routerShell)=="shell" then
-                  //Extract IP from shell
-                  if hasIndex(routerShell,"host_computer") then
-                    routerComp=routerShell.host_computer
-                    if hasIndex(routerComp,"public_ip") then
-                      publicIP=routerComp.public_ip
-                    else if hasIndex(routerComp,"local_ip") then
-                      publicIP=routerComp.local_ip
-                    end if
-                  end if
-                  if publicIP then
-                    if outLvl>=2 then print green("Agent: Found router at "+publicIP)
-                  end if
-                end if
+              routerShell=Attack.scanCustom(["-r","router","s"],true, Obj)
+              if routerShell and typeof(routerShell)=="shell" then
+                hc=host_computer(routerShell)
+                if hc and hasIndex(hc,"public_ip") then publicIP=hc.public_ip else if hc and hasIndex(hc,"local_ip") then publicIP=hc.local_ip
               end if
             end if
           end if
@@ -1138,11 +1233,12 @@ AgentHandlers._handleExploit=function(Obj,step,context)
             result.critical=true
             return result
           end if
-          //Determine if we need root (may have been disabled by setup)
+          if outLvl>=2 then print green("Agent: Bounce router="+publicIP+" target="+targetIP)
+          //Determine if we need root (keep root when hack lib is configured)
           needRoot=false
           if hasIndex(requirements,"privilege") and requirements.privilege=="root" then needRoot=true
-          //If no vulnerable library configured, we can't guarantee root - take what we can get
-          if lanSetupResult and not lanSetupResult.alreadyConfigured then
+          hasHackLib=hasIndex(globals,"G_settings") and hasIndex(globals.G_settings,"vulnerableLib") and hasIndex(globals.G_settings,"vulnerableLibIndex") and globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex
+          if needRoot and not hasHackLib then
             needRoot=false
             if outLvl>=2 then print yellow("Agent: Root access not guaranteed without vulnerable library - will accept guest/user")
           end if
@@ -1214,8 +1310,8 @@ AgentHandlers._handleExploit=function(Obj,step,context)
           if exploit.u=="g" then userPriv="guest"
         end if
         score=AgentHandlers._exploitObjectScore(objType)+AgentHandlers._exploitPrivScore(userPriv)
-        //Prefer exploits without additional requirements
-        if not hasIndex(exploit,"щ") then score=score+5
+        //Prefer exploits without additional requirements (key is Cyrillic scha via char() for ASCII-safe source)
+        if not hasIndex(exploit,char(1097)) then score=score+5
         //Track best scoring exploit
         if score>bestScore then
           bestScore=score

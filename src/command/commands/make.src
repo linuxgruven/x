@@ -187,11 +187,11 @@ Command.make=function(Obj,argv)
   end function
   defaultBins=function(arg)
     _p=ArgumentParser.init
-    _p.addArgument("y",false,"flag")  // Auto-confirm /bin placement
+    _p.addArgument("y",false,"flag")  // Auto-confirm /bin placement (or use session `yes`)
     arg=_p.parseArgs("make",arg)
     d=null
     c=Obj.computer
-    if arg.y then
+    if Gui.skipConfirm(arg.y) then
       d=File(c,"/bin")
     else
       if has_permission(File(c,"/bin"),"w") then
@@ -342,7 +342,8 @@ Command.make=function(Obj,argv)
     if not Obj.id==0 then return Warning.set("You can only use from main")
 		m=Proxy.getMapConf(Obj).accounts.values
 		if not m then return Info.info("No systems in Map.conf. Run [ get -m (count) ] to add systems to Map.conf")
-		if Gui.yesNo("Would you like to set an end point?",false) then
+		//Session yes skips endpoint prompts (same contract as Proxy.makeConnection)
+		if not globals.G_auto_yes and Gui.yesNo("Would you like to set an end point?",false) then
 			if Gui.yesNo("Select an end point from the root cache?") then
 				Cache.view
 				if not len(globals.G_cachePasswords) then
@@ -356,9 +357,9 @@ Command.make=function(Obj,argv)
           push(m,{"user":u,"ip":i,"password":k})
 				else
 					r=Gui.inputInt({"text":"Select a host to set as an end point"})
-					if not r isa number then
+					if r isa number then
 						k=Cache.select(r)
-            push(m,{"user":"root","ip":k.public_ip,"password":k.password})
+						if k then push(m,{"user":"root","ip":k.public_ip,"password":k.password})
 					end if
 				end if
 			else
@@ -636,17 +637,15 @@ Command.make=function(Obj,argv)
         if not has_permission(destDir,"w") then return Error.set("No write permission for: "+arg.o)
         move(q,arg.o,name(q))
         Info.info(z+" installed to [ "+arg.o+" ]")
-      else if not arg.y then
-        if has_permission(File(c,"/bin"),"w") then
-          if Gui.yesNo("Would you like to place "+white(z)+" into [ /bin ]?") then
-            move(q,"/bin",name(q))
-            Info.info(z+" has been successfully built and placed in [ /bin ]")
-          else
-            Info.info(z+" has been successfully built and placed in [ "+d+" ]")
-          end if
-        end if
-      else
+      else if Gui.skipConfirm(arg.y) then
         Info.info(z+" has been successfully built and placed in [ "+d+" ]")
+      else if has_permission(File(c,"/bin"),"w") then
+        if Gui.yesNo("Would you like to place "+white(z)+" into [ /bin ]?") then
+          move(q,"/bin",name(q))
+          Info.info(z+" has been successfully built and placed in [ /bin ]")
+        else
+          Info.info(z+" has been successfully built and placed in [ "+d+" ]")
+        end if
       end if
     end function
     lock=function;runBuild("p="""+arg.p+""";c=host_computer(get_shell);t=File(c,"""+arg.s+""")"+tools["lock"],"lock");end function

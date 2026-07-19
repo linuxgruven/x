@@ -241,6 +241,8 @@ end function
 AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headlessMode,debug,ips=null)
   if ips==null then ips=globals.G_agent._extractIps(cmd)
   if not ips then ips=[]
+  //Must be defined before object-request path (uses it outside autonomous block)
+  skipAllCommands=false
   //Check for autonomous decision-making requests
   autonomousPatterns=self._AUTONOMOUS_PATTERNS
   for pattern in autonomousPatterns
@@ -252,15 +254,29 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
       break
     end if
   end for
+  //"attack X need root computer on Y" - goal+object without decide/figure wording
+  if not actionFound and indexOf(cmd,"attack")!=null and (indexOf(cmd,"need")!=null or indexOf(cmd,"want")!=null) and (indexOf(cmd,"computer")!=null or indexOf(cmd,"shell")!=null or indexOf(cmd,"file")!=null) then
+    parsed.action="autonomous"
+    parsed.summary="Make autonomous decision"
+    parsed.autonomousRequest=true
+    actionFound=true
+    if debug then print green("[DEBUG] Autonomous - attack with object goal")
+  end if
   //Check for conditional logic patterns: "if X fails, try Y" or "scan target, and if vulnerable, exploit"
   conditionalPatterns=self._CONDITIONAL_PATTERNS
   hasConditional=false
-  for pattern in conditionalPatterns
-    if indexOf(cmd,pattern)!=null then
-      hasConditional=true
-      break
-    end if
-  end for
+  //Leading "if "/"then "/"else " (patterns use padded forms to avoid substring hits)
+  if len(cmd)>=3 and cmd[:3]=="if " then hasConditional=true
+  if not hasConditional and len(cmd)>=5 and cmd[:5]=="then " then hasConditional=true
+  if not hasConditional and len(cmd)>=5 and cmd[:5]=="else " then hasConditional=true
+  if not hasConditional then
+    for pattern in conditionalPatterns
+      if indexOf(cmd,pattern)!=null then
+        hasConditional=true
+        break
+      end if
+    end for
+  end if
   if hasConditional then
     conditional=globals.G_agent._parseConditionals(command)
     if conditional and hasIndex(conditional,"primary") then
@@ -454,7 +470,7 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
       skipAllCommands=false
       //Check for object request patterns with flexible matching (allow words between "need" and "computer")
       hasObjectRequest=false
-      if (indexOf(cmdLower,"i want")!=null or indexOf(cmdLower,"i need")!=null or indexOf(cmdLower,"give me")!=null or indexOf(cmdLower,"get me")!=null or indexOf(cmdLower,"grab me")!=null or indexOf(cmdLower,"fetch me")!=null) and (indexOf(cmdLower," shell")!=null or indexOf(cmdLower," computer")!=null or indexOf(cmdLower," file")!=null or indexOf(cmdLower," object")!=null or indexOf(cmdLower," router")!=null) then hasObjectRequest=true
+      if (indexOf(cmdLower,"i want")!=null or indexOf(cmdLower,"i need")!=null or indexOf(cmdLower,"need ")!=null or indexOf(cmdLower,"want ")!=null or indexOf(cmdLower,"give me")!=null or indexOf(cmdLower,"get me")!=null or indexOf(cmdLower,"grab me")!=null or indexOf(cmdLower,"fetch me")!=null) and (indexOf(cmdLower," shell")!=null or indexOf(cmdLower," computer")!=null or indexOf(cmdLower," file")!=null or indexOf(cmdLower," object")!=null or indexOf(cmdLower," router")!=null) then hasObjectRequest=true
       if hasObjectRequest then
         //Check if this has continuation context (comma, then, and, also, to do X, etc)
         hasContinuationContext=false
@@ -612,35 +628,32 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
         if indexOf(cmdLower,"local")!=null then push(continuationParts,"open web --l") else push(continuationParts,"open web")
         if debug then print green("[DEBUG] Autonomous - added 'open browser'")
       end if
-      //Check for "use X" or "run X" pattern to launch specific commands
-      if indexOf(cmdLower,"use")!=null or indexOf(cmdLower,"run")!=null then
-        triggerWord=null
-        triggerIdx=null
-        //Check for "need to use" or "want to use" patterns first (more specific)
-        if indexOf(cmdLower,"need to use")!=null then
-          triggerWord="need to use"
-          triggerIdx=indexOf(cmdLower,"need to use")
-        else if indexOf(cmdLower,"want to use")!=null then
-          triggerWord="want to use"
-          triggerIdx=indexOf(cmdLower,"want to use")
-        else if indexOf(cmdLower,"use")!=null then
-          triggerWord="use"
-          triggerIdx=indexOf(cmdLower,"use")
-        else if indexOf(cmdLower,"run")!=null then
-          triggerWord="run"
-          triggerIdx=indexOf(cmdLower,"run")
-        end if
-        if triggerIdx!=null then
-          afterTrigger=trim(cmdLower[triggerIdx+len(triggerWord):])
-          //Extract command with arguments until "on" or end of string
-          onIdx=indexOf(afterTrigger," on ")
-          if onIdx!=null then cmdToUse=trim(afterTrigger[:onIdx]) else cmdToUse=afterTrigger.trim
-          //Filter out commands that are just common words
-          firstWord=split(cmdToUse," ")[0]
-          if firstWord!="your" and firstWord!="the" and firstWord!="a" and firstWord!="an" and firstWord!="to" and len(cmdToUse)>0 then
-            push(continuationParts,cmdToUse)
-            if debug then print green("[DEBUG] Autonomous - added '"+cmdToUse+"' from "+triggerWord+" pattern")
-          end if
+      //Check for "use X" or "run X" as whole words (avoid substring hits)
+      triggerWord=null
+      triggerIdx=null
+      if indexOf(cmdLower,"need to use")!=null then
+        triggerWord="need to use"
+        triggerIdx=indexOf(cmdLower,"need to use")
+      else if indexOf(cmdLower,"want to use")!=null then
+        triggerWord="want to use"
+        triggerIdx=indexOf(cmdLower,"want to use")
+      else if indexOf(cmdLower," use ")!=null then
+        triggerWord="use"
+        triggerIdx=indexOf(cmdLower," use ")+1
+      else if indexOf(cmdLower," run ")!=null then
+        triggerWord="run"
+        triggerIdx=indexOf(cmdLower," run ")+1
+      end if
+      if triggerIdx!=null then
+        afterTrigger=trim(cmdLower[triggerIdx+len(triggerWord):])
+        //Extract command with arguments until "on" or end of string
+        onIdx=indexOf(afterTrigger," on ")
+        if onIdx!=null then cmdToUse=trim(afterTrigger[:onIdx]) else cmdToUse=afterTrigger.trim
+        //Filter out commands that are just common words
+        firstWord=split(cmdToUse," ")[0]
+        if firstWord!="your" and firstWord!="the" and firstWord!="a" and firstWord!="an" and firstWord!="to" and firstWord!="judgment" and len(cmdToUse)>0 then
+          push(continuationParts,cmdToUse)
+          if debug then print green("[DEBUG] Autonomous - added '"+cmdToUse+"' from "+triggerWord+" pattern")
         end if
       end if
       //Try intelligent command construction if no patterns matched
@@ -1016,7 +1029,8 @@ AgentParser._parseFlowPhase=function(Obj,command,cmd,parsed,actionFound,headless
       break
     end if
   end for
-  if not actionFound and (indexOf(cmd,"fetch")!=null or indexOf(cmd,"get")!=null or indexOf(cmd,"need")!=null or indexOf(cmd,"grab")!=null) then
+  //Skip fetch hijack when attack+object goal already marked autonomous
+  if not actionFound and indexOf(cmd,"attack")==null and (indexOf(cmd,"fetch")!=null or indexOf(cmd,"get")!=null or indexOf(cmd,"need")!=null or indexOf(cmd,"grab")!=null) then
     //Check if this is data extraction (emails, bank, users, etc) - should NOT be fetch
     isDataExtraction=false
     if indexOf(cmd,"email")!=null and (indexOf(cmd,"get")!=null or indexOf(cmd,"need")!=null or indexOf(cmd,"extract")!=null) then isDataExtraction=true

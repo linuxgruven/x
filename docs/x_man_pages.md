@@ -395,10 +395,11 @@ spawn -u tux            # Spawn as user tux
 ### exit
 Exit framework or active session.
 
-**Usage:** `exit [y]`
+**Usage:** `exit [-y|-n]`
 
-**Arguments:**
-- `[y]` - Skip confirmation prompt
+**Flags:**
+- `-y` - Skip confirmation prompt (or run `yes` first)
+- `-n` - Skip confirmation prompt (proxy sessions)
 
 **Aliases:** `x`, `home`
 
@@ -407,16 +408,18 @@ Exit framework or active session.
 - Connection cleanup
 - Optional confirmation
 - Return to main system
+- Honors session `yes` for skip-confirm
 
 **Examples:**
 ```bash
 exit                    # Exit with prompt
-exit y                  # Exit immediately
+exit -y                 # Exit immediately
+yes; exit               # Same via session auto-yes
 x                       # Quick exit alias
 home                    # Return home alias
 ```
 
-**See Also:** close
+**See Also:** close, yes
 
 ---
 
@@ -1612,29 +1615,38 @@ scp /remote/file.txt /local     # Download
 ---
 
 ### rsync
-Synchronize files/directories.
+Synchronize files/directories (local, SSH, or session).
 
-**Usage:** `rsync <source> <dest> [-r] [-v]`
+**Usage:** `rsync [-r|-a] [-v] [-u] [-n] [--delete] [-p PASSWORD] <source> <dest>`
 
-**Arguments:**
-- `<source>` - Source path
-- `<dest>` - Destination path
+**Path formats:**
+- Local: `path`
+- SSH: `[user@]host:path`
+- Session: `sess:id:path`
 
 **Flags:**
-- `-r` - Recursive
+- `-r` - Recursive (required for directories)
+- `-a` - Archive: recursive + preserve perms/owner/group (local)
 - `-v` - Verbose
+- `-u` - Skip files that already match (remote: single files only)
+- `-n` - Dry run
+- `--delete` - Delete **source** after successful transfer (not dest extras)
+- `-p PASSWORD` - SSH password
 
-**Features:**
-- Incremental sync
-- Recursive directory sync
-- Minimal data transfer
-- Progress display
+**Notes:**
+- Local single-file rename: `rsync a.txt /tmp/b.txt`
+- Root downloads prompt for owner; session `yes` skips and keeps root
 
 **Examples:**
 ```bash
 rsync file.txt /backup          # Sync file
+rsync file.txt /tmp/renamed.txt # Rename copy
 rsync -r /home/user /backup     # Sync directory
+rsync -av /src/ sess:2:/dst/    # Archive to session
+yes; rsync -av user@host:/etc/passwd /tmp/  # Skip root owner prompt
 ```
+
+**See Also:** [scp](#scp), [yes](#yes)
 
 ---
 
@@ -3176,7 +3188,7 @@ Arch-style package manager for Grey Hack system.
 - `-r` - Fetch random public repository
 
 **Upgrade Flags (-Su):**
-- `-y` - Auto-confirm upgrades
+- `-y` - Auto-confirm upgrades (or run `yes` first)
 - `-a <package>` - Upgrade specific package
 - `-p <path>` - Specify search path
 - `-i <path>` - Specify install path
@@ -3211,9 +3223,10 @@ pacman -Si                      # Show packages from default repo
 pacman -Si 192.168.1.1          # Show from specific repo
 pacman -Su                      # Upgrade all packages
 pacman -Su -a nmap -y           # Upgrade nmap, auto-confirm
+yes; pacman -Su -p lib -i lib   # Same via session auto-yes
 ```
 
-**See Also:** [build](#build)
+**See Also:** [build](#build), [make](#make), [yes](#yes)
 
 ---
 
@@ -3577,43 +3590,56 @@ Advanced proxy chain and routing management.
 **Usage:** `proxy [options]`
 
 **Key Flags:**
-- `-b` - Build proxy chain from Map.conf
+- `-a [yes]` - Standard proxy (proxy.dat or Map.conf; favors proxy.dat)
+- `-p [yes]` - Proxy.dat chain
+- `-m [yes]` - Map.conf chain
+- `-x [yes]` - Combine proxy.dat and Map.conf
+- `-r COUNT (-s) [yes]` - Random chain of COUNT hops (`-s` uses shells)
 - `-q` - Quick single hop router proxy
 - `-c` - Count hops in chain
-- `-x` - Combine proxy.dat and Map.conf
+- `-h -c COUNT` - Build COUNT-hop chain
 - `-ri <file>` - Import IPs to Map.conf
 - `-wo <file>` - Export Map.conf
 - `-d` - Create crash decoy
 - `-d -r` - Remove and recreate decoy
+
+Trailing `yes` (or run `yes` first) skips endpoint/cache prompts on `-a`/`-p`/`-m`/`-x`/`-r`.
 
 **Features:**
 - Multi-hop proxy chains
 - IP mapping and routing
 - Decoy creation
 - Chain management
+- Session `yes` / trailing `yes` for unattended chains
 
 **Examples:**
 ```bash
-proxy -b                        # Build proxy chain
+proxy -a                        # Build proxy chain
+yes; proxy -p                   # proxy.dat (yes skips prompts)
+proxy -p yes                    # Same with trailing yes
+proxy -r 5 yes                  # Random 5-hop chain, skip prompts
 proxy -q                        # Quick single hop
 proxy -c                        # Count hops
 proxy -ri custom_ips.dat        # Import IPs
 proxy -d                        # Create decoy
 ```
 
+**See Also:** hops, pivot, yes
+
 ---
 
 ### pivot
 Copy and launch X framework on target systems.
 
-**Usage:** `pivot [-y]`
+**Usage:** `pivot [-y] [--full]`
 
 **Flags:**
-- `-y` - Full pivot (complete X framework copy)
+- `-y` - Auto-yes; skip directory prompt, use home (same as `yes` first)
+- `--full` - Full pivot (upload entire local payload); implies auto-yes
 
 **Pivot Types:**
-- **Minimal** (default) - Used for scanning libraries, installing services
-- **Full** (-y flag) - Complete X framework copy with all features
+- **Minimal** (default) - Binary + empty payload structure
+- **Full** (`--full`) - Binary + entire local payload directory
 
 **Features:**
 - Remote framework deployment
@@ -3626,27 +3652,24 @@ Copy and launch X framework on target systems.
 # Basic pivoting
 scan -p 192.168.1.50 22         # Exploit SSH
 pivot                            # Minimal pivot (prompted)
-pivot -y                         # Full pivot
+pivot -y                         # Minimal, home directory
+yes; pivot                       # Same via session auto-yes
+pivot --full                     # Full pivot with payload
 
 # Multi-hop pivoting
 scan 192.168.1.100              # Compromise first target
-pivot                            # Pivot to first system
+pivot --full                     # Pivot to first system
 scan -n                          # Scan from pivot
 scan -p 192.168.2.50 22         # Exploit second target
 pivot                            # Nested pivot
 
-# Strategic operations
-pivot -y                         # Full pivot for extended ops
-scan -l                          # Scan libraries after pivot
-scan -n                          # Scan network from pivot
-
 # Pivot chain
 hunt ssh -c 1                    # Find SSH target
 scan -p TARGET 22                # Exploit found target
-pivot                            # Establish pivot point
+pivot -y                         # Quick minimal pivot
 ```
 
-**See Also:** pull, hops, proxy
+**See Also:** pull, hops, proxy, yes, proot
 
 ---
 
@@ -4736,26 +4759,31 @@ start --terminal        # Full terminal (exits X)
 ### pivot
 Copy and launch X framework on target systems.
 
-**Usage:** `pivot [-y]`
+**Usage:** `pivot [-y] [--full]`
 
 **Flags:**
-- `pivot` - Minimal pivot (for scanning/basic ops)
-- `-y` - Full pivot (complete X framework)
+- `pivot` - Minimal pivot (prompted for location)
+- `-y` - Auto-yes; home directory (same as `yes` first)
+- `--full` - Full pivot with entire payload; implies auto-yes
 
 **Features:**
 - Copy X to compromised systems
 - Minimal or full framework
 - Reuses existing X if present
 - Maximum 17 self-launches
-- Prompted for location
+- Prompted for location unless `-y` / `yes` / `--full`
 
 **Examples:**
 ```bash
 scan -p 192.168.1.50 22  # Exploit SSH
 pivot                     # Minimal pivot
-pivot -y                  # Full pivot with all features
+pivot -y                  # Minimal, skip prompts
+yes; pivot                # Same via session auto-yes
+pivot --full              # Full pivot with all payload
 scan -n && scan -p TARGET 22 && pivot  # Multi-hop chain
 ```
+
+**See Also:** pull, yes, proot
 
 ---
 
@@ -4883,16 +4911,17 @@ Private HTTP interweb service.
 **Usage:** `web`
 
 **Features:**
-- Install and launch private HTTP server
+- Installs/starts httpd if needed and writes `/Public/htdocs/website.html`
 - Secure browsing for coin/bank/repo services
 - Not port forwarded (local only)
 - Requires root privileges
 - Auto-closes on terminal exit
-- Repository fetch capability only
+- Repository fetch capability only (no account create / file download)
 
 **Examples:**
 ```bash
-web                     # Start private HTTP server
+web                     # Start or repair private HTTP server
+# In a normal terminal (not X): Browser.exe <local_ip>
 ```
 
 **See Also:** [service](#service), [open](#open), [start](#start)
@@ -5243,7 +5272,7 @@ Binary build and infection framework.
 **Usage:** `make -t [-y] (-f) (-c [-b]|[-e]) (-p [PASSWORD]) (-s [START]) BINARY | -rec | -r | -cs | -pm | -pp | -pc | -i BINARY V|R|T|C | -l | -v BINARY | -a [-y] | -b [OPTIONS] BINARY | -p BINARY`
 
 **Standalone Tools:**
-- `-t BINARY` - Make standalone tool (use -y to keep in current dir)
+- `-t BINARY` - Make standalone tool (`-y` or session `yes` keeps in current dir)
 - `-rec` - System recovery binary
 - `-r` - Generic rshell binary
 - `-cs` - Custom server frontend
@@ -5260,7 +5289,7 @@ Binary build and infection framework.
 **Build Operations:**
 - `-l` - List buildable binaries
 - `-v BINARY` - View binary source
-- `-a (-y)` - Build all default binaries (use -y to place in /bin)
+- `-a (-y)` - Build all default binaries (`-y` or session `yes` places in /bin)
 - `-b BINARY` - Build single binary
 - `-b S BINARY` - View source
 - `-b T BINARY` - Build with RAT
@@ -5286,14 +5315,17 @@ Binary build and infection framework.
 make -l                         # List all binaries
 make -b ls                      # Build ls binary
 make -a                         # Build all defaults
+make -a -y                      # Build all, place in /bin
+yes; make -a                    # Same via session auto-yes
 make -t lock                    # Create lock tool
+make -t -y unlock               # Standalone tool, keep in cwd
 make -i /bin/cat V              # Inject virus into cat
 make -b V ls                    # Build ls with virus
 make -pm                        # Proxy from Map.conf
 make -rec                       # System recovery binary
 ```
 
-**See Also:** [build](#build), [compile](#compile), [sys](#sys)
+**See Also:** [build](#build), [compile](#compile), [sys](#sys), [yes](#yes)
 
 ---
 
@@ -5466,7 +5498,7 @@ hide -s -n 5 -c XX             # Create XXXXXXXXXX pattern
 ### wipe
 System file corruption and log clearing.
 
-**Usage:** `wipe -x | -c | -m | -lx | -lc | -lt | -l | -b [-y] | -s [-y] | -t | -a | --deploy [SECONDS]`
+**Usage:** `wipe -x | -c | -m | -lx | -lc | -lt | -l | -b [yes] | -s [yes] | -t | -a | --deploy [SECONDS]`
 
 **Options:**
 - `-x` - Wipe x framework traces
@@ -5476,8 +5508,8 @@ System file corruption and log clearing.
 - `-lc` - Wipe log with custom ASCII (from /payload/data/ascii)
 - `-lt` - Wipe log with custom text
 - `-l` - Wipe local log file (standard)
-- `-b (-y)` - Wipe boot system, clear system.log if possible (optional -y for auto-confirm)
-- `-s (-y)` - Wipe entire file system (**DESTRUCTIVE**, optional -y for auto-confirm)
+- `-b [yes]` - Wipe boot system, clear system.log if possible (trailing yes or `yes` command to auto-confirm)
+- `-s [yes]` - Wipe entire file system (**DESTRUCTIVE**, trailing yes or `yes` command to auto-confirm)
 - `-t` - Wipe user Trash folder
 - `-a` - Wipe bank transaction log
 - `--deploy [.01-300 SECONDS]` - Deploy delayed log wiper
@@ -5497,11 +5529,13 @@ wipe -lx                        # Wipe with X graphic
 wipe -lc                        # Custom ASCII art
 wipe -x                         # Remove x traces
 wipe -b                         # Remove boot folder
-wipe -b -y                      # Auto-confirm boot wipe
+wipe -b yes                     # Auto-confirm boot wipe
+yes; wipe -b                    # Same via session auto-yes
+wipe -s yes                     # Auto-confirm filesystem wipe
 wipe --deploy 5                 # 5 second delayed wipe
 ```
 
-**See Also:** [clean](#clean), [rm](#rm), [logwatcher](#logwatcher)
+**See Also:** [clean](#clean), [rm](#rm), [lw](#lw), [yes](#yes)
 
 ---
 
@@ -6718,26 +6752,27 @@ recon --file targets.txt    # Batch recon
 ### pRoot
 Automated root shell and framework pivot.
 
-**Usage:** `pRoot [y]`
+**Usage:** `proot [-y]`
 
-**Arguments:**
-- `[y]` - Skip confirmation prompts
+**Flags:**
+- `-y` - Skip confirmation prompts (or run `yes` first)
 
 **Features:**
 - Automated privilege escalation
 - Automatic framework pivot to user home
 - Shell objects only
 - Streamlined post-exploitation
-- Confirmation bypass for scripting
+- Confirmation bypass via `-y` or session `yes`
 
 **Examples:**
 ```bash
-pRoot                       # Get root with prompts
-pRoot y                     # Skip confirmations
-scan -l && pRoot            # Exploit then escalate
+proot                       # Get root with prompts
+proot -y                    # Skip confirmations
+yes; proot                  # Same via session auto-yes
+scan -l && proot            # Exploit then escalate
 ```
 
-**See Also:** [sudo](#sudo), [su](#su), [passwd](#passwd)
+**See Also:** [sudo](#sudo), [su](#su), [passwd](#passwd), [pivot](#pivot), [yes](#yes)
 
 ---
 
@@ -6907,8 +6942,8 @@ Pack or repack libraries and routers for portable deployment.
 
 **Flags:**
 - `-a` - Pack all (crypto, metaxploit, router)
-- `-m [-y]` - Pack metaxploit.so (skip removal confirmation with -y)
-- `-c [-y]` - Pack crypto.so (skip removal confirmation with -y)
+- `-m [-y]` - Pack metaxploit.so (`-y` leaves uploaded lib on disk)
+- `-c [-y]` - Pack crypto.so (`-y` leaves uploaded lib on disk)
 - `-r [-i IP]` - Pack router (optionally specify IP)
 - `-s` - Pack smart appliance libraries
 - `-t` - Pack traffic management libraries
@@ -7548,7 +7583,11 @@ Enable or disable automatic yes to all prompts.
 
 **Usage:** `yes` | `yes --off` | `yes -c`
 
-**Description:** Sets a session-wide flag that automatically confirms all yes/no prompts without user input. Useful when running commands with `-i` (interactive) that would otherwise prompt before each operation. The flag is automatically cleared at the end of any pipeline, so `yes | cmd -i ...` works for pipeline-scoped auto-confirmation.
+**Description:** Sets a session-wide flag that automatically confirms all yes/no prompts without user input. Useful when running commands with `-i` (interactive) that would otherwise prompt before each operation.
+
+Also covers skip-confirm / use-defaults paths that accept `-y`, and trailing `yes` on `proxy` / `wipe -b|-s` / file download (e.g. `proxy -r 5 yes`, `wipe -b yes`): `exit`, `pivot`, `proot`, `make`, `pacman -Su`. Force-overwrite flags (`mkdir -y`, `touch -y`) and `pack -y` are not affected.
+
+The flag is automatically cleared at the end of any pipeline, so `yes | cmd -i ...` works for pipeline-scoped auto-confirmation. Use `yes --off` to disable outside a pipeline.
 
 **Flags:**
 - `yes` — Enable auto-yes; all GUI prompts return true automatically
@@ -7559,11 +7598,13 @@ Enable or disable automatic yes to all prompts.
 ```bash
 yes                             # Enable auto-yes for all subsequent prompts
 cp -i *.txt /backup             # All overwrite prompts auto-confirmed
+proxy -r 5                      # Skip proxy endpoint/cache prompts
+proxy -r 5 yes                  # Same with trailing yes (enables this flag)
 yes --off                       # Re-enable normal prompting
 yes | cp -i file.txt /etc       # Auto-confirm for this command only (pipeline-scoped)
 yes -c                          # Print whether auto-yes is currently ON or OFF
 ```
 
-**See Also:** [cp](#cp), [mv](#mv), [rm](#rm)
+**See Also:** [cp](#cp), [mv](#mv), [rm](#rm), [proxy](#proxy), [exit](#exit), [pivot](#pivot), [wipe](#wipe), [pacman](#pacman)
 
 ---

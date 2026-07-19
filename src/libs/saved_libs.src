@@ -165,12 +165,26 @@ SavedLibs.getFile=function(Obj,argv)
     t=split(name(n),"V")[0]
 		//Fallback to full name
     if not t then t=name(n)
-		//Get main system
-    sys=System.getSystem
-		//Copy library to target
-    r=scp(sys.shell,path(n),argv.p,Obj.object)
-		//Check for error
-    if r isa string then return Error.set(r)
+		//OPSEC: while proxied, stage via proxy shell so home IP never hits the target
+    if globals.G_proxy and hasIndex(globals.G_proxy,"shell") and globals.G_proxy.shell then
+      _ps=globals.G_proxy.shell
+      _pc=globals.G_proxy.computer
+      _stage="/tmp"
+      if hasIndex(globals.G_proxy,"user") and globals.G_proxy.user and hasIndex(globals.G_proxy.user,"home") then _stage=path(globals.G_proxy.user.home)
+      //Home -> proxy (proxy logs only), then proxy -> target
+      r=scp(System.getSystem.shell,path(n),_stage,_ps)
+      if r isa string then return Error.set(r)
+      staged=File(_pc,_stage+"/"+name(n))
+      if not staged then return Error.set("Failed to stage library on proxy")
+      r=scp(_ps,path(staged),argv.p,Obj.object)
+      if r isa string then return Error.set(r)
+      //Best-effort cleanup of staged file on proxy
+      if staged then delete(staged)
+    else
+      sys=System.getSystem
+      r=scp(sys.shell,path(n),argv.p,Obj.object)
+      if r isa string then return Error.set(r)
+    end if
 		//Get existing file
     f=File(Obj.computer,argv.p+"/"+t)
 		//Remove old version

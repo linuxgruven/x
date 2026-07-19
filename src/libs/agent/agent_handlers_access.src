@@ -41,26 +41,56 @@ AgentHandlers._handleGetObject=function(Obj,step,context)
   //Check if this is headless with continuation commands - use new path regardless of needRoot
   isHeadlessWithCommands=false
   if hasIndex(step,"isHeadless") and step.isHeadless and hasIndex(step,"continuationCommands") and len(step.continuationCommands)>0 then isHeadlessWithCommands=true
-  //Check if we should use root router bounce method (config settings configured + router shell available)
+  //Man-learned scan bounce flag (ai learn scan) -> Mission.getRootBounce (--e then --l)
   useRootBounce=false
-  if not isHeadlessWithCommands and hasIndex(globals,"G_settings") and hasIndex(globals.G_settings,"vulnerableLib") and hasIndex(globals.G_settings,"vulnerableLibIndex") then
-    if globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex then
-      //Config settings configured - check if router shell is available
-      if outLvl>=2 then print skyblue("Agent: Config settings configured - checking for router shell...")
-      routerShell=null
-      if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then routerShell=Attack.scanCustom([publicIP,"router","s"],true)
-      if routerShell and typeof(routerShell)=="shell" then
-        useRootBounce=true
-        if outLvl>=2 then print green("Agent: Using root router bounce method (most direct)")
-      else
-        if outLvl>=2 then print yellow("Agent: No router shell available - will try other methods")
-      end if
+  bounceFlag="--b"
+  if hasIndex(step,"flag") and step.flag then
+    bounceFlag=step.flag
+  else if hasIndex(globals.G_agent,"_getScanFlagForIntent") then
+    bounceFlag=globals.G_agent._getScanFlagForIntent("bounce")
+  end if
+  if not bounceFlag then bounceFlag="--b"
+  if not isHeadlessWithCommands then
+    //Root/computer LAN goals always use bounce -- flag / getRootBounce (user WAN bounce is not enough)
+    if needRoot or (hasIndex(step,"objectType") and (step.objectType=="computer" or step.objectType=="shell")) then
+      useRootBounce=true
+      if outLvl>=1 then print skyblue("Agent: man scan "+bounceFlag+" -p "+publicIP+" -l "+lanIP+" (backend: --e root bounce, else config -v/-x + --l)")
     end if
   end if
   if useRootBounce then
-    //BEST/MOST DIRECT: Use Mission.getRootBounce with configured vulnerable library
+    //Pass captured guest shell when available so getRootBounce skips re-scanCustom
+    if hasIndex(step,"routerShell") and step.routerShell then i.shell=step.routerShell
+    if (not hasIndex(i,"shell") or not i.shell) and context and hasIndex(context,"bounceShell") and context.bounceShell then i.shell=context.bounceShell
+    //Live proxy/shell Obj so remote extract uses the right MetaxploitLib (not packMetaxploit)
+    i.Obj=Obj
     objectResult=Mission.getRootBounce(publicIP,lanIP,i)
     if debug then print green("Debug: Mission.getRootBounce returned typeof="+typeof(objectResult))
+    bounceFailed=false
+    bounceErr=null
+    if typeof(objectResult)=="list" and len(objectResult)>=2 and objectResult[0]=="error" then
+      bounceFailed=true
+      bounceErr=str(objectResult[1])
+    else if objectResult isa Error then
+      bounceFailed=true
+      if hasIndex(objectResult,"message") then bounceErr=str(objectResult.message) else bounceErr=str(objectResult)
+    else if not objectResult or typeof(objectResult)!="computer" then
+      bounceFailed=true
+      bounceErr="no computer returned ("+typeof(objectResult)+")"
+    end if
+    //LAN root/computer goals: fail closed - do not fall through to dumping a guest router shell
+    if bounceFailed then
+      wantLanObj=needRoot or (hasIndex(step,"objectType") and (step.objectType=="computer" or step.objectType=="shell"))
+      if wantLanObj then
+        //Firewall never blocks LAN bounce - remap misleading engine text
+        if bounceErr and (indexOf(lower(bounceErr),"firewall")!=null or indexOf(lower(bounceErr),"connection refused")!=null) then bounceErr="bounce failed (not firewall) - try scan --e on router or config -v/-x"
+        result.error="scan --b failed: "+bounceErr
+        result.critical=true
+        if outLvl>=1 then print yellow("Agent: "+result.error)
+        return result
+      end if
+      if outLvl>=2 then print yellow("Agent: scan --b error: "+bounceErr+" - trying fallbacks")
+      objectResult=null
+    end if
     //Wrap the computer object - headless if continuation commands, interactive otherwise
     if objectResult and typeof(objectResult)=="computer" then
       //Determine headless mode based on continuation commands or needsInteractiveShell flag
@@ -109,6 +139,7 @@ AgentHandlers._handleGetObject=function(Obj,step,context)
   else if needRoot and not isHeadlessWithCommands then
     //ROOT ACCESS REQUIRED: Try Mission.getRootBounce first
     if outLvl>=2 then print yellow("Agent: Root access required - trying Mission.getRootBounce...")
+    i.Obj=Obj
     objectResult=Mission.getRootBounce(publicIP,lanIP,i)
     //Check if it returned an error array ["error", message]
     if typeof(objectResult)=="list" and len(objectResult)>=2 and objectResult[0]=="error" then
@@ -163,7 +194,7 @@ AgentHandlers._handleGetObject=function(Obj,step,context)
     if outLvl>=2 then print skyblue("Agent: Scanning "+publicIP+" for bounce exploits to "+lanIP+"...")
     r=get_router(publicIP)
     if r then
-      libraries=Exploit.extract(r,publicIP)
+      libraries=Exploit.extract(r,publicIP,Library.mxFor(Obj))
       if libraries and not (libraries isa Error) then
         //Look for exploits that can bounce to the LAN target
         foundBounce=false
@@ -256,7 +287,7 @@ AgentHandlers._handleGetObject=function(Obj,step,context)
     if outLvl>=2 then print yellow("Agent: No direct bounce exploits found - falling back to shell route")
     //FALLBACK: Get root shell on router and use scanForExploit
     //Step 1: Get root shell on router
-    ex=Attack.scanCustom([publicIP,"router","s"],true)
+    ex=Attack.scanCustom([publicIP,"router","s"],true, Obj)
     if typeof(ex)!="shell" then
       result.error="Could not get a shell on the router"
       result.failedAt="Router shell access"
@@ -539,7 +570,7 @@ AgentHandlers._handleGetObject=function(Obj,step,context)
           print yellow("Progress before failure:")
           for stepDesc in result.progress;print white("  [+] "+stepDesc);end for
           if hasIndex(result,"failedAt") then print red("  [X] Failed at: "+result.failedAt)
-          print yellow("Suggestion: Check if target has necessary ports open or try a different vulnerable library")
+          print yellow("Suggestion: Firewall never blocks LAN bounce - check config -v/-x hack lib or try another bounce exploit")
         end if
         Error.set(objectResult[1])
         return result

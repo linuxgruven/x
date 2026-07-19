@@ -2504,22 +2504,12 @@ System.toJSON=function(v,c=0,i=0)
   //In GreyScript, true==1 and false==0, so we cannot reliably distinguish
   //between boolean intent and numeric intent. Output all numbers as JSON numbers.
   if v isa number then return str(v)
-  //String with escaping - CRITICAL: escape in correct order
-  //1. Escape backslash first (\ -> \\)
-  //2. Then escape quote (" -> \")
-  //3. Then escape control characters
+  //String with escaping via Parser.escape (backslash, quote, control chars)
+  //Do not hand-roll replace("""","\""") - GreyScript quote literals are easy to get wrong
+  //and unescaped " inside man-page text breaks System.parse on reload.
   if v isa string then
     if len(v)==0 then return """"""
-    s=v
-    //Step 1: Escape backslashes (\ becomes \\)
-    s=s.replace("\\","\\\\")
-    //Step 2: Escape quotes (" becomes \")
-    s=s.replace("""","\""")
-    //Step 3: Escape newlines, returns, tabs
-    s=s.replace(char(10),"\n")
-    s=s.replace(char(13),"\r")
-    s=s.replace(char(9),"\t")
-    return """"+s+""""
+    return """"+Parser.escape(v)+""""
   end if
   //List to JSON array
   if v isa list then return Parser.listToJSON(v,c,i)
@@ -2537,57 +2527,61 @@ System.parse=function(s)
 end function
 //Manage Interweb/HTTP service with web page selection
 System.interWeb=function(Obj)
-  //Load HTTP library
+  if not Obj or not hasIndex(Obj,"computer") or not Obj.computer then return Error.set("No computer for Interweb")
+  if hasIndex(Obj,"user") and Obj.user and hasIndex(Obj.user,"name") and Obj.user.name!="root" then return Warning.set("web requires root privileges")
+  //Load HTTP library (install via pacman if missing)
   h=include_lib("/lib/libhttp.so")
-  //Library not loaded
   if not h then
-    //Install HTTP library
-    self.apt(Obj,["install","-a","libhttp.so","-p","/lib"])
-    //Try loading again
+    Command.pacman(Obj,["-Si","libhttp.so","-p","/lib"])
     h=include_lib("/lib/libhttp.so")
-    //Failed to load
     if not h then return Error.set("Unable to load the HTTP library")
-    //Install service if /Public missing
-    if not File(Obj.computer,"/Public") then install_service(h)
-	end if
-  //Start HTTP service
+  end if
+  //Ensure service files exist (/Public/htdocs), then start
+  if not File(Obj.computer,"/Public") then
+    r=install_service(h)
+    if r isa string then return Error.set(r)
+  end if
   r=start_service(h)
-  //Service failed to start
   if r isa string then return Error.set(r)
   c=Obj.computer
   _sys=System.getSystem
+  if not _sys or _sys isa Error or not hasIndex(_sys,"dir") or not _sys.dir.srcWeb then return Error.set("No web pages installed (missing payload/src/web)")
   _webDir=_sys.dir.srcWeb
   _webFiles=get_files(_webDir)
   if not _webFiles then return Error.set("No web pages installed")
-  //Service menu loop
+  //Build selectable page list once (skip defacement template "website")
+  pages=[]
+  for m in _webFiles
+    if name(m)=="website" then continue
+    push(pages,m)
+  end for
+  if not len(pages) then return Error.set("No Interweb pages found in src/web")
   while true
-    //Menu header
     CH=[green("Choose which Interweb service to use:")]
-    //Iterate through available pages
-    for m in _webFiles;if name(m)=="website" then continue;push(CH,white(name(m)));end for
-  //Add exit option
-  push(CH,iyellow("--- Done using Interweb ---"))
-  //Get user choice
-  UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
-  //Exit selected
-  if UCH==len(CH)-1 then
-    //Stop HTTP service
-    z=h.stop_service
-    if z isa string then return Error.set(z) else return Info.info("Interweb session closed")
-	end if
-  //Find selected file
-  _idx=0
-  for m in _webFiles;if name(m)=="website" then continue;if _idx==UCH-1 then break;_idx=_idx+1;end for
-  //Get website file
-  w=File(c,"/Public/htdocs/website.html")
-  //Update website content
-  if w then set_content(w,get_content(m))
-  //Display service info
-  Info.info("Interweb "+name(m)+" is running on "+c.local_ip)
-  //Display access instructions
-  Info.info("In a terminal type ' open -b "+c.local_ip+" ' to view the website")
-	end while
-//End interWeb
+    for m in pages;push(CH,white(name(m)));end for
+    push(CH,iyellow("--- Done using Interweb ---"))
+    UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
+    if UCH==len(CH)-1 then
+      z=stop_service(h)
+      if z isa string then return Error.set(z)
+      return Info.info("Interweb session closed")
+    end if
+    sel=UCH-1
+    if sel<0 or sel>=len(pages) then continue
+    m=pages[sel]
+    w=File(c,"/Public/htdocs/website.html")
+    if not w then
+      //Service tree incomplete - reinstall then retry write
+      r=install_service(h)
+      if r isa string then return Error.set(r)
+      w=File(c,"/Public/htdocs/website.html")
+    end if
+    if not w then return Error.set("Missing /Public/htdocs/website.html")
+    if not has_permission(w,"w") then return Error.set("No write permission on website.html")
+    set_content(w,get_content(m))
+    Info.info("Interweb "+name(m)+" is running on "+c.local_ip)
+    Info.info("In a terminal type ' Browser.exe "+c.local_ip+" ' to view the website")
+  end while
 end function
 //Standalone pipe command for variable management and debug control
 System.pipe=function(Obj,argv)

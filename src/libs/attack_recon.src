@@ -1241,15 +1241,8 @@ Attack.scanCustom=function(argv,returnEx=false,Obj=null)
   for arg in argv;if arg=="--router" then routerFlag=true else push(pos,arg);end for
   _findMode=len(pos)>=2 and lower(pos[1])=="find"
   if len(pos)<2 or (not _findMode and len(pos)<3) then return Error.set("Missing ip|library|target params")
-  // Resolve metaxploit: prefer shell's packMetaxploit, then pivot/proxy metaxploit, then global
-  _mx=Library.metaxploit
-  if Obj!=null then
-    if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then
-      _mx=Obj.packMetaxploit
-    else if hasIndex(Obj,"metaxploit") and Obj.metaxploit then
-      _mx=Obj.metaxploit
-    end if
-  end if
+  // Resolve metaxploit: session/proxy first (OPSEC - home mx leaks home IP into target logs)
+  _mx=Library.mxFor(Obj)
 	y=0
 	while y!=16
 		y+=1
@@ -1282,7 +1275,10 @@ Attack.scanCustom=function(argv,returnEx=false,Obj=null)
     end if
 		if globals.G_settings.monitorDirtyips then Dirty.add(i)
 		z=Exploit.extract(r,i,_mx)
-    if z isa Error then return
+    if z isa Error then
+      if returnEx then return z
+      return
+    end if
 		if not z then
 			Info.error("No attack vectors found")
 			continue
@@ -1580,13 +1576,13 @@ Attack.grabLog=function(Obj,argv)
   argv=_p.parseArgs("grab",argv)
   if argv isa Error then return
   if not argv.p then argv.p=0
-  // Get metaxploit library
-  if globals.G_metaxploit then z=globals.G_metaxploit else z=Library.metaxploit
+  // Metaxploit from current session/proxy - never prefer home G_metaxploit while proxied
+  z=Library.mxFor(Obj)
   S=null
   // Get router and extract exploits
   r=get_router(i)
   if not r then return Warning.set("IP down")
-  m=Exploit.extract(r,i)
+  m=Exploit.extract(r,i,z)
   if m isa Error then return Warning.set("No attack vectors found")
   // Find shell exploit for target port
   for e in m
@@ -1614,14 +1610,22 @@ Attack.grabLog=function(Obj,argv)
       end if
       // Check log file permissions
       if not has_permission(File(host_computer(S),"/var/system.log"),"r") then continue
-      // Copy log file to local system
-      x=scp(S,"var/system.log",path(globals.G_main.user.home)+"/Downloads",globals.G_main.shell)
+      // Pull via current session/proxy shell - never G_main while proxied (home IP in target logs)
+      _destShell=Obj.shell
+      _destComp=Obj.computer
+      _destDir=path(Obj.dir.current)
+      if globals.G_proxy and hasIndex(globals.G_proxy,"shell") then
+        _destShell=globals.G_proxy.shell
+        _destComp=globals.G_proxy.computer
+        if hasIndex(globals.G_proxy,"dir") and globals.G_proxy.dir then _destDir=path(globals.G_proxy.dir.current)
+      end if
+      x=scp(S,"var/system.log",_destDir,_destShell)
       if x isa string then return Error.set(x)
       // Optionally log shell access
       if argv.w then Log.shellLog(S)
-      // Move log to current directory with IP and port in name
-      f=File(globals.G_main.computer,path(globals.G_main.user.home)+"/Downloads/system.log")
-      if move(f,path(globals.G_main.dir.current),"system"+i+"_"+argv.p+".log")!=1 then return Error.set("Failed to move "+path(globals.G_main.user.home)+"/Downloads/system.log") else return Info.info("Log file saved to: "+path(globals.G_main.dir.current)+"/system"+i+"_"+argv.p+".log")
+      f=File(_destComp,_destDir+"/system.log")
+      if not f then return Error.set("Log downloaded but not found at "+_destDir+"/system.log")
+      if move(f,_destDir,"system"+i+"_"+argv.p+".log")!=1 then return Error.set("Failed to rename log") else return Info.info("Log file saved to: "+_destDir+"/system"+i+"_"+argv.p+".log")
     end for
   end for
   // Report failure if no shell found
@@ -1631,12 +1635,13 @@ end function
 // Args: Obj (context), argv (command arguments with -p public IP, -l LAN IP)
 // Returns: Root computer object on success, null on failure
 Attack.bounce=function(argv,headless=false)
-  // Check for vulnerable library configuration
-  if not globals.G_settings.vulnerableLib or globals.G_settings.vulnerableLibIndex==-1 then return Error.set("No vulnerable library set for bounce attack")
+  // scan --b -p PUBLIC -l LAN [cmds...]
+  // Backend: Mission.getRootBounce = scan --e root bounce, else config lib + scan --l
   // Extract -p and -l values; everything else becomes trailing commands
   publicIP=null
   lanIP=null
   trailing=[]
+  shellIn=null
   i=0
   while i<len(argv)
     a=argv[i]
@@ -1646,6 +1651,10 @@ Attack.bounce=function(argv,headless=false)
     else if a=="-l" and i+1<len(argv) then
       lanIP=argv[i+1]
       i+=2
+    else if a=="-s" and i+1<len(argv) then
+      //Optional: already-captured router shell (agent path)
+      shellIn=argv[i+1]
+      i+=2
     else
       push(trailing,a)
       i+=1
@@ -1654,8 +1663,12 @@ Attack.bounce=function(argv,headless=false)
   if not publicIP or not lanIP then return Error.set("Missing required parameters: -p <public IP> -l <LAN IP>")
   // Resolve public IP to router
   publicIP=Net.lookup(publicIP)
-  // Use Mission.getRootBounce to handle the attack
-  result=Mission.getRootBounce(publicIP,lanIP,{})
+  info={}
+  if shellIn then info.shell=shellIn
+  //Prefer current proxy for WAN metaxploit (same as agent getObject)
+  if globals.G_proxy then info.Obj=globals.G_proxy
+  // Use Mission.getRootBounce (scan --e local root bounce, else config -v/-x + scan --l)
+  result=Mission.getRootBounce(publicIP,lanIP,info)
   // Error result: ["error", message]
   if result isa list then return Error.set(result[1])
   // If inside a bash script, set FLAGS directly
@@ -1692,9 +1705,10 @@ Attack.bounce=function(argv,headless=false)
       cmdName=lower(parts[0])
       if hasIndex(co.commands,cmdName) then co.commands[cmdName](parts[1:])
     end for
-  else
-    Exploit.getComputer(result,headless)
+    return co
   end if
+  //Headless: return wrapped computer; interactive: open session
+  return Exploit.getComputer(result,headless)
 end function
 // Attack.shellBounce - Like scan --c but executes commands on the resulting shell
 // Usage: scan --s IP LIBRARY s [-S] [cmd [then cmd ...]]
@@ -1712,7 +1726,7 @@ Attack.shellBounce=function(argv,Obj=null)
     if a=="-S" then
       doSu=true
     else if lower(a)=="then" then
-      // explicit separator — everything after is trailing
+      // explicit separator - everything after is trailing
       trailing=argv[i+1:]
       break
     else if positionalCount<3 or a[:2]=="--" then
@@ -1720,7 +1734,7 @@ Attack.shellBounce=function(argv,Obj=null)
       push(scanArgs,a)
       if a[:2]!="--" then positionalCount+=1
     else
-      // 3 positionals done and not a -- flag — rest is trailing
+      // 3 positionals done and not a -- flag - rest is trailing
       trailing=argv[i:]
       break
     end if

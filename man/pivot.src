@@ -22,6 +22,7 @@ manPivot="PIVOT(1)                         X Shell Manual                       
 
     <b>-y</b>
       Auto-yes. Skip directory prompt, use home directory.
+      Same effect as running the <b>yes</b> command first.
 
     <b>--full</b>
       Full pivot. Upload x binary and entire local payload directory
@@ -37,6 +38,10 @@ manPivot="PIVOT(1)                         X Shell Manual                       
 
     <b>pivot -y</b>
     Minimal pivot (auto-yes, home directory)
+
+    <b>yes</b>
+    <b>pivot</b>
+    Same via session auto-yes
 
     <b>pivot --full</b>
     Full pivot with all payload data
@@ -77,4 +82,4 @@ manPivot="PIVOT(1)                         X Shell Manual                       
     <b>pivot -y</b>
     Quick minimal pivot
 <b>SEE ALSO</b>
-    <b>pull</b>"
+    <b>pull</b>, <b>yes</b>, <b>proot</b>"

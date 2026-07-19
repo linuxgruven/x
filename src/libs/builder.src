@@ -18,6 +18,37 @@ Builder.checkPerms=function(Obj)
   end if
   return C
 end function
+//sourceShell - Shell to SCP FROM when deploying libs (proxy > home)
+//OPSEC: never upload from G_main.shell onto a target while proxied - home IP hits target logs
+Builder.sourceShell=function
+  if globals.G_proxy and hasIndex(globals.G_proxy,"shell") and globals.G_proxy.shell then return globals.G_proxy.shell
+  return globals.G_main.shell
+end function
+//sourceMetaFile - Local metaxploit.so file on the upload source host
+//Returns: File or null
+Builder.sourceMetaFile=function
+  //Prefer metaxploit.so already on the proxy filesystem
+  if globals.G_proxy and hasIndex(globals.G_proxy,"computer") and globals.G_proxy.computer then
+    pc=globals.G_proxy.computer
+    //Common proxy install locations
+    for p in ["/lib/metaxploit.so","/root/metaxploit.so"]
+      f=File(pc,p)
+      if f then return f
+    end for
+    if hasIndex(globals.G_proxy,"dir") and globals.G_proxy.dir and hasIndex(globals.G_proxy.dir,"data") then
+      f=File(pc,path(globals.G_proxy.dir.data)+"/metaxploit.so")
+      if f then return f
+    end if
+    if hasIndex(globals.G_proxy,"root") and globals.G_proxy.root then
+      m=Io.findFile(globals.G_proxy.root,"metaxploit.so")
+      if m and not (m isa Error) then return m
+    end if
+  end if
+  //Home data dir (only safe when not proxied - callers still use sourceShell)
+  f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/metaxploit.so")
+  if f then return f
+  return null
+end function
 // Clean up temp build files and optionally an uploaded library from path(C)
 Builder._cleanup=function(Obj,C,m=null,n=".x_x")
   f=File(Obj.computer,path(C)+"/"+n+".src")
@@ -346,9 +377,10 @@ Builder.packCO=function(Obj,i=null)
   F=true
   m=Io.findFile(Obj.root,"metaxploit.so")
   if m isa Error then
-    m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/metaxploit.so")
+    m=self.sourceMetaFile
     if not m then return Error.set("","",true)
-    x=scp(globals.G_main.shell,path(m),path(C),Obj.shell)
+    //Upload from proxy shell when proxied - never G_main -> target
+    x=scp(self.sourceShell,path(m),path(C),Obj.shell)
     if x isa string then return Error.set(x)
     m=File(Obj.computer,path(C)+"/metaxploit.so")
     if not m then return Error.set("Failed to upload metaxploit")
@@ -389,9 +421,9 @@ Builder.packCOEX=function(ex,i=null)
   if not has_permission(h,"w") then return Error.set("","",true)
   h=path(h)
   if not m or m isa Error then
-    m=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/metaxploit.so")
+    m=self.sourceMetaFile
     if not m then return Error.set("","",true)
-    x=scp(globals.G_main.shell,path(m),h,ex)
+    x=scp(self.sourceShell,path(m),h,ex)
     if x isa string then return Error.set(x)
     m=File(host_computer(ex),h+"/metaxploit.so")
     if not m then return Error.set("Failed to import metaxploit")
@@ -538,7 +570,7 @@ end function
 // Log into an email account on the current machine and return the MetaMail object
 // Args: Obj (context), email (email address), pass (plaintext password)
 // Returns: MetaMail object or Error
-// XFIX1.0: packing not needed — mail_login works on the local host. Prefer:
+// XFIX1.0: packing not needed - mail_login works on the local host. Prefer:
 // XFIX1.0:   return mail_login(email,pass)
 // XFIX1.0: Callers that hit fetch/read/send/delete* still need the 2s MetaMail cooldown.
 Builder.packMailLogin=function(Obj,email,pass)

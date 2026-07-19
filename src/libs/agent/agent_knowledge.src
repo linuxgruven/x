@@ -198,52 +198,108 @@ AgentCore.getCommandInfo=function(commandName)
       for key in indexes(knowledge);if typeof(knowledge[key])=="number" and knowledge[key]==true then push(learnedCapabilities,key);end for
       if len(learnedCapabilities)>0 then print green("[DEBUG]   Capabilities: "+join(learnedCapabilities,", "))
     end if
-    //Check if this is truly new knowledge before saving
-    isNewKnowledge=not hasIndex(globals.G_agent.commandKnowledgeCache,normalizedName)
-    //Store in cache (update or add)
+    //Store in cache (update or add) - never auto-save here.
+    //Opportunistic learn during planning must not purge/overwrite the knowledge base.
+    //Persist only via ai learn / ai learn all / explicit saveKnowledge.
     globals.G_agent.commandKnowledgeCache[normalizedName]=knowledge
-    //Auto-save only if this was genuinely new knowledge AND not in batch mode
-    if isNewKnowledge and not hasIndex(globals.G_agent.config,"batchLearning") then
-      if outLvl>=1 then print skyblue("Agent: Auto-saving new command knowledge...")
-      globals.G_agent.saveKnowledge
-    else if isNewKnowledge and globals.G_agent.config.batchLearning then
-      if debug then print green("[DEBUG] Agent: Cached '"+normalizedName+"' (batch mode - will save at end)")
-    end if
+    inBatch=hasIndex(globals.G_agent.config,"batchLearning") and globals.G_agent.config.batchLearning
+    if inBatch and debug then print green("[DEBUG] Agent: Cached '"+normalizedName+"' (batch mode - will save at end)")
     return knowledge
   end if
   if debug then print green("[DEBUG] Agent: No help available for '"+normalizedName+"'")
   return null
+end function
+//Strip fields that break JSON round-trip (man-page quotes/colons in raw text)
+AgentCore._sanitizeKnowledgeEntry=function(cmd)
+  if not cmd or typeof(cmd)!="map" then return cmd
+  clean={}
+  for key in indexes(cmd)
+    //Drop bulky/unsafe free-text that re-breaks System.parse
+    if key=="raw" or key=="rawLower" then continue
+    val=cmd[key]
+    if key=="flags" and typeof(val)=="map" then
+      cleanFlags={}
+      for fk in indexes(val)
+        desc=str(val[fk])
+        //Flag descs only - strip quotes/newlines that corrupt JSON
+        desc=desc.replace("""","'")
+        desc=desc.replace(char(10)," ")
+        desc=desc.replace(char(13)," ")
+        if len(desc)>180 then desc=desc[:180]
+        cleanFlags[fk]=desc
+      end for
+      clean.flags=cleanFlags
+    else if key=="purpose" or key=="purposeLower" then
+      p=str(val).replace("""","'")
+      p=p.replace(char(10)," ")
+      if len(p)>200 then p=p[:200]
+      clean[key]=p
+    else
+      clean[key]=val
+    end if
+  end for
+  return clean
 end function
 //Manually trigger learning for a specific command
 AgentCore.learnCommand=function(Obj,commandName)
   outLvl=globals.G_agent.config.outputLevel
   if not commandName or len(commandName)==0 then return {"success":false,"error":"No command name provided"}
   if not hasIndex(self,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
+  //Ensure disk knowledge is loaded before merging a single command save
+  if not hasIndex(self,"knowledgeFileLoaded") or not globals.G_agent.knowledgeFileLoaded then
+    globals.G_agent.loadKnowledge
+    globals.G_agent.knowledgeFileLoaded=true
+  end if
   knowledge=globals.G_agent.getCommandInfo(commandName)
   if not knowledge then return {"success":false,"error":"Could not find man page for: "+commandName}
   if outLvl>=1 then print skyblue("Agent: Learned about '"+commandName+"' command")
+  globals.G_agent.saveKnowledge
   return {"success":true,"command":commandName,"knowledge":knowledge}
 end function
+//Delete every agent_knowledge*.json under data/ (numbered chunks + legacy names)
+//Returns count of files removed
+AgentCore._purgeKnowledgeFiles=function
+  if not globals.G_main or not globals.G_main.dir or not globals.G_main.dir.data then return 0
+  dataPath=path(globals.G_main.dir.data)
+  dataDir=File(globals.G_main.computer,dataPath)
+  if not dataDir then return 0
+  deletedCount=0
+  files=get_files(dataDir)
+  if files then
+    for f in files
+      n=name(f)
+      if not n then continue
+      //agent_knowledge_0.json, agent_knowledge.json, etc.
+      if indexOf(n,"agent_knowledge")==0 and indexOf(n,".json")!=null then
+        delete(f)
+        deletedCount+=1
+      end if
+    end for
+  end if
+  //Also hit numbered slots in case get_files missed anything
+  i=0;while i<=40
+    f=File(globals.G_main.computer,dataPath+"/agent_knowledge_"+i+".json")
+    if f then
+      delete(f)
+      deletedCount+=1
+    end if
+  i+=1;end while
+  return deletedCount
+end function
 //Learn all available commands from the session
+//Wipes prior man-learned knowledge files/cache, then regenerates from man pages
 AgentCore.learnAllCommands=function(Obj)
   debug=globals.G_agent.config.debug
   outLvl=globals.G_agent.config.outputLevel
-  if not hasIndex(self,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
-  //Clear existing cache to force complete regeneration
+  //1) Wipe in-memory cache
   globals.G_agent.commandKnowledgeCache={}
-  //Delete existing knowledge files (all chunks) to ensure clean overwrite
-  dataPath=path(globals.G_main.dir.data)
-  comp=globals.G_main.computer
-  deletedCount=0
-  i=0;while i<=20  //Delete up to 20 old chunk files
-  oldFile=dataPath+"/agent_knowledge_"+i+".json"
-  f=File(comp,oldFile)
-  if f then
-    delete(f)
-    deletedCount+=1
+  //2) Wipe all on-disk agent_knowledge*.json so nothing stale reloads
+  deletedCount=self._purgeKnowledgeFiles
+  globals.G_agent.knowledgeFileLoaded=true  //skip loadKnowledge mid-regen (files are gone)
+  if outLvl>=1 then
+    if deletedCount>0 then print yellow("Agent: Removed "+deletedCount+" old knowledge file(s)") else print yellow("Agent: No old knowledge files to remove")
+    print white("Agent: Regenerating knowledge from man pages...")
   end if
-  i+=1;end while
-  if deletedCount>0 and outLvl>=1 then print yellow("Agent: Deleted "+deletedCount+" existing knowledge files")
   //Get list of all available man pages from disk
   manDir=Man.getManDir
   if not manDir and globals.G_main and globals.G_main.dir and globals.G_main.dir.man then manDir=globals.G_main.dir.man
@@ -259,7 +315,7 @@ AgentCore.learnAllCommands=function(Obj)
   learned=0
   skipped=0
   total=len(commandList)
-  if outLvl>=1 then print white("Regenerating knowledge base with "+total+" commands...")
+  if outLvl>=1 then print white("Learning "+total+" commands from man pages...")
   //Only suppress debug output if debug wasn't already enabled
   savedDebug=debug
   suppressDebug=not savedDebug
@@ -279,23 +335,58 @@ AgentCore.learnAllCommands=function(Obj)
   if outLvl>=1 then print skyblue("Agent: Learned "+learned+" commands ("+skipped+" skipped)")
   //Disable batch mode
   globals.G_agent.config.batchLearning=false
-  //Save all learned knowledge to disk once (overwrites existing file)
+  //3) Write fresh knowledge files (force: we intentionally replaced the corpus)
   if learned>0 then
-    if outLvl>=1 then print skyblue("Agent: Writing knowledge file...")
-    globals.G_agent.saveKnowledge
+    if outLvl>=1 then print skyblue("Agent: Writing new knowledge files...")
+    globals.G_agent.saveKnowledge true
+    globals.G_agent.knowledgeFileLoaded=true
   end if
-  return {"success":true,"learned":learned,"skipped":skipped,"total":total}
+  return {"success":true,"learned":learned,"skipped":skipped,"total":total,"deleted":deletedCount}
+end function
+//Summarize on-disk knowledge files without System.parse (corrupt JSON must not Error.set spam)
+AgentCore._diskKnowledgeStats=function
+  stats={"files":0,"bytes":0}
+  if not globals.G_main or not globals.G_main.dir or not globals.G_main.dir.data then return stats
+  dataPath=path(globals.G_main.dir.data)
+  comp=globals.G_main.computer
+  chunkIdx=0;while chunkIdx<=20
+    f=File(comp,dataPath+"/agent_knowledge_"+chunkIdx+".json")
+    if not f then
+      if chunkIdx==0 then return stats
+      break
+    end if
+    content=get_content(f)
+    if content then
+      stats.files+=1
+      stats.bytes+=len(content)
+    end if
+  chunkIdx+=1;end while
+  return stats
 end function
 // Knowledge Persistence
 //Save learned command knowledge to disk (with automatic chunking for 160k limit)
-AgentCore.saveKnowledge=function
+//force=true: allow overwrite even when cache is smaller than on-disk (learn all)
+AgentCore.saveKnowledge=function(force=false)
   outLvl=globals.G_agent.config.outputLevel
   if not hasIndex(self,"commandKnowledgeCache") then return {"success":false,"error":"No knowledge to save"}
+  cacheCount=len(indexes(globals.G_agent.commandKnowledgeCache))
+  if cacheCount==0 then return {"success":false,"error":"No knowledge to save"}
+  //Refuse to purge a large KB with a tiny cache (e.g. opportunistic 1-command save after failed load)
+  if not force then
+    disk=self._diskKnowledgeStats
+    //Multiple chunks or large single file = full learn-all corpus; do not replace with a handful of cmds
+    if (disk.files>=2 or disk.bytes>20000) and cacheCount<50 then
+      if outLvl>=1 then print yellow("Agent: Refusing to save "+cacheCount+" commands over existing knowledge ("+disk.files+" files). Run: ai learn all")
+      return {"success":false,"error":"Refuse shrink save","cacheCount":cacheCount,"diskFiles":disk.files}
+    end if
+  end if
   maxFileSize=150000  //150k limit (leaving 10k buffer)
   comp=globals.G_main.computer
-  //Clean the commands before saving
+  //Sanitize: drop raw man text / escape-hostile quotes before JSON
   cleanedCommands={}
-  for cmdName in indexes(globals.G_agent.commandKnowledgeCache);cmd=globals.G_agent.commandKnowledgeCache[cmdName];cleanedCommands[cmdName]=cmd;end for
+  for cmdName in indexes(globals.G_agent.commandKnowledgeCache)
+    cleanedCommands[cmdName]=self._sanitizeKnowledgeEntry(globals.G_agent.commandKnowledgeCache[cmdName])
+  end for
   //Create base knowledge structure
   baseData={"version":"1.0","timestamp":time}
   //Convert each command to estimate size
@@ -319,9 +410,9 @@ AgentCore.saveKnowledge=function
     currentSize=currentSize+entry.size+50
   end for
   if len(currentChunk)>0 then push(chunks,currentChunk)
-  //Delete old knowledge files before writing new ones
+  //Delete ALL old knowledge files before writing new ones
   dataPath=path(globals.G_main.dir.data)
-  i=0;while i<=20;oldFile=dataPath+"/agent_knowledge_"+i+".json";f=File(comp,oldFile);if f then f.delete;i+=1;end while
+  self._purgeKnowledgeFiles
   //Write chunks to files
   savedFiles=0
   totalCommands=0
@@ -361,6 +452,7 @@ AgentCore.loadKnowledge=function
   if not hasIndex(self,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
   loadedCommands=0
   loadedFiles=0
+  parseFailures=0
   chunkIdx=0;while chunkIdx<=20  //Try up to 20 chunks
     knowledgeFile=dataPath+"/agent_knowledge_"+chunkIdx+".json"
     f=File(comp,knowledgeFile)
@@ -378,18 +470,21 @@ AgentCore.loadKnowledge=function
       continue
     end if
     knowledgeData=System.parse(content)
-    if not knowledgeData or typeof(knowledgeData)!="map" then
+    //Parser.parseMap Error.set prints [X]; treat Error / non-map as skip
+    if knowledgeData isa Error or not knowledgeData or typeof(knowledgeData)!="map" or not hasIndex(knowledgeData,"commands") then
+      parseFailures+=1
       if debug then print green("[DEBUG] Agent: Could not parse chunk "+chunkIdx)
       chunkIdx+=1
       continue
     end if
     //Merge commands from this chunk
-    if hasIndex(knowledgeData,"commands") and typeof(knowledgeData.commands)=="map" then
+    if typeof(knowledgeData.commands)=="map" then
       for cmdName in indexes(knowledgeData.commands);globals.G_agent.commandKnowledgeCache[cmdName]=knowledgeData.commands[cmdName];loadedCommands+=1;end for
       loadedFiles+=1
       if outLvl>=1 then print skyblue("Agent: Loaded chunk "+chunkIdx+" ("+len(indexes(knowledgeData.commands))+" commands)")
     end if
   chunkIdx+=1;end while
+  if parseFailures>0 and loadedCommands==0 and outLvl>=1 then print yellow("Agent: Knowledge files unreadable ("+parseFailures+" chunk(s)). Run: ai learn all")
   if loadedFiles==0 then return {"success":false,"error":"No valid knowledge files found"}
   if outLvl>=1 then print skyblue("Agent: Loaded "+loadedCommands+" commands from "+loadedFiles+" files")
   return {"success":true,"loaded":loadedCommands,"fileCount":loadedFiles}

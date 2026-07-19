@@ -6,30 +6,315 @@ Heist={
   "obj1":null,
   "obj2":null
 }
-//promptBank - Prompt for bank host and port (! cancels, same as Gui)
-//Args: label (prompt text for host, e.g. "Your bank")
-//Returns: map {host, port} or null if user quits
+//_sessions - Active session map (same source sess uses; avoid hasIndex(globals,...))
+Heist._sessions=function
+  s=globals.G_sessions
+  if s==null then return null
+  if len(s)==0 then return null
+  return s
+end function
+//_isShellVal - True if value is a live shell (typeof may be "shell" or contain it)
+Heist._isShellVal=function(x)
+  if not x then return false
+  t=typeof(x)
+  if t=="shell" then return true
+  if t and indexOf(t,"shell")!=null then return true
+  return false
+end function
+//_rawShell - Unwrap session/map to raw shell when needed
+Heist._rawShell=function(x)
+  if self._isShellVal(x) then
+    if typeof(x)=="map" and hasIndex(x,"shell") and self._isShellVal(x.shell) then return x.shell
+    return x
+  end if
+  if typeof(x)=="map" and hasIndex(x,"shell") and self._isShellVal(x.shell) then return x.shell
+  return null
+end function
+//_plainNick - Strip color codes from session nick for matching
+Heist._plainNick=function(nick)
+  if not nick then return ""
+  s=str(nick)
+  while true
+    a=indexOf(s,"<")
+    if a==null then break
+    b=indexOf(s,">")
+    if b==null or b<a then break
+    s=s[:a]+s[b+1:]
+  end while
+  return lower(trim(s))
+end function
+//_userLevel - guest|user|root from Utility.getUserEX
+Heist._userLevel=function(sh)
+  sh=self._rawShell(sh)
+  if not sh then return ""
+  u=Utility.getUserEX(sh)
+  if not u then return ""
+  if hasIndex(u,"raw") and u.raw then return u.raw
+  if hasIndex(u,"user") and u.user then return u.user
+  return ""
+end function
+//_isRoot - True when shell is root
+Heist._isRoot=function(sh)
+  return self._userLevel(sh)=="root"
+end function
+//_shellFromSession - Live shell on session (any privilege), or null
+Heist._shellFromSession=function(sess)
+  if not sess then return null
+  if hasIndex(sess,"rootShell") and self._isShellVal(sess.rootShell) then return self._rawShell(sess.rootShell)
+  if hasIndex(sess,"shell") and self._isShellVal(sess.shell) then return self._rawShell(sess.shell)
+  if hasIndex(sess,"object") and self._isShellVal(sess.object) then return self._rawShell(sess.object)
+  return null
+end function
+//_sessionById - sess list index (same as sess -u 2 / sess -n 2)
+Heist._sessionById=function(id)
+  if id==null then return null
+  if typeof(id)!="number" then id=to_int(id)
+  if typeof(id)!="number" then return null
+  if typeof(Session)!="map" or not hasIndex(Session,"_getByIndex") then return null
+  s=Session._getByIndex(id,false)
+  if not s or s isa Error then return null
+  return s
+end function
+//_sessionByNick - Nickname match (colored nick OK, same idea as sess -g)
+Heist._sessionByNick=function(name)
+  if not name then return null
+  key=lower(trim(name))
+  if typeof(Session)=="map" and hasIndex(Session,"_nickMap") and hasIndex(Session._nickMap,key) then
+    idx=Session._nickMap[key]
+    s=self._sessionById(idx)
+    if s then return s
+  end if
+  sessions=self._sessions
+  if not sessions then return null
+  for sess in sessions.values
+    if not sess or not hasIndex(sess,"nick") or not sess.nick then continue
+    //Match inside colored nick (Session.goto style) or stripped nick
+    if indexOf(lower(sess.nick),key)!=null then return sess
+    plain=self._plainNick(sess.nick)
+    if plain==key or indexOf(plain,key)!=null then return sess
+  end for
+  return null
+end function
+//_sessionMatchesBank - True if session meta/computer IP matches bank host
+Heist._sessionMatchesBank=function(sess,bankIP)
+  if not sess or not bankIP then return false
+  if hasIndex(sess,"meta") and sess.meta then
+    if hasIndex(sess.meta,"public_ip") and sess.meta.public_ip==bankIP then return true
+    if hasIndex(sess.meta,"local_ip") and sess.meta.local_ip==bankIP then return true
+  end if
+  if hasIndex(sess,"computer") and sess.computer then
+    c=sess.computer
+    if hasIndex(c,"public_ip") and c.public_ip==bankIP then return true
+    if hasIndex(c,"local_ip") and c.local_ip==bankIP then return true
+  end if
+  return false
+end function
+//_parseSessionRef - Parse "sess 2", "2", "sess bank", "bank", "session" (picker)
+//Returns: {mode:"pick"|"id"|"nick", id?, nick?} or null if not a session ref
+Heist._parseSessionRef=function(text)
+  if not text then return null
+  t=trim(text)
+  tl=lower(t)
+  //Bare picker keywords
+  if tl=="session" or tl=="sessions" or tl=="sess" then return {"mode":"pick"}
+  if tl=="use session" or tl=="use sessions" or tl=="from session" or tl=="from sessions" then return {"mode":"pick"}
+  if tl=="pick session" or tl=="pick sessions" then return {"mode":"pick"}
+  //sess 2 / session 2 / sess bank / session bank
+  rest=null
+  if indexOf(tl,"sess ")==0 then
+    rest=trim(t[5:])
+  else if indexOf(tl,"session ")==0 then
+    rest=trim(t[8:])
+  end if
+  if rest!=null and len(rest)>0 then
+    id=to_int(rest)
+    if typeof(id)=="number" and str(id)==rest then return {"mode":"id","id":id,"label":"sess "+str(id)}
+    return {"mode":"nick","nick":rest,"label":rest}
+  end if
+  //Bare numeric id: 2
+  id=to_int(t)
+  if typeof(id)=="number" and str(id)==t then return {"mode":"id","id":id,"label":"sess "+str(id)}
+  //Bare nick if it resolves
+  if self._sessionByNick(t) then return {"mode":"nick","nick":t,"label":t}
+  return null
+end function
+//_bankFromSession - Build bank map from a session Obj
+Heist._bankFromSession=function(sess,label=null)
+  if not sess then return null
+  sh=self._shellFromSession(sess)
+  if not sh then return Error.set("Session has no shell")
+  nick=label
+  if not nick and hasIndex(sess,"nick") and sess.nick then nick=self._plainNick(sess.nick)
+  if not nick and hasIndex(sess,"id") then nick=str(sess.id)
+  return {"host":nick,"port":0,"fromSession":true,"shell":sh,"sess":sess}
+end function
+//resolveSessionRef - Turn parsed ref into bank map (or Error / null cancel)
+Heist.resolveSessionRef=function(ref,label="bank")
+  if not ref then return null
+  if ref.mode=="pick" then return self.pickSessionShell(label)
+  if ref.mode=="id" then
+    sess=self._sessionById(ref.id)
+    if not sess then return Error.set("No session id "+str(ref.id)+" (check sess)")
+    bank=self._bankFromSession(sess,ref.label)
+    if bank isa Error then return bank
+    return bank
+  end if
+  if ref.mode=="nick" then
+    sess=self._sessionByNick(ref.nick)
+    if not sess then return Error.set("No session nick '"+ref.nick+"' (sess -n <id> "+ref.nick+")")
+    bank=self._bankFromSession(sess,ref.label)
+    if bank isa Error then return bank
+    return bank
+  end if
+  return null
+end function
+//pickSessionShell - Gui list of sessions that have a shell; user picks one
+Heist.pickSessionShell=function(label="bank")
+  sessions=self._sessions
+  if not sessions then
+    return Error.set("No sessions available")
+  end if
+  candidates=[]
+  labels=[green("Pick a session for "+label+" (or type sess <id> next time):")]
+  listIdx=0
+  for sess in sessions.values
+    sh=self._shellFromSession(sess)
+    //Show id even if main - skip only when no shell
+    if sh then
+      nick="sess "+str(listIdx)
+      if hasIndex(sess,"nick") and sess.nick then nick=nick+" "+self._plainNick(sess.nick)
+      priv=self._userLevel(sh)
+      ip=""
+      if hasIndex(sess,"meta") and sess.meta then
+        if hasIndex(sess.meta,"public_ip") then ip=sess.meta.public_ip
+        if hasIndex(sess.meta,"local_ip") then
+          if ip then ip=ip+":"+sess.meta.local_ip else ip=sess.meta.local_ip
+        end if
+      end if
+      line="["+str(listIdx)+"] "+nick+" ["+priv+"]"
+      if ip then line=line+" "+ip
+      push(labels,white(line))
+      push(candidates,{"sess":sess,"shell":sh,"nick":nick,"id":listIdx})
+    end if
+    listIdx+=1
+  end for
+  if len(candidates)==0 then return Error.set("No sessions with a shell")
+  push(labels,iyellow("Cancel"))
+  choice=Gui.choiceHybrid(labels,{},len(labels)-1)
+  if choice==null or choice==len(labels)-1 then return null
+  idx=choice-1
+  if idx<0 or idx>=len(candidates) then return null
+  pick=candidates[idx]
+  return self._bankFromSession(pick.sess,"sess "+str(pick.id))
+end function
+//promptBank - Prompt for bank; sess <id>|nick|session skips port
 Heist.promptBank=function(label)
-  host=Gui.input({"text":label+" ip|domain: "})
+  host=Gui.input({"text":label+" ip|domain|sess <id>|nick|session: "})
   if not host then return null
+  host=trim(host)
+  ref=self._parseSessionRef(host)
+  if ref then
+    bank=self.resolveSessionRef(ref,label)
+    //Error -> show and re-prompt caller; null = cancel picker
+    return bank
+  end if
+  //IP already held in a session - no port
+  if self.findSessionShell(host) then return {"host":host,"port":0,"fromSession":true}
   port=Gui.inputInt({"text":label+" port: ","default":141})
   if port==null then return null
   if typeof(port)!="number" then port=to_int(port)
   if typeof(port)!="number" or port<1 then return Error.set("Invalid port")
   return {"host":host,"port":port}
 end function
-//requireRootShell - Exploit bank and require a root shell
-//Args: host (ip|domain), port (number)
-//Returns: shell or Error
-Heist.requireRootShell=function(host,port)
+//ensureRoot - Require root; try su (prefer session Obj for headlessSu)
+Heist.ensureRoot=function(sh,label="session",sess=null)
+  raw=self._rawShell(sh)
+  if not raw then return Error.set("No shell for "+label)
+  if self._isRoot(raw) then return raw
+  got=self._userLevel(raw)
+  Info.info("Session "+label+" is "+got+" - escalating to root...")
+  //headlessSu expects a session-like Obj with .shell
+  suTarget=sess
+  if not suTarget and typeof(sh)=="map" and hasIndex(sh,"shell") then suTarget=sh
+  if suTarget and typeof(ShellObject)=="map" and hasIndex(ShellObject,"headlessSu") then
+    escalated=ShellObject.headlessSu(suTarget)
+    rawEsc=self._rawShell(escalated)
+    if rawEsc and self._isRoot(rawEsc) then return rawEsc
+  end if
+  if typeof(Exploit)=="map" and hasIndex(Exploit,"tryShellEX") then
+    escalated=Exploit.tryShellEX(raw,true)
+    rawEsc=self._rawShell(escalated)
+    if rawEsc and self._isRoot(rawEsc) then return rawEsc
+  end if
+  return Error.set("Need root on "+label+" (got "+got+") - su failed")
+end function
+//findSessionShell - Shell already in sess for nick/id/IP
+Heist.findSessionShell=function(host)
+  if not host then return null
+  ref=self._parseSessionRef(host)
+  if ref and ref.mode!="pick" then
+    bank=self.resolveSessionRef(ref,"bank")
+    if bank and not (bank isa Error) and hasIndex(bank,"shell") then return bank.shell
+  end if
+  sessions=self._sessions
+  if not sessions then return null
+  bankIP=host
+  if not is_valid_ip(bankIP) then bankIP=nslookup(bankIP)
+  if not is_valid_ip(bankIP) then return null
+  for sess in sessions.values
+    if not sess then continue
+    if not self._sessionMatchesBank(sess,bankIP) then continue
+    sh=self._shellFromSession(sess)
+    if sh then return sh
+  end for
+  return null
+end function
+//requireRootShell - Session first (no port): ensure root. Else exploit.
+Heist.requireRootShell=function(host,port,preShell=null,sess=null)
+  if self._isShellVal(preShell) then
+    label=host
+    if not label then label="session"
+    Info.info("Using session '"+label+"' (shell already present)")
+    return self.ensureRoot(preShell,label,sess)
+  end if
+  ref=self._parseSessionRef(host)
+  if ref and ref.mode!="pick" then
+    bank=self.resolveSessionRef(ref,host)
+    if bank isa Error then return bank
+    if bank and hasIndex(bank,"shell") then
+      Info.info("Using session '"+bank.host+"' (shell already present)")
+      sref=null
+      if hasIndex(bank,"sess") then sref=bank.sess
+      return self.ensureRoot(bank.shell,bank.host,sref)
+    end if
+  end if
+  sessShell=self.findSessionShell(host)
+  if self._isShellVal(sessShell) then
+    Info.info("Using session for "+host+" (shell already present)")
+    return self.ensureRoot(sessShell,host)
+  end if
+  if port==0 or port==null then
+    return Error.set("No session '"+host+"' (try: sess 2)")
+  end if
   s=self.getObject(host,port)
-  if typeof(s)!="shell" then
+  if not self._isShellVal(s) then
     if s isa Error then return s
     return Error.set("Failed to get shell on "+host)
   end if
-  u=Utility.getUserEX(s)
-  if not u or u.user!="root" then return Error.set("Need root on "+host+" (got "+str(u.user)+")")
-  return s
+  return self.ensureRoot(s,host)
+end function
+//resolveBank - Apply bank map from prompt/argv (honors .shell / .sess)
+Heist.resolveBank=function(bank)
+  if not bank then return Error.set("No bank specified")
+  pre=null
+  sess=null
+  if hasIndex(bank,"shell") then pre=bank.shell
+  if hasIndex(bank,"sess") then sess=bank.sess
+  port=null
+  if hasIndex(bank,"port") then port=bank.port
+  host=""
+  if hasIndex(bank,"host") then host=bank.host
+  return self.requireRootShell(host,port,pre,sess)
 end function
 //doWait - Display status, wait for manual heist, and corrupt logs
 //Returns: nothing (displays info and corrupts logs)
@@ -169,8 +454,34 @@ Heist.getObject=function(i,p)
     end if
   end for
 end function
-//init - Heist loop. Args: heist [yourHost yourPort [targetHost targetPort]]
-//Missing args fall back to Gui prompts. Bare heist stays interactive.
+//_consumeBankArg - Parse one bank from argv rest at idx (sess 2 | bank | ip port)
+//Returns: {bank, next} - bank may be null; next is next index
+Heist._consumeBankArg=function(rest,idx,label)
+  if idx>=len(rest) then return {"bank":null,"next":idx}
+  a=rest[idx]
+  al=lower(a)
+  //sess 2 / session bank (two tokens)
+  if (al=="sess" or al=="session") and idx+1<len(rest) then
+    ref=self._parseSessionRef(a+" "+rest[idx+1])
+    bank=self.resolveSessionRef(ref,label)
+    return {"bank":bank,"next":idx+2}
+  end if
+  //session | sess | bank | 2 | sess 2 (single token)
+  ref=self._parseSessionRef(a)
+  if ref then
+    bank=self.resolveSessionRef(ref,label)
+    return {"bank":bank,"next":idx+1}
+  end if
+  //ip/domain + port
+  if idx+1<len(rest) then
+    yp=to_int(rest[idx+1])
+    if typeof(yp)=="number" and yp>=1 then
+      return {"bank":{"host":a,"port":yp},"next":idx+2}
+    end if
+  end if
+  return {"bank":null,"next":idx}
+end function
+//init - Heist loop. Args: heist [sess 2] [target...] or heist ip port ...
 Heist.init=function(Obj,argv)
   _p=ArgumentParser.init
   argv=_p.parseArgs("heist",argv)
@@ -179,15 +490,15 @@ Heist.init=function(Obj,argv)
   if hasIndex(argv,"rest") and argv.rest then rest=argv.rest
   yourBank=null
   targetBank=null
-  if len(rest)>=2 then
-    yp=to_int(rest[1])
-    if typeof(yp)=="number" and yp>=1 then yourBank={"host":rest[0],"port":yp}
+  if len(rest)>0 then
+    r=self._consumeBankArg(rest,0,"Your bank")
+    yourBank=r.bank
+    if yourBank!=null or r.next>0 then
+      r2=self._consumeBankArg(rest,r.next,"Target bank")
+      targetBank=r2.bank
+    end if
   end if
-  if len(rest)>=4 then
-    tp=to_int(rest[3])
-    if typeof(tp)=="number" and tp>=1 then targetBank={"host":rest[2],"port":tp}
-  end if
-  Info.info("Heist loop — enter ! to cancel")
+  Info.info("Heist loop - enter ! to cancel")
   //Acquire root on your bank
   while true
     bank=yourBank
@@ -198,7 +509,7 @@ Heist.init=function(Obj,argv)
       Info.info("Heist cancelled")
       return
     end if
-    s=self.requireRootShell(bank.host,bank.port)
+    s=self.resolveBank(bank)
     if s isa Error then continue
     self.obj2=s
     Info.info("Your bank ready (root)")
@@ -214,7 +525,7 @@ Heist.init=function(Obj,argv)
       Info.info("Heist loop ended")
       return
     end if
-    s=self.requireRootShell(bank.host,bank.port)
+    s=self.resolveBank(bank)
     if s isa Error then continue
     self.obj1=s
     self.doWait

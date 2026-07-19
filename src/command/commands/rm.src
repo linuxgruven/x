@@ -21,7 +21,7 @@ Command.rm=function(Obj,argv)
   if hasSpecialMode then return Io.rm(Obj,argv)
   if hasIndex(argv,"useAI") then
     target=null
-    recursive=null
+    recursive=false
     if Gui.yesNo("Are we removing a file?") then
       target=Io.file(Obj,Obj.dir.current,"Select a file to remove:")
       if target isa Warning then return target
@@ -30,8 +30,13 @@ Command.rm=function(Obj,argv)
       if target isa Warning then return target
       recursive=Gui.yesNo("Recursive?")
     end if
+    if is_folder(target) and not is_symlink(target) and not recursive then
+      return Warning.set(name(target)+": is a directory, use recursive confirmation or :rm -r|-R "+path(target))
+    end if
     result=delete(target)
     if result then return Info.error(result)
+    if argv.v then Info.info("removed '"+path(target)+"'")
+    return
   end if
   if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin and not globals.G_pipe.XARGS_MODE then
     if not argv.rest then argv.rest=[]

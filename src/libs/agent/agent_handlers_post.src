@@ -598,12 +598,16 @@ AgentHandlers._handleFetchShell=function(Obj,step,context)
       publicIP=context.target
       if outLvl>=2 then print green("Agent: Using router IP "+publicIP+" from context")
     end if
+    //Prefer current router/proxy session when already bounced in
+    if not publicIP and AgentHandlers._isRouterSession(Obj) then
+      publicIP=AgentHandlers._sessionPublicIP(Obj)
+      if publicIP and outLvl>=2 then print green("Agent: Using current router session "+publicIP)
+    end if
     //Auto-detect router if still not found
     if not publicIP then
       if outLvl>=2 then print yellow("Agent: No router IP specified - scanning network for router...")
-      //Use network scan to find routers
       if typeof(Attack)=="map" and hasIndex(Attack,"scanCustom") then
-        routerShell=Attack.scanCustom(["router","s"],true)
+        routerShell=Attack.scanCustom(["-r","router","s"],true, Obj)
         if routerShell and typeof(routerShell)=="shell" then
           if hasIndex(routerShell,"host_computer") then
             routerComp=routerShell.host_computer
@@ -676,7 +680,7 @@ AgentHandlers._handleFetchShell=function(Obj,step,context)
   //Use Attack.scanCustom for headless shell fetching
   if isHeadless then
     if outLvl>=2 then print skyblue("Agent: Getting shell in headless mode...")
-    ex=Attack.scanCustom([targetIp,serviceName,objectType],true)
+    ex=Attack.scanCustom([targetIp,serviceName,objectType],true, Obj)
     if typeof(ex)!="shell" then
       result.error="Could not get shell on "+targetIp
       return result
@@ -725,7 +729,7 @@ AgentHandlers._handleFetchShell=function(Obj,step,context)
   end if
   //Interactive mode - get shell first, install libs if needed, then open terminal
   if outLvl>=2 then print skyblue("Agent: Getting shell...")
-  ex=Attack.scanCustom([targetIp,serviceName,objectType],true)
+  ex=Attack.scanCustom([targetIp,serviceName,objectType],true, Obj)
   if typeof(ex)!="shell" then
     result.error="Could not get shell on "+targetIp
     return result

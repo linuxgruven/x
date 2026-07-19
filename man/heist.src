@@ -3,23 +3,75 @@ manHeist="HEIST(1)                         X Shell Manual                       
 
 <b>NAME</b>
     heist - Interactive bank heist loop
+
 <b>SYNOPSIS</b>
     <b>heist</b>
+    <b>heist</b> sess ID
+    <b>heist</b> sess NICK
+    <b>heist</b> YOUR_HOST YOUR_PORT [TARGET_HOST TARGET_PORT]
+
 <b>DESCRIPTION</b>
-    Interactive heist helper. Acquires a root shell on your bank once,
-    then repeatedly prompts for target banks. After each successful
-    target, wait for your manual transfer and corrupt both
-    /server/transactions.log files. Enter <b>!</b> to cancel/quit.
+    Interactive heist helper. Acquires a <b>root</b> shell on your bank once,
+    then repeatedly prompts for target banks. After each successful target,
+    wait for your manual transfer and corrupt both
+    <b>/server/transactions.log</b> files. Enter <b>!</b> to cancel/quit.
+
+    Prefer an existing shell from <b>sess</b> when you already have the bank.
+    No port is needed for sessions — heist only ensures the shell is root
+    (escalates via su if needed). Otherwise the bank is exploited.
+
+<b>BANK PROMPT</b>
+    At each bank prompt you can enter:
+
+    <b>sess ID</b>
+      Use session by list id (same numbers as <b>sess</b> / <b>sess -l</b>).
+      Example: <b>sess 2</b>
+
+    <b>ID</b>
+      Bare session id. Example: <b>2</b>
+
+    <b>sess NICK</b> / <b>NICK</b>
+      Use a named session. Example: <b>sess bank</b> or <b>bank</b>
+      (after <b>sess -n 2 bank</b>)
+
+    <b>session</b> / <b>sess</b> / <b>use session</b>
+      Open a picker of sessions that have a shell.
+
+    <b>ip|domain</b>
+      Then prompted for port (default 141). Exploits for a root shell
+      unless that host already matches a session (no port in that case).
+
 <b>FLOW</b>
-    1. Prompt for your bank (ip|domain) and port (default 141)
-    2. Exploit and require root; re-prompt on failure
-    3. Prompt for target bank and port
-    4. Exploit and require root; re-prompt on failure
-    5. Press enter after the transfer; corrupt both logs
+    1. Resolve your bank (session id/nick/picker, or exploit host:port)
+    2. Ensure root on your bank; keep that shell for the loop
+    3. Resolve target bank the same way
+    4. Press enter after you perform the transfer
+    5. Corrupt <b>/server/transactions.log</b> on both banks
     6. Prompt for the next target (your bank is kept)
     7. Repeat until <b>!</b>
-<b>EXAMPLE:</b>
-    <b>heist</b>
-    Start the interactive heist loop
 
-    At prompts, enter <b>!</b> to cancel (same as other Gui inputs)"
+<b>EXAMPLES</b>
+    <color=#e4ff34># Session already held</color>
+    <b>sess -n 2 bank</b>
+        Name your bank shell
+
+    <b>heist</b>
+        At prompt: <b>sess 2</b>  (or <b>sess bank</b> / <b>bank</b> / <b>session</b>)
+
+    <b>heist sess 2</b>
+        Your bank = session 2; then prompt for targets
+
+    <b>heist sess bank</b>
+        Your bank = nick bank
+
+    <color=#e4ff34># Exploit path</color>
+    <b>heist mybank.com 141</b>
+        Exploit your bank; prompt for targets
+
+    <b>heist mybank.com 141 target.com 141</b>
+        One-shot your bank + first target from argv
+
+    At prompts, enter <b>!</b> to cancel (same as other Gui inputs).
+
+<b>SEE ALSO</b>
+    <b>sess</b>(1), <b>scan</b>(1)"

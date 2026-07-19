@@ -5,7 +5,7 @@ manInject="INJECT(1)                        X Shell Manual                      
     inject - Poison source file with rshell
 <b>SYNOPSIS</b>
     <b>inject -i</b> IP <b>-p</b> PORT <b>-n</b> PROCESSNAME FILE
-    <b>inject</b> HELP FILE
+    <b>inject</b> HELP|<b>?</b> FILE
 <b>DESCRIPTION</b>
     Inject rshell backdoor code into a source file. Parameter order is
     flexible, but FILE must be last. The help system automatically
@@ -17,8 +17,8 @@ manInject="INJECT(1)                        X Shell Manual                      
       PORT: Rshell server port
       PROCESSNAME: Process name for the backdoor
 
-    <b>HELP FILE</b> - Interactive Help
-      Launch help system to guide injection process.
+    <b>HELP</b>|<b>?</b> <b>FILE</b> - Interactive
+      Prompt for IP/port/process, then inject into FILE.
 <b>EXAMPLE:</b>
     <color=#e4ff34># Inject Backdoor</color>
     <b>inject -i</b> host.ip.addr <b>-p</b> 1222 <b>-n</b> sshd exploit.src

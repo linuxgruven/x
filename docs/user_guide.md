@@ -493,9 +493,9 @@ proxy -a                  # Standard proxy chain (proxy.dat or Map.conf)
 proxy -x                  # Combined proxy (both proxy.dat + Map.conf)
 proxy -q                  # Quick proxy (single router hop)
 proxy -c                  # Count hops
-proxy -p y                # Proxy.dat chain, skip prompts
+yes; proxy -p             # Proxy.dat chain (yes skips prompts)
 proxy -m                  # Map.conf chain
-proxy -r 5 y              # Random chain, 5 hops, auto-confirm
+yes; proxy -r 5           # Random chain, 5 hops (yes skips prompts)
 proxy -h -c 10            # 10-hop chain
 proxy -n                  # Create new Map.conf file
 ```

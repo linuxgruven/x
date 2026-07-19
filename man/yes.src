@@ -12,6 +12,12 @@ manYes="YES(1)                            X Shell Manual                        
     without user input. Useful when running commands with <b>-i</b> (interactive)
     that would otherwise prompt before each operation.
 
+    Also covers skip-confirm / use-defaults paths that accept <b>-y</b>, and
+    trailing <b>yes</b> on <b>proxy</b> / <b>wipe -b|-s</b> / file download
+    (e.g. <b>proxy -r 5 yes</b>, <b>wipe -b yes</b>): <b>exit</b>, <b>pivot</b>,
+    <b>proot</b>, <b>make</b>, <b>pacman -Su</b>. Force-overwrite flags
+    (<b>mkdir -y</b>, <b>touch -y</b>) and <b>pack -y</b> are not affected.
+
     The flag is automatically cleared at the end of any pipeline, so
     <b>yes | cmd -i ...</b> works for pipeline-scoped auto-confirmation.
 
@@ -33,6 +39,12 @@ manYes="YES(1)                            X Shell Manual                        
     <b>cp -i *.txt /backup</b>
     All overwrite prompts auto-confirmed
 
+    <b>proxy -r 5</b>
+    Skip proxy endpoint/cache prompts
+
+    <b>proxy -r 5 yes</b>
+    Same with trailing yes (enables this flag)
+
     <b>yes --off</b>
     Re-enable normal prompting
 
@@ -48,4 +60,4 @@ manYes="YES(1)                            X Shell Manual                        
     <b>yes | echo</b>
     Pipe clears the flag automatically
 <b>SEE ALSO</b>
-    <b>cp</b>, <b>mv</b>, <b>rm</b>"
+    <b>cp</b>, <b>mv</b>, <b>rm</b>, <b>proxy</b>, <b>exit</b>, <b>pivot</b>, <b>wipe</b>, <b>pacman</b>"

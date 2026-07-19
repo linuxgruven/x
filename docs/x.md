@@ -357,10 +357,14 @@ scan -nfd                   # Show then disable network firewalls
 ### Bounce Attack
 
 ```bash
-scan -b -p PUBLIC_IP -l LAN_IP     # Connect via public IP, pivot to LAN, escalate to root
+scan --b -p PUBLIC_IP -l LAN_IP    # Root bounce to LAN (same path missions/ai use)
 ```
 
-Requires `config -v` (vulnerable lib) and `config -x` (lib index) to be set. Wipes logs automatically.
+On the router as root this runs:
+1. `scan --e bounce -u root LAN` / `scan --e computer -u root LAN` against local `/lib`
+2. If no root lan bounce: install `config -v` lib, retry `--e`, then `scan --l <lib> <index> LAN` (`config -x`)
+
+Wipes logs automatically. `config -v` / `-x` only required when the router has no local root bounce.
 
 ### Exploit Types
 
@@ -693,9 +697,9 @@ vi proxy.dat                    # Open editor, then use: ne proxy.dat
 proxy -a                        # Standard proxy (proxy.dat preferred over Map.conf)
 proxy -x                        # Combined proxy (both proxy.dat + Map.conf)
 proxy -q                        # Quick proxy (single router hop)
-proxy -p y                      # proxy.dat chain, skip prompts
+yes; proxy -p                   # proxy.dat chain (yes skips prompts)
 proxy -m                        # Map.conf chain
-proxy -r 5 y                    # Random 5-hop chain, auto-confirm
+yes; proxy -r 5                 # Random 5-hop chain (yes skips prompts)
 proxy -h -c 10                  # 10-hop chain (1 hop = -q behavior)
 proxy -c                        # Count available hops
 ```
@@ -1101,15 +1105,14 @@ All mission types require a shell on the target LAN. GETFILE and DELETEFILE can 
 
 ## Heists — heist
 
-`heist` automates bank heist operations. The target transaction log is at `/server/transactions.log`.
+`heist` acquires root on your bank and each target, waits for your manual transfer, then corrupts `/server/transactions.log` on both. Prefers a shell already in `sess` (by id, nick, or IP).
 
 ```bash
-heist -t TARGET_BANK -b YOUR_BANK              # Basic heist
-heist -t bank.com -b mybank.com -a 123456      # Heist specific account
-heist -t bank.com -b mybank.com --tp 8080 --bp 9090  # Custom ports
+heist                              # At prompt: sess 2
+heist sess 2                       # Your bank = session id 2
+heist sess bank                    # Your bank = nick "bank"
+heist mybank.com 141 target.com 141
 ```
-
-Flags: `-t TARGET_BANK`, `-b YOUR_BANK`, `-a ACCOUNT` (optional), `--tp PORT` (target bank port), `--bp PORT` (your bank port)
 
 **See also:** `man heist`
 
@@ -1463,9 +1466,11 @@ ai clear 5                      # Clear last 5 history entries
 ### Training
 
 ```bash
-ai learn scan                   # Learn from scan man page
-ai learn all                    # Learn from all man pages (recommended first-run)
+ai learn scan                   # Learn from scan man page (--e/--l/--b flags, etc.)
+ai learn all                    # Wipe old agent_knowledge*.json and regenerate from all man pages
 ```
+
+`ai learn all` deletes every `agent_knowledge_*.json` under data/, clears the in-memory cache, then rebuilds from man pages. Planning consults those OPTIONS and prefers **`--` bash autos** (`--b`, `--e`, `--l`, `--c`, `--n`, `--s`) — those set `$scan_ok` / `$hold` for scripting.
 
 ### Configuration
 
@@ -1912,7 +1917,7 @@ wipe -lx                        # Wipe log with ASCII X graphic
 wipe -lc                        # Wipe log with custom ASCII (from /payload/data/ascii)
 wipe -lt                        # Wipe log with custom text (prompted)
 wipe -b                         # Wipe boot folder (system.log if accessible)
-wipe -b -y                      # Wipe boot with auto-confirm
+wipe -b yes                     # Wipe boot with auto-confirm
 wipe -s                         # Wipe entire filesystem (DESTRUCTIVE)
 wipe -a                         # Wipe all
 wipe --deploy 60                # Deploy delayed log wiper (fires after 60 seconds)

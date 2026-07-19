@@ -94,6 +94,35 @@ Library.cryptoVersion=function(Obj)
   //Return version or 0 if load failed
   if r then return version(r) else return "0"
 end function
+//mxFor - Metaxploit for remote ops (NEVER prefer home G_metaxploit while proxied)
+//Args: Obj (optional session - proxy/pivot/shell)
+//Returns: MetaxploitLib or null
+//OPSEC: overflow/net_use source IP = owner of this lib.
+//Proxy/pivot: use .metaxploit (WAN MetaxploitLib). packMetaxploit is for local LAN dumps
+//and breaks remote scanCustom if preferred first.
+//Shell: prefer packMetaxploit (host-local), then .metaxploit.
+Library.mxFor=function(Obj=null)
+  layer=""
+  if Obj then
+    if hasIndex(Obj,"layer") then layer=str(Obj.layer)
+    if layer=="proxy" or layer=="pivot" then
+      if hasIndex(Obj,"metaxploit") and Obj.metaxploit then return Obj.metaxploit
+      if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then return Obj.packMetaxploit
+    else
+      if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then return Obj.packMetaxploit
+      if hasIndex(Obj,"metaxploit") and Obj.metaxploit then return Obj.metaxploit
+    end if
+  end if
+  if globals.G_proxy then
+    p=globals.G_proxy
+    if hasIndex(p,"metaxploit") and p.metaxploit then return p.metaxploit
+    if hasIndex(p,"packMetaxploit") and p.packMetaxploit then return p.packMetaxploit
+  end if
+  if self.metaxploit then return self.metaxploit
+  //Home-only fallback when not on proxy/pivot
+  if not globals.G_proxy and not globals.G_hasPivoted and globals.G_metaxploit then return globals.G_metaxploit
+  return self.metaxploit
+end function
 //haveMetaxploit - Check if metaxploit library is available
 //Args: none
 //Returns: true if available, nothing otherwise

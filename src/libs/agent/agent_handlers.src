@@ -215,15 +215,22 @@ AgentHandlers._handleDataExtraction=function(Obj,step,context)
     if not publicIP and hasIndex(step,"target") then publicIP=step.target
     //If publicIP is same as targetIP or is also LAN, need to find router
     if publicIP==targetIp or (publicIP and is_lan_ip(publicIP)) then publicIP=null
+    //Prefer current router/proxy session
+    if not publicIP and AgentHandlers._isRouterSession(Obj) then
+      publicIP=AgentHandlers._sessionPublicIP(Obj)
+      if publicIP and outLvl>=2 then print green("Agent: Using current router session "+publicIP)
+    end if
     //Auto-detect router on network if no public IP specified
     if not publicIP then
       if outLvl>=2 then print yellow("Agent: No router IP specified - scanning network for router...")
-      if globals.G_agent.config.promptOnAmbiguous or globals.G_agent.config.promptOnSlow then
+      isAutoStep=false
+      if hasIndex(step,"autonomous") and step.autonomous then isAutoStep=true
+      if not isAutoStep and (globals.G_agent.config.promptOnAmbiguous or globals.G_agent.config.promptOnSlow) then
         resumeCmd=globals.G_agent._resumeCommand(context)
         confirm=globals.G_agent._beginConfirm("LAN target detected but no router specified. Scan network for router?",resumeCmd,"skipLanRouterPrompt","yes",true)
         if confirm then return confirm
       end if
-      routers=Attack.scanCustom(["router","s"],true)
+      routers=Attack.scanCustom(["-r","router","s"],true, Obj)
       if routers and typeof(routers)=="shell" then
         publicIP=routers.host_computer.lan_ip
         if outLvl>=2 then print green("Agent: Auto-detected router at "+publicIP)
@@ -272,7 +279,7 @@ AgentHandlers._handleDataExtraction=function(Obj,step,context)
   target=targetIp
   //Use Attack.scanCustom to get shell on router
   if outLvl>=2 then print yellow("[VERBOSE] Agent: Attacking router at "+target)
-  ex=Attack.scanCustom([target,"router","s"],true)
+  ex=Attack.scanCustom([target,"router","s"],true, Obj)
   if typeof(ex)!="shell" then
     result.error="Could not get a shell on the router"
     print yellow("Error: Failed to get shell on router at "+target)
@@ -1128,7 +1135,8 @@ AgentHandlers.diagnoseError=function(errorType,context)
     push(diagnosis.suggestions,"Cannot establish connection to target")
     push(diagnosis.suggestions,"Check if service is running")
     if hasIndex(context,"service") then push(diagnosis.fixes,"Try scanning first: ai scan "+context.target+" "+context.service)
-    push(diagnosis.fixes,"Check firewall rules")
+    //LAN bounce is never blocked by firewall - only suggest FW for non-bounce failures
+    if indexOf(errorType,"bounce")==null and indexOf(errorType,"firewall")==null then push(diagnosis.fixes,"Check firewall rules")
   else if indexOf(errorType,"exploit")!=null or indexOf(errorType,"failed")!=null then
     diagnosis.category="exploit_failed"
     push(diagnosis.suggestions,"Exploit attempt unsuccessful")

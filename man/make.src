@@ -40,8 +40,7 @@ manMake="MAKE(1)                          X Shell Manual                        
 <b>OPTIONS</b>
     <b>-t BINARY</b>
     Make standalone tool
-    -y keeps in current dir
-    -o PATH installs to path
+    -y keeps in current dir (or run <b>yes</b> first)
     -o PATH installs to path
 
     <b>-rec</b>
@@ -94,7 +93,7 @@ manMake="MAKE(1)                          X Shell Manual                        
 
     <b>-a (-y)</b>
     Build all default binaries
-    -y places in /bin
+    -y places in /bin (or run <b>yes</b> first)
 
     <b>-b BINARY</b>
     Build single binary
@@ -167,6 +166,10 @@ manMake="MAKE(1)                          X Shell Manual                        
     <b>make -a -y</b>
     Build all to /bin
 
+    <b>yes</b>
+    <b>make -a</b>
+    Same via session auto-yes
+
     <color=#e4ff34># Standalone Tools</color>
     <b>make -t lock</b>
     Create lock tool
@@ -234,4 +237,4 @@ manMake="MAKE(1)                          X Shell Manual                        
     Prompts for SSH login, displays
     messages in real time
 <b>SEE ALSO</b>
-    <b>build</b>"
+    <b>build</b>, <b>yes</b>"

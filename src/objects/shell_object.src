@@ -30,18 +30,16 @@ ShellObject.rootPivot=function(s,argv)
     f=File(c,path(u.home)+"/x")
     Crack.qrm(c,path(u.home),f)
   end if
-  //Select installation directory
-  if not argv.y then
-    //Prompt for directory or use default
+  //Select installation directory (-y or session `yes` -> default home)
+  if Gui.skipConfirm(argv.y) then
+    p=path(u.home)
+  else
     if Gui.yesNo("The default directory is "+white(path(u.home))+" use this directory?") then d=u.home else d=Io.folderEX(s,u.home,"Select a directory:")
 		if d isa Warning then
 			Info.info("Using the default directory: "+green(path(u.home)))
 			d=u.home
 		end if
     p=path(d)
-  else
-    //Use default directory with -y flag
-    p=path(u.home)
   end if
   //Create payload directory structure
   create_folder(c,p,"payload")
@@ -620,17 +618,16 @@ ShellObject.run=function(this,ex,isPiviting=false,argz=[],headless=false,cmds=nu
       f=File(this.computer,path(this.user.home)+"/x")
       Command.qrm(this,[f])
     end if
-    //Select directory (auto-yes or prompt)
-    if not argv.y and not argv.full then
+    //Select directory (-y, --full, or session `yes` -> default home)
+    if argv.full or Gui.skipConfirm(argv.y) then
+      p=path(this.user.home)
+    else
       if Gui.yesNo("The default directory is "+white(path(this.user.home))+" use this directory?") then d=this.user.home else d=Io.folder(this,this.dir.current,"Select a directory:")
-			//Use default if selection fails
 			if d isa Warning then
 				Info.info("Using the default directory: "+green(path(this.user.home)))
 				d=this.user.home
 			end if
       p=path(d)
-    else
-      p=path(this.user.home)
     end if
     //SCP X framework to target
     x=scp(globals.G_main.shell,path(File(globals.G_main.computer,globals.G_attributes.program_path)),p,this.shell)

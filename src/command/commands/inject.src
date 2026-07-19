@@ -4,6 +4,11 @@
 // =============================================================================
 Command.inject=function(Obj,argv)
   if not argv then return Man.help(["inject"])
+  // Accept help/HELP as interactive mode (same as ?)
+  if len(argv)>0 and lower(str(argv[0]))=="help" then
+    argv=argv[1:]
+    insert(argv,0,"?")
+  end if
   _p=ArgumentParser.init
   _p.addArgument("i",false,"store")        // IP address
   _p.addArgument("p",false,"storeNumber")  // Port number

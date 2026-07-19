@@ -7,15 +7,16 @@ manExit="EXIT(1)                          X Shell Manual                        
     <b>exit</b> [<b>-y</b>|<b>-n</b>]
 <b>DESCRIPTION</b>
     Terminates the current session. On main session, prompts if active
-    sessions exist. On proxy, prompts for confirmation (use -y to skip,
-    -n to also skip). On pivot/shell sessions, exits immediately.
+    sessions exist. On proxy, prompts for confirmation (use <b>-y</b> or the
+    <b>yes</b> command to skip, <b>-n</b> to also skip). On pivot/shell
+    sessions, exits immediately.
     Aliases: x
 <b>OPTIONS</b>
     <b>exit</b>
     Exit current session (may prompt for confirmation)
 
     <b>exit -y</b>
-    Skip confirmation prompt (proxy sessions)
+    Skip confirmation prompt (or run <b>yes</b> first)
 
     <b>exit -n</b>
     Skip confirmation prompt (proxy sessions)
@@ -30,5 +31,9 @@ manExit="EXIT(1)                          X Shell Manual                        
     <color=#e4ff34># Proxy Session</color>
     <b>exit -y</b>
     Exit proxy without confirmation
+
+    <b>yes</b>
+    <b>exit</b>
+    Same via session auto-yes
 <b>SEE ALSO</b>
-    <b>close</b>, <b>home</b>, <b>x</b>"
+    <b>close</b>, <b>home</b>, <b>x</b>, <b>yes</b>"

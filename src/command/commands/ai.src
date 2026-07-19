@@ -66,7 +66,7 @@ Command.ai=function(Obj,argv)
         if pos!=null then
           commandName=trim(fullCMD[pos+len(prefix):])
           if len(commandName)>0 then
-            if hasIndex(Obj.commands,"man") then return Obj.commands.man([commandName]) else return Command.man(Obj,[commandName])
+            if hasIndex(Obj.commands,"man") then return Obj.commands.man([commandName]) else return Man.help([commandName])
           end if
         end if
       end for
@@ -146,7 +146,15 @@ Command.ai=function(Obj,argv)
     if len(argv)<2 then return Error.set("Usage: ai learn <command> or ai learn all")
     if argv[1]=="all" then
       result=globals.G_agent.learnAllCommands(Obj)
-      if hasIndex(result,"success") and result.success then return Info.info("Learned "+result.learned+" commands (skipped "+result.skipped+" without man pages)") else return Error.set("Failed to learn commands: "+result.error)
+      if hasIndex(result,"success") and result.success then
+        msg="Regenerated knowledge: "+result.learned+" commands"
+        if hasIndex(result,"deleted") and result.deleted>0 then msg=msg+" (removed "+result.deleted+" old file(s))"
+        if hasIndex(result,"skipped") and result.skipped>0 then msg=msg+" ("+result.skipped+" skipped)"
+        return Info.info(msg)
+      end if
+      err="unknown"
+      if hasIndex(result,"error") then err=result.error
+      return Error.set("Failed to learn commands: "+err)
     else
       cmdName=argv[1]
       result=globals.G_agent.learnCommand(Obj,cmdName)

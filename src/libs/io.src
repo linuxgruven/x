@@ -368,19 +368,21 @@ Io._mv=function(Obj,f);return self._fileOpInteractive(Obj,f,"move");end function
 //Returns: copy result or Error
 Io._cp=function(Obj,f);return self._fileOpInteractive(Obj,f,"copy");end function
 //_get - Download file from remote to local system
-//Args: Obj (object), f (file to download), argv (arguments, "y" skips prompt)
+//Args: Obj (object), f (file to download), argv (trailing "yes" skips prompt; also honors session yes)
 //Returns: result or Error
 Io._get=function(Obj,f,argv)
 	//Check read permission
 	if not has_permission(f,"r") then return Error.set(Info.message.NOR)
-  //Check if skip prompt flag set
-  if argv and argv[0]=="y" then Arg1=true else Arg1=false
+  //Trailing yes enables session yes (same as running the yes command)
+  if argv and len(argv)>0 and lower(str(argv[0]))=="yes" then globals.G_auto_yes=true
   //Prompt for destination directory (or use default)
   d=null
-  if not Arg1 then
+  if Gui.skipConfirm(false) then
+    d=File(globals.G_main.computer,path(globals.G_main.dir.current))
+  else
     if Gui.yesNo("The default download to location is: "+white(path(globals.G_main.dir.current))+" use this directory?") then d=File(globals.G_main.computer,path(globals.G_main.dir.current)) else d=Io.folder(globals.G_main,globals.G_main.user.home,"Select a directory:")
   end if
-  if d isa Warning then
+  if d isa Warning or not d then
     Info.info("Using default download location: "+green(path(globals.G_main.dir.current)))
     d=File(globals.G_main.computer,path(globals.G_main.dir.current))
   end if
@@ -939,6 +941,23 @@ Io.browse=function(Obj,argv)
   end function
   // File operation command handler - interactive loop for selected file
   run=function(Obj,f)
+    // Shell-typed sessions (main/shell/proxy/pivot): offer to launch binaries
+    if is_binary(f) and Obj.type=="shell" then
+      if Gui.yesNo("Launch "+yellow(name(f))+"?",false) then
+        params=Gui.input({"text":"Enter params if any (empty for none)","default":""})
+        if params==null then return
+        gco=get_custom_object
+        saved={}
+        keys=[]
+        for k in gco;keys.push(k.key);end for
+        for k in keys;saved[k]=gco[k];remove(gco,k);end for
+        if params!="" then result=launch(Obj.shell,path(f),params) else result=launch(Obj.shell,path(f))
+        gco=get_custom_object
+        for k in saved;gco[k.key]=k.value;end for
+        if result isa string then Info.error(result)
+        return
+      end if
+    end if
     X=true
     // Command implementations with outer scope control
     man=function(arg);Io._man(Obj,arg);end function

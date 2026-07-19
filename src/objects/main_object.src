@@ -810,8 +810,10 @@ MainObject.run=function(this,ex,fileMeta={})
     if argv isa Error then return argv
     //Check for active sessions
     if len(globals.G_sessions.values)>1 then
-      //Skip prompt if -y or -n flag provided
-      if not argv.y and not argv.n then
+      //Skip prompt if -y, session `yes`, or -n
+      if argv.n then
+        //explicit no - still exit without asking
+      else if not Gui.skipConfirm(argv.y) then
         if not Gui.yesNo("You have active sessions. Exit anyway?") then return
       end if
     end if

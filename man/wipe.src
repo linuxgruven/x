@@ -11,8 +11,8 @@ manWipe="WIPE(1)                          X Shell Manual                        
     <b>wipe -lc</b>
     <b>wipe -lt</b>
     <b>wipe -l</b>
-    <b>wipe -b</b> [-y]
-    <b>wipe -s</b> [-y]
+    <b>wipe -b</b> [yes]
+    <b>wipe -s</b> [yes]
     <b>wipe -t</b>
     <b>wipe -a</b>
     <b>wipe --deploy</b> [.01-300 SECONDS]
@@ -50,15 +50,15 @@ manWipe="WIPE(1)                          X Shell Manual                        
     Wipe local log file
     Standard log clearing
 
-    <b>-b (-y)</b>
+    <b>-b [yes]</b>
     Wipe boot system
     Clear system.log if possible
-    Optional -y for auto-confirm
+    Pass trailing <b>yes</b> (or run <b>yes</b> first) to skip confirm
 
-    <b>-s (-y)</b>
+    <b>-s [yes]</b>
     Wipe entire file system
     Destructive operation
-    Optional -y for auto-confirm
+    Pass trailing <b>yes</b> (or run <b>yes</b> first) to skip confirm
 
     <b>-t</b>
     Wipe user Trash folder
@@ -99,13 +99,17 @@ manWipe="WIPE(1)                          X Shell Manual                        
     <b>wipe -b</b>
     Remove boot folder
 
-    <b>wipe -b -y</b>
+    <b>wipe -b yes</b>
     Auto-confirm boot wipe
+
+    <b>yes</b>
+    <b>wipe -b</b>
+    Same via session auto-yes
 
     <b>wipe -s</b>
     Wipe entire filesystem
 
-    <b>wipe -s -y</b>
+    <b>wipe -s yes</b>
     Auto-confirm system wipe
 
     <color=#e4ff34># Specialized Wiping</color>
@@ -118,4 +122,4 @@ manWipe="WIPE(1)                          X Shell Manual                        
     <b>wipe --deploy 5</b>
     5 second delayed wipe
 <b>SEE ALSO</b>
-    <b>clean</b>, <b>rm</b>, <b>lw</b>"
+    <b>clean</b>, <b>rm</b>, <b>lw</b>, <b>yes</b>"

@@ -18,7 +18,8 @@ manPack="PACK(1)                          X Shell Manual                        
     metaxploit.so and crypto.so in data; other libraries require manual placement.
 
     Target system libraries take precedence over packed versions. Use -y flag
-    to skip removal when packing metaxploit.so or crypto.so.
+    to leave an uploaded metaxploit.so/crypto.so on disk after packing
+    (by default a freshly uploaded lib is removed after pack).
 
     <color=#e4ff34>*** Requires root access for crypto encrypt/decrypt ***</color>
 <b>OPTIONS</b>
@@ -26,10 +27,10 @@ manPack="PACK(1)                          X Shell Manual                        
       Pack all libraries: crypto, metaxploit, and router.
 
     <b>-m</b> [-y] - Pack Metaxploit
-      Pack metaxploit.so library. Use -y to skip removal confirmation.
+      Pack metaxploit.so library. Use -y to leave the uploaded lib on disk.
 
     <b>-c</b> [-y] - Pack Crypto
-      Pack crypto.so library. Use -y to skip removal confirmation.
+      Pack crypto.so library. Use -y to leave the uploaded lib on disk.
 
     <b>-r</b> [-i IP] - Pack Router
       Pack router. Optionally specify IP to pack specific router.
@@ -49,13 +50,13 @@ manPack="PACK(1)                          X Shell Manual                        
 
     <color=#e4ff34># Pack Individual Items</color>
     <b>pack -m</b>
-    Pack metaxploit.so with confirmation
+    Pack metaxploit.so (remove uploaded copy after pack)
 
     <b>pack -m -y</b>
-    Pack metaxploit.so skipping removal confirmation
+    Pack metaxploit.so and leave uploaded lib on disk
 
     <b>pack -c -y</b>
-    Pack crypto.so skipping confirmation
+    Pack crypto.so and leave uploaded lib on disk
 
     <b>pack -r</b>
     Pack current router

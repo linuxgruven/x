@@ -4,43 +4,44 @@ manRsync="RSYNC(1)                         X Shell Manual                       
 <b>NAME</b>
     rsync - File synchronization utility
 <b>SYNOPSIS</b>
-    <b>rsync</b>
-    <b>rsync -r</b>
-    <b>rsync -a</b>
-    <b>rsync -v</b>
-    <b>rsync -u</b>
-    <b>rsync --delete</b>
-    <b>rsync -n</b>
-    <b>rsync -p</b><b> PASSWORD</b>
+    <b>rsync</b> [<b>-r</b>|<b>-a</b>] [<b>-v</b>] [<b>-u</b>] [<b>-n</b>] [<b>--delete</b>] [<b>-p</b> PASSWORD] <b>SRC</b> <b>DST</b>
 <b>DESCRIPTION</b>
     The rsync utility synchronizes files between local and remote systems.
-    It supports SSH, session-based transfers, and various synchronization
-    modes including recursive, archive, and differential updates.
+    It supports SSH, session-based transfers, and local sync with recursive,
+    archive, update, and dry-run modes.
 
     <b>Root Ownership Behavior:</b>
     When downloading files as root, rsync prompts for an owner name to
     set ownership and group on the downloaded files. Leave empty to keep
-    root ownership. This prevents downloaded files from defaulting to root.
+    root ownership. Run <b>yes</b> first (or session auto-yes) to skip the
+    prompt and keep root.
 
     <b>Path Formats:</b>
-      Local:   <b>path</b>
+      Local:   <b>path</b> (a colon only counts as remote if it is
+               <b>sess:</b>..., <b>user@host:</b>..., or <b>host:path</b>
+               with no <b>/</b> before the colon)
       SSH:     <b>[user@]host:path</b>
       Session: <b>sess:id:path</b>
 <b>OPTIONS</b>
     <b>-r</b> - Recursive
       Recursively transfer directories and subdirectories.
+      Required for directory sources (local and remote).
 
     <b>-a</b> - Archive Mode
-      Archive mode: recursive transfer with permission preservation.
+      Recursive transfer plus preserve permissions, owner, and group
+      on local-to-local sync (after copy).
 
     <b>-v</b> - Verbose
       Verbose output showing transfer progress and details.
 
     <b>-u</b> - Update Only
-      Skip files that are newer on destination (update mode).
+      Skip files that already match on the destination.
+      Local: full tree. Remote: single files before transfer;
+      remote directories still transfer fully.
 
     <b>--delete</b> - Delete Source
-      Delete source files after successful transfer.
+      Delete source files after a successful transfer.
+      Does not remove extra files on the destination.
 
     <b>-n</b> - Dry Run
       Perform trial run without making any changes.
@@ -55,6 +56,10 @@ manRsync="RSYNC(1)                         X Shell Manual                       
     <b>rsync -av /source/dir/ sess:2:/dest/dir/</b>
     Transfer to session ID 2
 
+    <color=#e4ff34># Rename</color>
+    <b>rsync file.txt /tmp/renamed.txt</b>
+    Copy local file under a new name
+
     <color=#e4ff34># With Authentication</color>
     <b>rsync -au -p mypassword /source/dir/ user@remote:/dest/dir/</b>
     Update mode with password authentication
@@ -68,7 +73,12 @@ manRsync="RSYNC(1)                         X Shell Manual                       
     Preview transfer without making changes
 
     <color=#e4ff34># Update Only</color>
-    <b>rsync -auv /local/dir/ user@host:/remote/dir/</b>
-    Transfer only files newer than destination
+    <b>rsync -auv /local/dir/ /backup/dir/</b>
+    Transfer only files that differ from destination
+
+    <color=#e4ff34># Skip root owner prompt</color>
+    <b>yes</b>
+    <b>rsync -av user@host:/etc/passwd /tmp/</b>
+    Download as root without ownership prompt
 <b>SEE ALSO</b>
-    <b>scp</b>"
+    <b>scp</b>, <b>yes</b>"

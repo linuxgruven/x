@@ -157,6 +157,13 @@ Gui.choiceHybrid=function(z,shortcuts={},d=null,skipNum=false,anykey=false,promp
 		return numericChoice
 	end while
 end function
+//True if -y/--yes flag set OR session `yes` (globals.G_auto_yes)
+//Use for skip-confirm / use-defaults paths. Not for force-overwrite flags (mkdir/touch).
+Gui.skipConfirm=function(flag=null)
+  if flag then return true
+  if globals.G_auto_yes then return true
+  return false
+end function
 //Yes/no prompt with default
 Gui.yesNo=function(m="",d=true)
   //Auto-yes: skip prompt and return true
@@ -187,6 +194,8 @@ Gui.yesNo=function(m="",d=true)
 end function
 //Yes/no prompt with null default option
 Gui.yesNoNon=function(m="",d=null)
+  //Auto-yes: skip prompt and return true
+  if globals.G_auto_yes then return true
   //Display message if provided
 	if m then print yellow(m)
   //Set default prompt text
@@ -207,8 +216,8 @@ end function
 Gui.delPrompt=function(f,a=null)
   //Get file name
 	n=name(f)
-  //Auto-delete without confirmation
-  if a then
+  //Auto-delete without confirmation (-y flag or session yes)
+  if Gui.skipConfirm(a) then
 	//Delete file
 	r=delete(f)
 	if r=="" then Info.info(n+ " deleted successfully") else Error.set(r)

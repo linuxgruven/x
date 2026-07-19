@@ -11,7 +11,8 @@ manPRoot="PROOT(1)                         X Shell Manual                       
     Automated privilege escalation and directory pivot utility. Secures root
     shell access and automatically pivots framework into compromised user home
     directory. Streamlines post-exploitation workflow. Only compatible with
-    shell objects. Optional confirmation bypass for scripted operations.
+    shell objects. Optional confirmation bypass via <b>-y</b> or the
+    <b>yes</b> command.
 
 <b>OPTIONS</b>
     <b>proot</b>
@@ -19,7 +20,7 @@ manPRoot="PROOT(1)                         X Shell Manual                       
         Prompts for confirmation
 
     <b>proot -y</b>
-        Skip confirmation prompts
+        Skip confirmation prompts (or run <b>yes</b> first)
         Immediate execution
 
 <b>EXAMPLE:</b>
@@ -30,6 +31,10 @@ manPRoot="PROOT(1)                         X Shell Manual                       
     <color=#e4ff34># Automated Workflows</color>
     <b>proot -y</b>
         No prompts, quick execution
+
+    <b>yes</b>
+    <b>proot</b>
+        Same via session auto-yes
 
     <color=#e4ff34># Exploitation Workflow</color>
     <b>scan -l</b>
@@ -42,4 +47,4 @@ manPRoot="PROOT(1)                         X Shell Manual                       
         Explore root directory
 
 <b>SEE ALSO</b>
-    <b>sudo</b>, <b>su</b>, <b>passwd</b>"
+    <b>sudo</b>, <b>su</b>, <b>passwd</b>, <b>pivot</b>, <b>yes</b>"

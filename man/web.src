@@ -14,41 +14,20 @@ manWeb="WEB(1)                           X Shell Manual                         
     files only, without account creation or file download capabilities.
 <b>OPTIONS</b>
     <b>web</b> - Launch Interweb Service
-      Initiates the private HTTP interweb service.
-      Provides safe browsing for financial and repository services.
+      Installs/starts httpd if needed, writes /Public/htdocs/website.html,
+      and prints how to open it. Provides safe browsing for financial and
+      repository services.
 <b>EXAMPLE:</b>
     <color=#e4ff34># Launch Service</color>
     <b>web</b>
-    Start the private HTTP server
+    Start (or repair) the private HTTP server
 
-    <color=#e4ff34># Access Services</color>
-    <b>web</b>
-    Browse coin services securely
-
-    <b>web</b>
-    Access bank services privately
-
-    <b>web</b>
-    View repository files safely
+    <color=#e4ff34># View Site</color>
+    In a normal terminal (not X): <b>Browser.exe &lt;local_ip&gt;</b>
+    Opens the Interweb page on this machine
 
     <color=#e4ff34># Service Features</color>
-    <b>web</b>
-    No port forwarding (local only)
-
-    <b>web</b>
-    Auto-closes on terminal exit
-
-    <b>web</b>
-    Repository fetch capability
-
-    <color=#e4ff34># Security Notes</color>
-    <b>web</b>
-    Requires root privileges
-
-    <b>web</b>
-    Cannot create accounts or download files
-
-    <b>web</b>
-    Limited repo functionality
+    Local-only (not port-forwarded); auto-closes with the terminal
+    Repository fetch only — no account create / file download
 <b>SEE ALSO</b>
     <b>service</b>, <b>open</b>, <b>start</b>"

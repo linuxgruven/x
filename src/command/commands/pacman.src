@@ -405,29 +405,16 @@ Command.pacman=function(Obj,argv)
       if not status then return Info.info("No updates needed")
       Info.info("The following package will be updated:")
       Info.info(arg.a)
-      if not arg.y then
-        if Gui.yesNo("Do you want to continue?") then
-          // Check and handle root permissions for system directories
-          accessCheck=ensureSystemDirAccess(arg.i,arg.a)
-          if accessCheck isa Error then return accessCheck
-          result=install(Library.aptclient,arg.a,arg.i)
-          if not result then return Error.set("Internal error")
-          if result isa string then return Error.set(result)
-          chmodInstalledFile(arg.i,arg.a)
-          Info.info(arg.a+" installed")
-        else
-          return Warning.set("aborted")
-        end if
-      else
-        // Check and handle root permissions for system directories
-        accessCheck=ensureSystemDirAccess(arg.i,arg.a)
-        if accessCheck isa Error then return accessCheck
-        result=install(Library.aptclient,arg.a,arg.i)
-        if not result then return Error.set("Internal error")
-        if result isa string then return Error.set(result)
-        chmodInstalledFile(arg.i,arg.a)
-        Info.info(arg.a+" installed")
+      if not Gui.skipConfirm(arg.y) then
+        if not Gui.yesNo("Do you want to continue?") then return Warning.set("aborted")
       end if
+      accessCheck=ensureSystemDirAccess(arg.i,arg.a)
+      if accessCheck isa Error then return accessCheck
+      result=install(Library.aptclient,arg.a,arg.i)
+      if not result then return Error.set("Internal error")
+      if result isa string then return Error.set(result)
+      chmodInstalledFile(arg.i,arg.a)
+      Info.info(arg.a+" installed")
     else
       // Bulk upgrade: scan directory and upgrade all outdated packages
       upgradablePackages=checkUpgrade(arg.p)
@@ -436,47 +423,25 @@ Command.pacman=function(Obj,argv)
       print yellow("-"*32)
 			for package in upgradablePackages;print white(package);end for
 			print yellow("-"*32)
-      if not arg.y then
-        if Gui.yesNo("Do you want to continue?") then
-          // Check and handle root permissions for system directories
-          accessCheck=ensureSystemDirAccess(arg.i,upgradablePackages[0])
-          if accessCheck isa Error then return accessCheck
-          count=0
-          for package in upgradablePackages
-            result=install(Library.aptclient,package,arg.i)
-            if result==null then
-              Info.error("Internal error")
-            else if result isa string then
-              Error.set(result)
-            else if result isa number then
-              chmodInstalledFile(arg.i,package)
-              Info.info(package+" updated")
-            end if
-            count+=1
-          end for
-          Info.info(count+" packages updated")
-        else
-          Info.warning("aborted")
-        end if
-      else
-        // Check and handle root permissions for system directories
-        accessCheck=ensureSystemDirAccess(arg.i,upgradablePackages[0])
-        if accessCheck isa Error then return accessCheck
-        count=0
-        for package in upgradablePackages
-          result=install(Library.aptclient,package,arg.i)
-          if result==null then
-            Info.error("Internal error")
-          else if result isa string then
-            Error.set(result)
-          else if result isa number then
-            chmodInstalledFile(arg.i,package)
-            Info.info(package+" updated")
-          end if
-          count+=1
-        end for
-        Info.info(count+" packages updated")
+      if not Gui.skipConfirm(arg.y) then
+        if not Gui.yesNo("Do you want to continue?") then return Info.warning("aborted")
       end if
+      accessCheck=ensureSystemDirAccess(arg.i,upgradablePackages[0])
+      if accessCheck isa Error then return accessCheck
+      count=0
+      for package in upgradablePackages
+        result=install(Library.aptclient,package,arg.i)
+        if result==null then
+          Info.error("Internal error")
+        else if result isa string then
+          Error.set(result)
+        else if result isa number then
+          chmodInstalledFile(arg.i,package)
+          Info.info(package+" updated")
+        end if
+        count+=1
+      end for
+      Info.info(count+" packages updated")
     end if
   end function
   runSetup=function(arg)

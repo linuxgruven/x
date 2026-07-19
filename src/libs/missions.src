@@ -26,7 +26,9 @@ Mission.getObject=function(public,local,i,needRoot=false)
   if not router then return
   if typeof(router)=="router" then
     fallbackResult=null
-    _ports=Exploit.extract(router,public)
+    _mx=Library.mxFor(null)
+    if i and hasIndex(i,"Obj") then _mx=Library.mxFor(i.Obj)
+    _ports=Exploit.extract(router,public,_mx)
     if _ports isa Error then return
     for m in _ports
       if m isa Error then continue
@@ -66,7 +68,7 @@ Mission.getObjectShell=function(public,local=null)
     rootShell=null
     userShell=null
     guestShell=null
-    _ports=Exploit.extract(router,public)
+    _ports=Exploit.extract(router,public,Library.mxFor(null))
     if _ports isa Error then return
     for m in _ports
       if m isa Error then continue
@@ -104,12 +106,50 @@ Mission.getPasswd=function(obj,i)
   return ["error",yellow("Could not find the specified user in /etc/passwd")]
 end function
 Mission.getRootBounce=function(public,local,i)
-  if not globals.G_settings.vulnerableLib or not globals.G_settings.vulnerableLibIndex then return ["error",yellow("Vulnerable library or index not set in settings")]
-  //check if we have a shell on the router
-  ex=Attack.scanCustom([public,"router","s"],true)
-  if typeof(ex)!="shell" then return ["error",yellow("Could not get a shell on the router")]
-  shell=Exploit.getShell(ex,false,[],true)
-  //check if we are root
+  if not i then i={}
+  //Agent may pass an already-captured router shell in i.shell (skip re-scan)
+  ex=null
+  shell=null
+  if hasIndex(i,"shell") and i.shell then
+    if typeof(i.shell)=="shell" then
+      ex=i.shell
+      shell=Exploit.getShell(ex,false,[],true)
+    else if typeof(i.shell)=="map" and hasIndex(i.shell,"shell") and typeof(i.shell.shell)=="shell" then
+      shell=i.shell
+      ex=i.shell.shell
+    end if
+  end if
+  if not shell then
+    //Use live session Obj for metaxploit (OPSEC - avoid home IP in router logs)
+    _sess=null
+    if hasIndex(i,"Obj") and i.Obj then
+      _sess=i.Obj
+    else if globals.G_proxy then
+      _sess=globals.G_proxy
+    end if
+    //Need router shell (port 0). find -s alone prefers non-router shells - use --router.
+    if not Library.mxFor(_sess) then return ["error",yellow("No metaxploit for remote scan (load on proxy)")]
+    _attempts=[[public,"kernel_router","s"],[public,"router","s"],[public,"find","s","--router"]]
+    _lastErr="no shell exploit succeeded"
+    for _args in _attempts
+      ex=Attack.scanCustom(_args,true,_sess)
+      if typeof(ex)=="shell" then break
+      if ex isa Error then
+        if hasIndex(ex,"message") then _lastErr=str(ex.message) else _lastErr=str(ex)
+      else if ex then
+        _lastErr="scanCustom returned "+typeof(ex)
+      end if
+      ex=null
+    end for
+    if typeof(ex)!="shell" then return ["error",yellow("Could not get a shell on the router ("+_lastErr+")")]
+    shell=Exploit.getShell(ex,false,[],true)
+  end if
+  if not shell or shell isa Error then
+    why="getShell failed"
+    if shell isa Error and hasIndex(shell,"message") then why=str(shell.message)
+    return ["error",yellow("Could not get a shell on the router ("+why+")")]
+  end if
+  //check if we are root on the router (required to scan local libs / install bounce lib)
   if shell.user.raw!="root" then shell=ShellObject.headlessSu(shell)
   if shell isa Error then
     if hasIndex(i,"anyUser") and i.anyUser then
@@ -123,15 +163,74 @@ Mission.getRootBounce=function(public,local,i)
   if shell.user.raw!="root" then return ["error",yellow("Could not get a root shell on the router")]
   //Wipe the log
   Log.shellLog(shell.shell)
-  //Load the vulnerable library
-  SavedLibs.getFile(shell,["-p","/lib",globals.G_settings.vulnerableLib])
-  //Need to pack metaxploit
+  //Need packed metaxploit to load local /lib (same as scan --e / --l)
   ShellObject.packMeta(shell)
-  //need to run scan --l on the target using globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex
-  computer=Exploit.scanLocalCustom(shell,[globals.G_settings.vulnerableLib,globals.G_settings.vulnerableLibIndex,local],true,true)
-  if computer isa Error then return ["error",yellow("Unable to get a computer bounce to the target")]
-  if typeof(computer)!="computer" then return ["error",yellow("Unable to get target computer on "+local)]
-  return computer
+  //Helpers: same backend as scan --e / --l
+  isRootComputer=function(c)
+    if typeof(c)!="computer" then return false
+    u=Utility.getUserEX(c)
+    if not u then return false
+    if hasIndex(u,"user") and u.user=="root" then return true
+    if hasIndex(u,"raw") and u.raw=="root" then return true
+    if hasIndex(u,"name") and u.name=="root" then return true
+    return false
+  end function
+  //From nested-router computer, get root shell and bounce to original LAN
+  hopFromComputer=function(comp)
+    co=Exploit.getComputer(comp,true)
+    if not co or co isa Error then return null
+    raw=Exploit.returnShell(co,true)
+    if typeof(raw)!="shell" then return null
+    hop=Exploit.getShell(raw,false,[],true)
+    if not hop or hop isa Error then return null
+    if hop.user.raw!="root" then hop=ShellObject.headlessSu(hop)
+    if not hop or hop isa Error or hop.user.raw!="root" then return null
+    ShellObject.packMeta(hop)
+    c2=Exploit.scanForExploit(hop,["-u","root","bounce",local],true,true)
+    if isRootComputer(c2) then return c2
+    c2=Exploit.scanForExploit(hop,["-u","root","computer",local],true,true)
+    if isRootComputer(c2) then return c2
+    if globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex!=null and globals.G_settings.vulnerableLibIndex!=-1 then
+      SavedLibs.getFile(hop,["-p","/lib",globals.G_settings.vulnerableLib])
+      c2=Exploit.scanLocalCustom(hop,[globals.G_settings.vulnerableLib,globals.G_settings.vulnerableLibIndex,local],true,true)
+      if isRootComputer(c2) then return c2
+    end if
+    return null
+  end function
+  //Direct LAN, then nested gateway (e.g. 172.16.3.9 via 172.16.3.1)
+  bounceTargets=[local]
+  _parts=split(local,"\.")
+  if len(_parts)==4 then
+    _gw=_parts[0]+"."+_parts[1]+"."+_parts[2]+".1"
+    if _gw!=local then push(bounceTargets,_gw)
+  end if
+  tryTargets=function(useLocalCustom)
+    for _bt in bounceTargets
+      if useLocalCustom then
+        c=Exploit.scanLocalCustom(shell,[globals.G_settings.vulnerableLib,globals.G_settings.vulnerableLibIndex,_bt],true,true)
+      else
+        c=Exploit.scanForExploit(shell,["-u","root","bounce",_bt],true,true)
+        if not isRootComputer(c) then c=Exploit.scanForExploit(shell,["-u","root","computer",_bt],true,true)
+      end if
+      if not isRootComputer(c) then continue
+      if _bt==local then return c
+      hopped=hopFromComputer(c)
+      if hopped then return hopped
+    end for
+    return null
+  end function
+  //1) scan --e: root bounce from libraries already on the router
+  computer=tryTargets(false)
+  if computer then return computer
+  //2) No local root bounce - install config bounce lib, then scan --e again (and --l as pin)
+  hasHackLib=globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex!=null and globals.G_settings.vulnerableLibIndex!=-1
+  if not hasHackLib then return ["error",yellow("No root lan bounce via scan --e and bounce lib not set (config -v/-x)")]
+  SavedLibs.getFile(shell,["-p","/lib",globals.G_settings.vulnerableLib])
+  computer=tryTargets(false)
+  if computer then return computer
+  computer=tryTargets(true)
+  if computer then return computer
+  return ["error",yellow("Unable to get a computer bounce to the target (scan --l)")]
 end function
 Mission.init=function(m)
 	self.mail=m

@@ -54,6 +54,109 @@ AgentCore._getPortForService=function(serviceName)
   end if
   return null
 end function
+//Bash auto flags are the -- variants (set $scan_ok / $hold). Upgrade -x to --x when possible.
+AgentCore._preferBashFlag=function(flag,knowledge=null)
+  if not flag then return flag
+  if len(flag)>=2 and flag[:2]=="--" then return flag
+  //Single-dash -> double-dash (bash-scriptable form)
+  if len(flag)>=2 and flag[0]=="-" and flag[1]!="-" then
+    bashFlag="-"+flag
+    if knowledge and hasIndex(knowledge,"flags") and hasIndex(knowledge.flags,bashFlag) then return bashFlag
+    //Known scan bash autos even if man cache missing the -- entry
+    return bashFlag
+  end if
+  return flag
+end function
+//Select a flag from learned man-page knowledge by scoring descriptions against intent words.
+//Bash autos are the -- flags - always prefer those for agent/scripted use.
+//Args: cmdName, intentWords, preferBash (default true) -> only score -- flags when true
+AgentCore._selectFlagFromKnowledge=function(cmdName,intentWords,preferBash=true)
+  debug=globals.G_agent.config.debug
+  outLvl=globals.G_agent.config.outputLevel
+  if not cmdName or not intentWords or len(intentWords)==0 then return null
+  knowledge=null
+  if hasIndex(globals.G_agent,"commandKnowledgeCache") and hasIndex(globals.G_agent.commandKnowledgeCache,cmdName) then
+    knowledge=globals.G_agent.commandKnowledgeCache[cmdName]
+  else if hasIndex(globals.G_agent,"getCommandInfo") then
+    knowledge=globals.G_agent.getCommandInfo(cmdName)
+  end if
+  if not knowledge or not hasIndex(knowledge,"flags") or not knowledge.flags then return null
+  bestFlag=null
+  bestScore=0
+  for flag in knowledge.flags.indexes
+    isBash=len(flag)>=2 and flag[:2]=="--"
+    //Agent/bash path: only consider -- autos (skip interactive single-dash twins)
+    if preferBash and not isBash then continue
+    desc=lower(str(knowledge.flags[flag]))
+    flagLower=lower(flag)
+    score=0
+    for word in intentWords
+      w=lower(str(word))
+      if not w or len(w)<2 then continue
+      if indexOf(desc,w)!=null then score=score+20
+      bare=flagLower
+      while len(bare)>0
+        if bare[0]!="-" then break
+        bare=bare[1:]
+      end while
+      if bare==w then score=score+15
+      if indexOf(flagLower,w)!=null then score=score+8
+    end for
+    //Strong boost for bash -- autos
+    if isBash then score=score+25
+    if score>bestScore then
+      bestScore=score
+      bestFlag=flag
+    end if
+  end for
+  //If preferBash found nothing, retry allowing single-dash then upgrade to --
+  if (not bestFlag or bestScore<20) and preferBash then
+    return self._selectFlagFromKnowledge(cmdName,intentWords,false)
+  end if
+  if bestFlag and bestScore>=20 then
+    bestFlag=self._preferBashFlag(bestFlag,knowledge)
+    if outLvl>=2 then
+      desc=knowledge.flags[bestFlag]
+      if not desc and hasIndex(knowledge.flags,bestFlag[1:]) then desc=knowledge.flags[bestFlag[1:]]
+      print yellow("[VERBOSE] Agent: man "+cmdName+" -> "+bestFlag+" (bash -- flag, score "+str(bestScore)+")")
+      if desc then print yellow("[VERBOSE]   "+desc)
+    end if
+    if debug then print green("[DEBUG] _selectFlagFromKnowledge: "+cmdName+" -> "+bestFlag)
+    return bestFlag
+  end if
+  return null
+end function
+//Resolve scan -- bash flag for a named intent from learned man page (ai learn scan / learn all)
+//intents: bounce, exploitSearch, customLocal, customRemote, lanNetwork, shellBounce
+//Always returns a -- flag (bash $scan_ok / $hold path)
+AgentCore._getScanFlagForIntent=function(intent)
+  words=[]
+  fallback=null
+  if intent=="bounce" then
+    words=["bounce","automated","root","computer","lan"]
+    fallback="--b"
+  else if intent=="exploitSearch" then
+    words=["search","all","libraries","exploit","type"]
+    fallback="--e"
+  else if intent=="customLocal" then
+    words=["custom","local","exploit","index"]
+    fallback="--l"
+  else if intent=="customRemote" then
+    words=["custom","public","connect"]
+    fallback="--c"
+  else if intent=="lanNetwork" then
+    words=["smart","lan","network"]
+    fallback="--n"
+  else if intent=="shellBounce" then
+    words=["shell","bounce","commands"]
+    fallback="--s"
+  else
+    return null
+  end if
+  flag=self._selectFlagFromKnowledge("scan",words,true)
+  if flag then return self._preferBashFlag(flag)
+  return fallback
+end function
 //Get command capabilities from cached knowledge
 AgentCore._getCommandCapabilities=function(cmdName)
   if not cmdName then return []

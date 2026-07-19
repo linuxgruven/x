@@ -236,7 +236,7 @@ Command.mainCallbacks=function(Obj)
 		customLocal=function(arg);return Exploit.scanLocalCustom(Obj,arg);end function
 		disableAllFW=function(arg);if not Library.haveMetaxploit then return;Net.disableRouters(1);end function
 		scanAll=function(arg);Net.scanAll(arg);end function
-		customRemote=function(arg);return Attack.scanCustom(arg);end function
+		customRemote=function(arg);return Attack.scanCustom(arg,false,Obj);end function
 		scanPObject=function(arg);if globals.G_errors.pobject isa Error then return Error.set("PObjects are in an error state, please check the log");PartialObject.target(arg,false,true,Library.metaxploit,{"public_ip":Obj.meta.public_ip,"local_ip":Obj.meta.local_ip,"metaLib":null});end function
 		scanPODirectory=function(arg)
 			if globals.G_errors.pobject isa Error then return Error.set("PObjects are in an error state, please check the log")
@@ -1504,38 +1504,7 @@ Command.mainCallbacks=function(Obj)
 		Proxy.proxy(Obj,argv)
 	end function
 	__ids=function(argv);if Net.hasInternet(Obj) isa Warning then return;Command.ids(Obj,argv);end function
-	__web=function(argv)
-    h=include_lib("/lib/libhttp.so")
-    if not h then
-      Command.pacman(Obj,["-Si","libhttp.so","-p","/lib"])
-      h=include_lib("/lib/libhttp.so")
-      if not h then return Error.set("Unable to load the HTTP library")
-      if not File(Obj.computer,"/Public") then install_service(h)
-    end if
-    r=start_service(h)
-    if r isa string then return Error.set(r)
-    c=Obj.computer
-    _sys=System.getSystem
-    _webDir=_sys.dir.srcWeb
-    _webFiles=get_files(_webDir)
-    if not _webFiles then return Error.set("No web pages installed")
-    while true
-      CH=[green("Choose which Interweb service to use:")]
-      for m in _webFiles;if name(m)=="website" then continue;push(CH,white(name(m)));end for
-      push(CH,iyellow("--- Done using Interweb ---"))
-      UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
-      if UCH==len(CH)-1 then
-        z=h.stop_service
-        if z isa string then return Error.set(z) else return Info.info("Interweb session closed")
-      end if
-      _idx=0
-      for m in _webFiles;if name(m)=="website" then continue;if _idx==UCH-1 then break;_idx=_idx+1;end for
-      w=File(c,"/Public/htdocs/website.html")
-      if w then set_content(w,get_content(m))
-      Info.info("Interweb "+name(m)+" is running on "+c.local_ip)
-      Info.info("In a terminal type ' Browser.exe "+c.local_ip+" ' to view the website")
-    end while
-  end function
+	__web=function(argv);System.interWeb(Obj);end function
 	__drop=function(argv)
     if not argv then return Man.help(["drop"])
 		Arg1=lower(argv[0])

@@ -34,12 +34,17 @@ Proxy.farm=function
   if not Exploit.have then return
   //Track tested IPs to avoid reprocessing duplicates from Net.rip
   seen={}
+  attempts=0
+  maxAttempts=self.chain.countTo*100
+  if maxAttempts<50 then maxAttempts=50
+  _mx=Library.mxFor(null)
 	//add - Extract root password from /etc/passwd and add to chain
+  //Returns true only when a usable password was queued
 	add=function(f,i)
     //Fast path: reuse cached root password if already known
     if Shadow.hasPassword(i) then
       p=Shadow.returnPassword(i)
-      if p then
+      if p and p!="<fakehash>" then
         push(Proxy.chain.ips,{
           "ip":i,
           "port":22,
@@ -47,7 +52,7 @@ Proxy.farm=function
           "password":p
         })
         Proxy.chain.count=Proxy.chain.count+1
-        return
+        return true
       end if
     end if
 		for l in split(get_content(f),char(10))
@@ -59,10 +64,11 @@ Proxy.farm=function
 			if len(l)==2 and len(l[1])==32 then
 				//Skip non-root users
 				if not l[0]=="root" then continue
-				//Crack hash using rainbow table
+				//Crack hash using rainbow table / decipher
 				p=Crack.hash(l[1])
-				//Skip if crack failed
-				if not p then continue
+				//Skip if crack failed (null, fake, or still a raw md5)
+				if not p or p=="<fakehash>" then continue
+				if p==l[1] then continue
 				//Add to shadow cache
 				Shadow.add([i,p])
 				//Add to proxy chain
@@ -74,117 +80,78 @@ Proxy.farm=function
         })
 				//Increment chain count
 				Proxy.chain.count=Proxy.chain.count+1
-				//Exit function on success
-				return
+				return true
 			end if
 		end for
+    return false
 	end function
   //checkPort - Check if SSH port (22) is open (short-circuit on first match)
   checkPort=function(z);for p in z;if port_number(p)==22 then return not is_closed(p);end for;end function
-	//getPasswd - Extract /etc/passwd file from exploited object
+	//getPasswd - Extract /etc/passwd; true only if add() queued a password
 	getPasswd=function(ex,i,e)
 		//Handle file object
 		if e=="file" then
-			//Navigate to root of filesystem
 			ex=FileHelper.toRootEx(ex)
-			//Exit if navigation failed
-			if ex==null then return
-			//Find /etc folder
+			if ex==null then return false
 			for d in get_folders(ex)
-				//Skip non-etc folders
 				if name(d)!="etc" then continue
-				//Find passwd file
-				for f in get_files(d);if name(f)!="passwd" then continue;if has_permission(f,"r") then add(f,i) else return;end for
+				for f in get_files(d)
+          if name(f)!="passwd" then continue
+          if not has_permission(f,"r") then return false
+          return add(f,i)
+        end for
 			end for
-		//Handle computer object
+      return false
 		else if e=="computer" then
-			//Get /etc/passwd file
 			f=File(ex,"/etc/passwd")
-			//Exit if not found
-			if not f then return
-			//Add if readable
-			if has_permission(f,"r") then add(f,i) else return
-		//Handle shell object
+			if not f or not has_permission(f,"r") then return false
+			return add(f,i)
     else if indexOf(e,"shell")!=null then
-			//Get /etc/passwd from shell's computer
 			f=File(host_computer(ex),"/etc/passwd")
-			//Exit if not found
-			if not f then return
-			//Add if readable
-			if has_permission(f,"r") then add(f,i) else return
+			if not f or not has_permission(f,"r") then return false
+			return add(f,i)
 		end if
-		//Return success
-    return 1
+    return false
 	end function
 	//Main farming loop
 	while true
-		//Check if target count reached
 		if self.chain.count>=self.chain.countTo then break
+    attempts=attempts+1
+    if attempts>maxAttempts then
+      Info.warning("proxy -r: found "+str(self.chain.count)+"/"+str(self.chain.countTo)+" after "+str(attempts)+" attempts")
+      break
+    end if
 		i=Net.rip
-    //Skip IPs already tested in this run
     if hasIndex(seen,i) then continue else seen[i]=1
-		//Get router for IP
 		r=get_router(i)
-		//Skip if no router
 		if not r then continue
-		//Get router ports
 		z=used_ports(r)
-		//Skip if no ports
 		if not z isa list then continue
-    //Skip if SSH not open
     if not checkPort(z) then continue
-		//Add to dirty IP list if monitoring enabled
 		if globals.G_settings.monitorDirtyips then Dirty.add(i)
-		//Break flag for success
 		b=null
-		//Display target IP
     Info.info("Trying "+i+"...")
-    //Exploit cache per lib/version for this host
     exploitCache={}
-    //Extract exploitable services
-    for m in Exploit.extract(r,i)
-			//Break on error
-      if m isa Error then break
-			//Break if already found password
+    libs=Exploit.extract(r,i,_mx)
+    if libs isa Error or not libs then continue
+    for m in libs
 			if b then break
-			//Skip router service (port 0)
+			if not m or not hasIndex(m,"port_number") then continue
+			//Skip router service (port 0) - need SSH host behind WAN
 			if m.port_number==0 then continue
-			//Build exploit cache key
       E=lib_name(m.metaLib)+"_"+version(m.metaLib)
-			//Get exploits from local per-host cache or global cache
-      if hasIndex(exploitCache,E) then
-        q=exploitCache[E]
-      else
-        if hasIndex(globals.G_exploitCache,E) then
-          q=Exploit._ex(E)
-          exploitCache[E]=q
-        else
-          break
-        end if
-      end if
-			//Skip if no exploits
-			if not q isa list then continue
-			//Try each exploit
+      q=Proxy._getCachedExploits(exploitCache,E,m)
+			if not q isa list or not len(q) then continue
 			for e in q
-				//Skip empty exploits
 				if not len(e) then continue
-				//Check for shell/computer/file exploits
 				if e.e=="s" or e.e=="c" or e.e=="f" then
-					//Skip shells if useShells disabled
 					if e.e=="s" and not self.useShells then continue
-					//Execute exploit
 					ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"proxy")
-					//Skip invalid results
           if ex==null or ex isa number or ex isa string then continue
-					//Get object type
 					obj=typeof(ex)
-					//Check if exploitable type
 					if obj=="computer" or indexOf(obj,"shell")!=null or obj=="file" then
-						//Try to get /etc/passwd
 						if getPasswd(ex,i,obj) then
-							//Mark success
 							b=1
-							//Break exploit loop
 							break
 						end if
 					end if
@@ -294,6 +261,10 @@ Proxy.makeConnection=function(Obj,l,Z=null)
 	s2=0
 	//Final password for cache
 	j=null
+  //Skip endpoint/cache prompts when session `yes` is on (G_auto_yes)
+  //Note: do not fall through to Gui.yesNo under auto-yes - that would answer YES to
+  //"set an end point?" and then block on input prompts.
+  if not Z and globals.G_auto_yes then Z=1
 	//Check if endpoint not specified
   if not Z then
 		//Prompt to set endpoint
@@ -349,38 +320,65 @@ Proxy.makeConnection=function(Obj,l,Z=null)
     end if
   end if
   Info.info("Generating proxy's now...")
+  //Prefer live session shell when available (home/proxy)
+  _src=get_shell
+  if Obj and hasIndex(Obj,"shell") and Obj.shell then _src=Obj.shell
+  //Track hop shells for hops command / registered proxy session
+  globals.G_hops=[]
+  lastCred=null
 	//Build connection chain
 	for i in l
-		//Validate connection has all 4 fields
-		if not len(i)==4 then continue
-		//Save password if this is final hop
-		if c==len(l) then j=i.password
-		//First connection (from local shell)
+		//Require credential fields (do not use len(map)==4 — extra keys would skip valid hops)
+		if not hasIndex(i,"ip") or not hasIndex(i,"port") or not hasIndex(i,"user") or not hasIndex(i,"password") then continue
+		lastCred=i
+		j=i.password
+		//First connection (from local/session shell)
 		if c==1 then
-			//Connect to first hop
-			s1=connect_service(get_shell,i.ip,i.port,i.user,i.password)
-			//Set hop number
+			s1=connect_service(_src,i.ip,i.port,i.user,i.password)
+      if typeof(s1)!="shell" then
+        why=str(s1)
+        return Error.set("Failed to connect to "+i.ip+":"+str(i.port)+" ("+why+")")
+      end if
+			push(globals.G_hops,s1)
 			n=1
 			c=2
-			//Continue to next hop
 			continue
 		end if
-		//Connect through previous hop
 		s2=connect_service(s1,i.ip,i.port,i.user,i.password)
-		//Log shell
-    Log.shellLog(s2)
-		//Update hop number
+    if typeof(s2)!="shell" then
+      why=str(s2)
+      return Error.set("Failed hop "+str(c)+" to "+i.ip+":"+str(i.port)+" ("+why+")")
+    end if
+		push(globals.G_hops,s2)
 		n=c
 		c+=1
-		//Move s2 to s1 for next iteration
 		s1=s2
 	end for
-	//Log final shell
-	Log.shellLog(s1)
-	//Add to cache if requested
+  if typeof(s1)!="shell" then return Error.set("Proxy chain produced no shell")
+	//Wipe logs across the full chain (same as proxy -h)
+	for _hop in globals.G_hops;Log.shellLog(_hop);end for
 	if A then Cache.addEx(s1,j)
-	//Launch exploit shell interface
-  Exploit.getShell(s1)
+  //Deploy x and launch a registered PROXY session (not a plain SHELL wrapper)
+  comp=host_computer(s1)
+  if lastCred and lastCred.user=="root" then
+    H=File(comp,"/root")
+  else
+    u=Utility.getUserEX(s1)
+    if u and hasIndex(u,"home") and u.home then H=u.home else H=null
+    if not H and lastCred then H=File(comp,"/home/"+lastCred.user)
+  end if
+  if not H then return Error.set("Cannot resolve home directory on proxy endpoint")
+  X=File(globals.G_main.computer,globals.G_attributes.program_path)
+  if not X then return Error.set("Missing local x binary to deploy to proxy")
+  x=scp(globals.G_main.shell,path(X),path(H),s1)
+  if x isa string then return Error.set(x)
+  if not create_folder(comp,path(H),"payload") isa number then return Error.set("Failed to create payload folder")
+  if not create_folder(comp,path(H)+"/payload/","data") isa number then return Error.set("Failed to create data folder")
+  globals.G_attributes.hops=true
+  Info.info("Proxy chain established with "+str(len(globals.G_hops))+" hops")
+  Info.info("You can view the proxy hops by using the hops command")
+  Boot.pivotCOLoad
+  return launch(s1,path(H)+"/x",Kernel.key+" proxy")
 end function
 //mapCount - Count entries in Map.conf
 //Args: Obj (main object)
@@ -396,10 +394,8 @@ Proxy.proxy=function(Obj,argv)
 	Arg1=lower(argv[0])
 	//useMap - Use Map.conf proxy chain
 	useMap=function(arg)
-		//Get optional cache flag
-    if arg then Z=arg[0] else Z=null
-		//Convert "y" to 1
-    if Z and Z=="y" then Z=1
+		//Trailing `yes` enables session yes (same as running the yes command)
+    if arg and len(arg)>0 and lower(str(arg[0]))=="yes" then globals.G_auto_yes=true
 		//Load accounts from Map.conf
 		l=Proxy.getMapConf(Obj).accounts.values
 		//Check if accounts exist
@@ -415,15 +411,13 @@ Proxy.proxy=function(Obj,argv)
         "password":a.password
       })
 		end for
-		//Build connection chain
-		Proxy.makeConnection(Obj,z,Z)
+		//Build connection chain (prompts skipped when G_auto_yes)
+		Proxy.makeConnection(Obj,z)
 	end function
 	//usePDat - Use proxy.dat proxy chain
 	usePDat=function(l,arg)
-		//Get optional cache flag
-    if arg then Z=arg[0] else Z=null
-		//Convert "y" to 1
-    if Z and Z=="y" then Z=1
+		//Trailing `yes` enables session yes (same as running the yes command)
+    if arg and len(arg)>0 and lower(str(arg[0]))=="yes" then globals.G_auto_yes=true
 		//Get proxy.dat file
 		f=File(Obj.computer,path(Obj.dir.data)+"/proxy.dat")
 		//Check if file exists
@@ -438,7 +432,7 @@ Proxy.proxy=function(Obj,argv)
 			//Decrypt connection string
 			j=split(Encryption.encrypt(p,Kernel.key,false),":")
 			//Validate has 4 fields
-      if not len(j)==4 then continue
+      if len(j)!=4 then continue
 			//Add to connection list
       push(z,{
         "password":j[3],
@@ -447,8 +441,7 @@ Proxy.proxy=function(Obj,argv)
         "ip":j[0],
       })
 		end for
-		//Build connection chain
-		Proxy.makeConnection(Obj,z,Z)
+		Proxy.makeConnection(Obj,z)
 	end function
 	//newMapConf - Create new Map.conf file
   newMapConf=function(arg);Proxy.createNewMap(Obj);end function
@@ -475,15 +468,14 @@ Proxy.proxy=function(Obj,argv)
 		if c==0 and d==0 then return Warning.set("No proxy chain in Map.conf or proxy.dat yet. Run [ get -m (count) ] to create a new proxy chain")
 	end function
 	combine=function(arg)
-    if arg then Z=arg[0] else Z=null
-    if Z and Z=="y" then Z=1
+    if arg and len(arg)>0 and lower(str(arg[0]))=="yes" then globals.G_auto_yes=true
 		l=[]
     j=null
 		f=File(Obj.computer,path(Obj.dir.data)+"/proxy.dat")
     if f then
       for p in split(get_content(f),char(10))
         a=split(Encryption.encrypt(p,Kernel.key,false),":")
-        if not len(a)==4 then continue
+        if len(a)!=4 then continue
         push(l,{
           "ip":a[0],
           "port":to_int(a[1]),
@@ -493,7 +485,7 @@ Proxy.proxy=function(Obj,argv)
       end for
     end if
     j=Proxy.getMapConf(Obj).accounts.values
-    if not j then return Proxy.makeConnection(Obj,l,Z)
+    if not j then return Proxy.makeConnection(Obj,l)
 		for a in j
       push(l,{
         "ip":a.ip,
@@ -502,17 +494,26 @@ Proxy.proxy=function(Obj,argv)
         "password":a.password
       })
 		end for
-		Proxy.makeConnection(Obj,l,Z)
+		Proxy.makeConnection(Obj,l)
 	end function
 	random=function(arg)
-		if not arg then return Error.set("Invalid ip count")
-		Proxy.chain={}
-    a=0
-		if arg then Z=to_int(arg[0]) else Z=1
-		if not Z isa number then Z=1
-    arg=join(arg,"")
-    if indexOf(arg,"-s")!=null then Proxy.useShells=1
-    if indexOf(arg,"y")!=null then a=1
+		if not arg then return Error.set("Invalid ip count - usage: proxy -r COUNT [-s] [yes]")
+    //Reset sticky -s from a previous run
+    Proxy.useShells=false
+    Z=null
+    for tok in arg
+      t=lower(str(tok))
+      if t=="-s" or t=="--shells" or t=="s" then
+        Proxy.useShells=1
+      else if t=="yes" then
+        //Same as running the yes command
+        globals.G_auto_yes=true
+      else
+        n=to_int(tok)
+        if n isa number and n>0 then Z=n
+      end if
+    end for
+		if not Z then return Error.set("Invalid ip count - usage: proxy -r COUNT [-s] [yes]")
 		if not globals.G_rainbow then Crack.loading
 		Info.info("Running...")
 		Proxy.chain={
@@ -521,7 +522,9 @@ Proxy.proxy=function(Obj,argv)
       "ips":[]
 		}
 		Proxy.farm
-		if len(Proxy.chain.ips) then Proxy.makeConnection(Obj,Proxy.chain.ips,a)
+		if not len(Proxy.chain.ips) then return Warning.set("proxy -r found 0 usable SSH roots (try -s, or scan libs / rainbow)")
+    //Prompts skipped when G_auto_yes (from `yes` command or trailing yes)
+    Proxy.makeConnection(Obj,Proxy.chain.ips)
 	end function
 	useBoth=function(arg)
 		f=File(globals.G_main.computer,path(globals.G_main.dir.data)+"/proxy.dat")

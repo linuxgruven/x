@@ -63,6 +63,8 @@ Command.find=function(Obj,argv)
 			argv.folder=true
 		else if _t=="link" then
 			argv.link=true
+		else
+			return Error.set("Invalid -t type: "+argv.t+" (bin|binary|text|folder|dir|link)")
 		end if
 	end if
 	// Default to * when a path is given without a name pattern

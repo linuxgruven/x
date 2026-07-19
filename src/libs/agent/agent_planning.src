@@ -7,7 +7,7 @@ AgentPlanning._LOCAL_OPS=["directCommand","navigation","fileOp","fileContent","p
 AgentPlanning._DANGEROUS_OPS=["wipe","bomb","ddos","0day","encrypt"]
 AgentPlanning._MODERATE_OPS=["tux","exploit","crack","escalate"]
 AgentPlanning._COMPLEX_OPS=["escalate","backdoor","0day"]
-AgentPlanning._COMMAND_MAPPING={"fetch":"scan","scan":"scan","exploit":"exploit","crack":"crack","escalate":"su","proxy":"proxy","pivot":"pivot","nmap":"nmap","dig":"deepscan","decipher":"decipher","tux":"adduser","backdoor":"backdoor","encrypt":"encrypt","decrypt":"decrypt","build":"build","sniffer":"sniffer"}
+AgentPlanning._COMMAND_MAPPING={"fetch":"scan","scan":"scan","attack":"scan","getObject":"scan","autonomous":"scan","exploit":"exploit","crack":"crack","escalate":"su","proxy":"proxy","pivot":"pivot","nmap":"nmap","dig":"deepscan","decipher":"decipher","tux":"adduser","backdoor":"backdoor","encrypt":"encrypt","decrypt":"decrypt","build":"build","sniffer":"sniffer"}
 AgentPlanning._SYNONYM_GROUPS=[["space","free","available","capacity","remaining","left"],["find","search","locate","discover"],["list","show","display","print"],["delete","remove","erase"],["copy","duplicate"],["move","relocate"],["create","make","new"]]
 AgentPlanning._expandSubnet=function(subnet)
   debug=globals.G_agent.config.debug
@@ -271,13 +271,32 @@ AgentPlanning._createAlternativePlan=function(Obj,failedStep,context)
       if outLvl>=2 then print yellow("  * Alternative 1: Switch to reconnaissance")
     end if
   else if failedStep.type=="exploit" then
-    //Try different exploit or manual approach
-    if hasIndex(context,"availableExploits") and len(context.availableExploits)>1 then
+    //Router shell goals: fall back to scanCustom fetch (do not crack the current session)
+    reqs=null
+    if hasIndex(failedStep,"requirements") then reqs=failedStep.requirements
+    wantRouterShell=reqs and hasIndex(reqs,"libraryType") and reqs.libraryType=="router" and ((not hasIndex(reqs,"objectType")) or reqs.objectType=="shell")
+    if wantRouterShell then
+      tgt=null
+      if hasIndex(failedStep,"publicIP") and failedStep.publicIP then
+        tgt=failedStep.publicIP
+      else if hasIndex(failedStep,"target") and failedStep.target and not is_lan_ip(failedStep.target) then
+        tgt=failedStep.target
+      else if context and hasIndex(context,"publicIP") and context.publicIP then
+        tgt=context.publicIP
+      else if context and hasIndex(context,"target") and context.target and not is_lan_ip(context.target) then
+        tgt=context.target
+      end if
+      needRoot=reqs and hasIndex(reqs,"privilege") and reqs.privilege=="root"
+      if tgt then
+        push(plan.steps,{"type":"fetchShell","target":tgt,"service":"router","objectType":"s","needRoot":needRoot,"isHeadless":false,"description":"Fetch router shell on "+tgt+" (fallback)"})
+        if outLvl>=2 then print yellow("  * Alternative 1: Fetch router shell via scanCustom")
+      end if
+    else if hasIndex(context,"availableExploits") and len(context.availableExploits)>1 then
       push(plan.steps,{"type":"exploit","description":"Retry with next best exploit","retryCount":1})
       if outLvl>=2 then print yellow("  * Alternative 1: Try next exploit from list")
     else
-      push(plan.steps,{"type":"crack","description":"Attempt credential cracking instead"})
-      if outLvl>=2 then print yellow("  * Alternative 1: Switch to credential cracking")
+      //Do not crack current session as a stand-in for a failed remote exploit
+      if outLvl>=2 then print yellow("  [X] No safe alternative for failed exploit (skip local password crack)")
     end if
   else if failedStep.type=="escalate" then
     //Try alternative escalation methods

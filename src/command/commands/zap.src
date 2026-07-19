@@ -20,7 +20,7 @@ Command.zap=function(Obj,argv)
       for line in lines;print orange("Line # ("+yellow(str(__line_idx+1))+") ")+white(line);end for
       lineNum=Gui.inputInt({"text":"Enter line number to remove"})
       if not lineNum isa number then return
-      if lineNum<0 or lineNum>len(lines)-1 then continue
+      if lineNum<1 or lineNum>len(lines) then continue
       lines.remove(lineNum-1)
       return set_content(fileObj,join(lines,char(10)))
     end while

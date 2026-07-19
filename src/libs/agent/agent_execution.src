@@ -6,7 +6,7 @@ AgentExecution={}
 //Step handler registry - maps step types to handler functions
 AgentExecution._stepHandlers={}
 AgentExecution._SIMPLE_COMMANDS=["networkCmd","buildExec","fileOp","fileContent","permissions","transfer","process","userMgmt","wifiAttack","networkTool","advancedAttack","netConfig","compression","navigation"]
-AgentExecution._FLAG_KEYWORDS={"randomIP":["random","rip"],"localhost":["localhost","local"],"publicIP":["public"],"recursive":["recursive","recurse","all"],"force":["force","forced"],"verbose":["verbose","detailed"],"quiet":["quiet","silent"],"all":["all","everything"]}
+AgentExecution._FLAG_KEYWORDS={"randomIP":["random","rip"],"localhost":["localhost","local"],"publicIP":["public"],"recursive":["recursive","recurse","all"],"force":["force","forced"],"verbose":["verbose","detailed"],"quiet":["quiet","silent"],"all":["all","everything"],"bounce":["bounce","lan bounce","root bounce"],"exploitSearch":["exploit search","search libraries","--e"],"customLocal":["custom local","local exploit","--l"],"customRemote":["custom remote","--c"],"lanNetwork":["lan network","smart lan","--n"]}
 AgentExecution._NO_ARG_COMMANDS=["home","clear","exit","help"]
 //Execute the plan step by step
 AgentExecution._executePlan=function(Obj,plan,context=null)
@@ -95,8 +95,12 @@ AgentExecution._executePlan=function(Obj,plan,context=null)
         //No rawObject/wrappedObj - shell may be stored in context directly (e.g. fetchShell interactive)
         if debug and not hasIndex(context,"shell") and not hasIndex(context,"rootShell") then print yellow("[DEBUG] Step did not return rawObject or wrappedObj")
       end if
-      //Check if we need to inject escalation step
-      if hasIndex(results,"needsEscalation") and results.needsEscalation then
+      //Inject escalation when step/context marked wrong privilege (root required, guest captured)
+      needEsc=false
+      if hasIndex(stepResult,"needsEscalation") and stepResult.needsEscalation then needEsc=true
+      if context and hasIndex(context,"needsEscalation") and context.needsEscalation then needEsc=true
+      if hasIndex(results,"needsEscalation") and results.needsEscalation then needEsc=true
+      if needEsc then
         if outLvl>=2 then print yellow("[VERBOSE] Agent: Injecting escalation step into plan")
         escalateStep={"type":"escalate","description":"Escalate privileges to meet requirements","autonomous":true}
         if hasIndex(step,"requirements") then escalateStep.requirements=step.requirements
@@ -104,6 +108,8 @@ AgentExecution._executePlan=function(Obj,plan,context=null)
         insert(plan.steps,i+1,escalateStep)
         stepsCount+=1
         results.needsEscalation=false
+        if context then context.needsEscalation=false
+        if hasIndex(stepResult,"needsEscalation") then stepResult.needsEscalation=false
       end if
     else
       results.stepsFailed+=1
