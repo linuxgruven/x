@@ -1,163 +1,150 @@
 // =============================================================================
 // IDS
-// Intrusion detection: monitor processes and files; kill/delete unauthorized changes.
+// Intrusion detection: monitor processes and files; kill/delete/restore unauthorized changes.
 // =============================================================================
 Command.ids=function(Obj,argv)
-  // Initialize watcher app if enabled and not already running
-  // Check if firewall exists on router (hasFirewall flag)
-  if len(firewall_rules(get_router)) then hasFirewall=1 else hasFirewall=null
-  baselineProcs=[]
-  procLines=split(show_procs(Obj.computer),char(10))[1:]
-  for line in procLines;fields=split(line," ");push(baselineProcs,{"user":fields[0],"id":to_int(fields[1]),"name":fields[-1]});end for
-  baselineFiles={}
-  allFiles=Io.getAll(Obj.root)
-  if allFiles isa Error then
-    print red("Error reading directory for baseline: "+allFiles)
-    return
-  end if
-  for fileObj in allFiles
-    // Io.getAll returns file objects, not strings - get the path
-    if not fileObj then continue
-    filePath=fileObj.path
-    if not filePath or not len(filePath) then continue
-    // Get relative path for map key (strip leading slash if present)
-    relativePath=filePath
-    if relativePath[0:1]=="/" then relativePath=relativePath[1:]
-    metadata={}
-    metadata.size=0
-    metadata.content=null
-    isBinary=is_binary(fileObj)
-    isFolder=is_folder(fileObj)
-    if not isBinary and not isFolder and has_permission(fileObj,"r") then
-      fileInfo=fileObj.parent.get_files
-      for f in fileInfo
-        if path(f)==filePath then
-          metadata.size=size(f)
-          break
-        end if
-      end for
-      content=get_content(fileObj)
-      if content!=null then metadata.content=content else metadata.content=""
-    end if
-    baselineFiles[relativePath]=metadata
-  end for
-  Info.info("IDS initialized and running...")
-  // Main monitoring loop (runs until poll_input!="q" becomes false)
-  Utility.pressQ
-  while poll_input!="q"
-    currentProcLines=split(show_procs(Obj.computer),char(10))[1:]
-    for line in currentProcLines
-      fields=split(line," ")
-      proc={"user":fields[0],"id":to_int(fields[1]),"name":fields[-1]}
-      // Check if process exists in baseline (indexOf returns null if not found)
-      if indexOf(baselineProcs,proc)==null then
-        print red("Killing [ "+proc.name+" ]")
-        result=close_program(Obj.computer,proc.id)
-        // result==1 means success
-        if result==1 then
-          print green("Process Closed [ "+proc.name+" ]")
-          continue
-        end if
-        if result isa string and len(result) then Info.error(result)
-      end if
-    end for
-    for rule in firewall_rules(get_router);if split(rule," ")[0]!="DENY" then print red("Firewall rules have been changed");end for
-    currentFiles={}
-    allFiles=Io.getAll(Obj.root)
-    if allFiles isa Error then continue
-    for fileObj in allFiles
-      // Io.getAll returns file objects, not strings - get the path
-      if not fileObj then continue
-      filePath=fileObj.path
-      if not filePath or not len(filePath) then continue
-      // Get relative path for comparison (strip leading slash if present)
-      relativePath=filePath
-      if relativePath[0:1]=="/" then relativePath=relativePath[1:]
-      metadata={}
-      metadata.size=0
-      metadata.content=null
-      isBinary=is_binary(fileObj)
-      isFolder=is_folder(fileObj)
-      hasRead=has_permission(fileObj,"r")
-      if not isBinary and not isFolder and hasRead then
-        fileInfo=fileObj.parent.get_files
-        for f in fileInfo
-          if f.path==filePath then
-            metadata.size=f.size
-            break
-          end if
-        end for
-        // Store content for text files (any file that's not binary/folder)
-        content=get_content(fileObj)
-        if content!=null then metadata.content=content else metadata.content=""
-        // Debug: Show content tracking and changes
-        if hasIndex(baselineFiles,relativePath) then
-          oldContent=baselineFiles[relativePath].content
-          if oldContent!=null and metadata.content!=oldContent then print lime("Content changed: /"+relativePath+" ("+len(oldContent)+" -> "+len(metadata.content)+" chars)")
-        else
-          print cyan("New text file tracked: /"+relativePath+" ("+len(metadata.content)+" chars)")
-        end if
-      end if
-      currentFiles[relativePath]=metadata
-    end for
-    for path in indexes(currentFiles)
-      if not hasIndex(baselineFiles,path) then
-        print red("File Created [ /"+path+" ]")
-        delete(File(Obj.computer,"/"+path))
-        print green("File Removed [ /"+path+" ]")
-      end if
-    end for
-    for path in indexes(baselineFiles)
-      if not hasIndex(currentFiles,path) then
-        print red("File Removed [ /"+path+" ]")
-        // Update baseline to reflect deletion
-        remove(baselineFiles,path)
-      end if
-    end for
-    for path in indexes(currentFiles)
-      if hasIndex(baselineFiles,path) then
-        oldMeta=baselineFiles[path]
-        newMeta=currentFiles[path]
-        sizeChanged=(oldMeta.size!=newMeta.size)
-        contentChanged=false
-        // Compare content if both old and new have content stored (not null, not empty tracking)
-        if oldMeta.content!=null and newMeta.content!=null then
-          contentChanged=(oldMeta.content!=newMeta.content)
-        else if oldMeta.content==null and newMeta.content!=null then
-          // File became readable/text
-          contentChanged=true
-        else if oldMeta.content!=null and newMeta.content==null then
-          // File became binary/unreadable
-          contentChanged=true
-        end if
-        if sizeChanged or contentChanged then
-          print yellow("*** File Modified [ /"+path+" ] ***")
-          print grey("Size: "+oldMeta.size+" -> "+newMeta.size)
-          print grey("Content null check: old="+str(oldMeta.content==null)+" new="+str(newMeta.content==null))
-          if oldMeta.content!=null and newMeta.content!=null then
-            oldLines=split(oldMeta.content,char(10))
-            newLines=split(newMeta.content,char(10))
-            maxLines=len(oldLines)
-            if len(newLines)>maxLines then maxLines=len(newLines)
-            i=0
-            while i<maxLines
-              oldLine=""
-              newLine=""
-              if i<len(oldLines) then oldLine=oldLines[i]
-              if i<len(newLines) then newLine=newLines[i]
-              if oldLine!=newLine then
-                print yellow("line "+str(i+1))
-                if len(oldLine)>0 then print red("- "+oldLine)
-                print green("+ "+newLine)
-              end if
-            i+=1
-            end while
-          end if
-          baselineFiles[path]=newMeta
-        end if
-      end if
-    end for
-    wait(1)
-  end while
-  Info.info("IDS shutting down...")
+	interval=1
+	if argv and len(argv)>0 then
+		interval=to_int(argv[0])
+		if not interval isa number or interval<1 then interval=1
+	end if
+	procKey=function(p);return p.user+":"+str(p.id)+":"+p.name;end function
+	readProcs=function
+		keys={}
+		list=[]
+		for line in split(show_procs(Obj.computer),char(10))[1:]
+			fields=split(line," ")
+			if len(fields)<3 then continue
+			p={"user":fields[0],"id":to_int(fields[1]),"name":fields[-1]}
+			if not p.id isa number then continue
+			push(list,p)
+			keys[procKey(p)]=p
+		end for
+		return {"list":list,"keys":keys}
+	end function
+	fwSnapshot=function
+		rules=firewall_rules(get_router)
+		if not rules then return ""
+		return join(rules,char(10))
+	end function
+	fileSnapshot=function
+		snap={}
+		allFiles=Io.getAll(Obj.root)
+		if not allFiles then return snap
+		for fileObj in allFiles
+			if not fileObj then continue
+			filePath=path(fileObj)
+			if not filePath or not len(filePath) then continue
+			relativePath=filePath
+			if relativePath[0:1]=="/" then relativePath=relativePath[1:]
+			if not relativePath then continue
+			metadata={"size":size(fileObj),"content":null}
+			if not is_binary(fileObj) and not is_folder(fileObj) and has_permission(fileObj,"r") then
+				content=get_content(fileObj)
+				if content!=null then metadata.content=content else metadata.content=""
+			end if
+			snap[relativePath]=metadata
+		end for
+		return snap
+	end function
+	baselineProc=readProcs
+	baselineFw=fwSnapshot
+	prevFwOk=true
+	baselineFiles=fileSnapshot
+	Info.info("IDS initialized (interval: "+interval+"s, files: "+len(baselineFiles)+", procs: "+len(baselineProc.list)+")")
+	Utility.pressQ
+	while poll_input!="q"
+		// Kill processes not in the startup baseline
+		currentProc=readProcs
+		for p in currentProc.list
+			if hasIndex(baselineProc.keys,procKey(p)) then continue
+			print red("Killing [ "+p.name+" ]")
+			result=close_program(Obj.computer,p.id)
+			if result==1 then
+				print green("Process Closed [ "+p.name+" ]")
+			else if result isa string and len(result) then
+				Info.error(result)
+			end if
+		end for
+		// Firewall: alert on transition away from baseline (no spam while still wrong)
+		fwNow=fwSnapshot
+		fwOk=(fwNow==baselineFw)
+		if not fwOk and prevFwOk then Info.warning("Firewall rules have been changed")
+		if fwOk and not prevFwOk then Info.info("Firewall rules restored")
+		prevFwOk=fwOk
+		// Filesystem integrity
+		currentFiles=fileSnapshot
+		for rel in indexes(currentFiles)
+			if hasIndex(baselineFiles,rel) then continue
+			print red("File Created [ /"+rel+" ]")
+			f=File(Obj.computer,"/"+rel)
+			if f then
+				delete(f)
+				print green("File Removed [ /"+rel+" ]")
+			end if
+		end for
+		for rel in indexes(baselineFiles)
+			if hasIndex(currentFiles,rel) then continue
+			print red("File Removed [ /"+rel+" ]")
+			remove(baselineFiles,rel)
+		end for
+		for rel in indexes(currentFiles)
+			if not hasIndex(baselineFiles,rel) then continue
+			oldMeta=baselineFiles[rel]
+			newMeta=currentFiles[rel]
+			sizeChanged=(oldMeta.size!=newMeta.size)
+			contentChanged=false
+			if oldMeta.content!=null and newMeta.content!=null then
+				contentChanged=(oldMeta.content!=newMeta.content)
+			else if oldMeta.content==null and newMeta.content!=null then
+				contentChanged=true
+			else if oldMeta.content!=null and newMeta.content==null then
+				contentChanged=true
+			end if
+			if not sizeChanged and not contentChanged then continue
+			print yellow("*** File Modified [ /"+rel+" ] ***")
+			print grey("Size: "+oldMeta.size+" -> "+newMeta.size)
+			// Restore text content when we have a baseline copy
+			if oldMeta.content!=null and contentChanged then
+				f=File(Obj.computer,"/"+rel)
+				if f and not is_folder(f) and has_permission(f,"w") then
+					set_content(f,oldMeta.content)
+					print green("File Restored [ /"+rel+" ]")
+					if oldMeta.content!=null and newMeta.content!=null then
+						oldLines=split(oldMeta.content,char(10))
+						newLines=split(newMeta.content,char(10))
+						maxLines=len(oldLines)
+						if len(newLines)>maxLines then maxLines=len(newLines)
+						i=0
+						while i<maxLines
+							oldLine=""
+							newLine=""
+							if i<len(oldLines) then oldLine=oldLines[i]
+							if i<len(newLines) then newLine=newLines[i]
+							if oldLine!=newLine then
+								print yellow("line "+str(i+1))
+								if len(oldLine)>0 then print red("- "+oldLine)
+								print green("+ "+newLine)
+							end if
+							i+=1
+						end while
+					end if
+				else
+					baselineFiles[rel]=newMeta
+				end if
+			else
+				// Binary / size-only: accept into baseline (cannot restore bytes)
+				baselineFiles[rel]=newMeta
+			end if
+		end for
+		if poll_input=="q" then break
+		waitCount=0
+		while waitCount<interval
+			if poll_input=="q" then break
+			wait(1)
+			waitCount+=1
+		end while
+		if poll_input=="q" then break
+	end while
+	Info.info("IDS shutting down...")
 end function

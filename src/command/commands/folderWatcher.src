@@ -10,79 +10,55 @@ Command.folderWatcher=function(Obj,argv)
 	if not has_permission(targetDir,"r") then return Error.set("No read permission on directory: "+path(targetDir))
 	if not has_permission(targetDir,"x") then return Error.set("No execute permission on directory: "+path(targetDir))
 	if len(argv)>=2 then interval=to_int(argv[1]) else interval=10
-	if not interval isa number then interval=10
+	if not interval isa number or interval<1 then interval=10
 	dirName=name(targetDir)
 	dirPath=path(targetDir)
-	// Ensure path ends with / for consistent string replacement
+	// Trailing slash so prefix-strip yields a clean relative path (incl. root "/")
 	if dirPath[-1]!="/" then dirPath=dirPath+"/"
-	baseline={}
-	allFiles=Io.getAll(targetDir)
-	if not allFiles or allFiles isa Error then
-		// Try to get files directly without recursion as fallback
-		allFiles=get_files(targetDir)
-		if not allFiles then allFiles=[]
-		Info.info("Using non-recursive mode for "+dirName+" ("+len(allFiles)+" files)")
-	end if
-	for file in allFiles
-		filePath=path(file)
-		relativePath=filePath.replace(dirPath,"")
-		metadata={}
-		metadata.size=size(file)
-		// For text files, store content for change detection
-		isBinary=is_binary(file)
-		isFolder=is_folder(file)
-		hasRead=has_permission(file,"r")
-		if not isBinary and not isFolder and hasRead then
-			content=get_content(file)
-			if content!=null then metadata.content=content else metadata.content=""
-		end if
-		baseline[relativePath]=metadata
-	end for
-	Info.info("Starting monitoring of "+dirName+" (interval: "+interval+"s, files: "+len(baseline)+")")
-	Utility.pressQ
-	while poll_input!="q"
-		current={}
+	relPath=function(filePath)
+		if indexOf(filePath,dirPath)==0 then return filePath[len(dirPath):]
+		return filePath
+	end function
+	listFiles=function
 		allFiles=Io.getAll(targetDir)
-		if not allFiles or allFiles isa Error then
-			// Try to get files directly without recursion as fallback
+		if allFiles isa Error then
 			allFiles=get_files(targetDir)
 			if not allFiles then allFiles=[]
 		end if
-		for file in allFiles
-			filePath=path(file)
-			relativePath=filePath.replace(dirPath,"")
-			metadata={}
-			metadata.size=size(file)
-			// For text files, store content for change detection
-			isBinary=is_binary(file)
-			isFolder=is_folder(file)
-			hasRead=has_permission(file,"r")
-			if not isBinary and not isFolder and hasRead then
+		return allFiles
+	end function
+	snapshot=function
+		snap={}
+		for file in listFiles()
+			metadata={"size":size(file)}
+			if not is_binary(file) and not is_folder(file) and has_permission(file,"r") then
 				content=get_content(file)
 				if content!=null then metadata.content=content else metadata.content=""
 			end if
-			current[relativePath]=metadata
+			snap[relPath(path(file))]=metadata
 		end for
-		hasChanges=false
+		return snap
+	end function
+	baseline=snapshot()
+	Info.info("Starting monitoring of "+dirName+" (interval: "+interval+"s, files: "+len(baseline)+")")
+	Utility.pressQ
+	while poll_input!="q"
+		current=snapshot()
 		for filePath in indexes(current)
 			if not hasIndex(baseline,filePath) then
-				hasChanges=true
 				Info.info("File Created [ "+filePath+" ]","(+++)")
 				baseline[filePath]=current[filePath]
 			else
 				baseSize=baseline[filePath].size
 				currSize=current[filePath].size
 				if baseSize!=currSize then
-					hasChanges=true
 					Info.info("File Modified [ "+filePath+" ] (size changed)","(***)")
 					baseline[filePath]=current[filePath]
 				else if hasIndex(current[filePath],"content") or hasIndex(baseline[filePath],"content") then
-					// Check if content exists in both or changed from text to binary
 					currHasContent=hasIndex(current[filePath],"content")
 					baseHasContent=hasIndex(baseline[filePath],"content")
 					if currHasContent and baseHasContent then
 						if current[filePath].content!=baseline[filePath].content then
-							hasChanges=true
 							Info.info("File Modified [ "+filePath+" ] (content changed)","(***)")
 							oldLines=split(baseline[filePath].content,char(10))
 							newLines=split(current[filePath].content,char(10))
@@ -97,24 +73,19 @@ Command.folderWatcher=function(Obj,argv)
 								if lineNum<len(newLines) then newLine=newLines[lineNum]
 								if oldLine!=newLine then
 									if lineNum<len(oldLines) and lineNum<len(newLines) then
-										// Line modified
-                    // Show old version if it had text
 										if len(oldLine)>0 then print "    "+yellow("Line "+(lineNum+1)+": ")+red("- ")+white(oldLine)
 										print "    "+yellow("Line "+(lineNum+1)+": ")+green("+ ")+white(newLine)
 									else if lineNum>=len(oldLines) then
-										// Line added
 										print "    "+yellow("Line "+(lineNum+1)+": ")+green("+ ")+white(newLine)
 									else
-										// Line removed
 										print "    "+yellow("Line "+(lineNum+1)+": ")+red("- ")+white(oldLine)
 									end if
 								end if
-							lineNum+=1
+								lineNum+=1
 							end while
 							baseline[filePath]=current[filePath]
 						end if
 					else if currHasContent!=baseHasContent then
-						hasChanges=true
 						Info.info("File Modified [ "+filePath+" ] (type or permission changed)","(***)")
 						baseline[filePath]=current[filePath]
 					end if
@@ -123,15 +94,17 @@ Command.folderWatcher=function(Obj,argv)
 		end for
 		for filePath in indexes(baseline)
 			if not hasIndex(current,filePath) then
-				hasChanges=true
 				Info.warning("File Removed [ "+filePath+" ]","(---)")
 				remove(baseline,filePath)
 			end if
 		end for
-		if not hasChanges then Info.info("No file changes to "+dirName)
 		if poll_input=="q" then return Info.info("Folder watcher stopped")
 		waitCount=0
-		while waitCount<interval;if poll_input=="q" then return Info.info("Folder watcher stopped");wait(1);waitCount+=1;end while
+		while waitCount<interval
+			if poll_input=="q" then return Info.info("Folder watcher stopped")
+			wait(1)
+			waitCount+=1
+		end while
 	end while
 	Info.info("Folder watcher stopped")
 end function

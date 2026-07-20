@@ -42,11 +42,14 @@ htop --deploy           # Install on system
 ### ps
 Display running processes (used in pipes).
 
-**Usage:** `ps [-u user] [-C command]`
+**Usage:** `ps [-u user] [-c command]` · `ps -m` · `ps -l [PAUSE]` · `ps -w [PAUSE]`
 
 **Flags:**
 - `-u <user>` - Filter by username
-- `-C <command>` - Filter by command name
+- `-c <command>` - Filter by command name
+- `-m` - Interactive manage/kill mode
+- `-l [PAUSE]` - Lock: kill processes not in startup baseline (`q` to stop)
+- `-w [PAUSE]` - Watch launches/exits in real time (`q` to stop)
 
 **Output Format:** `USER PID CPU% MEM% COMMAND`
 
@@ -54,8 +57,11 @@ Display running processes (used in pipes).
 ```bash
 ps                      # All processes
 ps -u root              # Root's processes
-ps -C sshd              # SSH daemon processes
-ps -u guest -C bash     # Guest's bash processes
+ps -c sshd              # SSH daemon processes
+ps -l                   # Kill new processes
+ps -l 5                 # Lock with 5s interval
+ps -w                   # Watch launches/exits
+ps -w 2                 # Watch with 2s interval
 ps | wc -l              # Count processes
 ```
 
@@ -206,20 +212,22 @@ systemLock              # Start system monitor
 ---
 
 ### ids
-Intrusion Detection System with multi-vector monitoring.
+Intrusion Detection System with auto-response.
 
-**Usage:** `ids`
+**Usage:** `ids [PAUSE]`
 
 **Features:**
-- Process monitoring
-- File integrity checking
-- Firewall rule monitoring
-- Real-time alerts
-- Automatic response options
+- Kill new processes (not in startup baseline)
+- Delete newly created files
+- Restore modified text files to baseline
+- Firewall rule change alerts (no spam)
+- File removal alerts
+- Optional poll interval (default 1s)
 
 **Examples:**
 ```bash
-ids                     # Launch IDS
+ids                     # Launch IDS (1s interval)
+ids 5                   # Poll every 5 seconds
 ```
 
 ---
@@ -1305,24 +1313,23 @@ chog user *.conf                # Change multiple files
 ### fw (folderWatcher)
 Monitor directory for changes in real-time.
 
-**Usage:** `fw [PAUSE] FOLDER`  
+**Usage:** `fw FOLDER [PAUSE]`  
 **Alias:** `folderWatcher`
 
 **Arguments:**
 - `<directory>` - Directory to watch
-- `[interval]` - Check interval in seconds (default: 5)
+- `[interval]` - Check interval in seconds (default: 10, minimum: 1)
 
 **Features:**
-- Real-time change detection
+- Real-time change detection (quiet when idle)
 - New file alerts
-- Modified file alerts
+- Modified file alerts (size and text content diffs)
 - Deleted file alerts
-- Timestamp tracking
-- Continuous monitoring
+- Continuous monitoring (`q` to stop)
 
 **Examples:**
 ```bash
-fw /var                 # Watch /var (5s interval)
+fw /var                 # Watch /var (10s interval)
 fw /var/log 2           # Watch with 2s interval
 folderWatcher /home/user 10  # 10s interval
 ```
@@ -2191,37 +2198,39 @@ groupdel user admin         # Remove from admin
 ---
 
 ### psLock
-Lock specific processes from termination.
+Process lockdown (also `ps -l`).
 
-**Usage:** `psLock`
+**Usage:** `ps -l [PAUSE]` · `psLock [PAUSE]`
 
 **Features:**
-- Process protection
-- Kill prevention
-- Critical process locking
-- Unlock functionality
+- Baseline running processes at start
+- Kill any new process not in baseline
+- Poll interval (default 1s)
+- Press `q` to stop
 
 **Examples:**
 ```bash
-psLock                  # Lock processes
+ps -l                   # Lock processes
+ps -l 5                 # Poll every 5 seconds
 ```
 
 ---
 
 ### psMon
-Monitor and log process activity.
+Watch process launches and exits (also `ps -w`).
 
-**Usage:** `psMon`
+**Usage:** `ps -w [PAUSE]` · `psMon [PAUSE]`
 
 **Features:**
-- Process monitoring
-- Activity logging
-- Resource tracking
-- Alert generation
+- Alert when a process launches
+- Alert when a process exits
+- Poll interval (default 1s)
+- Press `q` to stop
 
 **Examples:**
 ```bash
-psMon                   # Monitor processes
+ps -w                   # Watch processes
+ps -w 5                 # Poll every 5 seconds
 ```
 
 ---

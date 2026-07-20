@@ -2,27 +2,32 @@
 manIds="IDS(8)                           X Shell Manual                           IDS(8)
 
 <b>NAME</b>
-    ids - is a intrusion detection system
+    ids - Intrusion detection and auto-response
 <b>SYNOPSIS</b>
-    <b>ids</b>
+    <b>ids</b> [PAUSE]
 <b>DESCRIPTION</b>
-    Intrusion Detection System monitoring tool. Watches processes, file system, and router
-    for changes. Real-time alerting for modifications and security events. Essential for defense.
+    Locks the current machine state and watches for unauthorized changes.
+    On start, baselines processes, firewall rules, and the full filesystem.
+    Press <b>q</b> to stop.
+
+    Auto-response:
+    - Kill processes not present at start
+    - Delete newly created files/folders
+    - Restore modified text files to baseline content
+    - Alert when firewall rules diverge from baseline
+    - Alert when baseline files are removed
+
+    PAUSE is the poll interval in seconds (default 1, minimum 1).
+    Binary size-only changes are reported and accepted (cannot restore bytes).
 <b>OPTIONS</b>
-    <b>ids</b>
-    Start IDS monitoring
-    Watch all system activity
+    <b>PAUSE</b>
+    Seconds between scans (default 1)
 <b>EXAMPLE:</b>
     <color=#e4ff34># Start Monitoring</color>
     <b>ids</b>
-    Begin IDS watch
+    Lock and watch with 1s refresh
 
-    <color=#e4ff34># Background Mode</color>
-    <b>ids &</b>
-    Run in background
-
-    <color=#e4ff34># With Logging</color>
-    <b>ids > ids.log</b>
-    Log all alerts
+    <b>ids 5</b>
+    Same, poll every 5 seconds
 <b>SEE ALSO</b>
-    <b>ps</b>, <b>lsof</b>, <b>find</b>"
+    <b>ps</b>, <b>psLock</b>, <b>fw</b>, <b>find</b>"

@@ -4,15 +4,23 @@ manRat="RAT(1)                           X Shell Manual                         
 <b>NAME</b>
     rat - x's dirty little rat server file editor
 <b>SYNOPSIS</b>
-    <b>rat</b> (<b>IP</b>) (<b>PORT</b>) (<b>PASSWORD</b>)
+    <b>rat</b>
+    <b>rat</b> IP
+    <b>rat</b> IP PORT
+    <b>rat</b> IP PORT PASSWORD
 <b>DESCRIPTION</b>
-    Used to make on the fly changes to your RAT file. Login
-    credentials are optional; if you omit them, you will be
-    prompted for them.
+    SSH to your rat C2 as root and edit <b>/root/rat</b> live. Anything
+    missing on the command line is prompted. Droppers built with
+    <b>make -b T</b> pull this file, build it, and launch it on the victim
+    (uses <b>~/Config</b>, or creates <b>~/.rat</b> if Config is missing).
+    Victim-side failures stay silent.
 <b>OPTIONS</b>
     <b>IP PORT PASSWORD</b> - Connect to RAT
       Manage your RAT file remotely. Credentials can be provided
       on command line or entered interactively.
+
+    Editor keys: <b>n</b> new, <b>a</b> append, <b>e</b> edit, <b>r</b> remove,
+    <b>d</b> dump local copy, <b>c</b> clear, <b>f</b> toggle highlight, <b>x</b> done.
 <b>EXAMPLE:</b>
     <color=#e4ff34># Connect with Credentials</color>
     <b>rat 136.22.27.184 22 xxxx</b>
@@ -25,4 +33,4 @@ manRat="RAT(1)                           X Shell Manual                         
     <b>rat</b>
     Prompt for all connection details
 <b>SEE ALSO</b>
-    <b>ssh</b>, <b>ftp</b>"
+    <b>make</b>, <b>ssh</b>"

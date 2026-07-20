@@ -5,12 +5,13 @@ manPs="PS(1)                            X Shell Manual                          
     ps - used to view current running process
 <b>SYNOPSIS</b>
     <b>ps</b> [<b>-u</b> USER] [<b>-c</b> CMD]
-    <b>ps </b><b>-m</b>
-    <b>ps </b><b>-l</b>
-    <b>ps </b><b>-w</b>
+    <b>ps</b> <b>-m</b>
+    <b>ps</b> <b>-l</b> [PAUSE]
+    <b>ps</b> <b>-w</b> [PAUSE]
 <b>DESCRIPTION</b>
-    Display active processes on remote system. Multiple modes for viewing, managing,
-    locking, and real-time monitoring. Essential for process management and system monitoring.
+    Display active processes. Modes for viewing, managing, locking new
+    processes, and real-time monitoring. <b>-m</b>, <b>-w</b>, and <b>-l</b>
+    are mutually exclusive. For filesystem lockdown see <b>ids</b>.
 <b>OPTIONS</b>
     <b>ps</b>
     View active processes
@@ -18,11 +19,12 @@ manPs="PS(1)                            X Shell Manual                          
 
     <b>-m</b>
     Manage processes
-    Interactive management mode
+    Interactive kill-by-PID mode
 
-    <b>-l</b>
-    Lock new processes
-    Prevent new launches
+    <b>-l</b> [PAUSE]
+    Lock process list
+    Kill any process not present at start. Press <b>q</b> to stop.
+    PAUSE is poll interval in seconds (default 1).
 
     <b>-u</b> USER
     Filter processes by username
@@ -30,9 +32,10 @@ manPs="PS(1)                            X Shell Manual                          
     <b>-c</b> CMD
     Filter processes by command name
 
-    <b>-w</b>
+    <b>-w</b> [PAUSE]
     Watch mode
-    Real-time monitoring
+    Alert on process launch and exit. Press <b>q</b> to stop.
+    PAUSE is poll interval in seconds (default 1).
 
 <b>EXAMPLE:</b>
     <color=#e4ff34># Basic View</color>
@@ -45,10 +48,16 @@ manPs="PS(1)                            X Shell Manual                          
 
     <color=#e4ff34># Lock Mode</color>
     <b>ps -l</b>
-    Prevent new processes
+    Kill newly launched processes
+
+    <b>ps -l 5</b>
+    Same, poll every 5 seconds
 
     <color=#e4ff34># Watch Mode</color>
     <b>ps -w</b>
-    Real-time monitoring
+    Real-time launch/exit alerts
+
+    <b>ps -w 5</b>
+    Same, poll every 5 seconds
 <b>SEE ALSO</b>
-    <b>lsof</b>, <b>kill</b>"
+    <b>lsof</b>, <b>kill</b>, <b>ids</b>"

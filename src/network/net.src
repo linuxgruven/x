@@ -2486,8 +2486,13 @@ end function
 Net.lookup=function(i)
   if not i then return
 	if is_valid_ip(i) then return i
-	if i[:3]=="www" then i=nslookup(i)
-	if not i=="Not found" then return i
+	// Resolve hostnames/domains; leave bare names (e.g. lib tokens) unchanged
+	if indexOf(i,".")!=null or i[:3]=="www" then
+		r=nslookup(i)
+		if not r or r=="Not found" or not is_valid_ip(r) then return null
+		return r
+	end if
+	return i
 end function
 Net.netConfig=function
 	r=get_router

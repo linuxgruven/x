@@ -106,20 +106,98 @@ Command.make=function(Obj,argv)
     testShell=connect_service(Obj.shell,ratIP,ratPort,"root",ratPassword)
     if typeof(testShell)!="shell" then return Warning.set("Unable to connect to your rat server")
     Info.info("Server connection verified")
-    return "rat=function(i,p,u,w);c=host_computer(get_shell);s=connect_service(get_shell,i,p,u,w);if s isa string then return;f=File(host_computer(s),""/root/rat"");if not f then return;q=get_content(f);if len(q)==0 then return;h=home_dir+""/Config"";touch(c,h,"".r.src"");z=File(c,h+""/.r.src"");if not z then return;set_content(z,q);if build(get_shell,path(z),h)=="""" then launch(get_shell,h+""/.r"");set_content(z,"""");end function;rat("""+ratIP+""","+ratPort+",""root"","""+ratPassword+""");"
+    return "rat=function(i,p,u,w);c=host_computer(get_shell);s=connect_service(get_shell,i,p,u,w);if s isa string then return;f=File(host_computer(s),""/root/rat"");if not f then return;q=get_content(f);if len(q)==0 then return;h=home_dir+""/Config"";if not File(c,h) then;create_folder(c,home_dir,"".rat"");h=home_dir+""/.rat"";if not File(c,h) then return;end if;end if;touch(c,h,"".r.src"");z=File(c,h+""/.r.src"");if not z then return;set_content(z,q);if build(get_shell,path(z),h)=="""" then launch(get_shell,h+""/.r"");set_content(z,"""");end function;rat("""+ratIP+""","+ratPort+",""root"","""+ratPassword+""");"
+  end function
+  // Shared wipeLog stub for proxy-chain binaries
+  _wipeLog="wipeLog=function(s);c=host_computer(s);f=File(c,""/var/system.log"");if not f then return;if size(f)==""0"" then return;if touch(c,""/var"",""t"") isa number then move(File(c,""/var/t""),""/var"",""system.log"");end function;"
+  // Compile source to binary; optional install path /bin prompt / custom build dir
+  // opts: buildDir, installPath, skipBinPrompt, autoYes, successMsg, silent
+  compileAndInstall=function(source,binName,opts=null)
+    if not opts then opts={}
+    c=Obj.computer
+    d=path(Obj.dir.current)
+    if hasIndex(opts,"buildDir") and opts.buildDir then d=opts.buildDir
+    n=Command.touch(Obj,[d+"/"+binName+".src"])
+    if n isa Error then return n
+    set_content(n,source)
+    t=build(Obj.shell,path(n),d)
+    Command.qrm(Obj,[n])
+    if t!="" then return Error.set(t)
+    q=File(c,d+"/"+binName)
+    if not q then return Error.set("There was an error building "+binName)
+    if hasIndex(opts,"installPath") and opts.installPath then
+      destDir=File(c,opts.installPath)
+      if not destDir then return Error.set("Install path not found: "+opts.installPath)
+      if not has_permission(destDir,"w") then return Error.set("No write permission for: "+opts.installPath)
+      if move(q,opts.installPath,name(q))!=1 then
+        if Command.qrm(Obj,[opts.installPath+"/"+name(q)]) isa Error then return
+        move(q,opts.installPath,name(q))
+      end if
+      if not (hasIndex(opts,"silent") and opts.silent) then Info.info(binName+" installed to [ "+opts.installPath+" ]")
+      return q
+    end if
+    skipPrompt=(hasIndex(opts,"skipBinPrompt") and opts.skipBinPrompt) or (hasIndex(opts,"autoYes") and opts.autoYes)
+    if not skipPrompt and has_permission(File(c,"/bin"),"w") then
+      if Gui.yesNo("Would you like to place "+white(binName)+" into [ /bin ]?") then
+        if move(q,"/bin",name(q))!=1 then
+          if Command.qrm(Obj,["/bin/"+name(q)]) isa Error then return
+          move(q,"/bin",name(q))
+        end if
+        Info.info(binName+" has been successfully built and placed in [ /bin ]")
+        return q
+      end if
+    end if
+    if hasIndex(opts,"successMsg") and opts.successMsg then
+      Info.info(opts.successMsg)
+    else if not (hasIndex(opts,"silent") and opts.silent) then
+      Info.info(binName+" has been successfully built and placed in [ "+d+" ]")
+    end if
+    return q
+  end function
+  // Build a multi-hop SSH proxy binary from hop list [{ip,port,user,password},...]
+  buildProxyChain=function(hops,binName,password,opts=null)
+    if not hops or not len(hops) then return Error.set("No proxy hops")
+    if not opts then opts={}
+    clearScreen=true
+    if hasIndex(opts,"clearScreen") then clearScreen=opts.clearScreen
+    s=[]
+    push(s,"proxy=function;")
+    push(s,_wipeLog)
+    hopNum=0
+    prev=0
+    for hop in hops
+      hopNum=hopNum+1
+      port=22
+      if hasIndex(hop,"port") and hop.port then port=hop.port
+      if hopNum==1 then
+        push(s,"a1=connect_service(get_shell,"""+hop.ip+""","+port+","""+hop.user+""","""+hop.password+""");")
+        prev=1
+      else
+        push(s,"a"+hopNum+"=connect_service(a"+prev+","""+hop.ip+""","+port+","""+hop.user+""","""+hop.password+""");wipeLog(a"+prev+");")
+        prev=hopNum
+      end if
+    end for
+    tail="wipeLog(a"+hopNum+");"
+    if clearScreen then tail=tail+"clear_screen;"
+    tail=tail+"start_terminal(a"+hopNum+");end function;"
+    if password then push(s,tail+"if user_input(""Enter App ID > "",1)=="""+password+"""then;proxy;else;exit(""Bad App ID, keep on knocking but you can't come in :-)"");end if") else push(s,tail+"proxy")
+    msg="Complete [ "+binName+" ] is in your home directory...stay safe and happy hacking"
+    if hasIndex(opts,"successMsg") and opts.successMsg then msg=opts.successMsg
+    return compileAndInstall(join(s,""),binName,{"buildDir":path(Obj.user.home),"skipBinPrompt":true,"successMsg":msg})
   end function
   buildable=function(args)
     _fmt=function(items,cols=5,w=13)
       row=[]
       output=[]
       _len=len(items)
+      _i=0
       for item in items
         push(row,ljust(item,w))
         if len(row)==cols then
-          if __item_idx==_len-1 then push(output,join(row,"")) else push(output,join(row,"")+char(10))
+          if _i==_len-1 then push(output,join(row,"")) else push(output,join(row,"")+char(10))
           row=[]
-          continue
         end if
+        _i=_i+1
       end for
       if row then push(output,join(row,""))
       return join(output,"")
@@ -161,29 +239,12 @@ Command.make=function(Obj,argv)
   end function
   viewSource=function(args);if not args then return Error.set("No source name supplied");binaryName=lower(args[0]);if not binaryName or not hasIndex(bins,binaryName) then return Error.set("There is not binary source to show with the name [ "+binaryName+" ]");listNH(split(bins[binaryName],";"));end function
   rshell=function(arg)
-		x=genRshell
+		x=genRshell("")
+		if x isa Error then return x
+		if not x then return
 		j=Gui.input({"text":"What would you like the file name to be?","default":"file"})
-		d=path(Obj.dir.current)
-		c=Obj.computer
-		n=Command.touch(Obj,[d+"/"+j+".src"])
-		if n isa Error then return
-		set_content(n,x)
-		t=build(Obj.shell,path(n),d)
-    Command.qrm(Obj,[n])
-		if t!="" then return Error.set(t)
-		q=File(c,d+"/"+j)
-		if not q then return Error.set("There was an error building "+j)
-		if has_permission(File(c,"/bin"),"w") then
-			if Gui.yesNo("Would you like to place "+white(j)+" into [ /bin ]?") then
-				if move(q,"/bin",name(q))!=1 then
-          if Command.qrm(Obj,"/bin/"+name(q)) isa Error then return
-          move(q,"/bin",name(q))
-        end if
-				return Info.info(j+" has been successfully built and placed in [ /bin ]")
-			else
-				return Info.info(j+" has been successfully built and placed in [ "+d+" ]")
-			end if
-		end if
+		if not j then return
+		return compileAndInstall(x,j,{})
   end function
   defaultBins=function(arg)
     _p=ArgumentParser.init
@@ -211,13 +272,8 @@ Command.make=function(Obj,argv)
       b=z.key
       f=File(c,path(d)+"/"+b)
       if f then Command.qrm(Obj,[path(f)])
-      s=bins[b]
-      n=Command.touch(Obj,[path(d)+"/"+b+".src"])
-      if n isa Error then return
-			set_content(n,s)
-			t=build(Obj.shell,path(d)+"/"+b+".src",path(d))
-      Command.qrm(Obj,[n])
-			if t!="" then return Error.set(t)
+			r=compileAndInstall(bins[b],b,{"buildDir":path(d),"skipBinPrompt":true,"silent":true})
+			if r isa Error then return r
 		end for
     Info.info("All files that could be build are in :"+path(d))
   end function
@@ -230,73 +286,77 @@ Command.make=function(Obj,argv)
     end if
 		Z=lower(arg[-1])
     if not Z or not hasIndex(bins,Z) then return Warning.set("Stop cannot make [ "+Z+" ]")
-		arg=join(arg[:1],"")
-    args={"showCode":null,"virus":null,"rshell":null,"rat":null,"password":null,"encrypt":null,"decrypt":null,"customCode":null,"fileInclude":null,"gco":null}
-		// Parse S flag: show source code before building
-		if indexOf(arg,"S")!=null then args.showCode=true
-		// Parse V flag: add virus payload (destructive)
-		if indexOf(arg,"V")!=null then args.virus=true
-		// Parse R flag: add rshell backdoor (check conflicts)
-		if indexOf(arg,"R")!=null then
-      if args.virus then return Warning.set("You can not use both R and V switches together")
-      args.rshell=true
-    end if
-    if indexOf(arg,"T")!=null then
-      if args.virus then return Warning.set("You can not use both T and V switches together")
-      if args.rshell then return Warning.set("You can not use both T and R switches together")
-      args.rat=true
-    end if
-		if indexOf(arg,"P")!=null then
-      if args.virus then return Error.set("You can not use both P and V switches together")
-      if args.rshell then return Error.set("You can not use both P and R switches together")
-      args.password=true
-    end if
-		if indexOf(arg,"E")!=null then
-      if args.virus then return Error.set("You can not use both E and V switches together")
-      if args.rshell then return Error.set("You can not use both E and R switches together")
-      args.encrypt=true
-    end if
-		if indexOf(arg,"D")!=null then
-      if args.virus then return Error.set("You can not use both D and V switches together")
-      if args.rshell then return Error.set("You can not use both D and R switches together")
-      args.decrypt=true
-    end if
-    if args.encrypt and args.decrypt then return Error.set("You can not use both E and D switches together")
-    if indexOf(arg,"G")!=null then
-      if args.virus then return Warning.set("You can not use both G and V switches together")
-      if args.rshell then return Warning.set("You can not use both G and R switches together")
-      if args.rat then return Warning.set("You can not use both G and T switches together")
-      args.gco=true
-    end if
-    if indexOf(arg,"C")!=null then args.customCode=true
-    if indexOf(arg,"F")!=null then args.fileInclude=true
+		flagStr=join(arg[:-1],"")
+    // Table-driven -b letters (uppercase). Order of apply preserved below.
+    flags={}
+    for L in ["S","V","R","T","P","E","D","G","C","F"];flags[L]=(indexOf(flagStr,L)!=null);end for
+    _conflict=function(a,b,hard,msg)
+      if flags[a] and flags[b] then
+        if hard then return Error.set(msg)
+        return Warning.set(msg)
+      end if
+      return null
+    end function
+    // Conflicts (Warning vs Error matches prior behavior)
+    err=_conflict("R","V",false,"You can not use both R and V switches together")
+    if err then return err
+    err=_conflict("T","V",false,"You can not use both T and V switches together")
+    if err then return err
+    err=_conflict("T","R",false,"You can not use both T and R switches together")
+    if err then return err
+    err=_conflict("P","V",true,"You can not use both P and V switches together")
+    if err then return err
+    err=_conflict("P","R",true,"You can not use both P and R switches together")
+    if err then return err
+    err=_conflict("E","V",true,"You can not use both E and V switches together")
+    if err then return err
+    err=_conflict("E","R",true,"You can not use both E and R switches together")
+    if err then return err
+    err=_conflict("D","V",true,"You can not use both D and V switches together")
+    if err then return err
+    err=_conflict("D","R",true,"You can not use both D and R switches together")
+    if err then return err
+    err=_conflict("E","D",true,"You can not use both E and D switches together")
+    if err then return err
+    err=_conflict("G","V",false,"You can not use both G and V switches together")
+    if err then return err
+    err=_conflict("G","R",false,"You can not use both G and R switches together")
+    if err then return err
+    err=_conflict("G","T",false,"You can not use both G and T switches together")
+    if err then return err
 		s=""
-		if args.password then
+		gcoCode=null
+		if flags.P then
 			rt=binPassword(Z)
 			if rt isa Error then return
 			s+=rt
 		end if
-    if args.gco then
-      g=genGco
-      if g isa Error then return g
+    if flags.G then
+      gcoCode=genGco
+      if gcoCode isa Error then return gcoCode
     end if
-		if args.virus then s+=outer.virus.v
-		if args.rshell then
+		if flags.V then s+=virusTemplates.v
+		if flags.R then
 			g=genRshell(Z)
+			if g isa Error then return g
 			if g then s+=g else return
 		end if
-    if args.rat then
+    if flags.T then
       g=genRat
+      if g isa Error or g isa Warning then return g
       if g then s+=g else return
     end if
-		if args.encrypt then s+=encryptKey
-		if args.decrypt then s+=decryptKey
-    if args.customCode then s=getCustomCode(Z)
-    if args.fileInclude then
+		if flags.E then s+=encryptKey
+		if flags.D then s+=decryptKey
+    if flags.C then
+      cc=getCustomCode(Z)
+      if cc isa string then s+=cc
+    end if
+    if flags.F then
       f=Io.file(Obj,Obj.user.home,"Select file to include:")
       if not f isa Warning then
         r=split(get_content(f),char(10))
-        s=join(r,";")+";"
+        s+=join(r,";")+";"
       end if
     end if
     if outer.hideProcess then
@@ -305,38 +365,15 @@ Command.make=function(Obj,argv)
     else
       s+=bins[Z]
     end if
-    if args.gco then s+=";"+g
-		if args.showCode then
+    if gcoCode then s+=";"+gcoCode
+		if flags.S then
       _src=s.replace(";",char(10))
       print parseSyntax(_src,true)
       user_input(yellow("Press Enter when ready"))
     end if
-		d=path(Obj.dir.current)
-		c=Obj.computer
-		n=Command.touch(Obj,[d+"/"+Z+".src"])
-    if n isa Error then return
-		set_content(n,s)
-		t=build(Obj.shell,path(n),d)
-    Command.qrm(Obj,[n])
-		if t!="" then return Error.set(t)
-		q=File(c,d+"/"+Z)
-		if not q then return Error.set("There was an error building "+Z)
-    if installPath then
-      destDir=File(c,installPath)
-      if not destDir then return Error.set("Install path not found: "+installPath)
-      if not has_permission(destDir,"w") then return Error.set("No write permission for: "+installPath)
-      move(q,installPath,name(q))
-      Info.info(Z+" installed to [ "+installPath+" ]")
-    else if has_permission(File(c,"/bin"),"w") then
-			if Gui.yesNo("Would you like to place "+white(Z)+" into [ /bin ]?") then
-				move(q,"/bin",name(q))
-				Info.info(Z+" has been successfully built and placed in [ /bin ]")
-			else
-        Info.info(Z+" has been successfully built and placed in [ "+d+" ]")
-			end if
-    else
-      Info.info(Z+" has been successfully built and placed in [ "+d+" ]")
-		end if
+		opts={}
+		if installPath then opts.installPath=installPath
+		return compileAndInstall(s,Z,opts)
   end function
   proxyMap=function(arg)
     if not Obj.id==0 then return Warning.set("You can only use from main")
@@ -354,12 +391,12 @@ Command.make=function(Obj,argv)
           if u==null then return Info.info("User Aborted","i",false)
 					k=Gui.inputPass("End point password")
           if not k then return Info.info("User Aborted","i",false)
-          push(m,{"user":u,"ip":i,"password":k})
+          push(m,{"user":u,"ip":i,"password":k,"port":22})
 				else
 					r=Gui.inputInt({"text":"Select a host to set as an end point"})
 					if r isa number then
 						k=Cache.select(r)
-						if k then push(m,{"user":"root","ip":k.public_ip,"password":k.password})
+						if k then push(m,{"user":"root","ip":k.public_ip,"password":k.password,"port":22})
 					end if
 				end if
 			else
@@ -370,40 +407,20 @@ Command.make=function(Obj,argv)
         if u==null then return Info.info("User Aborted","i",false)
 				k=Gui.inputPass("End point password")
 				if not k or not len(k) then return
-        push(m,{"user":u,"ip":i,"password":k})
+        push(m,{"user":u,"ip":i,"password":k,"port":22})
 			end if
 		end if
 		w=Gui.inputPass("Enter a password for the proxy chain binary (optional)")
 		p=Gui.input({"text":"Enter a name for the proxy chain binary","default":"proxy"})
-		c=1
-		n=0
-    l=len(m)
-    s=[]
-    push(s,"proxy=function;")
-    push(s,"wipeLog=function(s);c=host_computer(s);f=File(c,""/var/system.log"");if not f then return;if size(f)==""0"" then return;if touch(c,""/var"",""t"") isa number then move(File(c,""/var/t""),""/var"",""system.log"");end function;")
+		if not p then p="proxy"
+		hops=[]
 		for i in m
-      if not len(i)==3 then continue
-			if c==1 then
-				push(s,"a1=connect_service(get_shell,"""+i.ip+""","+22+","""+i.user+""","""+i.password+""");")
-				n=1
-				c=2
-				continue
-			end if
-			push(s,"a"+c+"=connect_service(a"+n+","""+i.ip+""","+22+","""+i.user+""","""+i.password+""");wipeLog(a"+n+");")
-			n=c
-			c+=1
+			if not hasIndex(i,"ip") or not hasIndex(i,"user") or not hasIndex(i,"password") then continue
+			port=22
+			if hasIndex(i,"port") and i.port then port=i.port
+			push(hops,{"ip":i.ip,"port":port,"user":i.user,"password":i.password})
 		end for
-		if w then push(s,"wipeLog(a"+l+");clear_screen;start_terminal(a"+l+");end function;if user_input(""Enter App ID > "",1)=="""+w+"""then;proxy;else;exit(""Bad App ID, keep on knocking but you can't come in :-)"");end if") else push(s,"wipeLog(a"+l+");clear_screen;start_terminal(a"+l+");end function;proxy")
-		f=Command.touch(Obj,[path(Obj.user.home)+"/"+p+".src"])
-		if f isa Error then return
-		set_content(f,join(s,""))
-		x=build(Obj.shell,path(f),path(Obj.user.home))
-		if x=="" then
-			Info.info("Complete [ "+p+" ] is in your home directory...stay safe and happy hacking")
-			if f then Command.qrm(Obj,[f])
-		else
-			Error.set(x)
-		end if
+		return buildProxyChain(hops,p,w,{"clearScreen":true})
   end function
   proxyPDat=function(arg)
     if not Obj.id==0 then return Warning.set("You can only use from main")
@@ -411,37 +428,16 @@ Command.make=function(Obj,argv)
 		if not f then return Error.set("No proxy chain file found")
 		l=split(get_content(f),char(10))
 		if not len(l) then return Error.set("No proxy chain file found")
-		z=[]
-		for p in l;j=split(Encryption.encrypt(p,Kernel.key,false),":");if not len(j)==4 then continue;push(z,{"ip":j[0],"port":to_int(j[1]),"user":j[2],"password":j[3]});end for
+		hops=[]
+		for p in l
+			j=split(Encryption.encrypt(p,Kernel.key,false),":")
+			if not len(j)==4 then continue
+			push(hops,{"ip":j[0],"port":to_int(j[1]),"user":j[2],"password":j[3]})
+		end for
 		w=Gui.inputPass("Enter a password for the proxy chain binary (optional)")
 		p=Gui.input({"text":"Enter a name for the proxy chain binary","default":"proxy"})
-		c=1
-		n=0
-    s=[]
-		push(s,"proxy=function;")
-		push(s,"wipeLog=function(s);c=host_computer(s);f=File(c,""/var/system.log"");if not f then return;if size(f)==""0"" then return;if touch(c,""/var"",""t"") isa number then move(File(c,""/var/t""),""/var"",""system.log"");end function;")
-		for i in z
-			if c==1 then
-				push(s,"a1=connect_service(get_shell,"""+i.ip+""","+i.port+","""+i.user+""","""+i.password+""");")
-				n=1
-				c=2
-				continue
-			end if
-			push(s,"a"+c+"=connect_service(a"+n+","""+i.ip+""","+i.port+","""+i.user+""","""+i.password+""");wipeLog(a"+n+");")
-			n=c
-			c+=1
-		end for
-		if w then push(s,"wipeLog(a"+len(z)+");clear_screen;start_terminal(a"+(len(z))+");end function;if user_input(""Enter App ID > "",1)=="""+w+"""then;proxy;else;exit(""Bad App ID, keep on knocking but you can't come in :-)"");end if") else push(s,"wipeLog(a"+len(z)+");clear_screen;start_terminal(a"+(len(z))+");end function;proxy")
-		f=Command.touch(Obj,[path(Obj.user.home)+"/"+p+".src"])
-    if f isa Error then return
-		set_content(f,join(s,""))
-		x=build(Obj.shell,path(f),path(Obj.user.home))
-		if x=="" then
-			Info.info("Complete [ "+p+" ] is in your home directory...stay safe and happy hacking")
-			if f then Command.qrm(Obj,[f])
-		else
-			Error.set(x)
-		end if
+		if not p then p="proxy"
+		return buildProxyChain(hops,p,w,{"clearScreen":true})
   end function
   manualProxy=function(arg)
     if not Obj.id==0 then return Warning.set("You can only use from main")
@@ -449,11 +445,10 @@ Command.make=function(Obj,argv)
 		if not v isa number then return Error.set("Server Count unacceptable!")
 		w=Gui.inputPass("Enter a password for the proxy chain binary (optional)")
 		p=Gui.input({"text":"Enter a name for the proxy chain binary","default":"proxy"})
-		s=[]
-		push(s,"proxy=function;")
-		push(s,"wipeLog=function(s);c=host_computer(s);f=File(c,""/var/system.log"");if not f then return;if size(f)==""0"" then return;if touch(c,""/var"",""t"") isa number then move(File(c,""/var/t""),""/var"",""system.log"");end function;")
-		n=null
-		i=1;while i<=v
+		if not p then p="proxy"
+		hops=[]
+		i=1
+		while i<=v
 			print green("[ "+i+" ]")
 			j=Gui.inputIP({"text":"Enter IP"})
       if j==null then return Info.info("User Aborted","i",false)
@@ -463,31 +458,16 @@ Command.make=function(Obj,argv)
       if u==null then return Info.info("User Aborted","i",false)
 			y=Gui.inputPass("Enter User Password")
       if not y then return Info.info("User Aborted","i",false)
-			if i==1 then
-				push(s,"a1=connect_service(get_shell,"""+j+""","+t+","""+u+""","""+y+""");")
-				n=i
-				i=i+1;continue
-			end if
-			push(s,"a"+(i)+"=connect_service(a"+n+","""+j+""","+t+","""+u+""","""+y+""");wipeLog(a"+n+");")
-			n=i
+			push(hops,{"ip":j,"port":t,"user":u,"password":y})
 			i=i+1
 		end while
-		if w then push(s,"wipeLog(a"+v+");start_terminal(a"+(v)+");end function;if user_input(""Enter App ID > "",1)=="""+w+"""then;proxy;else;exit(""Bad App ID, keep on knocking but you can't come in :-)"");end if") else push(s,"wipeLog(a"+v+");start_terminal(a"+(v)+");end function;proxy")
-		f=Command.touch(Obj,[path(Obj.user.home)+"/"+p+".src"])
-		if f isa Error then return
-		set_content(f,join(s,""))
-		x=build(Obj.shell,path(f),path(Obj.user.home))
-		if x=="" then
-			Info.info("Complete [ "+p+" ] is in your home directory...stay safe and happy hacking")
-			if f then Command.qrm(Obj,[f])
-		else
-			Error.set(x)
-		end if
+		return buildProxyChain(hops,p,w,{"clearScreen":false})
   end function
   serverFront=function(arg)
     if not Obj.id==0 then return Warning.set("You can only use from main")
 		w=Gui.inputPass("Enter a password for this custom server (optional)")
 		p=Gui.input({"text":"Enter a name for this custom server binary","default":"myserver"})
+		if not p then p="myserver"
 		j=Gui.inputIP({"text":"Enter IP"})
     if j==null then return Info.info("User Aborted","i",false)
 		t=Gui.inputInt({"text":"Enter Port"})
@@ -497,29 +477,13 @@ Command.make=function(Obj,argv)
 		y=Gui.inputPass("Enter User Password")
     if not y then return Info.info("User Aborted","i",false)
     s=Gui.input({"text":"Enter Service Type","default":"ssh"})
-    _=["proxy=function;"]
-    push(_,"a=connect_service(get_shell,"""+j+""","+t+","""+u+""","""+y+""","""+s+""");")
-		if w then push(_,"start_terminal(a);end function;if user_input(""Enter App ID > "",1)=="""+w+"""then;proxy;else;exit(""Bad App ID, keep on knocking but you can't come in :-)"");end if") else push(_,"start_terminal(a);end function;proxy")
-		f=Command.touch(Obj,[path(Obj.user.home)+"/"+p+".src"])
-		if f isa Error then return
-		set_content(f,join(_,""))
-		x=build(Obj.shell,path(f),path(Obj.user.home))
-		if x=="" then
-			Info.info("Complete [ "+p+" ] is in your home directory")
-			if f then Command.qrm(Obj,[f])
-		else
-			Error.set(x)
-		end if
+		if not s then s="ssh"
+    src="proxy=function;a=connect_service(get_shell,"""+j+""","+t+","""+u+""","""+y+""","""+s+""");"
+		if w then src=src+"start_terminal(a);end function;if user_input(""Enter App ID > "",1)=="""+w+"""then;proxy;else;exit(""Bad App ID, keep on knocking but you can't come in :-)"");end if" else src=src+"start_terminal(a);end function;proxy"
+		return compileAndInstall(src,p,{"buildDir":path(Obj.user.home),"skipBinPrompt":true,"successMsg":"Complete [ "+p+" ] is in your home directory"})
   end function
   buildRecovery=function(arg)
-		d=path(Obj.dir.current)
-		n=Command.touch(Obj,[d+"/rec.src"])
-		if n isa Error then return
-		set_content(n,Recover.source)
-		t=build(Obj.shell,path(n),d)
-    Command.qrm(Obj,[n])
-		if t!="" then return Error.set(t)
-		Info.info("Recover binary is in [ "+d+" ]")
+		return compileAndInstall(Recover.source,"rec",{"skipBinPrompt":true,"successMsg":"Recover binary is in [ "+path(Obj.dir.current)+" ]"})
   end function
   inject=function(arg)
     if len(arg)<2 then return Error.set("Invalid inject arguments")
@@ -612,41 +576,26 @@ Command.make=function(Obj,argv)
     buildTool=function(sourceKey)
       dName=sourceKey
       if hasIndex(displayNames,sourceKey) then dName=displayNames[sourceKey]
+      prefix=""
+      if arg.e then
+        if arg.c then return Error.set("Cannot combine -e with -c")
+        ek=encryptKey
+        if ek isa Error then return ek
+        prefix=ek
+      end if
       if arg.c then
         if arg.f then S=getCustomFile else S=getCustomCode(dName)
         if not S isa string then return
-        if arg.b then runBuild(S+tools[sourceKey],dName) else runBuild(tools[sourceKey]+S,dName)
+        if arg.b then runBuild(prefix+S+tools[sourceKey],dName) else runBuild(prefix+tools[sourceKey]+S,dName)
       else
-        runBuild(tools[sourceKey],dName)
+        runBuild(prefix+tools[sourceKey],dName)
       end if
     end function
     runBuild=function(s,z)
-      d=path(Obj.dir.current)
-      c=Obj.computer
-      n=Command.touch(Obj,[d+"/"+z+".src"])
-      if n isa Error then return
-      set_content(n,s)
-      t=build(Obj.shell,path(n),d)
-      Command.qrm(Obj,[n])
-      if t!="" then return Error.set(t)
-      q=File(c,d+"/"+z)
-      if not q then return Error.set("There was an error building "+z)
-      if arg.o then
-        destDir=File(c,arg.o)
-        if not destDir then return Error.set("Install path not found: "+arg.o)
-        if not has_permission(destDir,"w") then return Error.set("No write permission for: "+arg.o)
-        move(q,arg.o,name(q))
-        Info.info(z+" installed to [ "+arg.o+" ]")
-      else if Gui.skipConfirm(arg.y) then
-        Info.info(z+" has been successfully built and placed in [ "+d+" ]")
-      else if has_permission(File(c,"/bin"),"w") then
-        if Gui.yesNo("Would you like to place "+white(z)+" into [ /bin ]?") then
-          move(q,"/bin",name(q))
-          Info.info(z+" has been successfully built and placed in [ /bin ]")
-        else
-          Info.info(z+" has been successfully built and placed in [ "+d+" ]")
-        end if
-      end if
+      opts={}
+      if arg.o then opts.installPath=arg.o
+      if Gui.skipConfirm(arg.y) then opts.skipBinPrompt=true
+      return compileAndInstall(s,z,opts)
     end function
     lock=function;runBuild("p="""+arg.p+""";c=host_computer(get_shell);t=File(c,"""+arg.s+""")"+tools["lock"],"lock");end function
     unlock=function;runBuild("p="""+arg.p+""";c=host_computer(get_shell);t=File(c,"""+arg.s+""")"+tools["unlock"],"unlock");end function

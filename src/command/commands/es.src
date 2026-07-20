@@ -5,8 +5,9 @@
 Command.es=function(Obj,argv)
   if Net.hasInternet(Obj) isa Warning then return
 	use=function(arg)
-    index=to_int(arg[-1])
-    if not index isa number then return Error.set("Expected an index got: "+index)
+    if not arg or not len(arg) then return Error.set("Expected an index")
+    index=to_int(arg[0])
+    if not index isa number then return Error.set("Expected an index got: "+arg[0])
     if not hasIndex(globals.G_es.objects,index) then return Error.set("Index out of range")
     capturedObject=globals.G_es.objects[index]
     if indexOf(capturedObject.type,"shell")!=null then
@@ -24,24 +25,58 @@ Command.es=function(Obj,argv)
     Info.info("You have the following captured objects:")
     listNHZ(globals.G_es.display)
 	end function
+	// Parse "0", "2-5", "1,3" style index lists into a unique sorted list
+	parseIndices=function(arg)
+		indices=[]
+		for a in arg
+			parts=split(a,",")
+			for part in parts
+				part=trim(part)
+				if not part then continue
+				dashIdx=indexOf(part,"-")
+				if dashIdx!=null and dashIdx>0 and dashIdx<len(part)-1 then
+					rangeParts=split(part,"-")
+					if len(rangeParts)==2 then
+						startI=to_int(rangeParts[0])
+						endI=to_int(rangeParts[1])
+						if startI isa number and endI isa number then
+							if startI>endI then
+								_t=startI
+								startI=endI
+								endI=_t
+							end if
+							_i=startI
+							while _i<=endI
+								if indexOf(indices,_i)==null then push(indices,_i)
+								_i=_i+1
+							end while
+							continue
+						end if
+					end if
+				end if
+				i=to_int(part)
+				if i isa number and indexOf(indices,i)==null then push(indices,i)
+			end for
+		end for
+		return indices
+	end function
 	clear=function(arg)
-    if not len(globals.G_es.display) and not len(globals.G_es.objects) then return
+    if not len(globals.G_es.display) and not len(globals.G_es.objects) then return Info.info("EScan cache is empty")
     if not arg then
       globals.G_es.display=[]
       globals.G_es.objects=[]
       Info.info("EScan cache cleared")
     else
-      indices=[]
-      for a in arg
-        i=to_int(a)
-        if i isa number then push(indices,i)
-      end for
+      indices=parseIndices(arg)
+			if not len(indices) then return Error.set("Expected index or range (e.g. 0, 2-5)")
       indices.sort
       indices.reverse
+			removed=0
       for i in indices
-        if hasIndex(globals.G_es.display,i) then remove(globals.G_es.display,i)
+        if hasIndex(globals.G_es.display,i) then remove(globals.G_es.display,i);removed=removed+1
         if hasIndex(globals.G_es.objects,i) then remove(globals.G_es.objects,i)
       end for
+			if not removed then return Error.set("Index out of range")
       Info.info("Object(s) removed from es cache")
     end if
 	end function
@@ -78,7 +113,7 @@ Command.es=function(Obj,argv)
       if is_valid_ip(ipOrLibName) then return Error.set("Invalid arguments")
     end if
     if globals.G_settings.clearES then
-      if len(globals.G_es.display) and len(globals.G_es.objects) and (is_lan_ip(ipOrLibName) or is_valid_ip(ipOrLibName)) then
+      if len(globals.G_es.display) or len(globals.G_es.objects) then
         globals.G_es.display=[]
         globals.G_es.objects=[]
       end if
@@ -109,15 +144,36 @@ Command.es=function(Obj,argv)
       else
         loader=metaxploit
       end if
-      for libFile in libFiles
-        if indexOf(name(libFile),ipOrLibName)!=null then
-          library=load(loader,path(libFile))
-          ipOrLibName=name(libFile)
-          break
-        end if
-      end for
+			// Prefer exact name, then prefix match, then substring
+			_best=null
+			_bestRank=99
+			_ql=lower(ipOrLibName)
+			for libFile in libFiles
+				_n=name(libFile)
+				_nl=lower(_n)
+				if _nl==_ql then
+					_best=libFile
+					_bestRank=0
+					break
+				else if indexOf(_nl,_ql)==0 then
+					if _bestRank>1 then
+						_best=libFile
+						_bestRank=1
+					end if
+				else if indexOf(_nl,_ql)!=null then
+					if _bestRank>2 then
+						_best=libFile
+						_bestRank=2
+					end if
+				end if
+			end for
+			if _best then
+				library=load(loader,path(_best))
+				ipOrLibName=name(_best)
+			end if
       if not library then return Warning.set("Could not load library: "+ipOrLibName)
     end if
+		foundCount=0
     registerObject=function(exploitObj,objType,coloredType,displayIp)
       displayStr=getUser(exploitObj)+" "+coloredType+" object @"+ipOrLibName+":"+displayIp
       push(globals.G_es.display,displayStr)
@@ -126,15 +182,20 @@ Command.es=function(Obj,argv)
         "type":objType,
         "meta":metadata
       })
+			outer.foundCount=outer.foundCount+1
     end function
     updateLocalIp=function(detectedIp);if detectedIp!=localIp then metadata.local_ip=detectedIp;return green(detectedIp);end function
     memoryAddresses=scan(metaxploit,library)
+		if not memoryAddresses or not len(memoryAddresses) then return Info.info("No memory addresses found")
     for address in memoryAddresses
       scanResult=scan_address(metaxploit,library,address)
       for line in split(scanResult,char(10))
         if indexOf(line,"Unsafe")==null then continue
-        if indexOf(line,"<b>")==null then continue
-        exploitResult=overflow(library,address,slice(line,indexOf(line,">")+1,indexOf(line,"/")-1),overflowBuffer)
+				_b=indexOf(line,"<b>")
+				_e=indexOf(line,"</b>")
+				if _b==null or _e==null or _e<=_b then continue
+				unsafeVal=line[_b+3:_e]
+        exploitResult=overflow(library,address,unsafeVal,overflowBuffer)
         if not exploitResult or exploitResult isa number or exploitResult isa string then continue
         if is_valid_ip(ipOrLibName) then metadata={
           "public_ip":ipOrLibName,
@@ -157,9 +218,10 @@ Command.es=function(Obj,argv)
         end if
       end for
     end for
+		if foundCount==0 then return Info.info("No exploits found")
     listFound([])
   end function
-	if not argv then return listFound
+	if not argv then return listFound([])
 	if indexOf(argv[0],"-")==null then return attack(argv)
 	Arg1=lower(argv[0])
 	cmds={

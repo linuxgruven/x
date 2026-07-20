@@ -6,9 +6,9 @@ manFw="FW(8)                            X Shell Manual                          
 <b>SYNOPSIS</b>
     <b>fw</b> FOLDER [PAUSE]
 <b>DESCRIPTION</b>
-    Watch and monitor a folder or directory for file and folder additions
-    or deletions. Alert when changes are detected. If PAUSE time is provided,
-    will wait PAUSE seconds before refresh. Otherwise defaults to 10 seconds.
+    Watch a folder for file and folder additions, deletions, and content
+    changes. Stays quiet when nothing changes. Press <b>q</b> to stop.
+    PAUSE is the refresh interval in seconds (default 10, minimum 1).
 <b>EXAMPLE:</b>
     <color=#e4ff34># Watch Folder</color>
     <b>fw /home/tux/watched</b>

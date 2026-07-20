@@ -2086,7 +2086,7 @@ Io.getLib=function(Obj,n,m)
 end function
 //getAll - Get all files and folders recursively
 //Args: s (starting folder), excludeNames (optional list of folder names to skip)
-//Returns: list of all file objects or Error
+//Returns: list of all file objects (empty list if none)
 Io.getAll=function(s,excludeNames=null)
   //Initialize result list
   l=[]
@@ -2097,8 +2097,8 @@ Io.getAll=function(s,excludeNames=null)
   end function
   //Start recursion
   _(s)
-  //Return list or error
-  if not l then return Error.set("","",true) else return l
+  // Empty dirs are valid — return [] (not Error)
+  return l
 end function
 //findFile - Find file by name recursively
 //Args: s (starting folder), n (file name)

@@ -60,7 +60,7 @@ end function
 //Returns: True if successful, false otherwise
 ShellObject.packMeta=function(Obj,i=null)
   //Return if already packed (no IP) or packing with IP
-  if not i and Obj.packMetaxploit then return true
+  if not i and hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then return true
   //Pack computer object with metaxploit and router
   _=Builder.packCO(Obj,i)
   if _ isa Error then return false
@@ -80,7 +80,7 @@ end function
 //Returns: True if successful or already packed, false on error
 ShellObject.packCrypto=function(Obj)
   //Pack if not already cached
-  if not Obj.packCrypto then
+  if not hasIndex(Obj,"packCrypto") or not Obj.packCrypto then
     _=Builder.packCrypto(Obj)
     if _ isa Error then return false
     //Cache crypto library

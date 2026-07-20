@@ -1,50 +1,58 @@
 // =============================================================================
 // PSLOCK
-// Lock system state; kill new processes and delete new files continuously.
+// Lock process list; kill anything not present at lock time. (ps -l)
 // =============================================================================
 Command.psLock=function(Obj,argv)
-  baselineProcs=[]
-  procLines=split(show_procs(Obj.computer),char(10))[1:]
-  for line in procLines;parts=split(line," ");push(baselineProcs,{"user":parts[0],"id":to_int(parts[1]),"name":parts[-1]});end for
-  baselineFiles=Io.getAll(Obj.root)
-  Info.info("Locking system processes/files...")
-  Utility.pressQ
-  while poll_input!="q"
-    currentProcLines=split(show_procs(Obj.computer),char(10))[1:]
-    for line in currentProcLines
-      parts=split(line," ")
-      proc={"user":parts[0],"id":to_int(parts[1]),"name":parts[-1]}
-      isNewProc=(indexOf(baselineProcs,proc)==null)
-      if isNewProc then
-        print red("Killing [ "+proc.name+" ]")
-        closeResult=close_program(Obj.computer,proc.id)
-        // Check kill result (1=success, 0=not found, string=error)
-        if closeResult==1 then
-          print green("Process Closed [ "+proc.name+" ]")
-          continue
-        end if
-        if closeResult==0 then
-          print red("Process invalid [ "+proc.name+" ]")
-          continue
-        end if
-        if closeResult isa string and len(closeResult) then Info.error(closeResult)
-      end if
-    end for
-    currentFiles=Io.getAll(Obj.root)
-    compareResult=baselineFiles.compare(currentFiles)
-    if compareResult.r=="=" then continue
-    if compareResult.r=="+" then
-      for item in compareResult.l
-        filePath=split(item,":")[-1]
-        print red("File Created [ "+filePath+" ]")
-        delete(File(Obj.computer,filePath))
-        print green("File Removed [ "+filePath+" ]")
-      end for
-      continue
-    end if
-    if compareResult.r=="-" then
-      for item in compareResult.l;filePath=split(item,":")[-1];print red("File Removed [ "+filePath+" ]");baselineFiles.remove(indexOf(baselineFiles,filePath));end for
-      continue
-    end if
-  end while
+	interval=1
+	_pause=null
+	if argv isa list then
+		if len(argv)>0 then _pause=argv[0]
+	else if argv and hasIndex(argv,"rest") and argv.rest and len(argv.rest)>0 then
+		_pause=argv.rest[0]
+	end if
+	if _pause!=null then
+		interval=to_int(_pause)
+		if not interval isa number or interval<1 then interval=1
+	end if
+	procKey=function(p);return p.user+":"+str(p.id)+":"+p.name;end function
+	readProcs=function
+		keys={}
+		list=[]
+		for line in split(show_procs(Obj.computer),char(10))[1:]
+			parts=split(line," ")
+			if len(parts)<3 then continue
+			p={"user":parts[0],"id":to_int(parts[1]),"name":parts[-1]}
+			if not p.id isa number then continue
+			push(list,p)
+			keys[procKey(p)]=p
+		end for
+		return {"list":list,"keys":keys}
+	end function
+	baseline=readProcs
+	Info.info("Locking processes ("+len(baseline.list)+" baseline, interval: "+interval+"s)")
+	Utility.pressQ
+	while poll_input!="q"
+		current=readProcs
+		for p in current.list
+			if hasIndex(baseline.keys,procKey(p)) then continue
+			print red("Killing [ "+p.name+" ]")
+			closeResult=close_program(Obj.computer,p.id)
+			if closeResult==1 then
+				print green("Process Closed [ "+p.name+" ]")
+			else if closeResult==0 then
+				print red("Process invalid [ "+p.name+" ]")
+			else if closeResult isa string and len(closeResult) then
+				Info.error(closeResult)
+			end if
+		end for
+		if poll_input=="q" then break
+		waitCount=0
+		while waitCount<interval
+			if poll_input=="q" then break
+			wait(1)
+			waitCount+=1
+		end while
+		if poll_input=="q" then break
+	end while
+	Info.info("Process lock stopped")
 end function

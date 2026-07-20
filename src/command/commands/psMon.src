@@ -1,48 +1,57 @@
 // =============================================================================
 // PSMON
-// Monitor the process list in real-time; alerts on launch and termination.
+// Monitor the process list in real-time; alerts on launch and termination. (ps -w)
 // =============================================================================
 Command.psMon=function(Obj,argv)
-  processId=null
-  currentProcs={}  // Current cycle process snapshot
-  trackedProcs={}  // Baseline of all known processes
-  previousProcs={} // Previous cycle process snapshot
-  procLines=split(show_procs(Obj.computer),char(10))
-  for line in procLines[:-1]
-    // Parse process data (skip last line)
-    fields=split(line," ")[:-1]
-    pid=fields[0]
-    name=fields[-1]
-    previousProcs[pid]=name
-    trackedProcs[pid]=name
-  end for
-  Info.info("Monitoring system processes...")
-  Utility.pressQ
-  while poll_input!="q"
-    procLines=split(show_procs(Obj.computer),char(10))
-    for line in procLines[:-1];fields=split(line," ")[:-1];currentProcs[fields[0]]=fields[-1];end for
-    for proc in currentProcs
-      processId=proc.key
-      // Check if PID exists in tracked baseline (hasIndex returns 0 if missing)
-      isNewProcess=(hasIndex(trackedProcs,processId)==0)
-      if isNewProcess then
-        print green(yellow(str(processId))+" "+proc.value+" LAUNCHED!")
-        trackedProcs[processId]=proc.value
-      end if
-    end for
-    // Detect process terminations (optimization: only check if count decreased)
-    if len(currentProcs)<len(previousProcs) then
-      for proc in previousProcs
-        isTerminated=(hasIndex(currentProcs,proc.key)==0)
-        if isTerminated then
-          print red(yellow(str(proc.key))+" "+proc.value+" CLOSED!")
-          trackedProcs.remove(proc.key)
-          break
-        end if
-      end for
-    end if
-    previousProcs=currentProcs
-    currentProcs={}
-  end while
-  Info.info("ps monitor shutting down...")
+	interval=1
+	_pause=null
+	if argv isa list then
+		if len(argv)>0 then _pause=argv[0]
+	else if argv and hasIndex(argv,"rest") and argv.rest and len(argv.rest)>0 then
+		_pause=argv.rest[0]
+	end if
+	if _pause!=null then
+		interval=to_int(_pause)
+		if not interval isa number or interval<1 then interval=1
+	end if
+	readProcs=function
+		procs={}
+		for line in split(show_procs(Obj.computer),char(10))[1:]
+			parts=split(line," ")
+			if len(parts)<3 then continue
+			pid=str(parts[1])
+			if not to_int(pid) isa number then continue
+			procs[pid]=parts[-1]
+		end for
+		return procs
+	end function
+	trackedProcs=readProcs
+	previousProcs={}
+	for e in trackedProcs;previousProcs[e.key]=e.value;end for
+	Info.info("Monitoring processes ("+len(trackedProcs)+" baseline, interval: "+interval+"s)")
+	Utility.pressQ
+	while poll_input!="q"
+		currentProcs=readProcs
+		for proc in currentProcs
+			if hasIndex(trackedProcs,proc.key) then continue
+			print green(yellow(proc.key)+" "+proc.value+" LAUNCHED!")
+			trackedProcs[proc.key]=proc.value
+		end for
+		for proc in previousProcs
+			if hasIndex(currentProcs,proc.key) then continue
+			print red(yellow(proc.key)+" "+proc.value+" CLOSED!")
+			if hasIndex(trackedProcs,proc.key) then remove(trackedProcs,proc.key)
+		end for
+		previousProcs={}
+		for e in currentProcs;previousProcs[e.key]=e.value;end for
+		if poll_input=="q" then break
+		waitCount=0
+		while waitCount<interval
+			if poll_input=="q" then break
+			wait(1)
+			waitCount+=1
+		end while
+		if poll_input=="q" then break
+	end while
+	Info.info("ps monitor shutting down...")
 end function

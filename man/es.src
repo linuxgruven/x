@@ -4,18 +4,23 @@ manEs="ES(1)                            X Shell Manual                          
 <b>NAME</b>
     es - Discrete exploit scanning
 <b>SYNOPSIS</b>
-    <b>es</b> IP|DOMAIN PORT (ARGUMENT)
-    <b>es</b> LIBRARY (ARGUMENT)
+    <b>es</b>
+    <b>es</b> IP|DOMAIN PORT [BUFFER]
+    <b>es</b> LIBRARY [BUFFER]
     <b>es</b> <b>-l</b>
     <b>es</b> <b>-u</b> INDEX
-    <b>es</b> <b>-x</b> [INDEX] (INDEX) (INDEX-INDEX)
+    <b>es</b> <b>-x</b>
+    <b>es</b> <b>-x</b> INDEX [INDEX...]
+    <b>es</b> <b>-x</b> START-END
 <b>DESCRIPTION</b>
     Most discrete scanning method available. Targets specific services or
     libraries without broad network detection. May yield newer results if
     exploit database is more current than local libraries. Local scans
-    accept partial library names - automatically searches /lib directory.
+    accept partial library names - prefers exact match, then prefix, then
+    substring under /lib. Domains are resolved via DNS.
+    With no arguments, lists captured objects.
 <b>OPTIONS</b>
-    <b>es IP PORT</b>
+    <b>es IP|DOMAIN PORT</b>
     Scan remote target
     Discrete exploit detection
 
@@ -31,9 +36,12 @@ manEs="ES(1)                            X Shell Manual                          
     Use captured object
     Select by index number
 
+    <b>-x</b>
+    Clear all captured objects
+
     <b>-x INDEX</b>
     Clear objects by index
-    Supports ranges: 1-5
+    Supports ranges and lists: 2-5, 0,3, 1-3,5
 <b>EXAMPLE:</b>
     <color=#e4ff34># Local Library Scans</color>
     <b>es apt</b>
@@ -49,10 +57,16 @@ manEs="ES(1)                            X Shell Manual                          
     <b>es 180.94.158.132 80</b>
     Scan web service
 
+    <b>es example.com 22</b>
+    Resolve domain, then scan SSH
+
     <b>es 203.0.113.50 22</b>
     Scan SSH service
 
     <color=#e4ff34># Managing Results</color>
+    <b>es</b>
+    List captured exploits
+
     <b>es -l</b>
     List captured exploits
 
@@ -61,5 +75,8 @@ manEs="ES(1)                            X Shell Manual                          
 
     <b>es -x 2-5</b>
     Clear range of results
+
+    <b>es -x 0,3</b>
+    Clear specific indices
 <b>SEE ALSO</b>
     <b>scan</b>, <b>exp</b>, <b>nmap</b>"

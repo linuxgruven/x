@@ -42,6 +42,9 @@ manMake="MAKE(1)                          X Shell Manual                        
     Make standalone tool
     -y keeps in current dir (or run <b>yes</b> first)
     -o PATH installs to path
+    -c prepends custom code (-f from file, -b append base after custom)
+    -e prepends filesystem-encrypt walker (not with -c)
+    -p / -s used by lock/unlock
 
     <b>-rec</b>
     System recovery binary
