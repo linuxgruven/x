@@ -905,7 +905,7 @@ Attack.recon=function(rt,ex,argv)
         end if
       end if
       if not argv.filter then break
-      _f=Gui.input({"text":"Enter some filter data (type '!' to stop filtering)"})
+      _f=Gui.input({"text":"Enter some filter data"})
       if _f==null then break
     end while
   end function
@@ -963,7 +963,7 @@ Attack.recon=function(rt,ex,argv)
           if __i_idx!=len(E)-1 then print green("-")*45
         end for
         print white("-"*45)
-        f=Gui.input({"text":"Enter some filter data (type '!' to stop filtering)"})
+        f=Gui.input({"text":"Enter some filter data"})
         if f==null then break
       end while
     else
@@ -1053,7 +1053,7 @@ Attack.recon=function(rt,ex,argv)
         end for
         print white("-"*45)
         print white("-"*45)
-        f=Gui.input({"text":"Enter some filter data (type '!' to stop filtering)"})
+        f=Gui.input({"text":"Enter some filter data"})
         if f==null then break
       end while
     else

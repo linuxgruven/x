@@ -149,8 +149,10 @@ G_pipe={
 }
 //Cached exploit objects {ip: exploits}
 G_exploitCache={}
-//Cached dig results {name: lines[]}
+//Cached dig results {name: {Records, PIP, type}}
 G_digCache={}
+//Computers collected during the current dig crawl [{ip, ex}, ...]
+G_digObj=[]
 //Auto-yes flag: when true, Gui.yesNo returns true without prompting
 G_auto_yes=false
 //Binary tree for exploit lookup

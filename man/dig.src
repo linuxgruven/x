@@ -10,6 +10,8 @@ manDig="DIG(1)                           X Shell Manual                         
     <b>dig -r</b> [--extreme N] [--lwipe] [--files] [-i IP[,IP...]] [--router] [--root] [--filter] [-s [NAME]] [--cache NAME|!] [--ip IP]
     <b>dig -u</b> [--lwipe] [--extreme N] [--files] [--router] [--root] [--filter] [-s [NAME]] [-i IP[,IP...]] [--cache NAME|!] [--ip IP]
     <b>dig -g</b> [--lwipe] [--extreme N] [-i IP[,IP...]] [--router] [--root] [--filter] [--grep PAT ...] [-s [NAME]] [--cache NAME|!] [--ip IP]
+    <b>dig filter</b> [PAT ...] [--cache NAME]
+    <b>dig reset</b>
     <b>dig cache</b>
     <b>dig cache</b> NAME [--filter] [--grep PAT ...] [--dump] [--all|--email|--bank|--rshell|--user]
     <b>dig cache clear</b> [NAME]
@@ -155,11 +157,30 @@ manDig="DIG(1)                           X Shell Manual                         
       After scanning, save results to the session cache under NAME.
       Use <b>!</b> as NAME to auto-key by the router's public IP.
       Cache persists across pivots (stored in globals). Run from any machine.
+      Every successful -a/-e/-b/-r/-u/-g scan also updates <b>_last</b> for
+      <b>dig filter</b> (no flag required). <b>_last</b> is cleared when a new
+      dig starts, and dig caches from another public IP are dropped to save
+      memory. Named caches (e.g. <b>--cache loot</b>) are kept.
+
+    <b>filter</b> - Re-filter Last (or Cached) Results
+      Does NOT require a router, rescan, or library pack — only loads
+      <b>_last</b> (or a named cache) and prints/filters it.
+      Filters the last dig results (subjects, users, emails, banks, files, etc.).
+      <b>dig filter</b>              Interactive filter on last results
+      <b>dig filter PAT [PAT...]</b> One-shot OR-match filter on last results
+      <b>dig filter --cache NAME</b> Interactive filter on a named cache entry
+      <b>dig filter --cache NAME PAT</b> One-shot filter on named cache
+      Type <b>!</b> in the interactive prompt to stop.
+
+    <b>reset</b> - Hard Clear Dig Data
+      Wipe <b>_last</b>, all named dig caches, and the dig obj list.
+      No prompt, no router, no pack. Use to free memory.
+      Softer option: <b>dig cache clear</b> (prompts; cache only).
 
     <b>cache</b> - View / Manage Cached Results
       List all cached entries, view a named entry, or clear cache.
       Does NOT require a router - usable from any machine.
-      <b>cache</b>              List all cached entries
+      <b>cache</b>              List all cached entries (includes <b>_last</b>)
       <b>cache NAME</b>         Print cached entry NAME using its stored type
       <b>cache NAME --filter</b>     Interactively filter cached entry
       <b>cache NAME --grep PAT</b>   Filter cached entry by pattern (non-interactive; OR-match)
@@ -241,6 +262,12 @@ manDig="DIG(1)                           X Shell Manual                         
 
     <b>dig -e --subject</b>
     Scan email credentials, then log into each mailbox to list subject lines
+
+    <b>dig filter</b>
+    Interactively filter the last dig results (no rescan)
+
+    <b>dig filter invoice password</b>
+    Show last results matching 'invoice' OR 'password'
 
     <b>dig -e --subject -s mydig</b>
     Scan with subject lines and save to mydig.txt

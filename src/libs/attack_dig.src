@@ -6,6 +6,7 @@ Attack.dig=function(Obj,argv)
 	// Data storage + print functions — before cache handler so cache can reuse them
 	Records={}
 	PIP=null
+	_fromFilter=false
 	_hashCache={}
 	_crackHash=function(h)
 		if hasIndex(outer._hashCache,h) then return outer._hashCache[h]
@@ -19,13 +20,27 @@ Attack.dig=function(Obj,argv)
 			outer.Records[ip].users[uname]={"email":null,"bank":null,"rshell":null,"user":null,"files":[],"subj":[]}
 		end if
 	end function
+	_hasGrep=function
+		return hasIndex(argv,"grep") and argv.grep and len(argv.grep)>0
+	end function
+	_lineMatches=function(line)
+		if _hasGrep then
+			_ll=lower(str(line))
+			for _pat in argv.grep;if indexOf(_ll,lower(str(_pat)))!=null then return true;end for
+			return false
+		end if
+		if outer._f and outer._f!="" then return indexOf(lower(str(line)),lower(outer._f))!=null
+		return true
+	end function
 	printData=function
 		if globals.G_pipe.PIPE_MODE then
 			for _pl in prepData;push(globals.G_pipe.stdout,_pl);end for
 			return
 		end if
+		outer._f=""
 		_f=""
 		while true
+			outer._f=_f
 			if globals.G_Zday["rshell"] then print blue("RSHELL SERVER IP - : "+globals.G_Zday["rshell"])
 			_anyPrinted=false
 			for ipRec in outer.Records
@@ -35,19 +50,32 @@ Attack.dig=function(Obj,argv)
 				for uRec in _rec.users
 					_uname=uRec.key
 					_u=uRec.value
-					if _f then
+					_needFilter=_hasGrep or (_f and _f!="")
+					if _needFilter then
 						_chk=_uname+" "+_ip
 						if _u.user then _chk=_chk+" "+_u.user.pass
 						if _u.email then _chk=_chk+" "+_u.email.addr+" "+_u.email.pass
 						if _u.bank then _chk=_chk+" "+_u.bank.account+" "+_u.bank.pass
 						if _u.rshell then _chk=_chk+" "+_u.rshell.addr+" "+_u.rshell.pass
+						if _u.subj then
+							for _s in _u.subj;_chk=_chk+" "+_s;end for
+						end if
 						if _u.files then
 							for _fe in _u.files
 								_chk=_chk+" "+_fe.path
 								if _fe.content then _chk=_chk+" "+_fe.content
 							end for
 						end if
-						if indexOf(_chk,_f)==null then continue
+						_chk=lower(_chk)
+						if _hasGrep then
+							_ok=false
+							for _pat in argv.grep
+								if indexOf(_chk,lower(str(_pat)))!=null then _ok=true;break
+							end for
+							if not _ok then continue
+						else if indexOf(_chk,lower(_f))==null then
+							continue
+						end if
 					end if
 					if not _devPrinted then
 						if _anyPrinted then print white("="*45)
@@ -103,7 +131,7 @@ Attack.dig=function(Obj,argv)
 									_fIdx=_fIdx+1
 									if _fe.content then
 										for _cl in split(_fe.content,char(10))
-											if _f and indexOf(_cl,_f)==null then continue
+											if not _lineMatches(_cl) then continue
 											print white("    "+_cl)
 										end for
 									end if
@@ -152,8 +180,8 @@ Attack.dig=function(Obj,argv)
 								print cyan(_dfLine)
 								if _hasContent then
 									for _cl in split(_dfe.content,char(10))
-										if _f and indexOf(_cl,_f)==null then continue
-										print white("      "+_cl)
+											if not _lineMatches(_cl) then continue
+											print white("      "+_cl)
 									end for
 								end if
 							end for
@@ -163,9 +191,13 @@ Attack.dig=function(Obj,argv)
 			end for
 			if not _anyPrinted then print white("No data found.")
 			print white("="*45)
-			if not argv.filter then break
-			_f=Gui.input({"text":"Enter some filter data (type '!' to stop filtering)"})
-			if _f==null then break
+			// Keep imported rshell servers visible at the bottom (skip if none / no matches)
+			if _anyPrinted and outer._fromFilter and globals.G_rshell.servers then
+				if globals.G_settings.rshell then Rshell.list else RshellLite.list
+			end if
+			if not hasIndex(argv,"filter") or not argv.filter then break
+			_f=Gui.input({"text":"Enter some filter data"})
+			if _f==null or _f=="!" then break
 		end while
 	end function
 	printV=function
@@ -270,10 +302,59 @@ Attack.dig=function(Obj,argv)
 		end if
 		return
 	end if
+	// dig reset — hard wipe all dig session data (cache + crawl objects)
+	if argv and len(argv)>0 and argv[0]=="reset" then
+		globals.G_digCache={}
+		globals.G_digObj=[]
+		return Info.info("Dig data reset")
+	end if
+	// dig filter [PAT...] [--cache NAME] — re-filter last (or named) results without rescanning
+	runFilter=function(argList)
+		_p=ArgumentParser.init
+		_p.addArgument("cache",true,"store")
+		_p.addArgument("filter",true,"flag")
+		_p.addArgument("grep",true,"storeArray")
+		_fa=_p.parseArgs("dig",argList)
+		if _fa isa Error then return _fa
+		if not globals.G_digCache or len(globals.G_digCache)==0 then return Info.info("No dig results to filter. Run dig first.")
+		_name="_last"
+		if _fa.cache then _name=_fa.cache
+		if not hasIndex(globals.G_digCache,_name) then
+			if _name=="_last" then return Info.info("No last dig results. Run dig -e/-a/... first.")
+			return Info.warning("No cache entry '"+_name+"'")
+		end if
+		_d=globals.G_digCache[_name]
+		outer.Records=_d.Records
+		outer.PIP=_d.PIP
+		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO RESULTS|DATASETS FOUND")
+		// Must update outer argv — printData reads the dig-scope argv map
+		outer.argv=_fa
+		if hasIndex(outer.argv,"grep") and outer.argv.grep and len(outer.argv.grep)>0 then
+			// keep grep
+		else if hasIndex(outer.argv,"rest") and outer.argv.rest and len(outer.argv.rest)>0 then
+			outer.argv.grep=outer.argv.rest
+		else
+			outer.argv.filter=true
+		end if
+		outer._fromFilter=true
+		printData
+		outer._fromFilter=false
+		return true
+	end function
+	if argv and len(argv)>0 and argv[0]=="filter" then
+		pull(argv)
+		return runFilter(argv)
+	end if
   Arg1=pull(argv)
   _rawArgv=argv[:]
   if Arg1!="obj" then globals.G_digObj=[]
-  // -x/-rm/-sw/obj bypass the main parser; dispatched after all functions are defined
+  // filter/cache do not need a router; -x/-rm/-sw/obj bypass the main parser
+  if Arg1=="filter" then return runFilter(_rawArgv)
+  if Arg1=="reset" then
+    globals.G_digCache={}
+    globals.G_digObj=[]
+    return Info.info("Dig data reset")
+  end if
   if Arg1!="-x" and Arg1!="-rm" and Arg1!="-sw" and Arg1!="obj" then
   // Verify we're on a router/switch
   if indexOf(Obj.machineType,"Router")==null and indexOf(Obj.machineType,"Switch")==null then return Warning.set("You are not on a router, you can't use this command")
@@ -311,6 +392,40 @@ Attack.dig=function(Obj,argv)
 		globals.G_digCache[name]={"Records":outer.Records,"PIP":outer.PIP,"type":type}
 		Info.info("Cached as '"+name+"'")
 	end function
+	// Always keep last successful scan for dig filter (no prompt)
+	rememberLast=function(type)
+		if not globals.G_digCache then globals.G_digCache={}
+		globals.G_digCache["_last"]={"Records":outer.Records,"PIP":outer.PIP,"type":type}
+	end function
+	// Drop _last early so a new crawl does not keep two full result sets in RAM
+	releaseLast=function
+		if not globals.G_digCache then return
+		if hasIndex(globals.G_digCache,"_last") then remove(globals.G_digCache,"_last")
+	end function
+	// Unload dig results from another router (PIP change) to stay under GH memory limits
+	evictStaleDigCache=function(pip)
+		if not pip or not globals.G_digCache then return
+		_removed=0
+		if hasIndex(globals.G_digCache,"_last") then
+			_e=globals.G_digCache["_last"]
+			if not hasIndex(_e,"PIP") or _e.PIP!=pip then
+				remove(globals.G_digCache,"_last")
+				_removed=_removed+1
+			end if
+		end if
+		// Auto-keyed caches use the router public IP as the name
+		_stale=[]
+		for k in globals.G_digCache
+			if k.key=="_last" then continue
+			_e=k.value
+			if hasIndex(_e,"PIP") and _e.PIP and _e.PIP!=pip and k.key==_e.PIP then push(_stale,k.key)
+		end for
+		for n in _stale
+			remove(globals.G_digCache,n)
+			_removed=_removed+1
+		end for
+		if _removed>0 then Info.info("Released dig cache from previous router ("+str(_removed)+")")
+	end function
 	init=function
 		d={}
 		if Obj.layer=="shell" then
@@ -330,6 +445,9 @@ Attack.dig=function(Obj,argv)
 			d["router"]=get_router
 		end if
 		outer.PIP=public_ip(d.router)
+		// Free stale / previous last results before the crawl grows memory again
+		evictStaleDigCache(outer.PIP)
+		releaseLast
 		return d
 	end function
 	getips=function(c)
@@ -957,6 +1075,7 @@ Attack.dig=function(Obj,argv)
 		populateAll
 		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO RESULTS|DATASETS FOUND")
 		if argv.subject then _fetchSubjects
+		rememberLast("all")
 		if not argv.quiet then printData
 		if argv.s then saveData(prepData)
 		if argv.cache then saveToCache("all")
@@ -965,6 +1084,7 @@ Attack.dig=function(Obj,argv)
 		populateEmail
 		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO RESULTS|DATASETS FOUND")
 		if argv.subject then _fetchSubjects
+		rememberLast("email")
 		if not argv.quiet then printData
 		if argv.s then saveData(prepData)
 		if argv.cache then saveToCache("email")
@@ -972,6 +1092,7 @@ Attack.dig=function(Obj,argv)
 	_bank=function(arg)
 		populateBank
 		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO RESULTS|DATASETS FOUND")
+		rememberLast("bank")
 		if not argv.quiet then printData
 		if argv.s then saveData(prepData)
 		if argv.cache then saveToCache("bank")
@@ -979,6 +1100,7 @@ Attack.dig=function(Obj,argv)
 	_rshell=function(arg)
 		populateRshell
 		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO RESULTS|DATASETS FOUND")
+		rememberLast("rshell")
 		if not argv.quiet then printData
 		if argv.s then saveData(prepData)
 		if argv.cache then saveToCache("rshell")
@@ -986,6 +1108,7 @@ Attack.dig=function(Obj,argv)
 	_user=function(arg)
 		populateUser
 		if not outer.Records or len(outer.Records)==0 then return Info.warning("PERMISSIONS TO LOW TO GET PASSWD INFO")
+		rememberLast("user")
 		if not argv.quiet then printData
 		if argv.s then saveData(prepData)
 		if argv.cache then saveToCache("user")
@@ -993,6 +1116,7 @@ Attack.dig=function(Obj,argv)
 	_grab=function(arg)
 		populateGrab
 		if not outer.Records or len(outer.Records)==0 then return Info.warning("NO DATA FOUND")
+		rememberLast("grab")
 		if not argv.quiet then printData
 		if argv.s then saveData(prepData)
 		if argv.cache then saveToCache("grab")
@@ -1213,11 +1337,13 @@ Attack.dig=function(Obj,argv)
     "-g":@_grab,
     "-rm":@_rm,
     "-sw":@_sw,
-    "obj":@_obj
+    "obj":@_obj,
+    "filter":@runFilter
   }
 	// Command mode dispatcher
 	// Bypass commands: set minimal parsed argv so outer.argv has expected keys, then dispatch
-	if Arg1=="-x" or Arg1=="-rm" or Arg1=="-sw" or Arg1=="obj" then
+	if Arg1=="-x" or Arg1=="-rm" or Arg1=="-sw" or Arg1=="obj" or Arg1=="filter" then
+		if Arg1=="filter" then return runFilter(_rawArgv)
 		argv={"rest":_rawArgv,"root":false,"extreme":50,"i":null,"router":false,"quiet":false,"s":false}
 		if Arg1=="-x" then return _exec(_rawArgv)
 		if Arg1=="-rm" then return _rm(_rawArgv)

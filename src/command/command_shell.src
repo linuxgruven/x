@@ -138,6 +138,9 @@ Command.shellCallbacks=function(Obj)
 	__dig=function(argv)
     if Net.hasInternet(Obj) isa Warning then return
     if not argv then return Man.help(["dig"])
+    // filter/cache/obj/reset only need GCO — no pack, --ip, or rshell refresh
+    _digLight=argv[0]=="filter" or argv[0]=="cache" or argv[0]=="obj" or argv[0]=="reset"
+    if _digLight then return Attack.dig(Obj,argv)
     if globals.G_pipe.stdin and trim(globals.G_pipe.stdin)!="" and indexOf(argv,"--ip")==null then return Info.error("An IP was piped in but --ip was not specified. Did you mean: dig --ip "+argv.join(" ")+"?")
     _digObj=Obj
     _remoteShell=null
