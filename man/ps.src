@@ -2,7 +2,7 @@
 manPs="PS(1)                            X Shell Manual                            PS(1)
 
 <b>NAME</b>
-    ps - used to view current running process
+    ps - list running processes
 <b>SYNOPSIS</b>
     <b>ps</b> [<b>-u</b> USER] [<b>-c</b> CMD]
     <b>ps</b> <b>-m</b>

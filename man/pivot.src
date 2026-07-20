@@ -6,7 +6,7 @@ manPivot="PIVOT(1)                         X Shell Manual                       
 <b>SYNOPSIS</b>
     <b>pivot</b> [-y] [--full]
 <b>DESCRIPTION</b>
-    Pivoting is an integral part of x framework arsenal. Copy x to
+    Pivoting is an integral part of the x framework arsenal. Copy x to
     compromised systems and launch for continued operations. If x already
     exists on target, pivot launches existing copy instead of uploading.
 

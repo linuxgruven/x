@@ -86,11 +86,11 @@ manProxy="PROXY(1)                         X Shell Manual                       
 
     <b>-d (-r) (-i ID | -n NAME)</b> - Decoy
       Create a decoy to catch crashes. Use decoy to absorb crashes when using
-      reboot or get a io error. After a crash you will want to use this command
-      to setup another decoy. You are not able to interact with the decoys in
+      reboot or get an I/O error. After a crash you will want to use this command
+      to set up another decoy. You are not able to interact with the decoys in
       any way, except to be closed with sess. If you want to return to a specific
       session you can use the -i or the -n flag to specify the session by id or
-      name. Default is the calling object. Use the -r flag to remove a active decoy
+      name. Default is the calling object. Use the -r flag to remove an active decoy
       and setup a new one.
 <b>EXAMPLE:</b>
     <color=#e4ff34># Standard Proxy</color>

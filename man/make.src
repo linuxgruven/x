@@ -35,7 +35,8 @@ manMake="MAKE(1)                          X Shell Manual                        
     Build framework for creating standalone tools and infecting binaries. Supports
     virus, rshell, and RAT injection. Creates proxy binaries, custom servers, and
     system recovery tools. Lock and unlock binaries support -p for password and
-    -s for start path. Default encryption mode is -e. RAT requires /root/rat file
+    -s for start path. Optional <b>-e</b> on <b>make -t</b> prepends a filesystem-encrypt
+    walker (not with -c). RAT requires /root/rat file
     on C2 server for remote code execution.
 <b>OPTIONS</b>
     <b>-t BINARY</b>
@@ -92,7 +93,11 @@ manMake="MAKE(1)                          X Shell Manual                        
 
     <b>-v BINARY</b>
     View binary source
-    Display source code
+    Display buildable bins source only
+
+    <b>-p BINARY</b>
+    Peek source
+    Display bins, tools, or hide-template source
 
     <b>-a (-y)</b>
     Build all default binaries
@@ -151,10 +156,6 @@ manMake="MAKE(1)                          X Shell Manual                        
     <b>-b GS BINARY</b>
     Build with GCO reader (show source)
     Same as -b G but previews source before building
-
-    <b>-p BINARY</b>
-    View source code
-    Display buildable source
 <b>EXAMPLE:</b>
     <color=#e4ff34># Basic Building</color>
     <b>make -l</b>

@@ -19,7 +19,7 @@ manSu="SU(8)                            X Shell Manual                          
 <b>DESCRIPTION</b>
     Options (u) will assume we are using user root|super if not provided.
     It allows users to run programs with administrator security privileges,
-    also known as root|super user. It can also be used to access as any other user
+    also known as root|super user. It can also be used to switch to any other user
     registered on the machine, using the -u parameter.
     The <b>su</b> command can be executed to obtain root|super permissions only for
     the execution of that command.

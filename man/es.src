@@ -2,7 +2,7 @@
 manEs="ES(1)                            X Shell Manual                            ES(1)
 
 <b>NAME</b>
-    es - Discrete exploit scanning
+    es - Discreet exploit scanning
 <b>SYNOPSIS</b>
     <b>es</b>
     <b>es</b> IP|DOMAIN PORT [BUFFER]
@@ -13,7 +13,7 @@ manEs="ES(1)                            X Shell Manual                          
     <b>es</b> <b>-x</b> INDEX [INDEX...]
     <b>es</b> <b>-x</b> START-END
 <b>DESCRIPTION</b>
-    Most discrete scanning method available. Targets specific services or
+    Most discreet scanning method available. Targets specific services or
     libraries without broad network detection. May yield newer results if
     exploit database is more current than local libraries. Local scans
     accept partial library names - prefers exact match, then prefix, then
@@ -22,7 +22,7 @@ manEs="ES(1)                            X Shell Manual                          
 <b>OPTIONS</b>
     <b>es IP|DOMAIN PORT</b>
     Scan remote target
-    Discrete exploit detection
+    Discreet exploit detection
 
     <b>es LIBRARY</b>
     Scan local library

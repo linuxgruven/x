@@ -30,4 +30,4 @@ manIds="IDS(8)                           X Shell Manual                         
     <b>ids 5</b>
     Same, poll every 5 seconds
 <b>SEE ALSO</b>
-    <b>ps</b>, <b>psLock</b>, <b>fw</b>, <b>find</b>"
+    <b>ps</b>, <b>ps -l</b>, <b>fw</b>, <b>find</b>"

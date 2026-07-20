@@ -109,7 +109,7 @@ manRshell="RSHELL(1)                        X Shell Manual                      
     <b>rshell </b><b>logs</b>
     Download all system.log files from current rshells.
     <b>rshell </b><b>list</b>
-    List all imported rshell server's. The rshell service must be running.
+    List all imported rshell servers. The rshell service must be running.
     <b>rshell </b><b>refresh</b>
     Checks for new rshells and adds them to the rshell list.
     <b>rshell </b><b>-k </b><b>INDEX</b> [<b>P[NAME]</b>]

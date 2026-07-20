@@ -2,7 +2,7 @@
 manDrop="DROP(1)                          X Shell Manual                          DROP(1)
 
 <b>NAME</b>
-    drop - is a alias to the [-x] commands|flags
+    drop - an alias to the [-x] commands/flags
 <b>SYNOPSIS</b>
     <b>drop </b><b>-m</b>
     Clears all files from /lib except for init.so and net.so

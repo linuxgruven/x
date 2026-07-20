@@ -12,7 +12,7 @@ manDdos="DDOS(8)                          X Shell Manual                        
     <b>ddos -p</b> (<b>-c</b>) COUNT (<b>-p</b>) PORT IP
     <b>ddos -b</b><b> (-b) (-l) (-f) (-d)</b>
 <b>DESCRIPTION</b>
-    DOS is used to consume the target computers resources.
+    DOS is used to consume the target computer's resources.
 <b>OPTIONS</b>
     <b>-d</b> - Unlimited RShell Flood
       Flood target with unlimited zombie rshell connections.
