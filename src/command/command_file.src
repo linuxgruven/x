@@ -295,10 +295,6 @@ Command.fileCallbacks=function(Obj)
   __qrm=function(argv);Command.qrm(Obj,argv);end function
   __swap=function(argv);Command.swap(Obj,argv);end function
   __logWatcher=function(argv);Command.logWatcher(Obj);end function
-  __iploop=function(argv)
-    if Net.hasInternet(Obj) isa Warning then return
-    Net.ipLoop(argv)
-  end function
   __cdl=function(argv);Command.cd(Obj,argv);Command.ls(Obj,[]);end function
   __main=function(argv)
     //if Net.hasInternet(Obj) isa Warning then return
@@ -1357,7 +1353,6 @@ Command.fileCallbacks=function(Obj)
     "main":@__main,
     "cdl":@__cdl,
     "addpass":@__addpass,
-    "iploop":@__iploop,
     "lw":@__logWatcher,
     "swap":@__swap,
     "qrm":@__qrm,

@@ -574,7 +574,7 @@ Net.hunt=function(Obj,argv)
     end if
     for m in Exploit.extract(target,ip)
       if m isa Error then continue
-      if poll_input=="q" then return
+      if poll_input=="q" then return Warning.set("Hunt aborted")
       if hasIndex(opts,"preCacheMeta") and opts.preCacheMeta then
         if not Exploit.haveAlready(m.metaLib) then
           Info.info("Adding "+lib_name(m.metaLib)+":"+version(m.metaLib))
@@ -587,7 +587,7 @@ Net.hunt=function(Obj,argv)
       _ck=Exploit.getCacheKey(m.metaLib)
       if not hasIndex(globals.G_exploitCache,_ck) then Exploit.headless(m.metaLib)
       for ez in Exploit._ex(_ck)
-        if poll_input=="q" then return
+        if poll_input=="q" then return Warning.set("Hunt aborted")
         if ez.e=="s" then
           ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"net")
           if typeof(ex)!="shell" then continue
@@ -649,7 +649,9 @@ Net.hunt=function(Obj,argv)
       end if
       if arg.d then
         Info.info("Going after "+arg.l+":"+arg.v+" on "+r.public_ip)
-        if tryDowloadLib(r,r.public_ip,arg.l,arg.v) isa Error then continue
+        _hr=tryDowloadLib(r,r.public_ip,arg.l,arg.v)
+        if _hr isa Warning then return
+        if _hr isa Error then continue
       end if
       if arg.s then push(d,ljust(r.public_ip+":0",22)+" - "+"router "+kernel_version(r)) else print ljust(white(r.public_ip+yellow(":")+"0"),22)+yellow(" - ")+("router "+kernel_version(r))
       c-=1
@@ -678,19 +680,15 @@ Net.hunt=function(Obj,argv)
           //When matching sql-family port names (employees,students,etc) the actual lib_name is "sql"
           if origL=="sql" then dlName="sql" else dlName=l
           if arg.d then
-            if arg.v then
-              if arg.v!=v then continue
-              if tryDowloadLib(r,r.public_ip,dlName,arg.v) isa Error then
-                if tryLanhackLib(r,r.public_ip,dlName,arg.v) isa Error then continue else return
-              else
-                return
-              end if
+            if arg.v and arg.v!=v then continue
+            _hr=tryDowloadLib(r,r.public_ip,dlName,arg.v)
+            if _hr isa Warning then return
+            if _hr isa Error then
+              _hr=tryLanhackLib(r,r.public_ip,dlName,arg.v)
+              if _hr isa Warning then return
+              if _hr isa Error then continue else return
             else
-              if tryDowloadLib(r,r.public_ip,dlName,arg.v) isa Error then
-                if tryLanhackLib(r,r.public_ip,dlName,arg.v) isa Error then continue else return
-              else
-                return
-              end if
+              return
             end if
           else
             if arg.v then
@@ -721,9 +719,12 @@ Net.hunt=function(Obj,argv)
       if poll_input=="q" then return
       x=Net.getRandomRouter
       if arg.d then
-        if tryDownloadSystemLocal(x,x.public_ip,arg.l,arg.v) isa Error then continue else return
+        _hr=tryDownloadSystemLocal(x,x.public_ip,arg.l,arg.v)
+        if _hr isa Warning then return
+        if _hr isa Error then continue else return
       else if arg.s then
         r=tryInfoSystemLocal(x,x.public_ip,arg.l,arg.v,arg)
+        if r isa Warning then return
         if r isa Error then
           continue
         else if r isa string then
@@ -732,6 +733,7 @@ Net.hunt=function(Obj,argv)
         end if
       else
         r=tryInfoSystemLocal(x,x.public_ip,arg.l,arg.v,arg)
+        if r isa Warning then return
         if r isa Error then continue else c-=1
       end if
     end while
@@ -744,12 +746,12 @@ Net.hunt=function(Obj,argv)
     Info.info("Attempting a system hack for "+argv.n+"...")
     for m in Exploit.extract(x,i)
       if m isa Error then continue
-      if poll_input=="q" then return
+      if poll_input=="q" then return Warning.set("Hunt aborted")
       _ck=Exploit.getCacheKey(m.metaLib)
       if not hasIndex(globals.G_exploitCache,_ck) then Exploit.headless(m.metaLib)
       s=null
       for ez in Exploit._ex(_ck)
-        if poll_input=="q" then return
+        if poll_input=="q" then return Warning.set("Hunt aborted")
         if ez.e=="s" then
           ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"net")
           if typeof(ex)!="shell" then continue
@@ -758,6 +760,7 @@ Net.hunt=function(Obj,argv)
           if not s then s=e
           c=host_computer(e)
           a=Io.getAll(File(c,"/"))
+          if poll_input=="q" then return Warning.set("Hunt aborted")
           if a isa Error then return a
           for f in a
             if indexOf(name(f),argv.n)!=null then
@@ -781,12 +784,12 @@ Net.hunt=function(Obj,argv)
     Info.info("Attempting a system hack for "+argv.n+"...")
     for m in Exploit.extract(r,i)
       if m isa Error then continue
-      if poll_input=="q" then return
+      if poll_input=="q" then return Warning.set("Hunt aborted")
       _ck=Exploit.getCacheKey(m.metaLib)
       if not hasIndex(globals.G_exploitCache,_ck) then Exploit.headless(m.metaLib)
       s=null
       for ez in Exploit._ex(_ck)
-        if poll_input=="q" then return
+        if poll_input=="q" then return Warning.set("Hunt aborted")
         if ez.e=="s" then
           ex=Exploit.overflow(m.metaLib,ez.m,ez.s,null,"net")
           if typeof(ex)!="shell" then continue
@@ -795,6 +798,7 @@ Net.hunt=function(Obj,argv)
           if not s then s=e
           c=host_computer(e)
           a=Io.getAll(File(c,"/"))
+          if poll_input=="q" then return Warning.set("Hunt aborted")
           if a isa Error then return a
           for f in a
             if indexOf(name(f),argv.n)!=null then
@@ -820,9 +824,12 @@ Net.hunt=function(Obj,argv)
       if poll_input=="q" then return
       x=Net.getRandomRouter
       if arg.d then
-        if tryDownloadFile(arg,x,x.public_ip) isa Error then continue else return
+        _hr=tryDownloadFile(arg,x,x.public_ip)
+        if _hr isa Warning then return
+        if _hr isa Error then continue else return
       else if arg.s then
         r=tryInfoFile(arg,x,x.public_ip)
+        if r isa Warning then return
         if r isa Error then
           continue
         else if r isa string then
@@ -831,6 +838,7 @@ Net.hunt=function(Obj,argv)
         end if
       else
         r=tryInfoFile(arg,x,x.public_ip)
+        if r isa Warning then return
         if r isa Error then continue else c-=1
       end if
     end while
@@ -981,6 +989,7 @@ Net.hunt=function(Obj,argv)
     print ""
     if _ipMode then print yellow("  Hunt Player — pattern: ")+white(_ipPat)+yellow("  [q=quit  n=skip]") else print yellow("  Hunt Player — scanning automatically  [q=quit  n=skip]")
     print ""
+    Utility.pressQ
     _seen={}
     _tMax=arg.t
     if not _tMax then _tMax=6
@@ -1023,6 +1032,7 @@ Net.hunt=function(Obj,argv)
           continue
         end if
       end if
+      if poll_input=="q" then break
       pub=public_ip(r)
       if hasIndex(_seen,pub) then
         skipped+=1
@@ -1179,10 +1189,13 @@ Net.hunt=function(Obj,argv)
         end while
         targetIPs=[_bestIP]
       end if
+      if poll_input=="q" then break
       gotIn=false
+      _quit=false
       _di=0
       _dlen=len(targetIPs)
       while _di<_dlen
+        if poll_input=="q" then;_quit=true;break;end if
         targetLan=targetIPs[_di]
         _di+=1
         if not _q then print "    -> "+yellow(targetLan)
@@ -1192,6 +1205,7 @@ Net.hunt=function(Obj,argv)
         if arg.R then
           // -R flag: root bounce only
           result=Mission.getRootBounce(pub,targetLan,_bi)
+          if poll_input=="q" then;_quit=true;break;end if
           if not result isa list then
             comp=result
             if not _q then print green("    Got bounce")
@@ -1199,18 +1213,21 @@ Net.hunt=function(Obj,argv)
         else
           // Method 1: direct shell exploit
           ex=Mission.getObjectShell(pub,targetLan)
+          if poll_input=="q" then;_quit=true;break;end if
           if ex!=null and typeof(ex)=="shell" then
             comp=host_computer(ex)
             if not _q then print green("    Got shell")
           else if globals.G_settings.vulnerableLib and globals.G_settings.vulnerableLibIndex then
             // Method 2: getRootBounce fallback
             result=Mission.getRootBounce(pub,targetLan,_bi)
+            if poll_input=="q" then;_quit=true;break;end if
             if not result isa list then
               comp=result
               if not _q then print green("    Got bounce")
             end if
           end if
         end if
+        if poll_input=="q" then;_quit=true;break;end if
         if not comp then
           if not _q then print yellow("    no shell obtained")
           continue
@@ -1236,7 +1253,9 @@ Net.hunt=function(Obj,argv)
         if pf and has_permission(pf,"r") then userInfo=get_content(pf)
         // Collect text files — .txt anywhere or no-extension in /home/ only; ≤5 lines, no binaries
         txtFiles=[]
+        if poll_input=="q" then;_quit=true;break;end if
         allF=Io.getAll(File(comp,"/"))
+        if poll_input=="q" then;_quit=true;break;end if
         if not allF isa Error then
           _tfi=0
           _tflen=len(allF)
@@ -1379,6 +1398,7 @@ Net.hunt=function(Obj,argv)
         end if
         _di=_dlen
       end while
+      if _quit or poll_input=="q" then break
       if _fMax and found>=_fMax then break
       if not gotIn then print yellow("  No access on ")+white(pub)
       print ""
@@ -1395,7 +1415,7 @@ Net.hunt=function(Obj,argv)
     "player":@player
   }
   if not hasIndex(cmds,Arg1) and not hasIndex(_svcTable,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
-  Utility.pressQ
+  if Arg1!="player" then Utility.pressQ
   if hasIndex(cmds,Arg1) then
     cmds[Arg1](argv)
   else
@@ -1413,7 +1433,7 @@ Net.hunt=function(Obj,argv)
     if _e[2] then initRouterLib(argv) else initNetLib(argv)
   end if
 end function
-Net.ipLoop=function(argv)
+Net.ipLoop=function(Obj,argv)
   if not argv then argv=[]
   _p=ArgumentParser.init
   _p.addArgument("e",false,"store")   // extra params (exploit payload params)
@@ -1423,6 +1443,8 @@ Net.ipLoop=function(argv)
   if argv isa Error then return
   if argv.l then return Net.watchList
   if argv.x then return Net.clearWatchList
+  _mx=Library.mxFor(Obj)
+  if not _mx then return Warning.set("MetaxploitLib library is not available|loaded")
   // Pull stdin for IP
   Arg1=null
   hasPipeIn=hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null
@@ -1447,7 +1469,7 @@ Net.ipLoop=function(argv)
   if not Arg1 then return Man.help(["iploop"])
 	r=get_router(Arg1)
 	if not r then return Warning.set("IP down")
-	z=Exploit.extract(r,Arg1)
+	z=Exploit.extract(r,Arg1,_mx)
   if not z or z isa Error then return Error.set("No exploits found")
   F=null
   Info.info("Looping...")
@@ -1787,24 +1809,44 @@ end function
 //   Obj - Session object with .net.wlan property
 // Returns: null or Warning
 Net.viewWifi=function(Obj)
-	//Helper function to format network with signal strength colors
+	// 4-column rising bar from ▁▂▃▄▅▆▇█; color by signal tier
+	signalBar=function(p)
+		if p<0 then p=0
+		if p>100 then p=100
+		// Progressive fill (spaces pad to fixed width 4); 100% = solid max
+		if p>=100 then
+			return white("████")
+		else if p>=88 then
+			bar="▅▆▇█"
+		else if p>=75 then
+			bar="▄▅▆▇"
+		else if p>=67 then
+			bar="▃▄▅▆"
+		else if p>=50 then
+			bar="▂▃▄▅"
+		else if p>=34 then
+			bar="▂▃  "
+		else if p>=17 then
+			bar="▁▂  "
+		else
+			bar="▁   "
+		end if
+		// Weak→strong: red → orange → yellow → lime → green
+		if p>=86 then return green(bar)
+		if p>=67 then return lime(bar)
+		if p>=51 then return yellow(bar)
+		if p>=34 then return orange(bar)
+		return red(bar)
+	end function
 	formatPower=function(t)
-		//Parse signal strength percentage
 		p=to_int(t[1][:-1])
-		//Initialize BSSID color variable
 		b=null
-		//Color current network green, others white
 		if is_network_active(Obj.computer) then
 			if bssid_name(Obj.net.router)==t[0] then b=green(t[0]) else b=white(t[0])
 		else
 			b=white(t[0])
 		end if
-		//Strong signal (>=60%): green
-		if p>=60 then return b+" "+green(ljust(str(t[1]),5))+blue(t[2])
-		//Medium signal (40-59%): yellow
-		if p<=59 and p>=40 then return b+" "+yellow(ljust(str(t[1]),5))+blue(t[2])
-    //Weak signal (<40%): red
-    return b+" "+red(ljust(str(t[1]),5))+blue(t[2])
+		return b+" "+signalBar(p)+"  "+blue(t[2])
 	end function
   //Check if WiFi is available
   if not Obj.net.hasWifi then return Warning.set("Wifi is not active")

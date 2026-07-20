@@ -380,7 +380,6 @@ Command.shellCallbacks=function(Obj)
   end function
   __es=function(argv);Command.es(Obj,argv);end function
   __loop=function(argv);if Net.hasInternet(Obj) isa Warning then return;Net.loop(Obj,argv);end function
-  __iploop=function(argv);if Net.hasInternet(Obj) isa Warning then return;Net.ipLoop(argv);end function
   __recon=function(argv)
     if Net.hasInternet(Obj) isa Warning then return
     _stdin=""
@@ -413,7 +412,6 @@ Command.shellCallbacks=function(Obj)
     "exec":@__exec,
     "es":@__es,
     "loop":@__loop,
-    "iploop":@__iploop,
     "recon":@__recon
   }
 end function

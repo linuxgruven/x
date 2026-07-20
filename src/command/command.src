@@ -39,7 +39,6 @@ Command.fileCommands=[
   "main",
   "cdl",
   "addpass",
-  "iploop",
   "lw",
   "swap",
   "qrm",
@@ -197,8 +196,6 @@ Command.shellCommands=[
   "ping",
   "exec",
   "su",
-  "loop",
-  "iploop",
   "recon"
 ]
 Command.mainCommands=[
@@ -206,6 +203,7 @@ Command.mainCommands=[
   "spawn",
   "linklibs",
   "reload",
+  "iploop",
   "stats"
 ]
 //ProxyCommandList
@@ -213,11 +211,13 @@ Command.proxyCommands=[
   "pipe",
   "stats",
   "linklibs",
+  "iploop",
   "hops"
 ]
 //PivotCommandList
 Command.pivotCommands=[
   "pipe",
+  "iploop",
   "linklibs",
   "pull",
   "stats"

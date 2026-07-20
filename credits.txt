@@ -22,6 +22,7 @@ maho citrus  ==> Blockchain and REPL terminal
 redit0       ==> Email subject line display (concept)
 kotyKD       ==> Beta tester
 AkaB0B       ==> WatchDog Tool
+VauL7        ==> iwlist signal bar strength bar idea
 Clover       ==> Various crypto functions and other innovations
 Chrome       ==> https://steamcommunity.com/id/01043477120/ Minerva Owl Math/String.Lib
 JessaTehCrow ==> https://github.com/JessaTehCrow/crowsploit crowsploit Text formatting

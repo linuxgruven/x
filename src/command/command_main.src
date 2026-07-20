@@ -1563,6 +1563,7 @@ Command.mainCallbacks=function(Obj)
 	end function
   __specs=function(argv);System.getSpecs(Obj);end function
   __loop=function(argv);if Net.hasInternet(Obj) isa Warning then return;Net.loop(Obj,argv);end function
+  __iploop=function(argv);if Net.hasInternet(Obj) isa Warning then return;Net.ipLoop(Obj,argv);end function
   __wallet=function(argv);Command.wallet(Obj,argv);end function
 	__temp=function(argv)
 		if not argv then return Man.help(["temp"])
@@ -2040,6 +2041,7 @@ Command.mainCallbacks=function(Obj)
     "drop":@__drop,
     "specs":@__specs,
     "loop":@__loop,
+    "iploop":@__iploop,
     "wallet":@__wallet,
     "temp":@__temp,
     "recon":@__recon,
