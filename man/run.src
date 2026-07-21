@@ -44,7 +44,7 @@ manRun="RUN(1)                           X Shell Manual                         
 
     <b>FUNCTIONS:</b>
     <b>func name(param1,param2) / endfunc</b> - Define functions with parameters and recursion
-      Recursion depth: 10 levels with true local variable scope
+      Recursion depth: 100 levels with true local variable scope
       Example: func multiply(x,y) | _return _getvar(x)*_getvar(y) | endfunc
     <b>_return expression</b> - Return value from function with arithmetic support
       Example: _return _getvar(a)+_getvar(b)
@@ -332,7 +332,7 @@ manRun="RUN(1)                           X Shell Manual                         
       Example: do -c 5 _print Hello
       Example: do --while _print Looping
       Example: do -c 10 -n 2 _net_ping 192.168.1.1
-    <b>pause</b> - Wait for user to press Enter
+    <b>pause</b> / <b>_pause</b> - Wait for user to press Enter (whole-line command only)
     <b>// comment</b> - Single-line or inline comments (URL-aware)
 
     <b>MAP & JSON BUILTINS:</b>
@@ -450,11 +450,13 @@ manRun="RUN(1)                           X Shell Manual                         
     Multiline: Traditional line-by-line execution
 
     <b>PARAMETERS:</b>
-    Pass parameters using $1, $2, etc. Example: run script.src 192.168.1.1 router
+    Pass parameters using $1, $2, … $N. Example: run script.src 192.168.1.1 router
     <b>$STDIN</b> - Piped input from previous command. Available inside scripts when invoked via pipe.
       Example: echo 192.168.1.1 | run script.src  (inside script: _print Target: $STDIN)
       Combined with args: echo 10.0.0.1 | run script.src router  ($STDIN=10.0.0.1, $1=router)
-    <b>Note:</b> $1-$9 and $STDIN are substituted across the entire script before execution.
+    <b>Note:</b> $1…$N and $STDIN are substituted across the entire script before execution.
+      Replacement is longest-first ($10 before $1) so multi-digit params work.
+      Unused $1–$9 (or up to the highest provided arg) expand to empty.
       To use literal $N inside commands (e.g. awk field references), wrap in single quotes.
       Single-quoted strings are skipped by parameter substitution.
       Example: echo 10.20.30.40 | awk -F. '{print $2}'  // $2 is protected, awk gets it
@@ -462,9 +464,11 @@ manRun="RUN(1)                           X Shell Manual                         
     <b>FLAGS:</b>
     <b>--DEBUG</b>       - Show execution details and breakpoints
     <b>--SIGBREAK</b>    - Break execution on warnings
-    <b>--SIGCONT</b>     - Continue execution after errors
+    <b>--SIGCONT</b>     - Continue execution after errors (do not raise SIGSTOP on Error)
     <b>--ALLOWABS</b>    - Allow absolute paths (security override)
-    <b>--ONERROR cmd</b> - Execute command on error
+    <b>--ONERROR cmd</b> - On SIGSTOP (script error), run session command cmd then clear.
+                      Does not continue past errors; use --SIGCONT for that.
+                      In-script form: --ONERROR:cmd  (token until whitespace)
     <b>--STARTOVER</b>   - Automatically re-run script from start on any error (SIGSTOP)
                       Loops indefinitely until script completes without error.
                       Resets script variables ($VARS) on each retry.

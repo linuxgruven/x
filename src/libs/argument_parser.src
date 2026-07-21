@@ -25,11 +25,25 @@ ArgumentParser.addArgument=function(n,l=false,a="store",d=null)
   }
 end function
 // Expand combined short flags (-abc becomes -a -b -c)
+// Only pure letter runs are split so attached values survive (-c10, -d:foo)
 ArgumentParser.check=function(a)
   r=[]
   for f in a
-    // Check for combined short flags
+    canSplit=false
     if len(f)>2 and f[0]=="-" and f[1]!="-" then
+      canSplit=true
+      _len=len(f)
+      i=1
+      while i<_len
+        ch=f[i]
+        if not ((ch>="a" and ch<="z") or (ch>="A" and ch<="Z")) then
+          canSplit=false
+          break
+        end if
+        i+=1
+      end while
+    end if
+    if canSplit then
       _len=len(f);i=1;while i<_len;push(r,"-"+f[i]);i+=1;end while
     else
       push(r,f)
@@ -71,9 +85,10 @@ ArgumentParser.checkRedirect=function(Obj,n,args)
 		args["double"]=true
 		i=indexOf(args.rest,">>")
 		remove(args.rest,i)
-		// Parse output file path (required for append)
+		// Parse output file path (required for append) — token immediately after >>
 		if len(args.rest)>=i+1 then
-			z=pop(args.rest)
+			z=args.rest[i]
+			remove(args.rest,i)
 			if not z then return Error.set("No output file provided")
 			if z[0]=="~" then z=path(Obj.user.home)+z[1:]
 			if indexOf(z,"/")!=null then
@@ -182,14 +197,14 @@ ArgumentParser.parseArgs=function(c,args)
 		// Handle storeNumber action (numeric value)
 		else if k["action"]=="storeNumber" then
 			if attachedValue!=null then
-				v=val(attachedValue)
-				if not v isa number then return Error.set("Invalid parameter (number) for flag: '"+flagKey+"'")
+				raw=attachedValue
 			else
 				i+=1
 				if len(args)<=i then return Error.set("No parameter for flag: '"+flagKey+"'")
-				v=val(args[i])
-				if not v isa number then return Error.set("Invalid parameter (number) for flag: '"+flagKey+"'")
+				raw=args[i]
 			end if
+			v=self._parseNumber(raw)
+			if v==null then return Error.set("Invalid parameter (number) for flag: '"+flagKey+"'")
 		// Handle flag action (boolean)
 		else if k["action"]=="flag" then
 			v=true
@@ -255,7 +270,7 @@ ArgumentParser.out=function(Obj,args)
 		return
 	end if
 	// Check if PIPE_MODE is enabled (for pipe chain support)
-	if globals.G_pipe.PIPE_MODE then
+	if hasIndex(globals.G_pipe,"PIPE_MODE") and globals.G_pipe.PIPE_MODE then
 		// Buffer output for next command in pipe chain
 		if args.data isa list then
 			for line in args.data;push(globals.G_pipe.stdout,str(line));end for
@@ -311,8 +326,8 @@ ArgumentParser.parsePath=function(Obj,args)
 			if not _cp then return Error.set("Current directory no longer exists")
 			j=a.replace("\./",_cp+"/")
 			push(r,j)
-		// Handle glob patterns with * wildcard
-		else if indexOf(a,"*")!=null then
+		// Handle glob patterns with * / ? wildcards
+		else if indexOf(a,"*")!=null or indexOf(a,"?")!=null then
 			// Use Glob library for clean expansion
 			expanded=Glob.expand(Obj,a)
 			if len(expanded)>1 or expanded[0]!=a then
@@ -333,6 +348,17 @@ ArgumentParser.parsePath=function(Obj,args)
 	// Store expanded paths
 	args.rest=r
 	return args
+end function
+// Parse a numeric flag value; reject non-numeric strings (val("abc")→0)
+// Returns number or null
+ArgumentParser._parseNumber=function(raw)
+  if raw==null then return null
+  s=trim(str(raw))
+  if not s then return null
+  if not s.is_match("^-?[0-9]+(\.[0-9]+)?$") then return null
+  v=val(s)
+  if not v isa number then return null
+  return v
 end function
 // Display help for command and return IPC error
 ArgumentParser.printHelp=function(c);Man.help([c]);return Error.set("","",true);end function

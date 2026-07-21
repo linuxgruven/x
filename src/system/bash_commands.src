@@ -269,15 +269,11 @@ Bash.process=function(s,Obj=null)
     print cyan("  Input Command: ")+white(s)
     print cyan("  Active Variables: ")+yellow(indexes(gb.VARS))
   end if
-  //Handle _pause command (explicit pause - show Press [Enter] and return)
-  if trim(s)=="_pause" or trim(s)=="pause" then
+  // Handle pause only as a whole-line command (not a substring)
+  _pauseTrim=trim(s)
+  if _pauseTrim=="_pause" or _pauseTrim=="pause" then
     self.pause
     return ""
-  end if
-  //Handle pause_ command (substring match for legacy/accidental triggers)
-  if indexOf(s,"pause")!=null then
-    s=s.replace("pause","")
-    self.pause
   end if
   //Handle _getvar command - replace all occurrences
   //BUT skip _getvar when it's inside certain functions that need the actual type preserved
@@ -1457,7 +1453,7 @@ Bash._exec=function(Obj,c,skipProcess=false)
     if indexOf(globCmds,cmd.name)!=null then
       globExpanded=[]
       for gArg in cmd.args
-        if typeof(gArg)=="string" and indexOf(gArg,"*")!=null then
+        if typeof(gArg)=="string" and (indexOf(gArg,"*")!=null or indexOf(gArg,"?")!=null) then
           expanded=Glob.expand(Obj,gArg)
           if expanded and typeof(expanded)=="list" then globExpanded=globExpanded+expanded else push(globExpanded,gArg)
         else
@@ -1541,8 +1537,11 @@ Bash._exec=function(Obj,c,skipProcess=false)
     if gb.DEBUG then
       print cyan("  Command is user-defined function")
       print cyan("    Calling function: ")+white(funcLookup)
+      print cyan("    Args: ")+yellow(cmd.args)
     end if
-    self._callFunc(Obj,funcLookup)
+    _fnArgs=[]
+    if hasIndex(cmd,"args") and cmd.args then _fnArgs=cmd.args
+    self._callFunc(Obj,funcLookup,_fnArgs)
     return false
   end if
   //Execute command from command table

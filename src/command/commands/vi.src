@@ -4,20 +4,20 @@
 // =============================================================================
 Command.vi=function(Obj,argv)
   // If a path flag has no value, inject pipe stdin as the argument
-  _pipeIn=globals.G_pipe.stdin
-  if _pipeIn and len(argv)>0 then
-    _last=argv[len(argv)-1]
-    if _last=="-n" or _last=="-o" or _last=="-l" then push(argv,trim(_pipeIn))
+  if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null and len(argv)>0 then
+    _pipeIn=trim(str(globals.G_pipe.stdin))
+    if _pipeIn then
+      _last=argv[len(argv)-1]
+      if _last=="-n" or _last=="-o" or _last=="-l" then push(argv,_pipeIn)
+    end if
   end if
   _p=ArgumentParser.init
-  _p.addArgument("o",false,"store")  // Output file path override
-  _p.addArgument("n",false,"store")  // Starting line number
-  _p.addArgument("c",false,"flag")  // Clear screen on start
-  // Encryption enabled flag
-  _p.addArgument("e",false,"flag")  // Enable encryption
-  // Encryption key/passphrase
+  _p.addArgument("o",false,"store")  // Open existing file
+  _p.addArgument("n",false,"store")  // Create new file
+  _p.addArgument("c",false,"flag")   // Clear screen on start
+  _p.addArgument("e",false,"flag")   // Enable encryption
   _p.addArgument("k",false,"store")  // Encryption key/passphrase
-  _p.addArgument("l",false,"store")  // Load file at specific line position
+  _p.addArgument("l",false,"store")  // Load all files from folder
   argv=_p.parse("vi",argv,Obj)
   if argv isa Error then return
   if argv.c then clear_screen
@@ -90,18 +90,19 @@ Command.vi=function(Obj,argv)
   // Helper: Save buffer content to file (encrypt if needed)
   saveFile=function(buf)
     if not buf.dirty then return true
+    lines=buf.content
+    if not lines isa list then lines=[str(lines)]
     content=""
     if buf.encrypted then
-      // Handle single-line vs multi-line encryption
       if buf.singleLine then
-        content=Encryption.encrypt(buf.content,buf.key)
+        content=Encryption.encrypt(join(lines,char(10)),buf.key)
       else
         encrypted=[]
-        for line in buf.content;push(encrypted,Encryption.encrypt(line,buf.key));end for
+        for line in lines;push(encrypted,Encryption.encrypt(line,buf.key));end for
         content=join(encrypted,char(10))
       end if
     else
-      content=join(buf.content,char(10))
+      content=join(lines,char(10))
     end if
     result=set_content(buf.file,content)
     if result isa string then return Error.set(result)
@@ -340,31 +341,46 @@ Command.vi=function(Obj,argv)
     remove(buffer[currentIndex].content,lineNum)
     buffer[currentIndex].dirty=true
   end function
-  // Command: Delete current line (vi-style dd)
+  // Command: Delete current line (vi-style dd / Ndd)
   cmdDeleteLine=function(args)
     if not buffer then return Error.set("No files opened")
     if len(buffer[currentIndex].content)==0 then return
+    n=outer.cmdCount
+    if n<1 then n=1
     saveUndo
-    // Yank deleted line
-    outer.yankBuffer=[buffer[currentIndex].content[outer.cursorLine]]
-    remove(buffer[currentIndex].content,outer.cursorLine)
+    outer.yankBuffer=[]
+    i=0
+    while i<n
+      if outer.cursorLine>=len(buffer[currentIndex].content) then break
+      push(outer.yankBuffer,buffer[currentIndex].content[outer.cursorLine])
+      remove(buffer[currentIndex].content,outer.cursorLine)
+      i+=1
+    end while
     if len(buffer[currentIndex].content)==0 then push(buffer[currentIndex].content,"")
     clampCursor
     buffer[currentIndex].dirty=true
-    outer.lastCommand={"cmd":"dd","count":outer.cmdCount}
+    outer.lastCommand={"cmd":"dd","count":n}
     outer.cmdCount=1
   end function
-  // Command: Delete character at cursor (vi-style x)
+  // Command: Delete character at cursor (vi-style x / Nx)
   cmdDeleteChar=function(args)
     if not buffer then return Error.set("No files opened")
     if len(buffer[currentIndex].content)==0 then return
+    n=outer.cmdCount
+    if n<1 then n=1
     saveUndo
-    line=buffer[currentIndex].content[outer.cursorLine]
-    if len(line)==0 then return
-    if outer.cursorCol>=len(line) then outer.cursorCol=len(line)-1
-    buffer[currentIndex].content[outer.cursorLine]=line[:outer.cursorCol]+line[outer.cursorCol+1:]
+    i=0
+    while i<n
+      line=buffer[currentIndex].content[outer.cursorLine]
+      if len(line)==0 then break
+      if outer.cursorCol>=len(line) then outer.cursorCol=len(line)-1
+      if outer.cursorCol<0 then break
+      buffer[currentIndex].content[outer.cursorLine]=line[:outer.cursorCol]+line[outer.cursorCol+1:]
+      i+=1
+    end while
     buffer[currentIndex].dirty=true
-    outer.lastCommand={"cmd":"x","count":1}
+    outer.lastCommand={"cmd":"x","count":n}
+    outer.cmdCount=1
   end function
  //Command: Replace text in line (ex-style)
   cmdReplace=function(args)
@@ -383,13 +399,22 @@ Command.vi=function(Obj,argv)
     buffer[currentIndex].content[lineNum]=line.replace(oldText,newText)
     buffer[currentIndex].dirty=true
   end function
-  // Command: Yank (copy) current line (vi-style yy)
+  // Command: Yank (copy) current line (vi-style yy / Nyy)
   cmdYankLine=function(args)
     if not buffer then return Error.set("No files opened")
     if len(buffer[currentIndex].content)==0 then return
-    outer.yankBuffer=[buffer[currentIndex].content[outer.cursorLine]]
-    Info.info("1 line yanked")
-    outer.lastCommand={"cmd":"yy","count":outer.cmdCount}
+    n=outer.cmdCount
+    if n<1 then n=1
+    outer.yankBuffer=[]
+    i=0
+    while i<n
+      idx=outer.cursorLine+i
+      if idx>=len(buffer[currentIndex].content) then break
+      push(outer.yankBuffer,buffer[currentIndex].content[idx])
+      i+=1
+    end while
+    Info.info(str(len(outer.yankBuffer))+" line(s) yanked")
+    outer.lastCommand={"cmd":"yy","count":n}
     outer.cmdCount=1
   end function
   // Command: Put (paste) yanked text below (vi-style p)
@@ -486,6 +511,7 @@ Command.vi=function(Obj,argv)
   cmdRepeat=function(args)
     if not lastCommand then return Info.info("No command to repeat")
     cmd=lastCommand.cmd
+    if hasIndex(lastCommand,"count") and lastCommand.count then outer.cmdCount=lastCommand.count else outer.cmdCount=1
     if cmd=="dd" then
       cmdDeleteLine(args)
     else if cmd=="yy" then
@@ -496,6 +522,8 @@ Command.vi=function(Obj,argv)
       cmdPutBelow(args)
     else if cmd=="cc" then
       cmdChangeLine(args)
+    else
+      outer.cmdCount=1
     end if
   end function
   // Command: Move cursor down (vi-style j)
@@ -588,7 +616,7 @@ Command.vi=function(Obj,argv)
       outer.currentIndex=len(buffer)-1
     end if
   end function
- //Command: Quit with save
+  // Command: Quit with save
   cmdQuitSave=function(args)
     if not buffer then
       Info.info("Closing vi")
@@ -600,7 +628,7 @@ Command.vi=function(Obj,argv)
       if buf.dirty then
         saved=true
         result=saveFile(buf)
-        if result isa Error then Error.set(result)
+        if result isa Error then return result
       end if
     end for
     if saved then Info.info("All files saved, closing vi") else Info.info("Closing vi")
@@ -761,7 +789,9 @@ Command.vi=function(Obj,argv)
     if not buffer then return Error.set("No files opened")
     saveUndo
     if not buffer[currentIndex].content then return Warning.set("Nothing to clear")
-    buffer[currentIndex].content=[]
+    buffer[currentIndex].content=[""]
+    outer.cursorLine=0
+    outer.cursorCol=0
     buffer[currentIndex].dirty=true
   end function
   // Command: Remove all empty lines from current file
@@ -781,6 +811,7 @@ Command.vi=function(Obj,argv)
   end function
   // Command: Toggle syntax highlighting
   cmdFormat=function(args)
+    if not buffer then return Error.set("No files opened")
     buffer[currentIndex].format=not buffer[currentIndex].format
     status="disabled"
     if buffer[currentIndex].format then status="enabled"
@@ -788,9 +819,9 @@ Command.vi=function(Obj,argv)
   end function
   // Command: Toggle line numbers display
   cmdHide=function(args)
-    outer.showLineNumbers=not showLineNumbers
+    outer.showLineNumbers=not outer.showLineNumbers
     status="hidden"
-    if showLineNumbers then status="visible"
+    if outer.showLineNumbers then status="visible"
     Info.info("Line numbers "+status)
   end function
   // Command: Toggle clear screen mode
@@ -1125,6 +1156,35 @@ Command.vi=function(Obj,argv)
         mode="normal"
         continue
       end if
+      // Count prefix (e.g. 5j) — same rules as normal mode
+      cmdCount=1
+      countStr=""
+      _vlen=len(input)
+      _vidx=0
+      while _vidx<_vlen
+        _vch=input[_vidx]
+        if _vch>="0" and _vch<="9" then
+          countStr=countStr+_vch
+          _vidx+=1
+        else
+          break
+        end if
+      end while
+      if countStr!="" then
+        rest=input[len(countStr):]
+        // Bare "0" is line-start; bare number is goto line; else count+cmd
+        if rest=="" and countStr=="0" then
+          cmdLineStart([])
+          continue
+        else if rest=="" then
+          cmdGotoLine([countStr])
+          continue
+        else
+          cmdCount=to_int(countStr)
+          if cmdCount<1 then cmdCount=1
+          input=rest
+        end if
+      end if
       if input=="j" then
         cmdMoveDown([])
         continue
@@ -1213,8 +1273,19 @@ Command.vi=function(Obj,argv)
         end if
       end while
       if countStr!="" then
-        cmdCount=to_int(countStr)
-        input=input[len(countStr):]
+        rest=input[len(countStr):]
+        // Bare "0" is line-start; bare number is goto line; else count+cmd
+        if rest=="" and countStr=="0" then
+          cmdLineStart([])
+          continue
+        else if rest=="" then
+          cmdGotoLine([countStr])
+          continue
+        else
+          cmdCount=to_int(countStr)
+          if cmdCount<1 then cmdCount=1
+          input=rest
+        end if
       end if
       if hasIndex(normalCommands,input) then
         normalCommands[input]([])

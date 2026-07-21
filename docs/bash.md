@@ -370,7 +370,7 @@ Place these flags anywhere in your script file (they are stripped before executi
 | `--ALLOWABS` | Allow absolute paths in `_fs_*` commands |
 | `--SIGBREAK` | Allow breaking out of script on warnings |
 | `--SIGCONT` | Continue execution on warnings instead of stopping |
-| `--ONERROR:` | Continue on errors (set custom error handler) |
+| `--ONERROR:` / `--ONERROR cmd` | On SIGSTOP, run handler command (does not continue past errors; use `--SIGCONT` for that) |
 
 Flags can also be passed on the command line: `run --DEBUG --SIGBREAK myscript`
 

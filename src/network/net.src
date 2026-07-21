@@ -1471,13 +1471,45 @@ Net.ipLoop=function(Obj,argv)
 	if not r then return Warning.set("IP down")
 	z=Exploit.extract(r,Arg1,_mx)
   if not z or z isa Error then return Error.set("No exploits found")
-  F=null
-  Info.info("Looping...")
+  // Record a shell/computer/file hit without mutating extract meta
+  addHit=function(ex,m,e)
+    obj=typeof(ex)
+    if indexOf(obj,"shell")==null and obj!="computer" and obj!="file" then return
+    i=md5(m.public_ip+e.m+e.s)
+    if hasIndex(globals.G_watchList,i) then return
+    u=Utility.getUserEX(ex)
+    userCode="?"
+    if u and hasIndex(u,"user") and u.user then userCode=str(u.user)[0]
+    meta=m
+    if obj=="computer" then
+      meta={
+        "public_ip":m.public_ip,
+        "local_ip":ex.local_ip,
+        "port_number":m.port_number,
+        "metaLib":m.metaLib,
+        "session":m.session
+      }
+    end if
+    globals.G_watchList[i]={
+      "Exploit":typeof(ex),
+      "user":userCode,
+      "object":ex,
+      "meta":meta
+    }
+  end function
+  tryOverflow=function(m,e)
+    if Arg2 then return Exploit.overflow(m.metaLib,e.m,e.s,Arg2,"net")
+    return Exploit.overflow(m.metaLib,e.m,e.s,null,"net")
+  end function
+  Info.info("Looping... ("+str(C)+" already watched)")
   Utility.pressQ
   while true
     _k=poll_input
     if _k=="q" or _k=="x" then break
+    _quit=false
     for m in z
+      _k=poll_input
+      if _k=="q" or _k=="x" then;_quit=true;break;end if
       if not hasIndex(globals.G_exploitCache,lib_name(m.metaLib)+"_"+version(m.metaLib)) then
         Info.error("Database is out of date missing library: "+lib_name(m.metaLib)+"_"+version(m.metaLib))
         continue
@@ -1485,124 +1517,40 @@ Net.ipLoop=function(Obj,argv)
       x=Exploit._ex(Exploit.getCacheKey(m.metaLib))
       if not x then continue
       for e in x
+        _k=poll_input
+        if _k=="q" or _k=="x" then;_quit=true;break;end if
         if hasIndex(e,"ю") then
           if e.ю isa number then
             if indexOf(Exploit.getrtree(str(e.ю)),"active")==null then continue
-            if Arg2 then ex=Exploit.overflow(m.metaLib,e.m,e.s,Arg2,"net") else ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"net")
-            if not ex then continue
-            obj=typeof(ex)
-            i=md5(m.public_ip+e.m+e.s)
-            if indexOf(obj,"shell")!=null then
-              if hasIndex(globals.G_watchList,i) then continue
-              globals.G_watchList[i]={
-                "Exploit":typeof(ex),
-                "user":Utility.getUserEX(ex).user[0],
-                "object":ex,
-                "meta":m
-              }
-            else if obj=="computer" then
-              if hasIndex(globals.G_watchList,i) then continue
-              m.local_ip=ex.local_ip
-              globals.G_watchList[i]={
-                "Exploit":typeof(ex),
-                "user":Utility.getUserEX(ex).user[0],
-                "object":ex,
-                "meta":m
-              }
-            else if obj=="file" then
-              if hasIndex(globals.G_watchList,i) then continue
-              globals.G_watchList[i]={
-                "Exploit":typeof(ex),
-                "user":Utility.getUserEX(ex).user[0],
-                "object":ex,
-                "meta":m
-              }
-            end if
+            ex=tryOverflow(m,e)
+            if ex then addHit(ex,m,e)
           else
-            for q in split(e.ю,"Ш")
-              if indexOf(Exploit.getrtree(q),"active")==null then continue
-              if Arg2 then ex=Exploit.overflow(m.metaLib,e.m,e.s,Arg2,"net") else ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"net")
-              if not ex then continue
-              obj=typeof(ex)
-              i=md5(m.public_ip+e.m+e.s)
-              if indexOf(obj,"shell")!=null then
-                if hasIndex(globals.G_watchList,i) then continue
-                globals.G_watchList[i]={
-                  "Exploit":typeof(ex),
-                  "user":Utility.getUserEX(ex).user[0],
-                  "object":ex,
-                  "meta":m
-                }
-              else if obj=="computer" then
-                if hasIndex(globals.G_watchList,i) then continue
-                m.local_ip=ex.local_ip
-                globals.G_watchList[i]={
-                  "Exploit":typeof(ex),
-                  "user":Utility.getUserEX(ex).user[0],
-                  "object":ex,
-                  "meta":m
-                }
-              else if obj=="file" then
-                if hasIndex(globals.G_watchList,i) then continue
-                globals.G_watchList[i]={
-                  "Exploit":typeof(ex),
-                  "user":Utility.getUserEX(ex).user[0],
-                  "object":ex,
-                  "meta":m
-                }
-              end if
+            for qv in split(e.ю,"Ш")
+              _k=poll_input
+              if _k=="q" or _k=="x" then;_quit=true;break;end if
+              if indexOf(Exploit.getrtree(qv),"active")==null then continue
+              ex=tryOverflow(m,e)
+              if ex then addHit(ex,m,e)
             end for
+            if _quit then break
           end if
         else
-          if not Arg2 then continue
-          if e.e!="l" then continue
-          if Arg2 then ex=Exploit.overflow(m.metaLib,e.m,e.s,Arg2,"net") else ex=Exploit.overflow(m.metaLib,e.m,e.s,null,"net")
-          if not ex then continue
-          obj=typeof(ex)
-          i=md5(m.public_ip+e.m+e.s)
-          if indexOf(obj,"shell")!=null then
-            if hasIndex(globals.G_watchList,i) then continue
-            globals.G_watchList[i]={
-              "Exploit":typeof(ex),
-              "user":Utility.getUserEX(ex).user[0],
-              "object":ex,
-              "meta":m
-            }
-          else if obj=="computer" then
-            if hasIndex(globals.G_watchList,i) then continue
-            m.local_ip=ex.local_ip
-            globals.G_watchList[i]={
-              "Exploit":typeof(ex),
-              "user":Utility.getUserEX(ex).user[0],
-              "object":ex,
-              "meta":m
-            }
-          else if obj=="file" then
-            if hasIndex(globals.G_watchList,i) then continue
-            globals.G_watchList[i]={
-              "Exploit":typeof(ex),
-              "user":Utility.getUserEX(ex).user[0],
-              "object":ex,
-              "meta":m
-            }
-          end if
+          if not Arg2 or e.e!="l" then continue
+          ex=tryOverflow(m,e)
+          if ex then addHit(ex,m,e)
         end if
       end for
+      if _quit then break
     end for
-    if F then return self.watchList
-    if len(globals.G_watchList)>C then
-      if not F then
-        F=1
-        continue
-      end if
-    end if
+    if _quit then break
   end while
+  if len(globals.G_watchList)>C then return self.watchList
 end function
 Net.watchList=function
   if not globals.G_watchList then return Info.info("You have no objects in the watch list")
   while true
 		if globals.G_attributes.back then return
-    CH=[green("You have the folowing vectors to choose from:")]
+    CH=[green("You have the following vectors to choose from:")]
     for i in globals.G_watchList;push(CH,orange(ljust(i.value.Exploit,21,0,blue("-")))+formatUser(i.value.user)+" "+yellow(i.value.meta.local_ip)+char(10)+green("     ==> ")+green("Public ip:"+i.value.meta.public_ip)+yellow(" Lib:"+lib_name(i.value.meta.metaLib)+" "+version(i.value.meta.metaLib)));end for
     push(CH,iyellow("Finished"))
     UCH=Gui.choiceHybrid(CH,{},len(CH)-1)
@@ -3101,12 +3049,12 @@ Net.loop=function(Obj,argv)
     if not r then return Error.set("Bad IP or router down")
     if r isa string then return Error.set(r)
     if E<0 or E>65535 then return Error.set("Port range is 0-65535")
-    _meta=null
-    if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then _meta=Obj.packMetaxploit else _meta=Library.metaxploit
+    _meta=Library.mxFor(Obj)
+    if not _meta then return Error.set("Metaxploit library is not available")
     n=net_use(_meta,G,E)
     if not n then return Error.set("Cannot connect to net session")
     l=dump_lib(n)
-    if not l then Error.set("Cannot dump library")
+    if not l then return Error.set("Cannot dump library")
     print yellow("-- Payload overview --")
     print blue("Public IP     : "+G)
     print blue("Port          : "+E)
@@ -3190,8 +3138,8 @@ Net.loop=function(Obj,argv)
     A=path(A)
     r=get_router
     p=r.public_ip
-    _meta=null
-    if hasIndex(Obj,"packMetaxploit") and Obj.packMetaxploit then _meta=Obj.packMetaxploit else _meta=Library.metaxploit
+    _meta=Library.mxFor(Obj)
+    if not _meta then return Error.set("Metaxploit library is not available")
     n=load(_meta,A)
     if not n then return Error.set("Unable to load "+A)
     print yellow("-- Payload overview --")

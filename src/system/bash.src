@@ -44,10 +44,9 @@ Bash._getVar=function(k=null)
   if hasIndex(globals.G_bash.FLAGS,k) then return globals.G_bash.FLAGS[k]
   return ""
 end function
-//Store variable key-value pair in VARS map
+//Store variable key-value pair in VARS map (null values allowed)
 Bash._setVar=function(k=null,v=null)
   if k==null then return ""
-  if v==null then return ""
   //Store numbers as strings so get_var prints correctly (e.g. 0 renders as "0" not blank)
   if typeof(v)=="number" then v=str(v)
   globals.G_bash.VARS[k]=v
@@ -139,6 +138,7 @@ Bash.start=function
   gb.FUNCS={}
   gb.CALLSTACK=[]
   gb.RECURSION=0
+  if not hasIndex(gb,"RECURSION_MAX") or not gb.RECURSION_MAX then gb.RECURSION_MAX=100
   gb.ALLOWABS=false
   gb.SESSION_STACK={}
   if not hasIndex(gb,"FLAGS") or not gb.FLAGS then gb.FLAGS={"OBJ":{}}
@@ -252,14 +252,22 @@ Bash.run=function(Obj,argv)
     globals.G_bash.CANCONT=true
     content=content.replace("--SIGCONT","")
   end if
-  if indexOf(content,"--ONERROR:")!=null then
-    globals.G_bash.CANCONT=true
-    content=content.replace("--ONERROR:","")
-    if indexOf(content,":")!=null then
-      p=content[indexOf(content,":"):]
-      globals.G_bash.ONERROR=p.replace(":","")
-      content=content.replace(p,"")
-    end if
+  // In-script --ONERROR:handler (does NOT set CANCONT — errors still SIGSTOP, then handler runs)
+  _oeTag="--ONERROR:"
+  _oeIdx=indexOf(content,_oeTag)
+  if _oeIdx!=null then
+    _oeRest=content[_oeIdx+len(_oeTag):]
+    _oeHandler=""
+    _oeI=0
+    _oeLen=len(_oeRest)
+    while _oeI<_oeLen
+      _oeCh=_oeRest[_oeI]
+      if _oeCh==" " or _oeCh==char(9) or _oeCh==char(10) or _oeCh==char(13) then break
+      _oeHandler=_oeHandler+_oeCh
+      _oeI+=1
+    end while
+    globals.G_bash.ONERROR=trim(_oeHandler)
+    content=content[:_oeIdx]+_oeRest[_oeI:]
   end if
   //Replace $STDIN with piped input or interactive user_input if $STDIN used in script
   if hasIndex(globals.G_pipe,"stdin") and globals.G_pipe.stdin!=null then
@@ -275,32 +283,30 @@ Bash.run=function(Obj,argv)
     stdinVal=null
   end if
   if stdinVal!=null then content=self._replaceParam(content,"$STDIN",stdinVal)
-  //Replace $1, $2, etc with arguments
-  if argv.rest then
-    if globals.G_bash.DEBUG then print green("Processing args: ")+argv.rest
-    if globals.G_bash.DEBUG then print green("Before command builder: ")+content
-    _len=len(argv.rest)+1
-    r=1
-    while r<_len
-      searchStr="$"+str(r)
-      if globals.G_bash.DEBUG then print cyan("  Looking for: ")+yellow(searchStr)+" in content"
-      if indexOf(content,searchStr)!=null then
-        if globals.G_bash.DEBUG then print cyan("  Replacing with: ")+yellow(argv.rest[r-1])
-        content=self._replaceParam(content,searchStr,argv.rest[r-1])
-        if globals.G_bash.DEBUG then print cyan("  After replacement: ")+white(content)
-      else
-        if globals.G_bash.DEBUG then print red("  Not found in content")
-      end if
-      r+=1
-    end while
-    if globals.G_bash.DEBUG then print green("After command builder: ")+content
+  //Replace $N with arguments — longest-first so $10 is not eaten by $1
+  _argN=0
+  if argv.rest then _argN=len(argv.rest)
+  if globals.G_bash.DEBUG and _argN then
+    print green("Processing args: ")+argv.rest
+    print green("Before command builder: ")+content
   end if
-  //Clear any unused $N placeholders (up to $9) — expand to empty string
-  r=1
-  while r<=9
+  r=_argN
+  while r>=1
     searchStr="$"+str(r)
-    content=self._replaceParam(content,searchStr,"")
-    r+=1
+    if indexOf(content,searchStr)!=null then
+      if globals.G_bash.DEBUG then print cyan("  Replacing ")+yellow(searchStr)+cyan(" with: ")+yellow(argv.rest[r-1])
+      content=self._replaceParam(content,searchStr,argv.rest[r-1])
+    end if
+    r-=1
+  end while
+  if globals.G_bash.DEBUG and _argN then print green("After command builder: ")+content
+  //Clear unused $N placeholders (at least $1-$9, or up to highest provided arg)
+  _clearMax=_argN
+  if _clearMax<9 then _clearMax=9
+  r=_clearMax
+  while r>=1
+    content=self._replaceParam(content,"$"+str(r),"")
+    r-=1
   end while
   //Clear unused $STDIN placeholder if no pipe input and script had no $STDIN usage
   content=self._replaceParam(content,"$STDIN","")
@@ -653,11 +659,13 @@ Bash.continueMacro=function(Obj)
         if cmd.type=="for" then
           forAst=Bash._parseScript(cmd.body)
           forPivoted=false
+          forIter=0
           for item in cmd.list
+            forIter+=1
             if gb.SIGSTOP or gb.SIGBREAK then break
             gb.VARS[cmd.var]=item
-            //Push continuation for remaining iterations
-            remaining=cmd.list[__item_idx+1:]
+            // Push continuation for remaining iterations (same as _execBody)
+            remaining=cmd.list[forIter:]
             if not gb.RUN then gb.RUN=[]
             push(gb.RUN,{"__LOOP__":true,"type":"for","var":cmd.var,"list":remaining,"body":cmd.body,"after":cmd.after,"tryDepth":cmd.tryDepth})
             Bash._execBody(Obj,forAst,true)
