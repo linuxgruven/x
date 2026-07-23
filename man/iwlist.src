@@ -8,16 +8,23 @@ manIwlist="IWLIST(8)                        X Shell Manual                      
     <b>iwlist -d</b> INDEX
     <b>iwlist -b</b> INDEX
     <b>iwlist -c</b> BSSID ESSID PASSWORD
+    <b>iwlist -u</b> INDEX|ESSID|BSSID|NICK
+    <b>iwlist -n</b> INDEX|ESSID|BSSID|NICK [NICKNAME]
+    <b>iwlist -e</b> [INDEX|ESSID|BSSID|NICK] [FIELD] [VALUE]
     <b>iwlist -k</b> INDEX [ACKS]
-    <b>iwlist hop</b> [init|list|burn|revive] [-t SECONDS]
+    <b>iwlist crackall</b> [--all]
+    <b>iwlist creds</b>
+    <b>iwlist hop</b> [init [--all]|list|burn|revive] [-t SECONDS]
+    <b>iwlist burn</b> [INDEX|ESSID|BSSID|NICK]
 <b>DESCRIPTION</b>
     iwlist framework for interacting with wireless networks. Provides tools
     for listing available networks, connecting to access points, cracking
     network passwords using dictionary or brute force attacks, and launching
     deauthentication attacks. Use <b>iwlist -l</b> to display all available
     wireless networks in range before performing attacks or connections.
-    The <b>hop</b> subcommand automates WiFi credential harvesting and network
-    bouncing for stealth operations.
+    Saved credentials live in the session data folder as <b>wifi_creds</b>
+    (format: BSSID|ESSID|PASSWORD|flag|signal|nick). The <b>hop</b>
+    subcommand bounces between clean saved networks.
 <b>OPTIONS</b>
     <b>-l</b> - List Networks
       Display all available WiFi networks in range.
@@ -35,41 +42,105 @@ manIwlist="IWLIST(8)                        X Shell Manual                      
       Connect to specified WiFi network with credentials.
       Requires BSSID, ESSID, and password.
 
+    <b>-u INDEX|ESSID|BSSID|NICK</b> - Use Saved Credential
+      Connect using an entry from <b>wifi_creds</b>.
+      Accepts list index, ESSID, BSSID, or nickname.
+
+    <b>-n INDEX|ESSID|BSSID|NICK</b> [NICKNAME] - Set Nickname
+      Set a nickname on a saved credential. Omit nickname or
+      pass <b>-</b> to clear. Nicknames can be used with <b>-u</b>.
+      Shortcut for <b>-e … nick …</b>.
+
+    <b>-e</b> / <b>--edit</b> - Edit Credentials
+      No args: open <b>wifi_creds</b> in vi.
+      One arg: show all fields for that entry.
+      Two+ args: set a field.
+      Fields: <b>nick</b>, <b>pass</b>, <b>flag</b> (clean|burned),
+      <b>signal</b>, <b>essid</b>, <b>burn</b> (mark bad), <b>delete</b> (remove).
+
+    <b>burn</b> [INDEX|ESSID|BSSID|NICK] - Burn Network
+      Mark a network as burned (bad). Stays in <b>wifi_creds</b>
+      but hopping skips it. No arg burns the current AP.
+      Same as <b>hop burn</b>. Use <b>-e … delete</b> to remove.
+
     <b>-k INDEX</b> [ACKS] - Crack Network
-      Launch deauthentication attack to crack network.
-      Optional ACKS parameter for attack intensity.
+      Capture using ACK count from signal strength; on
+      failure, rescans signal and retries once. Optional
+      ACKS overrides the target (no auto-retry when ACKS
+      is given).
+
+    <b>crackall</b> [--all] - Crack Visible Networks
+      Crack visible APs at <b>40%+</b> signal and write
+      results to <b>wifi_creds</b>. Skips weaker APs and
+      networks already saved (refreshes their signal).
+      Use <b>--all</b> (or <b>-a</b>) to include weak APs.
+      Does <b>not</b> start hopping. Each AP is captured once
+      from signal strength; on failure, rescans signal and
+      retries once. Press <b>q</b> between networks to quit
+      early. Each successful crack is written to
+      <b>wifi_creds</b> immediately (survives Ctrl+C).
+      (q cannot interrupt mid-aireplay.) Alias: <b>hop init</b>
+
+    <b>creds</b> - View Saved Credentials
+      Show all entries in <b>wifi_creds</b> with index,
+      status, nick, signal, BSSID, ESSID, and password.
 
     <b>hop</b> - WiFi Hopping
       Start bouncing between clean WiFi networks. Burned
-      networks are skipped. If no credentials file exists,
-      runs init automatically. Use Ctrl+C to stop hopping.
+      networks are skipped but kept in the file. If no
+      credentials file exists, runs crackall automatically.
+      Use Ctrl+C to stop.
 
-    <b>hop init</b> - Initialize Credentials
-      Crack all visible WiFi networks and save credentials
-      to data directory for hopping. Skips already-cracked
-      networks. Does not start hopping.
+    <b>hop init</b> [--all] - Initialize Credentials
+      Same as <b>crackall</b>. Does not start hopping.
 
     <b>hop -t SECONDS</b> - Hop with Interval
       Start hopping with custom interval between network
       switches. Default is 3 seconds.
 
     <b>hop list</b> - List Arsenal
-      Show all networks in the credential database with
-      their status (clean or burned).
+      Show saved networks with clean/burned status
+      (passwords hidden). Use <b>creds</b> to see passwords.
 
-    <b>hop burn</b> [ESSID|INDEX] - Burn Network
-      Mark a network as burned so it won't be used during
-      hopping. Accepts ESSID or index from 'hop list'.
-      If no argument given, burns current network.
+    <b>hop burn</b> [ESSID|INDEX|NICK] - Burn Network
+      Mark that network burned (bad). Kept in wifi_creds,
+      skipped by hop. No arg burns current connection.
 
-    <b>hop revive</b> <ESSID|INDEX|all> - Revive Network
-      Un-burn a network, making it available for hopping
-      again. Accepts ESSID or index from 'hop list'.
-      Use 'all' to revive all burned networks.
+    <b>hop revive</b> <ESSID|INDEX|NICK|all> - Revive Network
+      Clear burned flag so the network is usable for hop
+      again. Use <b>all</b> to revive every burned entry.
 <b>EXAMPLE:</b>
     <color=#e4ff34># List Networks</color>
     <b>iwlist -l</b>
     Show all WiFi networks in range
+
+    <color=#e4ff34># Crack All + Use Saved</color>
+    <b>iwlist crackall</b>
+    Crack 40%+ networks into wifi_creds
+    <b>iwlist crackall --all</b>
+    Crack every visible network (including weak)
+    <b>iwlist creds</b>
+    View saved credentials (nick, signal, passwords)
+    <b>iwlist -n 0 homebase</b>
+    Nickname the first entry
+    <b>iwlist -e 0</b>
+    Show all fields for entry 0
+    <b>iwlist -e 0 pass secret123</b>
+    Update saved password
+    <b>iwlist -e 0 burn</b>
+    Mark entry burned (bad) — stays in list
+    <b>iwlist burn 0</b>
+    Same — mark burned by index
+    <b>iwlist -e 0 delete</b>
+    Actually remove entry from wifi_creds
+    <b>iwlist -e</b>
+    Open wifi_creds in vi
+    <b>iwlist -u homebase</b>
+    Connect by nickname
+    <b>iwlist -u 0</b>
+    Connect using first saved entry
+    <b>iwlist -u HomeNetwork</b>
+    Connect by ESSID from wifi_creds
 
     <color=#e4ff34># Dictionary Attack</color>
     <b>iwlist -d 0</b>
@@ -106,26 +177,26 @@ manIwlist="IWLIST(8)                        X Shell Manual                      
     Then launch dictionary attack
 
     <color=#e4ff34># WiFi Hopping</color>
-    <b>iwlist hop init</b>
-    Crack all networks and save credentials
+    <b>iwlist crackall</b>
+    Crack 40%+ networks and save credentials
 
     <b>iwlist hop</b>
-    Start hopping (auto-inits if no creds)
+    Start hopping (auto-crackall if no creds)
 
     <b>iwlist hop -t 5</b>
     Hop with 5 second interval
 
     <b>iwlist hop list</b>
-    Show all networks and their clean/burned status
+    Show arsenal status (no passwords)
 
     <b>iwlist hop burn</b>
-    Burn current connected network
+    Mark current connected network burned (bad)
 
-    <b>iwlist hop burn Yco</b>
-    Burn network by ESSID
+    <b>iwlist burn Yco</b>
+    Mark network burned by ESSID
 
     <b>iwlist hop burn 2</b>
-    Burn network by index from hop list
+    Mark network burned by index
 
     <b>iwlist hop revive Yco</b>
     Un-burn a specific network

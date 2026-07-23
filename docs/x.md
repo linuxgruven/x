@@ -1470,7 +1470,7 @@ ai learn scan                   # Learn from scan man page (--e/--l/--b flags, e
 ai learn all                    # Wipe old agent_knowledge*.json and regenerate from all man pages
 ```
 
-`ai learn all` deletes every `agent_knowledge_*.json` under data/, clears the in-memory cache, then rebuilds from man pages. Planning consults those OPTIONS and prefers **`--` bash autos** (`--b`, `--e`, `--l`, `--c`, `--n`, `--s`) — those set `$scan_ok` / `$hold` for scripting.
+`ai learn all` deletes every `agent_knowledge_*.json` under data/ai/, clears the in-memory cache, then rebuilds from man pages. Planning consults those OPTIONS and prefers **`--` bash autos** (`--b`, `--e`, `--l`, `--c`, `--n`, `--s`) — those set `$scan_ok` / `$hold` for scripting.
 
 ### Configuration
 

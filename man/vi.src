@@ -75,11 +75,17 @@ manVi="VI(1)                            X Shell Manual                          
     <b>y</b>       Yank selection
 
     <color=#e4ff34># Search & Replace</color>
-    <b>/text</b>   Search for 'text'
-    <b>/^func</b>  Search with regex
+    <b>/text</b>   Search forward for 'text'
+    <b>?text</b>   Search backward for 'text'
+    <b>n</b>       Next match (same direction)
+    <b>N</b>       Previous match (opposite direction)
+    <b>3n</b>      Jump 3 matches
+    <b>/</b>       Repeat last search forward
+    <b>//pat/</b>  Regex search (pattern wrapped in / /)
     <b>:s/old/new/</b>       Replace on current line
     <b>:%s/old/new/</b>      Replace first in all lines
     <b>:%s/old/new/g</b>     Replace all in file
+    Bare <b>?</b> shows editor help (use <b>?text</b> for reverse search)
 
     <color=#e4ff34># File Operations</color>
     <b>:o file</b>   Open file in new buffer
@@ -138,6 +144,12 @@ manVi="VI(1)                            X Shell Manual                          
     <color=#e4ff34># Search & Replace Workflow</color>
     <b>/function</b>
     Find 'function' in file
+    <b>n</b>
+    Jump to next match
+    <b>N</b>
+    Jump to previous match
+    <b>?return</b>
+    Search backward for 'return'
     <b>:%s/oldVar/newVar/g</b>
     Replace all oldVar with newVar
     <b>:w</b>

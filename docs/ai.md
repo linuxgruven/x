@@ -37,7 +37,7 @@ ai set timeout 30          # Set timeout and save
 ai set promptOnAttack yes  # Enable attack prompts
 ```
 
-**Behavior:** Sets value explicitly and saves to `agent_config.json`. Persists across sessions.
+**Behavior:** Sets value explicitly and saves to `data/ai/agent_config.json`. Persists across sessions.
 
 **Value Normalization:**
 - `on`, `yes`, `true`, `enabled` → `true`
@@ -108,7 +108,7 @@ ai restore defaults     # Alias for reset config
 
 ### Config File Location
 
-Configuration is saved to `agent_config.json` in the same directory as `agent_knowledge.json`.
+Configuration is saved to `data/ai/agent_config.json` alongside other agent files.
 
 **File Structure:**
 ```json

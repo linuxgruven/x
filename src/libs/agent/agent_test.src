@@ -100,12 +100,12 @@ AgentTest._handleTest=function(Obj,step,context)
     savedTemplates=null
     if hasIndex(globals.G_agent.sessionContext,"templates") then savedTemplates=globals.G_agent.sessionContext.templates
     comp=globals.G_main.computer
-    dataPath=path(globals.G_main.dir.data)
+    dataPath=globals.G_agent.getAiDir
+    if not dataPath then dataPath=path(globals.G_main.dir.data)+"/ai"
     testFile=dataPath+"/agent_learning.json"
     //Remove any existing test file first
     oldF=File(comp,testFile)
     if oldF then delete(oldF)
-    //Also remove old .dat file if it exists
     oldDat=File(comp,dataPath+"/agent_learning.dat")
     if oldDat then delete(oldDat)
     //--- Sub-test A: saveLearning writes valid JSON ---

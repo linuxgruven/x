@@ -256,29 +256,28 @@ AgentCore.learnCommand=function(Obj,commandName)
   globals.G_agent.saveKnowledge
   return {"success":true,"command":commandName,"knowledge":knowledge}
 end function
-//Delete every agent_knowledge*.json under data/ (numbered chunks + legacy names)
+//Delete every agent_knowledge*.json under data/ai/
 //Returns count of files removed
 AgentCore._purgeKnowledgeFiles=function
   if not globals.G_main or not globals.G_main.dir or not globals.G_main.dir.data then return 0
-  dataPath=path(globals.G_main.dir.data)
-  dataDir=File(globals.G_main.computer,dataPath)
-  if not dataDir then return 0
+  aiPath=self.getAiDir
+  if not aiPath then return 0
   deletedCount=0
+  dataDir=File(globals.G_main.computer,aiPath)
+  if not dataDir then return 0
   files=get_files(dataDir)
   if files then
     for f in files
       n=name(f)
       if not n then continue
-      //agent_knowledge_0.json, agent_knowledge.json, etc.
       if indexOf(n,"agent_knowledge")==0 and indexOf(n,".json")!=null then
         delete(f)
         deletedCount+=1
       end if
     end for
   end if
-  //Also hit numbered slots in case get_files missed anything
   i=0;while i<=40
-    f=File(globals.G_main.computer,dataPath+"/agent_knowledge_"+i+".json")
+    f=File(globals.G_main.computer,aiPath+"/agent_knowledge_"+i+".json")
     if f then
       delete(f)
       deletedCount+=1
@@ -347,10 +346,11 @@ end function
 AgentCore._diskKnowledgeStats=function
   stats={"files":0,"bytes":0}
   if not globals.G_main or not globals.G_main.dir or not globals.G_main.dir.data then return stats
-  dataPath=path(globals.G_main.dir.data)
+  aiPath=self.getAiDir
+  if not aiPath then return stats
   comp=globals.G_main.computer
   chunkIdx=0;while chunkIdx<=20
-    f=File(comp,dataPath+"/agent_knowledge_"+chunkIdx+".json")
+    f=File(comp,aiPath+"/agent_knowledge_"+chunkIdx+".json")
     if not f then
       if chunkIdx==0 then return stats
       break
@@ -411,7 +411,8 @@ AgentCore.saveKnowledge=function(force=false)
   end for
   if len(currentChunk)>0 then push(chunks,currentChunk)
   //Delete ALL old knowledge files before writing new ones
-  dataPath=path(globals.G_main.dir.data)
+  aiPath=self.getAiDir
+  if not aiPath then return {"success":false,"error":"AI data directory unavailable"}
   self._purgeKnowledgeFiles
   //Write chunks to files
   savedFiles=0
@@ -424,10 +425,10 @@ AgentCore.saveKnowledge=function(force=false)
   for entry in chunks[chunkIdx];chunkData.commands[entry.name]=entry.data;totalCommands+=1;end for
   jsonStr=System.toJSON(chunkData,1,0)
   fileName="agent_knowledge_"+chunkIdx+".json"
-  knowledgeFile=dataPath+"/"+fileName
+  knowledgeFile=aiPath+"/"+fileName
   f=File(comp,knowledgeFile)
   if not f then
-    result=touch(comp,dataPath,fileName)
+    result=touch(comp,aiPath,fileName)
     if not result then return {"success":false,"error":"Failed to create "+fileName}
     f=File(comp,knowledgeFile)
   end if
@@ -446,7 +447,8 @@ end function
 AgentCore.loadKnowledge=function
   debug=globals.G_agent.config.debug
   outLvl=globals.G_agent.config.outputLevel
-  dataPath=path(globals.G_main.dir.data)
+  aiPath=self.getAiDir
+  if not aiPath then return {"success":false,"error":"AI data directory unavailable"}
   comp=globals.G_main.computer
   //Try to load all chunk files (agent_knowledge_0.json, agent_knowledge_1.json, etc.)
   if not hasIndex(self,"commandKnowledgeCache") then globals.G_agent.commandKnowledgeCache={}
@@ -454,7 +456,7 @@ AgentCore.loadKnowledge=function
   loadedFiles=0
   parseFailures=0
   chunkIdx=0;while chunkIdx<=20  //Try up to 20 chunks
-    knowledgeFile=dataPath+"/agent_knowledge_"+chunkIdx+".json"
+    knowledgeFile=aiPath+"/agent_knowledge_"+chunkIdx+".json"
     f=File(comp,knowledgeFile)
     if not f then
       if chunkIdx==0 then

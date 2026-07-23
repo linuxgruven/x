@@ -511,7 +511,7 @@ manAi="AI(1)                            X Shell Manual                          
 
     <b>ai set debug on</b>
     Enable debug permanently
-    Saves to agent_config.json
+    Saves to data/ai/agent_config.json
 
     <b>ai set outputLevel 2</b>
     Set verbose output (0=silent, 1=normal, 2=verbose)

@@ -56,11 +56,36 @@ Command.computerCallbacks=function(Obj)
 		wifiBrute=function(arg);if not arg then return Man.help(["iwlist"]);if Net.wifiBrute(Obj,to_int(arg[0])) then Obj.net=Net.initNetwork(Obj);end function
 		wifiConnect=function(arg);if Net.wifiConnect(Obj,arg) then Obj.net=Net.initNetwork(Obj);end function
 		wifiCrack=function(arg);if Net.wifiCrack(Obj,arg) then Obj.net=Net.initNetwork(Obj);end function
+		wifiForceAll=function(arg)
+      if not arg then return false
+      for a in arg
+        al=lower(a)
+        if al=="--all" or al=="-a" or al=="all" then return true
+      end for
+      return false
+    end function
+		wifiCrackAll=function(arg);Net.wifiHopInit(Obj,wifiForceAll(arg));end function
+		wifiCreds=function(arg);Net.wifiHopList(Obj,true);end function
+		wifiUse=function(arg)
+      if not arg then return Error.set("Usage: iwlist -u <INDEX|ESSID|BSSID|NICK>")
+      if Net.wifiUse(Obj,arg) then Obj.net=Net.initNetwork(Obj)
+    end function
+		wifiNick=function(arg)
+      if not arg then return Error.set("Usage: iwlist -n <INDEX|ESSID|BSSID|NICK> [nickname]")
+      Net.wifiNick(Obj,arg)
+    end function
+		wifiEdit=function(arg)
+      Net.wifiEdit(Obj,arg)
+    end function
+		wifiBurn=function(arg)
+      if arg and len(arg)>=1 then return Net.wifiHopBurn(Obj,arg[0])
+      return Net.wifiHopBurn(Obj)
+    end function
 		wifiHop=function(arg)
       if not arg then return Net.wifiHop(Obj)
       a0=lower(arg[0])
       if a0=="init" then
-        Net.wifiHopInit(Obj)
+        Net.wifiHopInit(Obj,wifiForceAll(arg[1:]))
         return
       end if
       if a0=="list" then return Net.wifiHopList(Obj)
@@ -87,6 +112,14 @@ Command.computerCallbacks=function(Obj)
 			"-l":@viewWifi,
 			"-d":@wifiDict,
 			"-c":@wifiConnect,
+			"-u":@wifiUse,
+			"-n":@wifiNick,
+			"-e":@wifiEdit,
+			"--edit":@wifiEdit,
+			"burn":@wifiBurn,
+			"creds":@wifiCreds,
+			"crackall":@wifiCrackAll,
+			"--crackall":@wifiCrackAll,
 			"hop":@wifiHop
 		}
 		if Utility.checkValid(Obj) then cmds["-k"]=@wifiCrack

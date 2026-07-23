@@ -11,6 +11,15 @@ AgentCore._BOOL_KEYS=["debug","aggressive","stealth","dryRun","trainer","promptO
 AgentCore._NUMBER_KEYS=["maxRetries","timeout","outputLevel"]
 AgentCore._ROOT_WORDS=["root","admin","superuser","administrator","elevated","privileged","sudo","best","highest"]
 AgentCore._ESCALATION_BLACKLIST=["cal","date","uptime","clear","pwd","whoami","hostname","echo"]
+//Ensure data/ai exists and return its path (all agent persistence lives here)
+AgentCore.getAiDir=function
+  if not globals.G_main or not globals.G_main.dir or not globals.G_main.dir.data then return null
+  dataPath=path(globals.G_main.dir.data)
+  aiPath=dataPath+"/ai"
+  comp=globals.G_main.computer
+  if not File(comp,aiPath) then create_folder(comp,dataPath,"ai")
+  return aiPath
+end function
 //True if command text asks for elevated/root privileges
 AgentCore._wantsRoot=function(cmd)
   if not cmd then return false
@@ -124,7 +133,9 @@ end function
 //Save agent configuration to disk
 AgentCore.saveConfig=function
   outLvl=globals.G_agent.config.outputLevel
-  configFile=path(globals.G_main.dir.data)+"/agent_config.json"
+  aiPath=self.getAiDir
+  if not aiPath then return {"success":false,"error":"AI data directory unavailable"}
+  configFile=aiPath+"/agent_config.json"
   if outLvl>=1 then print skyblue("Agent: Saving config to "+configFile)
   //Build config data structure
   configData={
@@ -137,7 +148,7 @@ AgentCore.saveConfig=function
   //Get or create file
   f=File(comp,configFile)
   if not f then
-    result=touch(comp,path(globals.G_main.dir.data),"agent_config.json")
+    result=touch(comp,aiPath,"agent_config.json")
     if not result then return {"success":false,"error":"Failed to create config file"}
     f=File(comp,configFile)
   end if
@@ -154,7 +165,9 @@ end function
 AgentCore.loadConfig=function
   debug=globals.G_agent.config.debug
   outLvl=globals.G_agent.config.outputLevel
-  configFile=path(globals.G_main.dir.data)+"/agent_config.json"
+  aiPath=self.getAiDir
+  if not aiPath then return {"success":false,"error":"AI data directory unavailable"}
+  configFile=aiPath+"/agent_config.json"
   //Check if file exists
   result=File(G_main.computer,configFile)
   if not result then

@@ -209,10 +209,10 @@ Net.wifiBouncer=function(Obj,argv)
 end function
 // Function: _loadWifiCreds
 // Purpose: Load wifi_creds file into map keyed by BSSID
-// Format: BSSID|ESSID|PASSWORD|clean/burned
+// Format: BSSID|ESSID|PASSWORD|flag|signal|nick  (flag/signal/nick optional for old files)
 // Args:
 //   Obj - Session object with .computer, .dir properties
-// Returns: map keyed by BSSID with {BSSID,ESSID,PASS,flag} values, or null
+// Returns: map keyed by BSSID with {BSSID,ESSID,PASS,flag,signal,nick} values, or null
 Net._loadWifiCreds=function(Obj)
   credPath=path(Obj.dir.data)+"/wifi_creds"
   f=File(Obj.computer,credPath)
@@ -224,8 +224,12 @@ Net._loadWifiCreds=function(Obj)
     a=split(_,"\|")
     if len(a)<3 then continue
     flag="clean"
-    if len(a)>=4 then flag=a[3]
-    db[a[0]]={"BSSID":a[0],"ESSID":a[1],"PASS":a[2],"flag":flag}
+    signal=""
+    nick=""
+    if len(a)>=4 and a[3]!="" then flag=a[3]
+    if len(a)>=5 then signal=a[4]
+    if len(a)>=6 then nick=a[5]
+    db[a[0]]={"BSSID":a[0],"ESSID":a[1],"PASS":a[2],"flag":flag,"signal":signal,"nick":nick}
   end for
   return db
 end function
@@ -233,12 +237,17 @@ end function
 // Purpose: Save wifi creds map to file
 // Args:
 //   Obj - Session object
-//   db - map keyed by BSSID with {BSSID,ESSID,PASS,flag} values
+//   db - map keyed by BSSID with {BSSID,ESSID,PASS,flag,signal,nick} values
 // Returns: credPath on success, Error on failure
 Net._saveWifiCreds=function(Obj,db)
   credPath=path(Obj.dir.data)+"/wifi_creds"
   lines=[]
-  for k in indexes(db);e=db[k];push(lines,e.BSSID+"|"+e.ESSID+"|"+e.PASS+"|"+e.flag);end for
+  for k in indexes(db)
+    e=db[k]
+    if not hasIndex(e,"signal") or e.signal==null then e.signal=""
+    if not hasIndex(e,"nick") or e.nick==null then e.nick=""
+    push(lines,e.BSSID+"|"+e.ESSID+"|"+e.PASS+"|"+e.flag+"|"+e.signal+"|"+e.nick)
+  end for
   f=File(Obj.computer,credPath)
   if f then delete(f)
   touch(Obj.computer,path(Obj.dir.data),"wifi_creds")
@@ -247,12 +256,55 @@ Net._saveWifiCreds=function(Obj,db)
   set_content(f,join(lines,char(10)))
   return credPath
 end function
+// Function: _findWifiCred
+// Purpose: Resolve wifi_creds entry by index, BSSID, ESSID, or nickname
+// Returns: BSSID key or null
+Net._findWifiCred=function(db,sel)
+  if not db or sel==null or sel=="" then return null
+  n=to_int(sel)
+  if n isa number and n>=0 and str(n)==str(sel) then
+    keys=db.indexes
+    if n<len(keys) then return keys[n]
+  end if
+  if hasIndex(db,sel) then return sel
+  selLow=lower(sel)
+  for k in db.indexes
+    e=db[k]
+    if lower(e.ESSID)==selLow then return k
+    if hasIndex(e,"nick") and e.nick!="" and lower(e.nick)==selLow then return k
+  end for
+  return null
+end function
+// Function: _wifiRequiredAcks
+// Purpose: ACK count for aircrack from displayed signal (game: 300000/(power+15))
+// Args:
+//   signal - e.g. "40%" or "40"
+// Returns: integer ACK target (>= engine requirement)
+Net._wifiRequiredAcks=function(signal)
+  pwr=to_int((""+signal).replace("%",""))
+  if not pwr isa number then pwr=0
+  // ceil matches float path; +1 covers int-div / stop-when->maxAcks edge cases
+  return ceil(300000/(pwr+15))+1
+end function
+// Function: _wifiLiveSignal
+// Purpose: Re-read signal % for a BSSID from wifi_networks
+// Returns: signal string (e.g. "40%") or null if not visible
+Net._wifiLiveSignal=function(Obj,bssid)
+  live=wifi_networks(Obj.computer,"wlan0")
+  if not live then return null
+  for wifiEntry in live
+    parts=split(wifiEntry," ")
+    if len(parts)>=2 and parts[0]==bssid then return parts[1]
+  end for
+  return null
+end function
 // Function: wifiHopInit
-// Purpose: Crack all visible WiFi networks and save credentials to data file
+// Purpose: Crack visible WiFi networks and save credentials to data file
 // Args:
 //   Obj - Session object with .net.wlan, .user, .computer properties
+//   forceAll - if true, crack all signal strengths (default: 40%+ only)
 // Returns: Credentials file path on success, Error/Warning on failure
-Net.wifiHopInit=function(Obj)
+Net.wifiHopInit=function(Obj,forceAll=false)
   if not Obj.net.hasWifi then return Warning.set("Wifi is not active")
   w=Obj.net.wlan
   if not w or len(w)==0 then return Error.set("No WiFi networks found")
@@ -264,42 +316,112 @@ Net.wifiHopInit=function(Obj)
   //Start monitor mode
   airmon(D,"start","wlan0")
   newCount=0
+  refreshCount=0
+  aborted=false
   _len=len(w)
   i=0
+  minPower=40
+  if forceAll then minPower=0
+  Utility.pressQ
+  if forceAll then
+    Info.info("Cracking all visible networks. Press q between networks to quit (progress saves after each crack).")
+  else
+    Info.info("Cracking networks at "+minPower+"%+ signal. Press q between networks to quit (progress saves after each crack).")
+  end if
   while i<_len
+    _k=poll_input
+    if _k=="q" or _k=="Q" or _k=="x" then
+      aborted=true
+      break
+    end if
     n=w[i]
     bssid=n[0]
     signal=n[1]
     essid=n[2]
-    //Skip if already cracked
+    //Skip if already cracked; refresh signal strength when visible
     if hasIndex(existing,bssid) then
+      if signal and existing[bssid].signal!=signal then
+        existing[bssid].signal=signal
+        refreshCount=refreshCount+1
+      end if
       Info.info("Skipping "+essid+" (already cracked)")
       i=i+1
       continue
     end if
-    //Calculate ACK count from signal strength
-    a=ceil(300000/(to_int(signal.replace("%",""))+15))
-    Info.info("Cracking "+essid+" ("+bssid+") signal:"+signal+" ACKs:"+a+"...")
-    //Inject packets
-    aireplay(D,bssid,essid,a)
-    //Crack captured handshake
-    p=aircrack(D,"/home/"+Obj.user.name+"/file.cap")
-    //Clean up capture file
-    f=File(Obj.computer,path(Obj.user.home)+"/file.cap")
-    if f then delete(f)
+    pwr=to_int((""+signal).replace("%",""))
+    if not pwr isa number or pwr<minPower then
+      Info.info("Skipping "+essid+" (signal "+signal+" < "+minPower+"%)")
+      i=i+1
+      continue
+    end if
+    //One shot at engine target; on failure refresh live signal and retry once
+    p=null
+    attempt=0
+    while attempt<2
+      _k=poll_input
+      if _k=="q" or _k=="Q" or _k=="x" then
+        aborted=true
+        break
+      end if
+      targetAcks=Net._wifiRequiredAcks(signal)
+      if attempt==0 then
+        Info.info("Cracking "+essid+" ("+bssid+") signal:"+signal+" ACKs:"+targetAcks+"... ["+str(i+1)+"/"+str(_len)+"]")
+      else
+        Info.info("  Retry "+essid+" signal:"+signal+" ACKs:"+targetAcks+"...")
+      end if
+      aireplay(D,bssid,essid,targetAcks)
+      _k=poll_input
+      if _k=="q" or _k=="Q" or _k=="x" then
+        aborted=true
+        break
+      end if
+      p=aircrack(D,"/home/"+Obj.user.name+"/file.cap")
+      f=File(Obj.computer,path(Obj.user.home)+"/file.cap")
+      if f then delete(f)
+      if p!="null" and p then break
+      if attempt>=1 then break
+      liveSig=Net._wifiLiveSignal(Obj,bssid)
+      if liveSig then
+        signal=liveSig
+        w[i][1]=liveSig
+        livePwr=to_int((""+liveSig).replace("%",""))
+        if livePwr isa number and livePwr<minPower then
+          Info.info("  Signal dropped to "+liveSig+" (< "+minPower+"%) — skipping retry")
+          break
+        end if
+        Info.info("  More ACKs needed — refreshed signal to "+liveSig)
+      else
+        Info.info("  More ACKs needed — retrying same target (AP not in rescan)")
+      end if
+      attempt=attempt+1
+    end while
+    if aborted then break
     if p!="null" and p then
       Info.info("Cracked "+essid+": "+p,"+")
-      existing[bssid]={"BSSID":bssid,"ESSID":essid,"PASS":p,"flag":"clean"}
+      existing[bssid]={"BSSID":bssid,"ESSID":essid,"PASS":p,"flag":"clean","signal":signal,"nick":""}
       newCount=newCount+1
+      //Persist immediately so Ctrl+C / crash mid-aireplay does not lose prior cracks
+      Net._saveWifiCreds(Obj,existing)
     else
       Info.error("Failed to crack "+essid)
     end if
     i=i+1
   end while
-  if len(existing)==0 then return Error.set("Failed to crack any WiFi networks")
+  if len(existing)==0 then
+    if aborted then return Warning.set("Crack-all aborted — no credentials saved yet")
+    if forceAll then return Error.set("Failed to crack any WiFi networks")
+    return Error.set("Failed to crack any WiFi networks (need "+minPower+"%+ signal, or use --all)")
+  end if
+  //Final flush (signal refreshes on skips, etc.)
   r=Net._saveWifiCreds(Obj,existing)
   if r isa Error then return
-  Info.info("Saved "+len(existing)+" WiFi credentials ("+newCount+" new)","+")
+  msg="Saved "+len(existing)+" WiFi credentials ("+newCount+" new)"
+  if refreshCount>0 then msg=msg+", refreshed signal on "+refreshCount
+  if aborted then
+    Info.info(msg+" — aborted early (q)","!")
+  else
+    Info.info(msg,"+")
+  end if
   return r
 end function
 // Function: wifiHop
@@ -333,60 +455,67 @@ Net.wifiHop=function(Obj,waitTime=3)
     i=floor(rnd*max)
     if i==last and max>1 then i=(i+1)%max
     last=i
-    Info.info("Hopping to "+z[i].ESSID+"...")
+    if hasIndex(z[i],"nick") and z[i].nick!="" then
+      Info.info("Hopping to "+z[i].nick+" ("+z[i].ESSID+")...")
+    else
+      Info.info("Hopping to "+z[i].ESSID+"...")
+    end if
     connect_wifi(c,"wlan0",z[i].BSSID,z[i].ESSID,z[i].PASS)
     wait waitTime
   end while
 end function
+// Function: _removeWifiCred
+// Purpose: Remove one entry from wifi_creds by BSSID key; delete file if empty
+// Returns: removed entry map, or Error
+Net._removeWifiCred=function(Obj,db,key)
+  if not db or not hasIndex(db,key) then return Error.set("Network not in wifi_creds")
+  e=db[key]
+  name=e.ESSID
+  remove(db,key)
+  credPath=path(Obj.dir.data)+"/wifi_creds"
+  if len(db)==0 then
+    f=File(Obj.computer,credPath)
+    if f then delete(f)
+    return {"ESSID":name,"empty":true}
+  end if
+  Net._saveWifiCreds(Obj,db)
+  return {"ESSID":name,"empty":false}
+end function
 // Function: wifiHopBurn
-// Purpose: Mark a network as burned so it won't be used during hopping
+// Purpose: Mark a network as burned (bad) so hopping skips it; keeps it in wifi_creds
 // Args:
 //   Obj - Session object
-//   essid - ESSID of network to burn (optional, burns current if omitted)
+//   essid - ESSID/index/nick/BSSID (optional: burns current connected network)
 // Returns: null on success, Error on failure
 Net.wifiHopBurn=function(Obj,essid=null)
   db=Net._loadWifiCreds(Obj)
-  if not db then return Error.set("No wifi_creds file. Run 'iwlist hop init' first")
+  if not db then return Error.set("No wifi_creds file. Run 'iwlist crackall' first")
+  found=null
   if not essid then
-    //Burn current network
     r=get_router(Obj.computer)
     if not r then return Error.set("Not connected to any WiFi network")
-    bssid=r.bssid_name
-    if not hasIndex(db,bssid) then return Error.set("Current network not in arsenal")
-    db[bssid].flag="burned"
-    Net._saveWifiCreds(Obj,db)
-    Info.info("Burned "+db[bssid].ESSID+" — will not be used for hopping","!")
-    return
+    found=r.bssid_name
+    if not hasIndex(db,found) then return Error.set("Current network not in arsenal")
+  else
+    found=Net._findWifiCred(db,essid)
+    if not found then return Error.set("Network '"+essid+"' not found in arsenal")
   end if
-  //Find by index or ESSID
-  found=null
-  n=to_int(essid)
-  if n isa number and n>=0 then
-    keys=db.indexes
-    if n<len(keys) then found=keys[n]
-  end if
-  if not found then
-    for k in db.indexes
-      if lower(db[k].ESSID)==lower(essid) then
-        found=k
-        break
-      end if
-    end for
-  end if
-  if not found then return Error.set("Network '"+essid+"' not found in arsenal")
+  if db[found].flag=="burned" then return Info.info(db[found].ESSID+" is already burned")
   db[found].flag="burned"
+  if not hasIndex(db[found],"signal") then db[found].signal=""
+  if not hasIndex(db[found],"nick") then db[found].nick=""
   Net._saveWifiCreds(Obj,db)
-  Info.info("Burned "+db[found].ESSID+" — will not be used for hopping","!")
+  Info.info("Burned "+db[found].ESSID+" — marked bad, skipped by hop","!")
 end function
 // Function: wifiHopRevive
 // Purpose: Un-burn a network, making it available for hopping again
 // Args:
 //   Obj - Session object
-//   essid - ESSID to revive, or "all"
+//   essid - ESSID/index/nick/BSSID to revive, or "all"
 // Returns: null on success, Error on failure
 Net.wifiHopRevive=function(Obj,essid=null)
   db=Net._loadWifiCreds(Obj)
-  if not db then return Error.set("No wifi_creds file. Run 'iwlist hop init' first")
+  if not db then return Error.set("No wifi_creds file. Run 'iwlist crackall' first")
   if essid=="all" then
     ct=0
     for k in db.indexes
@@ -400,50 +529,187 @@ Net.wifiHopRevive=function(Obj,essid=null)
     Info.info("Revived "+ct+" networks","+")
     return
   end if
-  if not essid then return Error.set("Usage: iwlist hop revive <ESSID|INDEX|all>")
-  found=null
-  n=to_int(essid)
-  if n isa number and n>=0 then
-    keys=db.indexes
-    if n<len(keys) then found=keys[n]
-  end if
-  if not found then
-    for k in db.indexes
-      if lower(db[k].ESSID)==lower(essid) then
-        found=k
-        break
-      end if
-    end for
-  end if
+  if not essid then return Error.set("Usage: iwlist hop revive <ESSID|INDEX|NICK|all>")
+  found=Net._findWifiCred(db,essid)
   if not found then return Error.set("Network '"+essid+"' not found in arsenal")
   if db[found].flag=="clean" then return Info.info(essid+" is already clean")
   db[found].flag="clean"
   Net._saveWifiCreds(Obj,db)
-  Info.info("Revived "+db[found].ESSID,"+")
+  Info.info("Revived "+db[found].ESSID+" — available for hopping again","+")
 end function
 // Function: wifiHopList
 // Purpose: Display all networks in the arsenal with their status
 // Args:
 //   Obj - Session object
+//   showPass - If true, include saved passwords in output
 // Returns: null
-Net.wifiHopList=function(Obj)
+Net.wifiHopList=function(Obj,showPass=false)
   db=Net._loadWifiCreds(Obj)
-  if not db or len(db)==0 then return Error.set("No wifi_creds file. Run 'iwlist hop init' first")
+  if not db or len(db)==0 then return Error.set("No wifi_creds file. Run 'iwlist crackall' first")
   clean=0
   burned=0
   idx=0
   for k in db.indexes
     e=db[k]
+    nickInfo=""
+    if hasIndex(e,"nick") and e.nick!="" then nickInfo="  nick:"+e.nick
+    sigInfo=""
+    if hasIndex(e,"signal") and e.signal!="" then sigInfo="  "+e.signal
+    passInfo=""
+    if showPass then passInfo="  pass:"+e.PASS
+    label=e.ESSID+nickInfo
     if e.flag=="clean" then
-      print("  [" +idx+"] <color=#1EFF00>[clean]</color>  "+e.ESSID+" ("+e.BSSID+")")
+      print("  ["+idx+"] <color=#1EFF00>[clean]</color>  "+label+" ("+e.BSSID+")"+sigInfo+passInfo)
       clean=clean+1
     else
-      print("  ["+idx+"] <color=#FF0000>[burned]</color> "+e.ESSID+" ("+e.BSSID+")")
+      print("  ["+idx+"] <color=#FF0000>[burned]</color> "+label+" ("+e.BSSID+")"+sigInfo+passInfo)
       burned=burned+1
     end if
     idx=idx+1
   end for
-  Info.info(clean+" clean, "+burned+" burned")
+  Info.info(clean+" clean, "+burned+" burned — "+path(Obj.dir.data)+"/wifi_creds")
+end function
+// Function: wifiUse
+// Purpose: Connect using a saved wifi_creds entry (by index, ESSID, BSSID, or nick)
+// Args:
+//   Obj - Session object
+//   argv - [INDEX|ESSID|BSSID|NICK]
+// Returns: 1 on success, Error/Warning on failure
+Net.wifiUse=function(Obj,argv)
+  if not Obj.net.hasWifi then return Warning.set("Wifi is not active")
+  if not argv or len(argv)<1 then return Error.set("Usage: iwlist -u <INDEX|ESSID|BSSID|NICK>")
+  db=Net._loadWifiCreds(Obj)
+  if not db or len(db)==0 then return Error.set("No wifi_creds file. Run 'iwlist crackall' first")
+  found=Net._findWifiCred(db,argv[0])
+  if not found then return Error.set("Network '"+argv[0]+"' not found in wifi_creds. Run 'iwlist creds'")
+  e=db[found]
+  Info.info("Connecting to "+e.ESSID+" ("+e.BSSID+")...")
+  x=connect_wifi(Obj.computer,"wlan0",e.BSSID,e.ESSID,e.PASS)
+  if x then
+    Info.info("Connected to "+e.ESSID,"+")
+    return 1
+  end if
+  if x isa string then return Error.set(x)
+  return Error.set("Failed to connect to "+e.ESSID)
+end function
+// Function: wifiNick
+// Purpose: Set or clear a nickname on a wifi_creds entry
+// Args:
+//   Obj - Session object
+//   argv - [INDEX|ESSID|BSSID|NICK, newNickname...]  (omit nick / use "-" to clear)
+// Returns: null on success, Error on failure
+Net.wifiNick=function(Obj,argv)
+  if not argv or len(argv)<1 then return Error.set("Usage: iwlist -n <INDEX|ESSID|BSSID|NICK> [nickname]")
+  editArgs=[argv[0],"nick"]
+  if len(argv)>=2 then
+    i=1
+    while i<len(argv)
+      push(editArgs,argv[i])
+      i+=1
+    end while
+  else
+    push(editArgs,"-")
+  end if
+  return Net.wifiEdit(Obj,editArgs)
+end function
+// Function: wifiEdit
+// Purpose: Edit wifi_creds entries, or open the file in vi with no args
+// Args:
+//   Obj - Session object
+//   argv - [] opens vi; [sel] shows entry; [sel, field, value...] edits
+//         fields: nick, pass, password, flag, signal, essid, delete|rm|del
+// Returns: null on success, Error on failure
+Net.wifiEdit=function(Obj,argv)
+  credPath=path(Obj.dir.data)+"/wifi_creds"
+  // No args: open raw file in vi
+  if not argv or len(argv)==0 then
+    f=File(Obj.computer,credPath)
+    if not f then return Error.set("No wifi_creds file. Run 'iwlist crackall' first")
+    return Command.vi(Obj,["-o",credPath])
+  end if
+  db=Net._loadWifiCreds(Obj)
+  if not db or len(db)==0 then return Error.set("No wifi_creds file. Run 'iwlist crackall' first")
+  found=Net._findWifiCred(db,argv[0])
+  if not found then return Error.set("Network '"+argv[0]+"' not found in wifi_creds. Run 'iwlist creds'")
+  e=db[found]
+  if not hasIndex(e,"signal") or e.signal==null then e.signal=""
+  if not hasIndex(e,"nick") or e.nick==null then e.nick=""
+  // One arg: show entry details
+  if len(argv)==1 then
+    print white("  BSSID:  ")+e.BSSID
+    print white("  ESSID:  ")+e.ESSID
+    print white("  PASS:   ")+e.PASS
+    print white("  flag:   ")+e.flag
+    print white("  signal: ")+e.signal
+    print white("  nick:   ")+e.nick
+    Info.info("Edit: iwlist -e "+argv[0]+" <nick|pass|flag|signal|essid|delete> [value]")
+    return
+  end if
+  field=lower(argv[1])
+  val=""
+  if len(argv)>=3 then val=join(argv[2:]," ")
+  val=val.replace("|","")
+  if field=="burn" then
+    if e.flag=="burned" then return Info.info(e.ESSID+" is already burned")
+    e.flag="burned"
+    db[found]=e
+    Net._saveWifiCreds(Obj,db)
+    Info.info("Burned "+e.ESSID+" — marked bad, skipped by hop","!")
+    return
+  end if
+  if field=="delete" or field=="del" or field=="rm" then
+    r=Net._removeWifiCred(Obj,db,found)
+    if r isa Error then return
+    if r.empty then
+      Info.info("Deleted "+r.ESSID+" — removed last entry; deleted wifi_creds","+")
+    else
+      Info.info("Deleted "+r.ESSID+" from wifi_creds","+")
+    end if
+    return
+  end if
+  if field=="nick" or field=="nickname" then
+    if val=="-" then val=""
+    e.nick=val
+    db[found]=e
+    Net._saveWifiCreds(Obj,db)
+    if val=="" then Info.info("Cleared nickname on "+e.ESSID,"+") else Info.info("Nicknamed "+e.ESSID+" as '"+val+"'","+")
+    return
+  end if
+  if field=="pass" or field=="password" then
+    if val=="" then return Error.set("Usage: iwlist -e <sel> pass <password>")
+    e.PASS=val
+    db[found]=e
+    Net._saveWifiCreds(Obj,db)
+    Info.info("Updated password for "+e.ESSID,"+")
+    return
+  end if
+  if field=="flag" then
+    if val=="" then return Error.set("Usage: iwlist -e <sel> flag <clean|burned>")
+    fl=lower(val)
+    if fl!="clean" and fl!="burned" then return Error.set("flag must be clean or burned")
+    e.flag=fl
+    db[found]=e
+    Net._saveWifiCreds(Obj,db)
+    Info.info("Set "+e.ESSID+" flag to "+fl,"+")
+    return
+  end if
+  if field=="signal" or field=="strength" then
+    if val=="" then return Error.set("Usage: iwlist -e <sel> signal <value>")
+    e.signal=val
+    db[found]=e
+    Net._saveWifiCreds(Obj,db)
+    Info.info("Updated signal for "+e.ESSID+" to "+val,"+")
+    return
+  end if
+  if field=="essid" or field=="ssid" then
+    if val=="" then return Error.set("Usage: iwlist -e <sel> essid <name>")
+    e.ESSID=val
+    db[found]=e
+    Net._saveWifiCreds(Obj,db)
+    Info.info("Updated ESSID to "+val,"+")
+    return
+  end if
+  return Error.set("Unknown field '"+argv[1]+"'. Use: nick|pass|flag|signal|essid|burn|delete")
 end function
 // Function: lanBouncer
 // Purpose: Rotate LAN IP address within subnet for stealth operations
@@ -1630,40 +1896,47 @@ Net.wifiCrack=function(Obj,argv)
   airmon(D,"start","wlan0")
 	//Get selected network info
 	n=w[Arg1]
-	//Initialize ACK count variable
-	a=null
-	//Parse ACK count from arguments or calculate from signal strength
+	bssid=n[0]
+	signal=n[1]
+	essid=n[2]
+	manualAcks=null
 	if len(argv)==2 then
-		a=to_int(argv[1])
-		//If invalid number, calculate based on signal strength (weaker = more ACKs needed)
-		if not a isa number then a=ceil(300000/(to_int(n[1].replace("%",""))+15))
-	else
-		//Calculate ACK count based on signal strength
-		a=ceil(300000/(to_int(n[1].replace("%",""))+15))
+		manualAcks=to_int(argv[1])
+		if not manualAcks isa number then manualAcks=null
 	end if
-	//Display aireplay information
-	Info.info("Running aireplay on "+n[2]+" for "+a+" ACKs")
-	//Run aireplay to capture handshake packets
-	aireplay(D,n[0],n[2],a)
-	//Run aircrack on captured packets to recover password
-	p=aircrack(D,"/home/"+Obj.user.name+"/file.cap")
-	//Clean up capture file
-	f=File(Obj.computer,path(Obj.user.home)+"/file.cap")
-	if f then delete(f)
-	//Check if password was cracked
-	if p!="null" then
-		//Display recovered password
-		print yellow("Password for "+n[2]+" is : "+p)
-		//Prompt user to connect to network
-		if Gui.yesNo("Connect to "+n[2]+"?") then
-			if connect_wifi(Obj.computer,"wlan0",n[0],n[2],p)==1 then
+	p=null
+	attempt=0
+	while attempt<2
+		if manualAcks!=null then a=manualAcks else a=Net._wifiRequiredAcks(signal)
+		Info.info("Running aireplay on "+essid+" for "+a+" ACKs (signal:"+signal+")")
+		aireplay(D,bssid,essid,a)
+		p=aircrack(D,"/home/"+Obj.user.name+"/file.cap")
+		f=File(Obj.computer,path(Obj.user.home)+"/file.cap")
+		if f then delete(f)
+		if p!="null" and p then break
+		//Manual ACK count: no auto-retry (user chose the budget)
+		if manualAcks!=null then break
+		if attempt>=1 then break
+		liveSig=Net._wifiLiveSignal(Obj,bssid)
+		if liveSig then
+			signal=liveSig
+			w[Arg1][1]=liveSig
+			Info.info("More ACKs needed — refreshed signal to "+liveSig+", retrying...")
+		else
+			Info.info("More ACKs needed — retrying same target...")
+		end if
+		attempt=attempt+1
+	end while
+	if p!="null" and p then
+		print yellow("Password for "+essid+" is : "+p)
+		if Gui.yesNo("Connect to "+essid+"?") then
+			if connect_wifi(Obj.computer,"wlan0",bssid,essid,p)==1 then
 				Obj.net=Net.initNetwork(Obj)
 				return Info.info("Connection: Success!")
 			else
 				Info.error("Connection: Failed!")
 			end if
 		end if
-	//Password cracking failed
 	else
 		Info.error("Failed to get a wifi connection")
 	end if

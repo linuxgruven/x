@@ -1199,7 +1199,7 @@ end function
 
 ### Learning Persistence (JSON)
 
-Learning data is saved to `payload/data/agent_learning.json` using the same `System.toJSON`/`System.parse` format as config and knowledge files.
+Learning data is saved to `payload/data/ai/agent_learning.json` using the same `System.toJSON`/`System.parse` format as config and knowledge files.
 
 ```javascript
 // Save: Serializes patternScores, userPreferences, and templates to JSON
@@ -1416,7 +1416,7 @@ end for
 
 **Files:** `agent_learning.src`, `agent_core.src`, `agent_execute.src`
 
-All learning data is now persisted to `payload/data/agent_learning.json` between sessions. This includes pattern scores, user command/flag preferences, and learned templates.
+All learning data is now persisted to `payload/data/ai/agent_learning.json` between sessions. This includes pattern scores, user command/flag preferences, and learned templates.
 
 - **Save:** Called after every successful command execution
 - **Load:** Called during `init()` on startup

@@ -44,6 +44,10 @@ Command.vi=function(Obj,argv)
   yankBuffer=[]
   // Last command for repeat (.)
   lastCommand=null
+  // Last search: pattern, regex flag, direction (1 forward, -1 backward)
+  lastSearchPattern=""
+  lastSearchRegex=false
+  lastSearchDir=1
   // Command count (e.g., 3dd) - no outer. prefix, just local
   cmdCount=1
   // File buffer prototype object structure
@@ -696,45 +700,164 @@ Command.vi=function(Obj,argv)
     end if
     return indexOf(line,pattern)
   end function
-  // Command: Search forward (vi-style /pattern or /regex/)
-  cmdSearch=function(args)
-    if not buffer then return Error.set("No files opened")
-    if not args then return Error.set("Search pattern required")
+  // Helper: First match with start index strictly greater than afterCol (-1 = from start)
+  matchLineFrom=function(line,pattern,useRegex,afterCol)
+    start=afterCol+1
+    if start<0 then start=0
+    if start>len(line) then return null
+    if start==0 then return matchLine(line,pattern,useRegex)
+    if start>=len(line) then return null
+    sub=line[start:]
+    subPos=matchLine(sub,pattern,useRegex)
+    if subPos==null then return null
+    return start+subPos
+  end function
+  // Helper: Last match with start index strictly less than beforeCol
+  matchLineBefore=function(line,pattern,useRegex,beforeCol)
+    if beforeCol==null or beforeCol<=0 then return null
+    if beforeCol>len(line) then beforeCol=len(line)
+    segment=line[:beforeCol]
+    lastPos=null
+    pos=0
+    segLen=len(segment)
+    while pos<segLen
+      subPos=matchLine(segment[pos:],pattern,useRegex)
+      if subPos==null then break
+      lastPos=pos+subPos
+      // Advance at least one char so we can find later matches
+      pos=lastPos+1
+    end while
+    return lastPos
+  end function
+  // Helper: Parse /pattern or //regex/ args into pattern + regex flag
+  parseSearchPattern=function(args)
     pattern=join(args," ")
     useRegex=false
-    // Check if pattern is wrapped in / / for regex mode
     if len(pattern)>2 and pattern[0]=="/" and pattern[-1]=="/" then
       useRegex=true
       pattern=pattern[1:-1]
     end if
-    found=false
-    startLine=outer.cursorLine+1
-    contentLen=len(buffer[currentIndex].content)
-    i=startLine
-    while i<contentLen
-      matchPos=matchLine(buffer[currentIndex].content[i],pattern,useRegex)
+    return {"pattern":pattern,"useRegex":useRegex}
+  end function
+  // Helper: One search step in direction (1 forward, -1 backward). Returns true if moved.
+  searchStep=function(pattern,useRegex,dir)
+    content=buffer[currentIndex].content
+    contentLen=len(content)
+    if contentLen==0 then return false
+    curLine=outer.cursorLine
+    curCol=outer.cursorCol
+    if dir>=0 then
+      // Current line after cursor, then lines below, then wrap above (incl. current from start)
+      matchPos=matchLineFrom(content[curLine],pattern,useRegex,curCol)
       if matchPos!=null then
-        outer.cursorLine=i
+        outer.cursorLine=curLine
         outer.cursorCol=matchPos
-        found=true
-        break
+        return true
       end if
-    i+=1
-    end while
-    if not found then
-      i=0
-      while i<=outer.cursorLine
-        matchPos=matchLine(buffer[currentIndex].content[i],pattern,useRegex)
+      i=curLine+1
+      while i<contentLen
+        matchPos=matchLine(content[i],pattern,useRegex)
         if matchPos!=null then
           outer.cursorLine=i
           outer.cursorCol=matchPos
-          found=true
-          break
+          return true
         end if
       i+=1
       end while
+      i=0
+      while i<curLine
+        matchPos=matchLine(content[i],pattern,useRegex)
+        if matchPos!=null then
+          outer.cursorLine=i
+          outer.cursorCol=matchPos
+          return true
+        end if
+      i+=1
+      end while
+      // Wrap onto current line from the start (may land on same match after full cycle)
+      matchPos=matchLineFrom(content[curLine],pattern,useRegex,-1)
+      if matchPos!=null then
+        outer.cursorLine=curLine
+        outer.cursorCol=matchPos
+        return true
+      end if
+      return false
     end if
+    // Backward: current line before cursor, then lines above, then wrap below
+    matchPos=matchLineBefore(content[curLine],pattern,useRegex,curCol)
+    if matchPos!=null then
+      outer.cursorLine=curLine
+      outer.cursorCol=matchPos
+      return true
+    end if
+    i=curLine-1
+    while i>=0
+      matchPos=matchLineBefore(content[i],pattern,useRegex,len(content[i])+1)
+      if matchPos!=null then
+        outer.cursorLine=i
+        outer.cursorCol=matchPos
+        return true
+      end if
+    i-=1
+    end while
+    i=contentLen-1
+    while i>curLine
+      matchPos=matchLineBefore(content[i],pattern,useRegex,len(content[i])+1)
+      if matchPos!=null then
+        outer.cursorLine=i
+        outer.cursorCol=matchPos
+        return true
+      end if
+    i-=1
+    end while
+    matchPos=matchLineBefore(content[curLine],pattern,useRegex,len(content[curLine])+1)
+    if matchPos!=null then
+      outer.cursorLine=curLine
+      outer.cursorCol=matchPos
+      return true
+    end if
+    return false
+  end function
+  // Command: Search (/pattern forward, or pass dir=-1 for ?pattern). Empty pattern reuses last.
+  cmdSearch=function(args,dir=1)
+    if not buffer then return Error.set("No files opened")
+    if dir==null then dir=1
+    if dir>=0 then dir=1 else dir=-1
+    pattern=""
+    useRegex=false
+    if args and len(args)>0 and join(args," ")!="" then
+      parsed=parseSearchPattern(args)
+      pattern=parsed.pattern
+      useRegex=parsed.useRegex
+    else
+      if outer.lastSearchPattern=="" then return Error.set("Search pattern required")
+      pattern=outer.lastSearchPattern
+      useRegex=outer.lastSearchRegex
+    end if
+    if pattern=="" then return Error.set("Search pattern required")
+    outer.lastSearchPattern=pattern
+    outer.lastSearchRegex=useRegex
+    outer.lastSearchDir=dir
+    times=outer.cmdCount
+    if times<1 then times=1
+    found=false
+    t=0
+    while t<times
+      if not searchStep(pattern,useRegex,dir) then break
+      found=true
+    t+=1
+    end while
     if not found then Info.info("Pattern not found: "+stripRegex(pattern))
+  end function
+  // Command: Repeat last search in same direction (vi-style n / Nn)
+  cmdSearchNext=function(args)
+    if outer.lastSearchPattern=="" then return Error.set("No previous search")
+    cmdSearch([],outer.lastSearchDir)
+  end function
+  // Command: Repeat last search in opposite direction (vi-style N)
+  cmdSearchPrev=function(args)
+    if outer.lastSearchPattern=="" then return Error.set("No previous search")
+    cmdSearch([],-outer.lastSearchDir)
   end function
   // Command: Substitute in line or file (:s/old/new/ or :%s/old/new/)
   cmdSubstitute=function(args)
@@ -937,7 +1060,12 @@ Command.vi=function(Obj,argv)
     print white("  y                    Yank selection")
     print ""
     print white(bold("SEARCH:"))
-    print white("  /pattern             Search for pattern")
+    print white("  /pattern             Search forward")
+    print white("  ?pattern             Search backward")
+    print white("  n / N                Next / previous match")
+    print white("  3n                   Jump 3 matches forward")
+    print white("  /                    Repeat last search forward")
+    print white("  //regex/             Regex search (wrap pattern in / /)")
     print white("  :s/old/new/          Replace in current line")
     print white("  :%s/old/new/g        Replace all in file")
     print ""
@@ -954,6 +1082,7 @@ Command.vi=function(Obj,argv)
     print white("  :exec "+char(60)+"cmd"+char(62)+"          Run shell command")
     print white("  :man "+char(60)+"cmd"+char(62)+"           View man page")
     print white("  :zap                 Remove empty lines")
+    print white("  help or ?            Show this help (bare ?)")
     print ""
     print skyblue("Full docs: ")+bold(":man vi")+skyblue(" or press ")+bold("?")+skyblue(" in editor")
     print green("================================================================")
@@ -1002,6 +1131,8 @@ Command.vi=function(Obj,argv)
     "V":@cmdVisualLine,
     ">":@cmdNext,
     "<":@cmdPrevious,
+    "n":@cmdSearchNext,
+    "N":@cmdSearchPrev,
     "help":@cmdHelp,
     "?":@cmdHelp
   }
@@ -1222,10 +1353,15 @@ Command.vi=function(Obj,argv)
         continue
       end if
       print yellow("Not a visual mode command: "+input+" (Press Enter/V/v/esc to exit)")
-    else if mode=="command" or (len(input)>0 and (input[0]==":" or input[0]=="/")) then
-      // Handle search before stripping prefix
+    else if mode=="command" or (len(input)>0 and (input[0]==":" or input[0]=="/" or (input[0]=="?" and len(input)>1))) then
+      // Handle search before stripping prefix (/ forward, ?pattern backward; bare ? is help)
       if len(input)>0 and input[0]=="/" then
-        cmdSearch(split(input[1:]," "))
+        cmdSearch(split(input[1:]," "),1)
+        mode="normal"
+        continue
+      end if
+      if len(input)>1 and input[0]=="?" then
+        cmdSearch(split(input[1:]," "),-1)
         mode="normal"
         continue
       end if
@@ -1292,7 +1428,9 @@ Command.vi=function(Obj,argv)
       else if len(input)>0 and input[0]==":" then
         mode="command"
       else if len(input)>0 and input[0]=="/" then
-        cmdSearch(split(input[1:]," "))
+        cmdSearch(split(input[1:]," "),1)
+      else if len(input)>1 and input[0]=="?" then
+        cmdSearch(split(input[1:]," "),-1)
       else
         print yellow("Unknown command: '"+input+"' (press ? for help)")
         user_input("Press Enter...")

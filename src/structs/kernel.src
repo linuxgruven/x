@@ -4,7 +4,7 @@
 // =============================================================================
 Kernel={
   "password":"",
-  "version":"0.9.8.4",
+  "version":"0.9.8.5",
   "key":"nopassx",
   "zip":"SDQaBWeq43PCKXB"
 }
@@ -12,7 +12,7 @@ Kernel={
 //Uncomment to activate
 // Kernel={
 //   "password":"",
-//   "version":"0.9.8.4",
+//   "version":"0.9.8.5",
 //   "key":"",
 //   "zip":""
 // }
@@ -20,7 +20,7 @@ Kernel={
 //Uncomment to activate
 // Kernel={
 //   "password":"xyzzy",
-//   "version":"0.9.8.4",
+//   "version":"0.9.8.5",
 //   "key":"FUj!VnRm9.pPEaZeAs&^x+zJspnG^8<CDh.:dj.a+pm:27yjE.@w^YktXQhhEcrk",
 //   "zip":"SdQaBW1q43PCKXB"
 // }

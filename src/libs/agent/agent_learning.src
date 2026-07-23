@@ -410,8 +410,9 @@ end function
 AgentLearning.saveLearning=function
   debug=globals.G_agent.config.debug
   if not globals.G_main or not hasIndex(globals.G_main,"computer") then return false
-  dataPath=path(globals.G_main.dir.data)
-  filepath=dataPath+"/agent_learning.json"
+  aiPath=globals.G_agent.getAiDir
+  if not aiPath then return false
+  filepath=aiPath+"/agent_learning.json"
   //Build learning data
   data={}
   if hasIndex(globals.G_agent,"patternScores") then data.patternScores=globals.G_agent.patternScores
@@ -422,7 +423,7 @@ AgentLearning.saveLearning=function
   comp=globals.G_main.computer
   f=File(comp,filepath)
   if not f then
-    comp.touch(dataPath,"agent_learning.json")
+    comp.touch(aiPath,"agent_learning.json")
     f=File(comp,filepath)
   end if
   if f then set_content(f,jsonStr)
@@ -433,8 +434,9 @@ end function
 AgentLearning.loadLearning=function
   debug=globals.G_agent.config.debug
   if not globals.G_main or not hasIndex(globals.G_main,"computer") then return false
-  dataPath=path(globals.G_main.dir.data)
-  filepath=dataPath+"/agent_learning.json"
+  aiPath=globals.G_agent.getAiDir
+  if not aiPath then return false
+  filepath=aiPath+"/agent_learning.json"
   f=File(globals.G_main.computer,filepath)
   if not f then
     if debug then print green("[DEBUG] Learning: No saved learning data found")

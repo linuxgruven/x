@@ -9,10 +9,16 @@ Knowledge.loaded=false
 // Initialize knowledge system
 Knowledge.init=function
   if not globals.G_main or not hasIndex(globals.G_main,"computer") then return Error.set("Knowledge: G_main not initialized")
-  // Store under payload/data/ai (create folder if missing)
-  dataDir=globals.G_main.dir.data
-  aiPath=path(dataDir)+"/ai"
-  if not File(globals.G_main.computer,aiPath) then create_folder(globals.G_main.computer,path(dataDir),"ai")
+  // Store under payload/data/ai (shared with agent_*.json)
+  aiPath=null
+  if hasIndex(globals,"G_agent") and globals.G_agent and hasIndex(globals.G_agent,"getAiDir") then
+    aiPath=globals.G_agent.getAiDir
+  end if
+  if not aiPath then
+    dataDir=globals.G_main.dir.data
+    aiPath=path(dataDir)+"/ai"
+    if not File(globals.G_main.computer,aiPath) then create_folder(globals.G_main.computer,path(dataDir),"ai")
+  end if
   filepath=aiPath+"/knowledge.ai"
   self.knowledgeFile=File(globals.G_main.computer,filepath)
   if not self.knowledgeFile then
@@ -84,7 +90,11 @@ Knowledge.save=function
   if debug then print cyan("Debug: Knowledge.save - writing "+len(self.entries)+" entries")
   if debug then print cyan("Debug: knowledgeFile type: "+typeof(self.knowledgeFile))
   // Reload file reference to ensure it's valid
-  dataAiPath=path(globals.G_main.dir.data)+"/ai"
+  dataAiPath=null
+  if hasIndex(globals,"G_agent") and globals.G_agent and hasIndex(globals.G_agent,"getAiDir") then
+    dataAiPath=globals.G_agent.getAiDir
+  end if
+  if not dataAiPath then dataAiPath=path(globals.G_main.dir.data)+"/ai"
   filepath=dataAiPath+"/knowledge.ai"
   freshFile=File(globals.G_main.computer,filepath)
   if not freshFile then
