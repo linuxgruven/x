@@ -54,6 +54,7 @@ Command.fileCallbacks=function(Obj)
       "-s":@setAlias,
       "-r":@removeAlias,
       "-l":@listAliases,
+      "clear":@clearAll,
       "--clear":@clearAll
     }
     if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
@@ -137,6 +138,7 @@ Command.fileCallbacks=function(Obj)
 		cmds={
       "-v":@loadFile,
       "-u":@use,
+      "use":@use,
       "-e":@edit,
       "-y":@doLoad,
       "-n":@custom,
@@ -144,6 +146,7 @@ Command.fileCallbacks=function(Obj)
       "-d":@dump,
       "-r":@removeBy,
       "-x":@purge,
+      "connect":@useCustom,
       "--u":@useCustom
 		}
 		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
@@ -1094,6 +1097,7 @@ Command.fileCallbacks=function(Obj)
 			cmds["-x"]=@xTraces
 			cmds["-m"]=@proxyLogs
 			cmds["-c"]=@xConfig
+			cmds["deploy"]=@deploy
 			cmds["--deploy"]=@deploy
 		end if
 		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
@@ -1243,6 +1247,7 @@ Command.fileCallbacks=function(Obj)
 			"-c":@clear,
 			"-x":@killall,
 			"-u":@getShell,
+			"use":@getShell,
 			"--use":@getShell,
 			"-l":@view,
 			"-k":@killSingle,

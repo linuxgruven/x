@@ -130,37 +130,31 @@ Disk._quicksort=function(arr,field,descending=true)
 end function
 Disk.matchWildcard=function(text,pattern)
   //Match text against pattern with wildcard support (* = any characters)
-  //Returns true if text matches pattern, false otherwise
-  //No wildcard - simple contains check
-  if indexOf(pattern,"*")==null then return indexOf(text,pattern)!=null
-  //Split pattern by wildcards (escape * with backslash)
+  //No wildcard → exact name match (use *x* for contains, *.txt for suffix)
+  if indexOf(pattern,"*")==null then return text==pattern
+  //Split pattern by wildcards
   parts=split(pattern,"\*")
-  //No wildcard found after split (shouldn't happen but safety check)
-  if len(parts)==1 then return indexOf(text,parts[0])!=null
+  if len(parts)==1 then return text==parts[0]
   if len(parts)==2 then
     //Single wildcard: prefix*suffix or *suffix or prefix*
     prefix=parts[0]
     suffix=parts[1]
     if prefix=="" and suffix=="" then
-      //Just * matches everything
       return true
     else if prefix=="" then
-      //*suffix - check if ends with
       if len(suffix)>len(text) then return false
       return text[len(text)-len(suffix):]==suffix
     else if suffix=="" then
-      //prefix* - check if starts with
       if len(prefix)>len(text) then return false
       return text[:len(prefix)]==prefix
     else
-      //prefix*suffix - check both
       if len(prefix)+len(suffix)>len(text) then return false
       if text[:len(prefix)]!=prefix then return false
       if text[len(text)-len(suffix):]!=suffix then return false
       return true
     end if
   end if
-  //Multiple wildcards - check if all parts exist in order
+  //Multiple wildcards - all parts must appear in order
   pos=0
   for p in parts
     if p=="" then continue
@@ -174,24 +168,40 @@ Disk.displayResults=function(results,maxDisplay,showSize=true)
   //Display formatted results from analysis functions
   if not results then return Info.error("No results to display")
   if len(results)==0 then return Info.info("No matches found")
+  if maxDisplay>len(results) then maxDisplay=len(results)
   Info.info("Showing "+str(maxDisplay)+" of "+str(len(results))+" results:")
-  //Calculate max owner/group lengths for proper alignment
+  //Column widths from the rows we actually print
   maxOwner=8
   maxGroup=8
-  for item in results;if len(item.owner)>maxOwner then maxOwner=len(item.owner);if len(item.group)>maxGroup then maxGroup=len(item.group);end for
-  i=0;while i<maxDisplay
+  maxPath=8
+  maxSize=4
+  i=0
+  while i<maxDisplay
     item=results[i]
-    if item.is_folder then typeStr=yellow("[DIR] ") else typeStr=cyan("[FILE]")
-    perms=item.permissions
+    if len(item.owner)>maxOwner then maxOwner=len(item.owner)
+    if len(item.group)>maxGroup then maxGroup=len(item.group)
+    if len(item.path)>maxPath then maxPath=len(item.path)
+    if showSize then
+      sz=str(Io.size(item.size))
+      if len(sz)>maxSize then maxSize=len(sz)
+    end if
+    i=i+1
+  end while
+  i=0
+  while i<maxDisplay
+    item=results[i]
+    //Pad labels before coloring so ANSI/color tags do not skew width
+    if item.is_folder then typeStr=yellow(ljust("[DIR]",6)) else typeStr=cyan(ljust("[FILE]",6))
     ownerStr=ljust(item.owner,maxOwner)
     groupStr=ljust(item.group,maxGroup)
+    pathStr=ljust(item.path,maxPath)
     if showSize then
-      sizeStr=" "+Io.size(item.size)
-      print typeStr+" "+perms+" "+ownerStr+" "+groupStr+" "+ljust(item.path,40)+" "+rjust(sizeStr,10)
+      print typeStr+" "+item.permissions+" "+ownerStr+" "+groupStr+" "+pathStr+"  "+rjust(str(Io.size(item.size)),maxSize)
     else
-      print typeStr+" "+perms+" "+ownerStr+" "+groupStr+" "+item.path
+      print typeStr+" "+item.permissions+" "+ownerStr+" "+groupStr+" "+item.path
     end if
-  i+=1;end while
+    i=i+1
+  end while
   if len(results)>maxDisplay then Info.info("... and "+str(len(results)-maxDisplay)+" more results not shown")
 end function
 Disk.free=function(Obj,argv)
@@ -231,6 +241,7 @@ end function
 Disk.list=function(Obj,argv)
   //List files and directories sorted by size
   argv=ArgumentParser.check(argv)
+  argv=ArgumentParser.promoteWords(argv,["free","used"])
   _p=ArgumentParser.init
   //sort by size
   _p.addArgument("s",false,"flag")
@@ -270,7 +281,7 @@ Disk.list=function(Obj,argv)
   if argv.free then return self.free(Obj,argv)
   if argv.used then return self.used(Obj,argv)
   startPath=null
-  if len(argv.rest)>0 then startPath=argv.rest[0] else startPath=path(Obj.root)
+  if len(argv.rest)>0 then startPath=argv.rest[0] else startPath=path(Obj.dir.current)
   //Get filesystem analysis
   Info.info("Analyzing filesystem...")
   results=self.analyzeFileSystem(Obj,startPath)
@@ -288,10 +299,8 @@ Disk.list=function(Obj,argv)
         itemName=lower(itemName)
         pattern=lower(pattern)
       end if
-      //Check for match based on flags
-      matched=false
-      //Exact match only (no wildcards, no contains)
-      if exactMatch then matched=(itemName==pattern) else matched=self.matchWildcard(itemName,pattern) //Use wildcard matching function
+      //Exact (-e) or glob: plain name = exact; use * for wildcards (*x*, *.txt)
+      if exactMatch then matched=(itemName==pattern) else matched=self.matchWildcard(itemName,pattern)
       if matched then push(filtered,item)
     end for
     results=filtered

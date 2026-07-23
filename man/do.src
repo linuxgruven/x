@@ -5,17 +5,17 @@ manDo="DO(1)                            X Shell Manual                          
     do - Repeat commands multiple times
 <b>SYNOPSIS</b>
     <b>do -c</b> COUNT [<b>-n</b> SECONDS] COMMAND
-    <b>do --while</b> [<b>-n</b> SECONDS] COMMAND
-    <b>do --success</b> [<b>-n</b> SECONDS] COMMAND
-    <b>do --match</b> PATTERN [<b>-n</b> SECONDS] COMMAND
+    <b>do while</b> [<b>-n</b> SECONDS] COMMAND
+    <b>do success</b> [<b>-n</b> SECONDS] COMMAND
+    <b>do match</b> PATTERN [<b>-n</b> SECONDS] COMMAND
 <b>DESCRIPTION</b>
     Execute a command repeatedly for a specified number of iterations,
     continuously until 'q' is pressed, until the command succeeds, or until
     its output matches a pattern. COUNT must be a number. Only one mode flag
-    (-c, --while, --success, --match) may be used at a time.
+    (-c, while, success, match) may be used at a time.
 
     The optional <b>-n</b> flag inserts a delay between iterations, making <b>do</b>
-    behave like the Unix <b>watch</b> command when combined with <b>--while</b>.
+    behave like the Unix <b>watch</b> command when combined with <b>while</b>.
 
     <b>Pipes inside do:</b>
       The shell splits pipe operators <b>|</b> before <b>do</b> sees them. To repeat
@@ -28,14 +28,14 @@ manDo="DO(1)                            X Shell Manual                          
       Execute COMMAND exactly COUNT times.
       COUNT must be a numeric value.
 
-    <b>--while</b> - Repeat Continuously
+    <b>while</b> - Repeat Continuously
       Execute COMMAND continuously until 'q' is pressed.
 
-    <b>--success</b> - Retry Until Success
+    <b>success</b> - Retry Until Success
       Execute COMMAND repeatedly until it completes without error.
       Stops as soon as COMMAND succeeds. Press 'q' to abort.
 
-    <b>--match PATTERN</b> - Retry Until Output Matches
+    <b>match PATTERN</b> - Retry Until Output Matches
       Execute COMMAND repeatedly until any line of its output matches
       PATTERN (regex). Output is printed each iteration. Press 'q' to abort.
 
@@ -60,28 +60,28 @@ manDo="DO(1)                            X Shell Manual                          
     <b>do -c 5 -n 2 ping 192.168.1.1</b>
     Ping 5 times, 2 seconds apart
 
-    <b>do --while -n 5 ps</b>
+    <b>do while -n 5 ps</b>
     Refresh process list every 5 seconds (watch-style)
 
-    <b>do --while -n 2 cat /etc/passwd | wc -l</b>
+    <b>do while -n 2 cat /etc/passwd | wc -l</b>
     Monitor line count every 2 seconds
 
     <color=#e4ff34># Continuous Execution (no delay)</color>
-    <b>do --while nmap -p 22 192.168.1.0/24</b>
+    <b>do while nmap -p 22 192.168.1.0/24</b>
     Continuous network scanning
 
     <color=#e4ff34># Retry Until Success</color>
-    <b>do --success -n 3 exploit router 80</b>
+    <b>do success -n 3 exploit router 80</b>
     Retry exploit every 3 seconds until it succeeds
 
-    <b>do --success -n 5 scan 1.2.3.4 http s</b>
+    <b>do success -n 5 scan 1.2.3.4 http s</b>
     Keep scanning until a result is returned without error
 
     <color=#e4ff34># Retry Until Output Matches</color>
-    <b>do --match ""open"" -n 2 scan 1.2.3.4</b>
+    <b>do match ""open"" -n 2 scan 1.2.3.4</b>
     Retry scan every 2 seconds until output contains 'open'
 
-    <b>do --match ""root"" -n 1 cat /etc/passwd</b>
+    <b>do match ""root"" -n 1 cat /etc/passwd</b>
     Repeat until 'root' appears in output
 <b>SEE ALSO</b>
     <b>wait</b>, <b>cron</b>"

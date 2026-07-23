@@ -22,7 +22,7 @@ manConfig="CONFIG(8)                        X Shell Manual                      
     <b>config -h</b>
     <b>config -z</b>
     <b>config -r</b>
-    <b>config --reset</b>
+    <b>config reset</b>
     <b>config -b</b>
     <b>config -d</b>
     <b>config -v</b> [NAME]
@@ -106,7 +106,7 @@ manConfig="CONFIG(8)                        X Shell Manual                      
     Use rshell shell objects
     Reinitialize imported servers
 
-    <b>--reset</b>
+    <b>reset</b>
     Reset to defaults
     Requires framework relaunch
 
@@ -191,7 +191,7 @@ manConfig="CONFIG(8)                        X Shell Manual                      
     <b>config -x reset</b>
     Reset method index to default (-1)
 
-    <b>config --reset</b>
+    <b>config reset</b>
     Reset all to defaults
 <b>SEE ALSO</b>
     <b>sys</b>, <b>make</b>, <b>set</b>, <b>alias</b>"

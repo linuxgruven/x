@@ -4,12 +4,13 @@
 // =============================================================================
 Command.yes=function(Obj,argv)
   _p=ArgumentParser.init
-  _p.addArgument("off",true,"flag")   // --off: disable auto-yes
-  _p.addArgument("c",false,"flag")     // -c: check current status
+  _p.addArgument("off",true,"flag")    // off / --off: disable auto-yes
+  _p.addArgument("check",true,"flag")  // check / --check: show status
   if not argv then argv=[]
+  argv=ArgumentParser.promoteWords(argv,["off","check"])
   argv=_p.parse("yes",argv,Obj)
   if argv isa Error then return
-  if argv.c then
+  if argv.check then
     if globals.G_auto_yes then Info.info("Auto-yes is ON") else Info.info("Auto-yes is OFF")
   else if argv.off then
     globals.G_auto_yes=false

@@ -4,20 +4,20 @@ manHtop="HTOP(1)                          X Shell Manual                        
 <b>NAME</b>
     htop - Interactive process viewer
 <b>SYNOPSIS</b>
-    <b>htop</b> [--deploy]
+    <b>htop</b> [deploy]
 <b>DESCRIPTION</b>
     Display active processes of the operating system in real-time.
-    The --deploy flag launches htop as a background process, allowing
-    continued shell use. Without --deploy, use CTRLC to exit.
+    The deploy subcommand launches htop as a background process, allowing
+    continued shell use. Without deploy, use CTRLC to exit.
 <b>OPTIONS</b>
-    <b>--deploy</b> - Background Mode
+    <b>deploy</b> - Background Mode
       Launch htop as a background process.
       Allows continued shell interaction while monitoring processes.
 <b>EXAMPLE:</b>
     <b>htop</b>
     Run process viewer (CTRLC to exit)
 
-    <b>htop --deploy</b>
+    <b>htop deploy</b>
     Launch as background process
 <b>SEE ALSO</b>
     <b>spawn</b>, <b>gmon</b>"

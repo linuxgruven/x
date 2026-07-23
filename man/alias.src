@@ -8,7 +8,7 @@ manAlias="ALIAS(1)                         X Shell Manual                       
     <b>alias -s</b> (reads from stdin: ""ALIAS COMMAND [PARAMS]"")
     <b>alias -r ALIAS</b>
     <b>alias -l</b>
-    <b>alias --clear</b>
+    <b>alias clear</b>
 <b>DESCRIPTION</b>
     Create command aliases for faster access to frequently-used commands
     with common parameters. Aliases persist across sessions.
@@ -24,7 +24,7 @@ manAlias="ALIAS(1)                         X Shell Manual                       
       Display all configured aliases. Pipeable — output can be
       filtered with grep.
 
-    <b>--clear</b> - Clear All Aliases
+    <b>clear</b> - Clear All Aliases
       Remove all configured aliases.
 <b>EXAMPLE:</b>
     <b>alias -l</b>
@@ -47,7 +47,7 @@ manAlias="ALIAS(1)                         X Shell Manual                       
     <b>alias -r ll</b>
     Remove ll alias
 
-    <b>alias --clear</b>
+    <b>alias clear</b>
     Clear all aliases
 
     <b>alias -l | grep scan</b>

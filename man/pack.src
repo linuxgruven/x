@@ -10,7 +10,7 @@ manPack="PACK(1)                          X Shell Manual                        
     <b>pack -r</b> [-i IP]
     <b>pack -s</b>
     <b>pack -t</b>
-    <b>pack --check</b>
+    <b>pack check</b>
 <b>DESCRIPTION</b>
     The pack utility packages libraries and routers for portable deployment.
     It enables crypto encryption/decryption and maintains libraries in the
@@ -41,7 +41,7 @@ manPack="PACK(1)                          X Shell Manual                        
     <b>-t</b> - Pack Traffic
       Pack traffic management libraries.
 
-    <b>--check</b> - List Packed Items
+    <b>check</b> - List Packed Items
       Display all currently packed items in /payload/data.
 <b>EXAMPLE:</b>
     <color=#e4ff34># Pack All Libraries</color>
@@ -70,7 +70,7 @@ manPack="PACK(1)                          X Shell Manual                        
     <b>pack -t</b>
     Pack traffic libraries
 
-    <b>pack --check</b>
+    <b>pack check</b>
     List all packed items
 <b>SEE ALSO</b>
     <b>0day</b>, <b>lms</b>"

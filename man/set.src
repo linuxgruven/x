@@ -27,7 +27,7 @@ manSet="SET(1)                           X Shell Manual                         
     <b>set -p</b>
     <b>set -q</b>
     <b>set -rn</b> (TARGET_[PATH]) ([LENGTH])
-    <b>set --senc</b> [-u USER] [-P PASSWORD] [-p PORT] [--remove]
+    <b>set senc</b> [-u USER] [-P PASSWORD] [-p PORT] [--remove]
 <b>DESCRIPTION</b>
     Comprehensive file and system modification toolkit. Creates notes, file bombs,
     ghost accounts, and manages permissions. Handles owner, group, and chmod
@@ -138,7 +138,7 @@ manSet="SET(1)                           X Shell Manual                         
     Rename all files randomly
     Default: current dir, length 20
 
-    <b>--senc [-u USER] [-P PASSWORD] [-p PORT] [--remove]</b>
+    <b>senc [-u USER] [-P PASSWORD] [-p PORT] [--remove]</b>
     Setup SSH encryption (S1 or R1)
     -u: SSH username
     -P: SSH password
@@ -198,16 +198,16 @@ manSet="SET(1)                           X Shell Manual                         
     Randomize filenames
 
     <color=#e4ff34># Encryption</color>
-    <b>set --senc</b>
+    <b>set senc</b>
     Setup encryption (prompts for creds)
 
-    <b>set --senc -u root -P password</b>
+    <b>set senc -u root -P password</b>
     Setup with credentials
 
-    <b>set --senc --remove</b>
+    <b>set senc --remove</b>
     Remove encryption
 
-    <b>set --senc -u admin -p 22</b>
+    <b>set senc -u admin -p 22</b>
     Prompts for password only
 <b>SEE ALSO</b>
     <b>chmod</b>, <b>chown</b>, <b>sys</b>"

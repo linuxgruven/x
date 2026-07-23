@@ -920,6 +920,7 @@ Command.mainCallbacks=function(Obj)
       "-g":@doChgrp,
       "-c":@doChmod,
       "-e":@emailSettings,
+      "senc":@encryption,
       "--senc":@encryption
 		}
 		cmds=cmds+Command.setBase(Obj)
@@ -1491,6 +1492,7 @@ Command.mainCallbacks=function(Obj)
 		cmds={
       "-s":@remoteConnection,
       "-t":@terminal,
+      "terminal":@term,
       "--terminal":@term,
       "x":@startX
 		}
@@ -1810,6 +1812,7 @@ Command.mainCallbacks=function(Obj)
       end if
     end function
 		cmds={
+      "reset":@reset,
       "--reset":@reset,
       "-r":@rshell,
       "-c":@create,

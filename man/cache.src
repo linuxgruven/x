@@ -5,7 +5,7 @@ manCache="CACHE(1)                         X Shell Manual                       
     cache - Remote system attack cache management
 <b>SYNOPSIS</b>
     <b>cache -l</b>
-    <b>cache -u</b> NICK[NAME] | INDEX
+    <b>cache</b> <b>use</b>|<b>-u</b> NICK[NAME] | INDEX
     <b>cache -e</b> NICK[NAME] | INDEX
     <b>cache -y</b>
     <b>cache -n</b>
@@ -13,11 +13,11 @@ manCache="CACHE(1)                         X Shell Manual                       
     <b>cache -d</b>
     <b>cache -r</b> NICK[NAME] | INDEX
     <b>cache -x</b>
-    <b>cache --u -a</b> NICK[NAME] | INDEX
-    <b>cache --u -t</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
-    <b>cache --u -s</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
-    <b>cache --u -p</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
-    <b>cache --u -u</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
+    <b>cache connect -a</b> NICK[NAME] | INDEX
+    <b>cache connect -t</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
+    <b>cache connect -s</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
+    <b>cache connect -p</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
+    <b>cache connect -u</b> NICK[NAME] | INDEX ([PORT]) ([SERVICE])
 <b>DESCRIPTION</b>
     Remote system attack cache for maintaining persistent access to compromised
     systems. Stores SSH and FTP backdoors for later exploitation. Populated by
@@ -28,7 +28,7 @@ manCache="CACHE(1)                         X Shell Manual                       
     List captured systems
     Shows all cached entries
 
-    <b>-u NICK[NAME] | INDEX</b>
+    <b>use</b>|<b>-u NICK[NAME] | INDEX</b>
     Use cached system
     Connect by name or index
 
@@ -60,23 +60,23 @@ manCache="CACHE(1)                         X Shell Manual                       
     Clear entire cache
     Remove all entries
 
-    <b>--u -a NICK[NAME] | INDEX</b>
+    <b>connect -a NICK[NAME] | INDEX</b>
     Attack cached system
     Launch exploit against target
 
-    <b>--u -t NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
+    <b>connect -t NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
     Start terminal connection
     SSH or FTP terminal access
 
-    <b>--u -s NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
+    <b>connect -s NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
     Open shell connection
     Full shell access to target
 
-    <b>--u -p NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
+    <b>connect -p NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
     Pivot to cached system
     Upload X and launch in pivot mode
 
-    <b>--u -u NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
+    <b>connect -u NICK[NAME] | INDEX ([PORT]) ([SERVICE])</b>
     Full pivot with restart
     Deploy X to target and restart framework
 <b>EXAMPLE:</b>
@@ -101,19 +101,19 @@ manCache="CACHE(1)                         X Shell Manual                       
     Edit third entry
 
     <color=#e4ff34># Remote Operations</color>
-    <b>cache --u -s 0</b>
+    <b>cache connect -s 0</b>
     Open shell on first system
 
-    <b>cache --u -s hacked</b>
+    <b>cache connect -s hacked</b>
     Open shell using nickname
 
-    <b>cache --u -t 1 21 ftp</b>
+    <b>cache connect -t 1 21 ftp</b>
     FTP terminal on port 21
 
-    <b>cache --u -p webserver</b>
+    <b>cache connect -p webserver</b>
     Standard pivot to system
 
-    <b>cache --u -u webserver 22 ssh</b>
+    <b>cache connect -u webserver 22 ssh</b>
     Full pivot and restart
 
     <color=#e4ff34># Cache Management</color>

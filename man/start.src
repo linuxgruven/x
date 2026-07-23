@@ -7,7 +7,7 @@ manStart="START(8)                         X Shell Manual                       
     <b>start x</b> [PATH]
     <b>start -t</b>
     <b>start -s</b>
-    <b>start --terminal</b>
+    <b>start terminal</b>
 <b>DESCRIPTION</b>
     Launch new x framework instances or establish terminal connections.
     Supports launching nested x instances (up to 17 pivots), starting
@@ -24,7 +24,7 @@ manStart="START(8)                         X Shell Manual                       
     <b>-s</b> - Remote Shell
       Start remote SSH or FTP shell connection.
 
-    <b>--terminal</b> - Full Terminal Session
+    <b>terminal</b> - Full Terminal Session
       Launch actual terminal session (closes current x session).
       Requires confirmation.
 
@@ -53,7 +53,7 @@ manStart="START(8)                         X Shell Manual                       
     <b>start -t</b>
     Start terminal-like interface
 
-    <b>start --terminal</b>
+    <b>start terminal</b>
     Launch full terminal (exits x session)
 
     <color=#e4ff34># Multi-hop Pivoting</color>

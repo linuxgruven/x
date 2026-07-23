@@ -5,8 +5,8 @@ manYes="YES(1)                            X Shell Manual                        
     yes - enable or disable automatic yes to all prompts
 <b>SYNOPSIS</b>
     <b>yes</b>
-    <b>yes --off</b>
-    <b>yes -c</b>
+    <b>yes off</b>
+    <b>yes check</b>
 <b>DESCRIPTION</b>
     Sets a session-wide flag that automatically confirms all yes/no prompts
     without user input. Useful when running commands with <b>-i</b> (interactive)
@@ -21,15 +21,15 @@ manYes="YES(1)                            X Shell Manual                        
     The flag is automatically cleared at the end of any pipeline, so
     <b>yes | cmd -i ...</b> works for pipeline-scoped auto-confirmation.
 
-    Use <b>yes --off</b> to manually disable the flag outside of a pipeline.
+    Use <b>yes off</b> to manually disable the flag outside of a pipeline.
 <b>OPTIONS</b>
     <b>yes</b>
     Enable auto-yes. All Gui prompts will return true automatically.
 
-    <b>yes --off</b>
+    <b>yes off</b>
     Disable auto-yes and restore normal prompt behaviour.
 
-    <b>yes -c</b>
+    <b>yes check</b>
     Check the current state of auto-yes (ON or OFF).
 <b>EXAMPLE:</b>
     <color=#e4ff34># Session-scoped</color>
@@ -45,7 +45,7 @@ manYes="YES(1)                            X Shell Manual                        
     <b>proxy -r 5 yes</b>
     Same with trailing yes (enables this flag)
 
-    <b>yes --off</b>
+    <b>yes off</b>
     Re-enable normal prompting
 
     <color=#e4ff34># Pipeline-scoped (auto-cleared after pipe)</color>
@@ -53,7 +53,7 @@ manYes="YES(1)                            X Shell Manual                        
     Auto-confirm overwrite for this command only
 
     <color=#e4ff34># Check status</color>
-    <b>yes -c</b>
+    <b>yes check</b>
     Print whether auto-yes is currently ON or OFF
 
     <color=#e4ff34># Cheeky reset</color>

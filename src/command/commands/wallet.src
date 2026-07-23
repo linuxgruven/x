@@ -30,8 +30,9 @@ Command.wallet=function(Obj,argv)
     return credentials
   end function
   if not argv then return Man.help(["wallet"])
+  argv=ArgumentParser.promoteWords(argv,["create"])
   _p=ArgumentParser.init
-  _p.addArgument("create",true,"flag")  // Long flag: --create (create new wallet)
+  _p.addArgument("create",true,"flag")  // create / --create (create new wallet)
   _p.addArgument("u",false,"store")  // Username for wallet
   _p.addArgument("p",false,"store")  // Password for wallet
   argv=_p.parseArgs("wallet",argv)

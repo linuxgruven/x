@@ -115,6 +115,7 @@ Command.computerCallbacks=function(Obj)
 			"-u":@wifiUse,
 			"-n":@wifiNick,
 			"-e":@wifiEdit,
+			"edit":@wifiEdit,
 			"--edit":@wifiEdit,
 			"burn":@wifiBurn,
 			"creds":@wifiCreds,

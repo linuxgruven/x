@@ -310,9 +310,11 @@ Command.shellCallbacks=function(Obj)
 	end function
 	__sniffer=function(argv)
     if not Library.haveMetaxploit then return
+    if not argv then argv=[]
+    argv=ArgumentParser.promoteWords(argv,["save","deploy"],false)
     _p=ArgumentParser.init
-    _p.addArgument("save",true,"flag")  // Long flag: --save (save captured packets)
-    _p.addArgument("deploy",true,"flag")  // Long flag: --deploy (deploy sniffer to target)
+    _p.addArgument("save",true,"flag")  // save / --save
+    _p.addArgument("deploy",true,"flag")  // deploy / --deploy
     argv=_p.parseArgs("sniffer",argv)
     if argv isa Error then return
     if not Obj.layer=="shell" then return Net.sniff(Obj,argv)
@@ -324,9 +326,11 @@ Command.shellCallbacks=function(Obj)
 		Net.sniff(Obj,argv)
 	end function
   __gmon=function(argv)
+    if not argv then argv=[]
+    argv=ArgumentParser.promoteWords(argv,["deploy"],false)
     _p=ArgumentParser.init
     _p.addArgument("p",false,"store")  // Monitor path (default: /home/guest)
-    _p.addArgument("deploy",true,"flag")  // Long flag: --deploy (deploy gmon to target)
+    _p.addArgument("deploy",true,"flag")  // deploy / --deploy
     argv=_p.parseArgs("gmon",argv)
     if argv isa Error then return
     if argv.deploy then

@@ -425,13 +425,13 @@ Bash.do=function(Obj,argv)
       if i>=_len then return Error.set("No parameter for flag: '-c'")
       c=val(argv[i])
       if not c isa number then return Error.set("Invalid parameter (number) for flag: '-c'")
-    else if a=="--while" then
+    else if a=="while" or a=="--while" then
       isWhile=true
-    else if a=="--success" then
+    else if a=="success" or a=="--success" then
       isSuccess=true
-    else if a=="--match" then
+    else if a=="match" or a=="--match" then
       i=i+1
-      if i>=_len then return Error.set("No parameter for flag: '--match'")
+      if i>=_len then return Error.set("No parameter for flag: 'match'")
       matchPat=argv[i]
     else if a=="-n" then
       i=i+1
@@ -450,7 +450,7 @@ Bash.do=function(Obj,argv)
   if isWhile then modeCount=modeCount+1
   if isSuccess then modeCount=modeCount+1
   if matchPat then modeCount=modeCount+1
-  if modeCount>1 then return Error.set("Cannot combine -c, --while, --success, and --match flags")
+  if modeCount>1 then return Error.set("Cannot combine -c, while, success, and match modes")
   if not c and not isWhile and not isSuccess and not matchPat then c=1
   cmdStr=join(rest," ")
   //--success: retry until command runs without error

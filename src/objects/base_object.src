@@ -198,6 +198,7 @@ BaseObject.runBash=function(Obj,argv)
   if not argv then return Man.help(["run"])
   if globals.G_bash.DEBUG then globals.G_bash.DEBUG=false
   if globals.G_bash.SIGSTOP then Bash.clear
+  argv=ArgumentParser.promoteWords(argv,["list","reset"])
   _p=ArgumentParser.init
   _p.addArgument("n",false,"store")
   _p.addArgument("e",false,"store")

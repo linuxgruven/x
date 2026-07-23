@@ -231,6 +231,7 @@ ShellObject.run=function(this,ex,isPiviting=false,argz=[],headless=false,cmds=nu
 		//Command map for start options
 		cmds={
       "-t":@terminal,
+      "terminal":@term,
       "--terminal":@term,
       "x":@startX
 		}
@@ -320,6 +321,7 @@ ShellObject.run=function(this,ex,isPiviting=false,argz=[],headless=false,cmds=nu
       "-u":@users,
       "-f":@lockFile,
       "-z":@zipFile,
+      "senc":@encryption,
       "--senc":@encryption
     }+Command.setBase(this)
 		if not hasIndex(cmds,Arg1) then return Error.set(Text.msg.flag+Arg1+" ]")
@@ -799,6 +801,7 @@ ShellObject.run=function(this,ex,isPiviting=false,argz=[],headless=false,cmds=nu
     end function
 		//Pack command map
 		cmds={
+      "check":@check,
       "--check":@check,
       "-a":@all,
       "-c":@crypto,

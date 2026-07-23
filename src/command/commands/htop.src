@@ -3,8 +3,10 @@
 // Real-time process monitor with CPU/memory bars; refreshes only on change.
 // =============================================================================
 Command.htop=function(Obj,argv)
+  if not argv then argv=[]
+  argv=ArgumentParser.promoteWords(argv,["deploy"],false)
   _p=ArgumentParser.init
-  _p.addArgument("deploy",true,"flag")  // Deployment flag
+  _p.addArgument("deploy",true,"flag")  // deploy / --deploy
   argv=_p.parse("htop",argv,Obj)
   if argv isa Error then return
   if argv.deploy then return Builder.deploy(Obj,argv,"htop")

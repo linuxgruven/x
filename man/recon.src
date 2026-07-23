@@ -8,10 +8,10 @@ manRecon="RECON(1)                         X Shell Manual                       
     <b>recon</b> [--extreme] <b>-a</b> IP
     <b>recon</b> [--extreme] <b>-s</b> [<b>-f</b> FILE|NAME] [<b>-p</b> PATH] IP
     <b>recon</b> [--extreme] <b>-r</b> IP
-    <b>recon</b> [--extreme] <b>--filter</b> [<b>-u</b>] [<b>--save</b>] [<b>-i</b> LAN_IP] IP
-    <b>recon</b> [--subjects] IP
-    <b>recon</b> <b>-g</b> [<b>--grep</b> PATTERN] [<b>--filter</b>] IP
-    <b>recon</b> <b>--file</b> PATH
+    <b>recon</b> [--extreme] <b>filter</b> [<b>-u</b>] [<b>save</b>] [<b>-i</b> LAN_IP] IP
+    <b>recon</b> [subjects] IP
+    <b>recon</b> <b>-g</b> [<b>--grep</b> PATTERN] [<b>filter</b>] IP
+    <b>recon</b> <b>file</b> PATH
 <b>DESCRIPTION</b>
     Network intelligence gathering tool for collecting public information and
     social engineering data. Retrieves email addresses, user information, and
@@ -22,8 +22,8 @@ manRecon="RECON(1)                         X Shell Manual                       
     By default recon builds a user dataset including passwords, email accounts,
     bank data, and any binary files found in the user's home folder when
     readable. Use <b>-r</b> to collect email-focused data only.
-    Use <b>--filter</b> for interactive dataset filtering. Filter prompts stop on
-    empty input or cancel. Use <b>--save</b> to write results to reconData.txt.
+    Use <b>filter</b> for interactive dataset filtering. Filter prompts stop on
+    empty input or cancel. Use <b>save</b> to write results to reconData.txt.
 
     When binary files are present in a user's home directory they are listed
     under <b>FILES FOUND</b> in the user dataset output.
@@ -45,18 +45,18 @@ manRecon="RECON(1)                         X Shell Manual                       
     Reverse/email-focused reconnaissance
     Collect email dataset instead of full user dataset
 
-    <b>recon --file PATH</b>
+    <b>recon file PATH</b>
     Process IP list from file
     Batch reconnaissance, one IP per line
 
-    <b>recon --filter IP</b>
+    <b>recon filter IP</b>
     Interactively filter printed dataset
     Use with -u for user dataset filtering
 
     <b>-u</b>
     Show/filter user dataset instead of email dataset
 
-    <b>--save</b>
+    <b>save</b>
     Save full recon results to reconData.txt in current directory
 
     <b>-i</b> LAN_IP
@@ -65,10 +65,10 @@ manRecon="RECON(1)                         X Shell Manual                       
     <b>--extreme</b>
     Expand LAN bounce address enumeration from 0-50 to 0-255
 
-    <b>--subjects</b>
+    <b>subjects</b>
     Fetch and display email subject lines for each account found
 
-    <b>--view</b>
+    <b>view</b>
     Display the contents of text files found in user home directories
 
     <b>-g</b>
@@ -106,24 +106,24 @@ manRecon="RECON(1)                         X Shell Manual                       
     Collect email-focused recon data
 
     <color=#e4ff34># Filtering</color>
-    <b>recon -u --filter 203.0.113.241</b>
+    <b>recon filter -u 203.0.113.241</b>
     Filter user dataset interactively
 
-    <b>recon --filter 203.0.113.241</b>
+    <b>recon filter 203.0.113.241</b>
     Filter email dataset interactively
 
-    <b>recon --filter -i 192.168.0.7 203.0.113.241</b>
+    <b>recon filter -i 192.168.0.7 203.0.113.241</b>
     Filter data while targeting one LAN IP
 
     <color=#e4ff34># Saving Results</color>
-    <b>recon --save 203.0.113.241</b>
+    <b>recon save 203.0.113.241</b>
     Save recon results to reconData.txt
 
     <color=#e4ff34># Email Subjects</color>
-    <b>recon --subjects 203.0.113.50</b>
+    <b>recon subjects 203.0.113.50</b>
     Include email subjects in output
 
-    <b>recon --view 203.0.113.50</b>
+    <b>recon view 203.0.113.50</b>
     Show contents of found text files inline
 
     <color=#e4ff34># Grab Mode</color>
@@ -133,11 +133,11 @@ manRecon="RECON(1)                         X Shell Manual                       
     <b>recon -g --grep password 203.0.113.50</b>
     Grab and filter to entries containing 'password'
 
-    <b>recon -g --filter 203.0.113.50</b>
+    <b>recon filter -g 203.0.113.50</b>
     Grab with interactive filter prompt
 
     <color=#e4ff34># Batch Operations</color>
-    <b>recon --file targets.txt</b>
+    <b>recon file targets.txt</b>
     Recon from IP list
 <b>SEE ALSO</b>
     <b>dig</b>, <b>scan</b>, <b>nslookup</b>"

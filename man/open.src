@@ -6,7 +6,7 @@ manOpen="OPEN(1)                          X Shell Manual                        
 <b>SYNOPSIS</b>
     <b>open </b><b>-t</b>|<b>term</b> [<b>--l</b>] [<b>PARAMS</b>]
     <b>open </b><b>-b</b>|<b>web</b> [<b>--l</b>] [<b>-f</b> [<b>INDEX</b>] [<b>PARAMS</b>)
-    <b>open </b><b>-e</b>|<b>email</b> [<b>--login</b>] [<b>--l</b>] [<b>PARAMS</b>]
+    <b>open </b><b>-e</b>|<b>email</b> [<b>login</b>] [<b>--l</b>] [<b>PARAMS</b>]
     <b>open </b><b>-s</b>|<b>set</b> [<b>--l</b>] [<b>PARAMS</b>]
     <b>open </b><b>-f</b>|<b>file</b> [<b>--l</b>] [<b>PARAMS</b>]
     <b>open </b><b>-c</b>|<b>code</b> [<b>--code</b> [<b>PARAM</b>] [<b>--l</b>] [<b>PARAMS</b>]
@@ -33,7 +33,7 @@ manOpen="OPEN(1)                          X Shell Manual                        
     locate and launch it automatically. Use the --l flag to open applications
     from the main system. The --l flag is optional for computer and file objects.
 
-    Use --deploy to SCP an application from your local /usr/bin to the target
+    Use deploy to SCP an application from your local /usr/bin to the target
     system, launch it, then clean up. Useful on shells where apps are missing.
 
     Accepts filenames/paths from stdin via pipe. Piped lines are appended as
@@ -107,7 +107,7 @@ manOpen="OPEN(1)                          X Shell Manual                        
     <b>-j</b>|<b>chat</b> - Chat Client
       Open the Chat client application for messaging.
 
-    <b>--deploy</b> - Deploy Application
+    <b>deploy</b> - Deploy Application
       SCP the application from local /usr/bin to the target, launch it,
       then remove the copy. Works with any app flag above.
 <b>EXAMPLE:</b>
@@ -118,7 +118,7 @@ manOpen="OPEN(1)                          X Shell Manual                        
     <b>open -b</b>
     Open browser
 
-    <b>open -e --login</b>
+    <b>open email login</b>
     Open email with auto-login
 
     <color=#e4ff34># Launch from Main</color>
@@ -180,10 +180,10 @@ manOpen="OPEN(1)                          X Shell Manual                        
     Open chat client
 
     <color=#e4ff34># Deploy to Remote</color>
-    <b>open -b --deploy</b>
+    <b>open browser deploy</b>
     Deploy and open browser on target
 
-    <b>open -c --deploy</b>
+    <b>open chat deploy</b>
     Deploy and open code editor on target
 <b>SEE ALSO</b>
     <b>exec</b>, <b>cd</b>"

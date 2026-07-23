@@ -9,7 +9,7 @@ manSu="SU(8)                            X Shell Manual                          
     <b>su </b><b>-r</b>
     <b>su </b><b>-e</b> [<b>-u</b> [<b>USER</b>]] <b>BINARY [</b><b>PARAMS</b><b>]</b>
     <b>su </b><b>-s</b> [<b>-u</b> [<b>USER</b>]]
-    <b>su </b><b>-t</b> [<b>--start</b> [<b>-u</b> [<b>USER</b>]]
+    <b>su </b><b>-t</b> [<b>start</b> [<b>-u</b> [<b>USER</b>]]
     <b>su </b><b>-l</b> [<b>-u</b> [<b>USER</b>]]
     <b>su </b><b>-w</b> [<b>-u</b> [<b>USER</b>]]
     <b>su </b><b>-p</b>
@@ -32,8 +32,8 @@ manSu="SU(8)                            X Shell Manual                          
         Execute a binary with user permissions.
     <b>su </b><b>-s</b> [<b>-u</b> [<b>USER</b>]]
         Start a shell session with user permissions.
-    <b>su </b><b>-t</b> [<b>--start</b>] [<b>-u</b> [<b>USER</b>]]
-        Start a terminal with user permissions. If the --start flag is used,
+    <b>su </b><b>-t</b> [<b>start</b>] [<b>-u</b> [<b>USER</b>]]
+        Start a terminal with user permissions. If start is used,
         then will close x to a terminal.
     <b>su </b><b>-l</b> [<b>-u</b> [<b>USER</b>]]
         Re-launch x in user mode.

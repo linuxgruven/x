@@ -3,6 +3,37 @@
 // Command-line argument parser; handles flags, options, positional args, and type coercion.
 // =============================================================================
 ArgumentParser={}
+// Promote bare words to long flags (e.g. create → --create)
+// words: list of action names, or map of word → flag string (e.g. {"connect":"--u"})
+// leadingOnly: if true (default), only argv[0]; if false, any bare word in argv
+ArgumentParser.promoteWords=function(argv,words,leadingOnly=true)
+  if not argv or len(argv)==0 then return argv
+  idxs=[]
+  if leadingOnly then
+    push(idxs,0)
+  else
+    i=0
+    while i<len(argv);push(idxs,i);i=i+1;end while
+  end if
+  for i in idxs
+    a=argv[i]
+    if not a or len(a)==0 then continue
+    al=lower(a)
+    if al[0]=="-" then continue
+    if words isa map then
+      if hasIndex(words,al) then argv[i]=words[al]
+    else
+      for w in words
+        if al==w then
+          argv[i]="--"+w
+          break
+        end if
+      end for
+    end if
+    if leadingOnly then break
+  end for
+  return argv
+end function
 // Initialize new argument parser instance
 ArgumentParser.init=function
   x=new self

@@ -10,7 +10,7 @@ manIwlist="IWLIST(8)                        X Shell Manual                      
     <b>iwlist -c</b> BSSID ESSID PASSWORD
     <b>iwlist -u</b> INDEX|ESSID|BSSID|NICK
     <b>iwlist -n</b> INDEX|ESSID|BSSID|NICK [NICKNAME]
-    <b>iwlist -e</b> [INDEX|ESSID|BSSID|NICK] [FIELD] [VALUE]
+    <b>iwlist</b> <b>edit</b>|<b>-e</b> [INDEX|ESSID|BSSID|NICK] [FIELD] [VALUE]
     <b>iwlist -k</b> INDEX [ACKS]
     <b>iwlist crackall</b> [--all]
     <b>iwlist creds</b>
@@ -51,7 +51,7 @@ manIwlist="IWLIST(8)                        X Shell Manual                      
       pass <b>-</b> to clear. Nicknames can be used with <b>-u</b>.
       Shortcut for <b>-e … nick …</b>.
 
-    <b>-e</b> / <b>--edit</b> - Edit Credentials
+    <b>-e</b> / <b>edit</b> - Edit Credentials
       No args: open <b>wifi_creds</b> in vi.
       One arg: show all fields for that entry.
       Two+ args: set a field.

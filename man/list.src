@@ -21,7 +21,7 @@ manList="LIST(1)                          X Shell Manual                        
     <b>list -a</b>
     <b>list -s</b>
     <b>list -s -b</b> (-B | -D)
-    <b>list -s --password</b> (-B | -D)
+    <b>list -s password</b> (-B | -D)
     <b>list -s -e</b> (-B | -D)
 <b>DESCRIPTION</b>
     Comprehensive system information gathering and vulnerability scanning tool.
@@ -105,7 +105,7 @@ manList="LIST(1)                          X Shell Manual                        
     List Bank accounts
     -B for dictionary, -D for decipher
 
-    <b>-s --password (-B | -D)</b>
+    <b>-s password (-B | -D)</b>
     List passwd accounts
     -B for dictionary, -D for decipher
 

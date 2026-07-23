@@ -6,12 +6,13 @@
 Command.open=function(Obj,argv)
   if not argv then return Man.help(["open"])
   appName=lower(pull(argv))
+  argv=ArgumentParser.promoteWords(argv,["login","deploy"],false)
   _p=ArgumentParser.init
   _p.addArgument("l",true,"flag") // Local execution mode
   _p.addArgument("f",false,"storeNumber") // Browser favorite number
-  _p.addArgument("login",true,"flag") // Email login mode
+  _p.addArgument("login",true,"flag") // login / --login (email)
   _p.addArgument("code",true,"store") // Code injection for editor
-  _p.addArgument("deploy",true,"flag") // Deploy app to target via SCP
+  _p.addArgument("deploy",true,"flag") // deploy / --deploy
   argv=_p.parseArgs("open",argv)
   if argv isa Error then return
   if (Obj.type=="computer" or Obj.type=="file") then argv.l=true

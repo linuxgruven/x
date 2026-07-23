@@ -3075,6 +3075,7 @@ Net.recon=function(Obj,argv,stdin="",tty=true)
   end if
   if not argv and not inputFromPipe then return Man.help(["recon"])
   if not argv then argv=[]
+  argv=ArgumentParser.promoteWords(argv,["filter","subjects","view","save","file"])
   _p=ArgumentParser.init
   _p.addArgument("u",false,"flag")
   _p.addArgument("a",false,"flag")

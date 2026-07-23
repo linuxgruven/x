@@ -7,7 +7,7 @@ manRun="RUN(1)                           X Shell Manual                         
     <b>@script</b>
     <b>run </b><b>script|path</b>
     <b>run </b><b>-e </b><b>[NAME]</b>
-    <b>run </b><b>--list</b>
+    <b>run </b><b>list</b>
     <b>run </b><b>-n </b><b>[NAME]</b>
     <b>run </b><b>-o</b>
     <b>run </b><b>--DEBUG </b><b>script</b>
@@ -328,9 +328,9 @@ manRun="RUN(1)                           X Shell Manual                         
     <b>_sys_procs</b> - Show running processes
     <b>_sys_kill PID</b> - Terminate process by PID
     <b>do</b> - Repeat command execution
-      Flags: -c N (repeat N times), --while (loop until q pressed), -n S (sleep S sec between)
+      Flags: -c N (repeat N times), while (loop until q pressed), -n S (sleep S sec between)
       Example: do -c 5 _print Hello
-      Example: do --while _print Looping
+      Example: do while _print Looping
       Example: do -c 10 -n 2 _net_ping 192.168.1.1
     <b>pause</b> / <b>_pause</b> - Wait for user to press Enter (whole-line command only)
     <b>// comment</b> - Single-line or inline comments (URL-aware)
@@ -472,7 +472,7 @@ manRun="RUN(1)                           X Shell Manual                         
     <b>--STARTOVER</b>   - Automatically re-run script from start on any error (SIGSTOP)
                       Loops indefinitely until script completes without error.
                       Resets script variables ($VARS) on each retry.
-    <b>--reset</b>       - Clear all persisted bash FLAGS (hold, scan_ok, OBJ named holds)
+    <b>reset</b>         - Clear all persisted bash FLAGS (hold, scan_ok, OBJ named holds)
                       Use this to wipe session state between runs.
 
     <color=#e4ff34>*** SIGSTOP errors terminate all script execution ***</color>
@@ -484,7 +484,7 @@ manRun="RUN(1)                           X Shell Manual                         
     Run script from bash folder or full path (requires --ALLOWABS for absolute paths).
     <b>run </b><b>-e </b><b>[NAME]</b>
     Edit existing bash script in vi editor.
-    <b>run </b><b>--list</b>
+    <b>run </b><b>list</b>
     List all available bash scripts in bash folder.
     <b>run </b><b>-n </b><b>[NAME]</b>
     Create new bash script with name in vi editor.
@@ -532,5 +532,5 @@ manRun="RUN(1)                           X Shell Manual                         
     run --STARTOVER myscript.src 192.168.1.1
     Script will restart from top whenever a SIGSTOP error occurs.
     <b>Clear session state:</b>
-    run --reset
+    run reset
     Wipes all persisted FLAGS including named OBJ holds and scan_ok."

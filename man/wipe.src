@@ -15,12 +15,12 @@ manWipe="WIPE(1)                          X Shell Manual                        
     <b>wipe -s</b> [yes]
     <b>wipe -t</b>
     <b>wipe -a</b>
-    <b>wipe --deploy</b> [.01-300 SECONDS]
+    <b>wipe deploy</b> [.01-300 SECONDS]
 <b>DESCRIPTION</b>
     System wiping tool for clearing logs, removing boot folders, and corrupting
     file systems. Removes traces of x framework. Supports custom ASCII art in
     wiped logs from /payload/data/ascii. Deploy flag launches delayed log wiper.
-    Cannot use --deploy with file or computer objects.
+    Cannot use deploy with file or computer objects.
 <b>OPTIONS</b>
     <b>-x</b>
     Wipe x framework traces
@@ -68,7 +68,7 @@ manWipe="WIPE(1)                          X Shell Manual                        
     Wipe bank transaction log
     Clear financial records
 
-    <b>--deploy [.01-300 SECONDS]</b>
+    <b>deploy [.01-300 SECONDS]</b>
     Deploy delayed log wiper
     Timer in seconds
 <b>EXAMPLE:</b>
@@ -119,7 +119,7 @@ manWipe="WIPE(1)                          X Shell Manual                        
     <b>wipe -a</b>
     Wipe bank logs
 
-    <b>wipe --deploy 5</b>
+    <b>wipe deploy 5</b>
     5 second delayed wipe
 <b>SEE ALSO</b>
     <b>clean</b>, <b>rm</b>, <b>lw</b>, <b>yes</b>"

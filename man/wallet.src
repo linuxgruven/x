@@ -5,10 +5,10 @@ manWallet="WALLET(1)                        X Shell Manual                      
     wallet - x wallet framework
 <b>SYNOPSIS</b>
     <b>wallet </b><b>-u </b><b>USER</b> (<b>-p </b><b>PASSWORD</b>)
-    <b>wallet </b><b>--create </b> (<b>-u </b><b>USER</b>) (<b>-p </b><b>PASSWORD</b>)
+    <b>wallet </b><b>create </b> (<b>-u </b><b>USER</b>) (<b>-p </b><b>PASSWORD</b>)
 <b>DESCRIPTION</b>
     Wallet management framework for secure credential storage and banking operations.
-    If password not supplied, interactive prompt appears. Create new wallets with --create.
+    If password not supplied, interactive prompt appears. Create new wallets with create.
 <b>OPTIONS</b>
     <b>-u USER</b>
     Wallet username
@@ -18,7 +18,7 @@ manWallet="WALLET(1)                        X Shell Manual                      
     Wallet password
     Prompted if omitted
 
-    <b>--create</b>
+    <b>create</b>
     Create new wallet
     Initialize wallet account
 <b>EXAMPLE:</b>
@@ -30,8 +30,8 @@ manWallet="WALLET(1)                        X Shell Manual                      
     Login with password
 
     <color=#e4ff34># Create Wallet</color>
-    <b>wallet --create</b>
+    <b>wallet create</b>
     Create with prompts
 
-    <b>wallet --create -u newuser -p SecurePass123</b>
+    <b>wallet create -u newuser -p SecurePass123</b>
     Create with credentials"

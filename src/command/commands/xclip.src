@@ -4,9 +4,10 @@
 // =============================================================================
 Command.xclip=function(Obj,argv)
   argv=ArgumentParser.check(argv)
+  argv=ArgumentParser.promoteWords(argv,["clear"])
   _p=ArgumentParser.init
   _p.addArgument("number",true,"storeNumber")  // Long flag: --number (store number in clipboard)
-  _p.addArgument("clear",true,"flag")  // Long flag: --clear (empty the clipboard)
+  _p.addArgument("clear",true,"flag")  // clear / --clear (empty the clipboard)
   _p.addArgument("p",false,"flag")  // Print clipboard item as output
   argv=_p.parseArgs("xc",argv)
   if argv isa Error then return argv

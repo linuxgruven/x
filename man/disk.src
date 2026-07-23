@@ -19,8 +19,8 @@ manDisk="DISK(1)                          X Shell Manual                        
     <b>disk --min</b><b> MINIMUM_SIZE</b>
     <b>disk --max</b><b> MAXIMUM_SIZE</b>
     <b>disk --top</b><b> TOP_COUNT</b>
-    <b>disk --free</b>
-    <b>disk --used</b>
+    <b>disk free</b>
+    <b>disk used</b>
 <b>DESCRIPTION</b>
     The disk utility provides comprehensive disk usage analysis and
     management capabilities. It enables file searching, size filtering,
@@ -52,10 +52,11 @@ manDisk="DISK(1)                          X Shell Manual                        
       Perform case-insensitive search matching.
 
     <b>-e</b> - Exact Match
-      Match exact name only (no wildcards, no partial matches).
+      Force exact name match (treat * as literal).
 
     <b>--find ITEM</b> - Find by Pattern
-      Search for files matching ITEM pattern.
+      Match file/dir <b>name</b> (not full path). Plain ITEM is
+      exact; use wildcards for partials: <b>*x*</b>, <b>*.txt</b>.
 
     <b>--limit DISPLAY_COUNT</b> - Limit Results
       Restrict output to DISPLAY_COUNT results.
@@ -69,10 +70,10 @@ manDisk="DISK(1)                          X Shell Manual                        
     <b>--top TOP_COUNT</b> - Top Results
       Display top TOP_COUNT largest items.
 
-    <b>--free</b> - Free Space
+    <b>free</b> - Free Space
       Show remaining disk capacity.
 
-    <b>--used</b> - Disk Usage Statistics
+    <b>used</b> - Disk Usage Statistics
       Display disk usage information.
 <b>EXAMPLE:</b>
     <color=#e4ff34># Basic Usage</color>
@@ -110,19 +111,22 @@ manDisk="DISK(1)                          X Shell Manual                        
 
     <color=#e4ff34># Search</color>
     disk --find *.txt
-    Find all .txt files
+    Find all .txt files under the current directory
+
+    disk --find *x*
+    Names containing x (plain x is exact-only)
 
     disk -i --find README
-    Case-insensitive search for README
+    Case-insensitive exact match for README
 
-    disk -e --find config.txt
-    Exact match only for config.txt
+    disk --find *.so /lib
+    Find .so files under /lib
 
     <color=#e4ff34># Disk Statistics</color>
-    <b>disk --free</b>
+    <b>disk free</b>
     Show free disk space
 
-    <b>disk --used</b>
+    <b>disk used</b>
     Show disk usage statistics
 
     <color=#e4ff34># Advanced</color>

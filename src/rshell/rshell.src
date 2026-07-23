@@ -46,6 +46,7 @@ Rshell.history=function(Obj,argv)
   cmds={
     "-l":@display,
     "-u":@use,
+    "use":@use,
     "--use":@use,
     "-c":@clear
   }

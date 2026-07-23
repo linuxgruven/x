@@ -5,9 +5,10 @@
 Command.su=function(Obj,argv)
   if not argv then return Man.help(["su"])
   command=lower(pull(argv))
+  argv=ArgumentParser.promoteWords(argv,["start"],false)
   _p=ArgumentParser.init
   _p.addArgument("u",false,"store")  // Username to switch to
-  _p.addArgument("start",true,"flag")  // Long flag: --start (start su session)
+  _p.addArgument("start",true,"flag")  // start / --start (start su session)
   argv=_p.parseArgs("su",argv)
   if argv isa Error then return
   // If stdin is piped in, use it as the password

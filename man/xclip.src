@@ -9,7 +9,7 @@ manXclip="XCLIP(1)                         X Shell Manual                       
     <b>xc</b> TEXT
     <b>xc --number</b> [NUMBER]
     <b>xc</b> [-p] [INDEX]
-    <b>xc --clear</b>
+    <b>xc clear</b>
 
 <b>DESCRIPTION</b>
     Basic clipboard utility for storing and retrieving text values. The
@@ -35,7 +35,7 @@ manXclip="XCLIP(1)                         X Shell Manual                       
       Return clipboard value at specified index.
       Use -p flag for passive retrieval without display.
 
-    <b>xc --clear</b> - Clear Clipboard
+    <b>xc clear</b> - Clear Clipboard
       Remove all entries from clipboard.
       Resets clipboard to empty state.
 
@@ -69,7 +69,7 @@ manXclip="XCLIP(1)                         X Shell Manual                       
         Retrieve in script variable
 
     <color=#e4ff34># Clear Clipboard</color>
-    <b>xc --clear</b>
+    <b>xc clear</b>
         Remove all entries
 
     <color=#e4ff34># Redirect Input</color>

@@ -724,6 +724,7 @@ MainObject.run=function(this,ex,fileMeta={})
 		if globals.G_bash.DEBUG then globals.G_bash.DEBUG=false
     //Clear bash state if SIGSTOP set
     if globals.G_bash.SIGSTOP then Bash.clear
+    argv=ArgumentParser.promoteWords(argv,["list","reset"])
 		_p=ArgumentParser.init
     //Add argument: -n <name> (create new script)
     _p.addArgument("n",false,"store")
@@ -731,7 +732,7 @@ MainObject.run=function(this,ex,fileMeta={})
 		_p.addArgument("e",false,"store")
     //Add argument: -o (list scripts)
     _p.addArgument("o",false,"flag")
-		//Add argument: --list (list scripts)
+		//Add argument: list / --list (list scripts)
 		_p.addArgument("list",true,"flag")
     //Add argument: --DEBUG (enable debug mode)
     _p.addArgument("DEBUG",true,"flag")

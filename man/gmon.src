@@ -4,28 +4,28 @@ manGmon="GMON(1)                          X Shell Manual                        
 <b>NAME</b>
     gmon - Directory change monitor
 <b>SYNOPSIS</b>
-    <b>gmon</b> [-p PATH] [--deploy]
+    <b>gmon</b> [-p PATH] [deploy]
 <b>DESCRIPTION</b>
-    Monitor a directory for file changes. Use --deploy to self-launch
+    Monitor a directory for file changes. Use deploy to self-launch
     as a background process. If not deployed, must be launched as root.
     Default monitored directory is /home/guest.
 <b>OPTIONS</b>
     <b>-p PATH</b> - Monitor Path
       Specify directory to monitor. Default: /home/guest
 
-    <b>--deploy</b> - Background Mode
+    <b>deploy</b> - Background Mode
       Launch as background process.
 <b>EXAMPLE:</b>
     <b>gmon</b>
     Monitor /home/guest (default)
 
-    <b>gmon --deploy</b>
+    <b>gmon deploy</b>
     Monitor in background
 
     <b>gmon -p /home/guest</b>
     Monitor /home/guest directory
 
-    <b>gmon -p /home --deploy</b>
+    <b>gmon deploy -p /home</b>
     Monitor /home in background
 <b>SEE ALSO</b>
     <b>htop</b>, <b>spawn</b>"

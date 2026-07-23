@@ -25,7 +25,7 @@ manRshell="RSHELL(1)                        X Shell Manual                      
     <b>rshell </b><b>-e </b><b>INDEX </b><b>COMMAND</b> [<b>PARAMS</b>]
     <b>rshell </b><b>-ea </b><b>COMMAND</b> [<b>PARAMS</b>]
     <b>rshell </b><b>-l</b>
-    <b>rshell </b><b>-u </b><b>INDEX</b>
+    <b>rshell </b><b>use</b>|<b>-u </b><b>INDEX</b>
     <b>rshell </b><b>-c </b><b>-a</b>
     <b>rshell </b><b>-c </b><b>-h</b>
     <b>rshell </b><b>-c </b><b>-r</b>
@@ -36,7 +36,7 @@ manRshell="RSHELL(1)                        X Shell Manual                      
     <b>rshell </b><b>-k </b><b>INDEX</b> [<b>P[NAME]</b>]
     <b>rshell </b><b>-x </b> [<b>P[NAME]</b>]
     <b>rshell </b><b>-h </b> [<b>-l</b>]
-    <b>rshell </b><b>-h </b><b>-u </b><b>INDEX</b>
+    <b>rshell </b><b>-h </b><b>use</b>|<b>-u </b><b>INDEX</b>
     <b>rshell </b><b>-h </b><b>-c</b>
 <b>DESCRIPTION</b>
     <b>rshell</b> is used to start, view, build and manage rshell connections.
@@ -96,8 +96,8 @@ manRshell="RSHELL(1)                        X Shell Manual                      
     <color=#e4ff34>*** NOT AVAILABLE WHEN USING RSHELL LITE ***</color>
     <b>rshell </b><b>-l</b>
     List captured rshells.
-    <b>rshell </b><b>-u </b><b>INDEX</b>
-    Opens a shell from the selected rshell id. Can also use '--use'.
+    <b>rshell </b><b>use</b>|<b>-u </b><b>INDEX</b>
+    Opens a shell from the selected rshell id. Also: <b>use</b> ID.
     <b>rshell </b><b>-c </b><b>-a</b>
     Clears all the rshell caches.
     <b>rshell </b><b>-c </b><b>-h</b>
@@ -121,7 +121,7 @@ manRshell="RSHELL(1)                        X Shell Manual                      
     <b>rshell </b><b>-h </b> [<b>-l</b>]
     List captured rshells from history.
     <b>rshell </b><b>-h </b><b>-u </b><b>INDEX</b>
-    Opens a shell object by id [i]. Can also use '--use'.
+    Opens a shell object by id [i]. Also: <b>use</b> ID.
     <b>rshell </b><b>-h </b><b>-c</b>
     Clears the rshell history cache.
 <b>EXAMPLE:</b>
